@@ -35,7 +35,7 @@ export default function MeasurementForm() {
       playerId: "",
       date: new Date().toISOString().split('T')[0],
       metric: "",
-      value: "",
+      value: 0,
       notes: "",
     },
   });
@@ -67,7 +67,7 @@ export default function MeasurementForm() {
         playerId: "",
         date: new Date().toISOString().split('T')[0],
         metric: "",
-        value: "",
+        value: 0,
         notes: "",
       });
       setSelectedPlayer(null);
@@ -140,7 +140,7 @@ export default function MeasurementForm() {
       playerId: "",
       date: new Date().toISOString().split('T')[0],
       metric: "",
-      value: "",
+      value: 0,
       notes: "",
     });
     setSelectedPlayer(null);
@@ -268,6 +268,8 @@ export default function MeasurementForm() {
                       disabled={createMeasurementMutation.isPending}
                       className="rounded-r-none"
                       data-testid="input-measurement-value"
+                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      value={field.value || ''}
                     />
                   </FormControl>
                   <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
