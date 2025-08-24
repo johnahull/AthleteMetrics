@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user: user?.user || null,
+      user: (user as any)?.user || null,
       login,
       logout,
       isLoading: isLoading || loginMutation.isPending || logoutMutation.isPending,

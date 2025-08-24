@@ -12,7 +12,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Auth middleware
 function requireAuth(req: any, res: any, next: any) {
-  if (!req.session?.user) {
+  if (!(req.session as any)?.user) {
     return res.status(401).json({ message: "Authentication required" });
   }
   next();
@@ -45,7 +45,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const adminPass = process.env.ADMIN_PASS || "password";
       
       if (username === adminUser && password === adminPass) {
-        req.session.user = { username };
+        (req.session as any).user = { username };
         res.json({ success: true, user: { username } });
       } else {
         res.status(401).json({ message: "Invalid credentials" });
@@ -67,8 +67,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/auth/me", (req, res) => {
-    if (req.session?.user) {
-      res.json({ user: req.session.user });
+    if ((req.session as any)?.user) {
+      res.json({ user: (req.session as any).user });
     } else {
       res.status(401).json({ message: "Not authenticated" });
     }
