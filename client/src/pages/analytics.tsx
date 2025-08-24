@@ -114,7 +114,7 @@ export default function Analytics() {
                   <SelectValue placeholder="All Teams" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Teams</SelectItem>
+                  <SelectItem value="all">All Teams</SelectItem>
                   {teams?.map((team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -128,7 +128,7 @@ export default function Analytics() {
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any</SelectItem>
+                  <SelectItem value="any">Any</SelectItem>
                   {Array.from({ length: 13 }, (_, i) => 2008 + i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
@@ -142,7 +142,7 @@ export default function Analytics() {
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any</SelectItem>
+                  <SelectItem value="any">Any</SelectItem>
                   {Array.from({ length: 13 }, (_, i) => 2008 + i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
@@ -156,7 +156,7 @@ export default function Analytics() {
                   <SelectValue placeholder="All Metrics" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Metrics</SelectItem>
+                  <SelectItem value="all">All Metrics</SelectItem>
                   <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
                   <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
                 </SelectContent>
