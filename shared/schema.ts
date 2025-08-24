@@ -85,7 +85,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   playerId: z.string().min(1, "Player is required"),
   date: z.string().min(1, "Date is required"),
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP"]),
-  value: z.string().transform((val) => parseFloat(val)).refine((val) => val > 0, "Value must be positive"),
+  value: z.number().positive("Value must be positive"),
 });
 
 // Types
