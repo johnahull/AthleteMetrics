@@ -2,11 +2,11 @@ import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogOut } from "lucide-react";
 import Sidebar from "./sidebar";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -56,9 +56,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               Athlete Performance Hub
             </div>
             {user && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-500">Welcome,</span>
-                <span className="font-medium text-gray-900">{user.username}</span>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">Welcome,</span>
+                  <span className="font-medium text-gray-900">{user.username}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={logout}
+                  className="flex items-center gap-1 text-gray-500 hover:text-gray-700"
+                  data-testid="logout-button"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </Button>
               </div>
             )}
           </div>
