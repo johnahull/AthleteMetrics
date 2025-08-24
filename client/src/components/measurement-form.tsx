@@ -36,6 +36,7 @@ export default function MeasurementForm() {
       date: new Date().toISOString().split('T')[0],
       metric: "",
       value: 0,
+      flyInDistance: undefined,
       notes: "",
     },
   });
@@ -68,6 +69,7 @@ export default function MeasurementForm() {
         date: new Date().toISOString().split('T')[0],
         metric: "",
         value: 0,
+        flyInDistance: undefined,
         notes: "",
       });
       setSelectedPlayer(null);
@@ -113,7 +115,7 @@ export default function MeasurementForm() {
   ) || [];
 
   const metric = form.watch("metric");
-  const units = metric === "FLY10_TIME" ? "s" : metric === "VERTICAL_JUMP" ? "in" : metric === "FLY_IN_DISTANCE" ? "yd" : "units";
+  const units = metric === "FLY10_TIME" ? "s" : metric === "VERTICAL_JUMP" ? "in" : "units";
 
   const onSubmit = (data: InsertMeasurement) => {
     if (!selectedPlayer) {
@@ -141,6 +143,7 @@ export default function MeasurementForm() {
       date: new Date().toISOString().split('T')[0],
       metric: "",
       value: 0,
+      flyInDistance: undefined,
       notes: "",
     });
     setSelectedPlayer(null);
@@ -242,7 +245,6 @@ export default function MeasurementForm() {
                   <SelectContent>
                     <SelectItem value="FLY10_TIME">10-Yard Fly Time</SelectItem>
                     <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                    <SelectItem value="FLY_IN_DISTANCE">Fly-In Distance</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -282,6 +284,39 @@ export default function MeasurementForm() {
               </FormItem>
             )}
           />
+
+          {/* Fly-In Distance (only for FLY10_TIME) */}
+          {metric === "FLY10_TIME" && (
+            <FormField
+              control={form.control}
+              name="flyInDistance"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Fly-In Distance (Optional)</FormLabel>
+                  <div className="flex">
+                    <FormControl>
+                      <Input 
+                        {...field}
+                        type="number"
+                        step="0.1"
+                        placeholder="Enter distance"
+                        disabled={createMeasurementMutation.isPending}
+                        className="rounded-r-none"
+                        data-testid="input-fly-in-distance"
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
+                      yd
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">Distance from start of acceleration to timing gate</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
         </div>
 
         {/* Notes */}
