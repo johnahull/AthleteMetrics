@@ -51,8 +51,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             <span>{isSidebarOpen ? 'Hide Menu' : 'Show Menu'}</span>
           </Button>
-          <div className="text-sm text-gray-500">
-            Athlete Performance Hub
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-500">
+              Athlete Performance Hub
+            </div>
+            {user && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500">Welcome,</span>
+                <span className="font-medium text-gray-900">{user.username}</span>
+              </div>
+            )}
           </div>
         </div>
         {/* Main Content */}
