@@ -30,6 +30,7 @@ export const measurements = pgTable("measurements", {
   metric: text("metric").notNull(), // "FLY10_TIME" or "VERTICAL_JUMP"
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
+  flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -84,8 +85,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   playerId: z.string().min(1, "Player is required"),
   date: z.string().min(1, "Date is required"),
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "FLY_IN_DISTANCE"]),
+  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP"]),
   value: z.number().positive("Value must be positive"),
+  flyInDistance: z.number().positive().optional(),
 });
 
 // Types
@@ -110,7 +112,6 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const MetricType = {
   FLY10_TIME: "FLY10_TIME",
   VERTICAL_JUMP: "VERTICAL_JUMP",
-  FLY_IN_DISTANCE: "FLY_IN_DISTANCE",
 } as const;
 
 export const TeamLevel = {

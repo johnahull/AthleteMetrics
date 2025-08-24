@@ -159,7 +159,6 @@ export default function Analytics() {
                   <SelectItem value="all">All Metrics</SelectItem>
                   <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
                   <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                  <SelectItem value="FLY_IN_DISTANCE">Fly-In Distance</SelectItem>
                 </SelectContent>
               </Select>
             </div>
