@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -110,6 +110,9 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Team" : "Add New Team"}</DialogTitle>
+          <DialogDescription>
+            {isEditing ? "Update team information below." : "Create a new team by filling out the form below."}
+          </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
@@ -152,7 +155,6 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">Select level...</SelectItem>
                       <SelectItem value="Club">Club</SelectItem>
                       <SelectItem value="HS">High School</SelectItem>
                       <SelectItem value="College">College</SelectItem>
