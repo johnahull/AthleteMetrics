@@ -113,7 +113,7 @@ export default function MeasurementForm() {
   ) || [];
 
   const metric = form.watch("metric");
-  const units = metric === "FLY10_TIME" ? "s" : metric === "VERTICAL_JUMP" ? "in" : "units";
+  const units = metric === "FLY10_TIME" ? "s" : metric === "VERTICAL_JUMP" ? "in" : metric === "FLY_IN_DISTANCE" ? "yd" : "units";
 
   const onSubmit = (data: InsertMeasurement) => {
     if (!selectedPlayer) {
@@ -242,6 +242,7 @@ export default function MeasurementForm() {
                   <SelectContent>
                     <SelectItem value="FLY10_TIME">10-Yard Fly Time</SelectItem>
                     <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
+                    <SelectItem value="FLY_IN_DISTANCE">Fly-In Distance</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />

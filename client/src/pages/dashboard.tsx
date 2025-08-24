@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
+import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 
 export default function Dashboard() {
   const { data: dashboardStats, isLoading } = useQuery({
@@ -91,7 +92,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Best Fly-10 Today</p>
                 <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-fly10">
-                  {stats.bestFly10Today ? `${stats.bestFly10Today.value}s` : "N/A"}
+                  {stats.bestFly10Today ? formatFly10TimeWithSpeed(parseFloat(stats.bestFly10Today.value)) : "N/A"}
                 </p>
                 <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-player">
                   {stats.bestFly10Today?.playerName || "No data today"}
@@ -193,7 +194,12 @@ export default function Dashboard() {
                         {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical"}
                       </span>
                     </td>
-                    <td className="py-3 font-mono">{measurement.value}{measurement.units}</td>
+                    <td className="py-3 font-mono">
+                      {measurement.metric === "FLY10_TIME" ? 
+                        formatFly10TimeWithSpeed(parseFloat(measurement.value)) : 
+                        `${measurement.value}${measurement.units}`
+                      }
+                    </td>
                     <td className="py-3 text-gray-600">{measurement.date}</td>
                   </tr>
                 ))}
