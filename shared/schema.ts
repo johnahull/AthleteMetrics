@@ -1,0 +1,119 @@
+import { sql } from "drizzle-orm";
+import { pgTable, text, varchar, integer, decimal, timestamp, date } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const teams = pgTable("teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  level: text("level"), // "Club", "HS", "College"
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const players = pgTable("players", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  fullName: text("full_name").notNull(),
+  birthYear: integer("birth_year").notNull(),
+  school: text("school"),
+  teamId: varchar("team_id").notNull().references(() => teams.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const measurements = pgTable("measurements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").notNull().references(() => players.id),
+  date: date("date").notNull(),
+  metric: text("metric").notNull(), // "FLY10_TIME" or "VERTICAL_JUMP"
+  value: decimal("value", { precision: 10, scale: 3 }).notNull(),
+  units: text("units").notNull(), // "s" or "in"
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+});
+
+// Relations
+export const teamsRelations = relations(teams, ({ many }) => ({
+  players: many(players),
+}));
+
+export const playersRelations = relations(players, ({ one, many }) => ({
+  team: one(teams, {
+    fields: [players.teamId],
+    references: [teams.id],
+  }),
+  measurements: many(measurements),
+}));
+
+export const measurementsRelations = relations(measurements, ({ one }) => ({
+  player: one(players, {
+    fields: [measurements.playerId],
+    references: [players.id],
+  }),
+}));
+
+// Insert schemas
+export const insertTeamSchema = createInsertSchema(teams).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPlayerSchema = createInsertSchema(players).omit({
+  id: true,
+  createdAt: true,
+  fullName: true,
+}).extend({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  birthYear: z.number().min(1990).max(2020),
+  teamId: z.string().min(1, "Team is required"),
+});
+
+export const insertMeasurementSchema = createInsertSchema(measurements).omit({
+  id: true,
+  createdAt: true,
+  units: true,
+}).extend({
+  playerId: z.string().min(1, "Player is required"),
+  date: z.string().min(1, "Date is required"),
+  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP"]),
+  value: z.string().transform((val) => parseFloat(val)).refine((val) => val > 0, "Value must be positive"),
+});
+
+// Types
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+export type Team = typeof teams.$inferSelect;
+
+export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
+export type Player = typeof players.$inferSelect;
+
+export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
+export type Measurement = typeof measurements.$inferSelect;
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+});
+
+// Enums
+export const MetricType = {
+  FLY10_TIME: "FLY10_TIME",
+  VERTICAL_JUMP: "VERTICAL_JUMP",
+} as const;
+
+export const TeamLevel = {
+  CLUB: "Club",
+  HS: "HS", 
+  COLLEGE: "College",
+} as const;

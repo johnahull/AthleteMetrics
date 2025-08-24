@@ -1,0 +1,207 @@
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent } from "@/components/ui/card";
+import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
+import PerformanceChart from "@/components/charts/performance-chart";
+
+export default function Dashboard() {
+  const { data: dashboardStats, isLoading } = useQuery({
+    queryKey: ["/api/analytics/dashboard"],
+  });
+
+  const { data: recentMeasurements } = useQuery({
+    queryKey: ["/api/measurements"],
+  });
+
+  const { data: teamStats } = useQuery({
+    queryKey: ["/api/analytics/teams"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-64"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = dashboardStats || {
+    totalPlayers: 0,
+    totalTeams: 0,
+    bestFly10Today: null,
+    bestVerticalToday: null,
+  };
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
+        <p className="text-gray-600 mt-1">Track athlete performance and team analytics</p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Players</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-players">
+                  {stats.totalPlayers}
+                </p>
+                <p className="text-sm text-green-600 mt-1">
+                  <ArrowUp className="inline h-3 w-3 mr-1" />
+                  Active athletes
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <UsersRound className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Active Teams</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-teams">
+                  {stats.totalTeams}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">Across all levels</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <Users className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Best Fly-10 Today</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-fly10">
+                  {stats.bestFly10Today ? `${stats.bestFly10Today.value}s` : "N/A"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-player">
+                  {stats.bestFly10Today?.playerName || "No data today"}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-6 w-6 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Best Vertical Today</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-vertical">
+                  {stats.bestVerticalToday ? `${stats.bestVerticalToday.value}in` : "N/A"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-vertical-player">
+                  {stats.bestVerticalToday?.playerName || "No data today"}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <ArrowUp className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <PerformanceChart />
+        
+        <Card className="bg-white">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Team Distribution</h3>
+            </div>
+            <div className="space-y-4">
+              {teamStats?.slice(0, 5).map((team, index) => (
+                <div key={team.teamId} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      index === 0 ? 'bg-blue-500' : 
+                      index === 1 ? 'bg-green-500' :
+                      index === 2 ? 'bg-yellow-500' :
+                      index === 3 ? 'bg-purple-500' : 'bg-gray-500'
+                    }`}></div>
+                    <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
+                  </div>
+                  <span className="text-sm text-gray-600">{team.playerCount} players</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <Card className="bg-white">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Measurements</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-sm font-medium text-gray-500 border-b border-gray-200">
+                  <th className="pb-3">Player</th>
+                  <th className="pb-3">Team</th>
+                  <th className="pb-3">Metric</th>
+                  <th className="pb-3">Value</th>
+                  <th className="pb-3">Date</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {recentMeasurements?.slice(0, 10).map((measurement) => (
+                  <tr key={measurement.id} className="border-b border-gray-100">
+                    <td className="py-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                          <span className="text-xs font-medium">
+                            {measurement.player.firstName.charAt(0)}{measurement.player.lastName.charAt(0)}
+                          </span>
+                        </div>
+                        <span className="font-medium">{measurement.player.fullName}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 text-gray-600">{measurement.player.team.name}</td>
+                    <td className="py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        measurement.metric === "FLY10_TIME" 
+                          ? "bg-blue-100 text-blue-800" 
+                          : "bg-purple-100 text-purple-800"
+                      }`}>
+                        {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical"}
+                      </span>
+                    </td>
+                    <td className="py-3 font-mono">{measurement.value}{measurement.units}</td>
+                    <td className="py-3 text-gray-600">{measurement.date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
