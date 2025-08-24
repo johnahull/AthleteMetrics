@@ -84,7 +84,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   playerId: z.string().min(1, "Player is required"),
   date: z.string().min(1, "Date is required"),
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP"]),
+  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "FLY_IN_DISTANCE"]),
   value: z.number().positive("Value must be positive"),
 });
 
@@ -110,6 +110,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const MetricType = {
   FLY10_TIME: "FLY10_TIME",
   VERTICAL_JUMP: "VERTICAL_JUMP",
+  FLY_IN_DISTANCE: "FLY_IN_DISTANCE",
 } as const;
 
 export const TeamLevel = {

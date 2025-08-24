@@ -6,6 +6,7 @@ import { Plus, Edit, Trash2, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
+import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 
 export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -136,7 +137,7 @@ export default function Teams() {
                   {stats.bestFly10 && (
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-600">Best Fly-10</span>
-                      <span className="text-sm font-medium font-mono">{stats.bestFly10}s</span>
+                      <span className="text-sm font-medium font-mono">{formatFly10TimeWithSpeed(parseFloat(stats.bestFly10))}</span>
                     </div>
                   )}
                   {stats.bestVertical && (
