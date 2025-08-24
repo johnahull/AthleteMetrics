@@ -128,10 +128,10 @@ Mia,Chen,2009,Lonestar 09G Navy,Westlake HS
 Elise,Ramos,2008,Thunder Elite,Anderson HS
 Jordan,Williams,2009,Lightning 08G,Lake Travis HS`;
 
-  const measurementsTemplate = `fullName,birthYear,date,metric,value,units,notes
-Mia Chen,2009,2025-01-20,FLY10_TIME,1.26,s,Electronic gates
-Elise Ramos,2008,2025-01-19,VERTICAL_JUMP,21.5,in,Jump mat
-Jordan Williams,2009,2025-01-18,FLY10_TIME,1.31,s,Manual timing`;
+  const measurementsTemplate = `fullName,birthYear,date,metric,value,units,flyInDistance,notes
+Mia Chen,2009,2025-01-20,FLY10_TIME,1.26,s,20,Electronic gates
+Elise Ramos,2008,2025-01-19,VERTICAL_JUMP,21.5,in,,Jump mat
+Jordan Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -345,7 +345,7 @@ Jordan Williams,2009,2025-01-18,FLY10_TIME,1.31,s,Manual timing`;
                   <pre className="whitespace-pre-wrap">{measurementsTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: fullName, birthYear, date, metric, value</span>
+                  <span className="text-xs text-gray-500">Required: fullName, birthYear, date, metric, value • Optional: flyInDistance (for fly 10 times)</span>
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -367,6 +367,7 @@ Jordan Williams,2009,2025-01-18,FLY10_TIME,1.31,s,Manual timing`;
                   <ul className="space-y-1 text-xs">
                     <li>• Metric values: FLY10_TIME (seconds) or VERTICAL_JUMP (inches)</li>
                     <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
+                    <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
                     <li>• Date format: YYYY-MM-DD</li>
                     <li>• Player matching is case-sensitive</li>
                   </ul>

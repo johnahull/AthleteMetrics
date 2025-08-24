@@ -395,6 +395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             date: row.date,
             metric: row.metric,
             value: row.value,
+            flyInDistance: row.flyInDistance ? parseFloat(row.flyInDistance) : undefined,
             notes: row.notes || "",
           };
 
@@ -462,9 +463,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
       
-      const csvHeader = "fullName,birthYear,date,metric,value,units,notes\n";
+      const csvHeader = "fullName,birthYear,date,metric,value,units,flyInDistance,notes\n";
       const csvBody = measurements.map(measurement => 
-        `"${measurement.player.fullName}",${measurement.player.birthYear},${measurement.date},${measurement.metric},${measurement.value},${measurement.units},"${measurement.notes || ""}"`
+        `"${measurement.player.fullName}",${measurement.player.birthYear},${measurement.date},${measurement.metric},${measurement.value},${measurement.units},${measurement.flyInDistance || ""},"${measurement.notes || ""}"`
       ).join('\n');
       
       res.send(csvHeader + csvBody);
