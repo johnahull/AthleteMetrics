@@ -1,0 +1,190 @@
+Build a full‑stack web app called “Athlete Performance Hub” for uploading, storing, and analyzing athlete performance data. Focus on two metrics: 10‑yard fly time and vertical jump. I need clean CRUD, CSV import, and clear analytics (tables + charts) filtered by team and age groups.
+
+Tech & Dev
+
+Stack: TypeScript, React (Vite) frontend; Node.js (Express) or Fastify backend; Prisma ORM.
+
+DB: Use SQLite by default; allow Postgres via DATABASE_URL env var.
+
+UI: Tailwind CSS; component library ok (shadcn/ui).
+
+Charts: Chart.js (via react-chartjs-2).
+
+Auth (simple): Single admin login via username/password in env (ADMIN_USER, ADMIN_PASS). Session cookie or JWT—keep it simple.
+
+Data Model
+
+Create these tables with Prisma (or equivalent):
+
+Team: id, name (unique), level (optional: “Club”, “HS”, “College”), notes.
+
+Player: id, firstName, lastName, fullName (computed), birthYear (int), school (string; HS/College), teamId (FK Team), createdAt.
+
+Measurement: id, playerId (FK Player), date (date), metric (enum: FLY10_TIME, VERTICAL_JUMP),
+value (number; seconds for fly10, inches for vertical), units (auto: s or in), notes.
+
+Seed with 3 Teams, 12 Players (varied birth years), and ~40 Measurements mixed across both metrics.
+
+CSV/XLSX Import/Export
+
+Support CSV upload for Players and Measurements. Accept XLSX if it’s easy; CSV is required.
+
+Validate rows; show a preview with “accept/reject” and per‑row error messages (missing player, wrong date format, invalid metric).
+
+On import, allow:
+
+“Match player by fullName + birthYear”
+
+Or “Create missing players and assign to a selected Team”
+
+Provide export to CSV for any table view (Players, Measurements, filtered analytics).
+
+CSV Templates (show downloadable samples in the UI)
+
+players.csv
+
+firstName,lastName,birthYear,teamName,school
+Mia,Chen,2009,Lonestar 09G Navy,Westlake HS
+Elise,Ramos,2008,Lonestar 08G,Anderson HS
+
+
+measurements.csv
+
+fullName,birthYear,date,metric,value,units,notes
+Mia Chen,2009,2025-08-20,FLY10_TIME,1.26,s,Electronic gates
+Elise Ramos,2008,2025-08-19,VERTICAL_JUMP,21.5,in,Jump mat
+
+
+Accept metric as FLY10_TIME or VERTICAL_JUMP; units must match (s or in). If units missing, infer based on metric.
+
+Backend API (REST)
+
+Implement CRUD + import/export endpoints.
+
+/api/auth/login (POST)
+
+/api/teams GET/POST/PATCH/DELETE
+
+/api/players GET/POST/PATCH/DELETE (+ query by team, birthYear range)
+
+/api/measurements GET/POST/PATCH/DELETE (+ query by player, team, date range, metric)
+
+/api/import/players (CSV)
+
+/api/import/measurements (CSV)
+
+/api/export/* for current filtered view
+
+Include basic rate limiting and input validation (zod or joi).
+
+Frontend Pages
+
+Login (simple form).
+
+Dashboard
+
+KPIs: total players, teams, latest test date.
+
+Quick cards: “Best Fly‑10 Today/This Month”, “Best Vertical Today/This Month”.
+
+Recent 10 entries table.
+
+Teams
+
+Table of teams; add/edit/delete.
+
+Players
+
+Table with search + filters (team, birth year range).
+
+Drawer/form to add a player: firstName, lastName, team, birthYear, school.
+
+Bulk import (CSV) with preview + validation.
+
+Data Entry
+
+Form to add a measurement:
+
+Select player (searchable), date, metric (Fly10 or Vertical), value, notes. Units auto‑filled.
+
+Optional quick‑add player inline.
+
+Bulk import (CSV) with preview + validation.
+
+Analytics
+
+Filters bar (sticky): Team (multi‑select), Birth Year (range), Metric, Date range.
+
+Tables:
+
+Leaderboards: fastest Fly‑10 (lowest time), highest Vertical.
+
+Per‑team summaries (count, mean, best, 25/50/75th percentiles).
+
+Charts:
+
+Fly‑10: histogram of times (per selected team/age), time‑series trend (best per week), and scatter of date vs time for selected players.
+
+Vertical: histogram of verticals, time‑series trend (best per week).
+
+Combined: scatter plot of Fly‑10 (x, seconds) vs Vertical (y, inches); hover shows name/team/date.
+
+Age Grouping: Provide quick presets by birth year (e.g., 2008s, 2009s, etc.). Display grouping label in tables and chart legends.
+
+Button to Export CSV of current filtered table.
+
+UX Requirements
+
+All tables paginated with client‑side search; columns sortable.
+
+Empty states with “Add player” / “Import CSV” CTAs.
+
+Inline toasts for success/error.
+
+Keyboard accessible; form validation with friendly errors.
+
+Mobile‑friendly.
+
+Computations
+
+Percentiles (25/50/75/90th) for each metric within the current filter.
+
+“Best” = min(Fly‑10) or max(Vertical) per player.
+
+Normalize chart axes appropriately (Fly‑10 typical range 0.9–1.8 s; Vertical 10–35 in).
+
+Show units on axes and in tooltips.
+
+Nice‑to‑Have (if time allows)
+
+Player profile page with history tables + charts.
+
+CSV export of a single player’s measurements.
+
+Simple role switch to “viewer” (read‑only) vs “admin”.
+
+Dark mode toggle.
+
+Delivery & DevOps
+
+Provide a Replit run script for both frontend and backend with a single “Run” button (concurrently).
+
+Include .env.example with DATABASE_URL, ADMIN_USER, ADMIN_PASS.
+
+Add basic tests for API validation.
+
+Provide README with:
+
+Setup
+
+Env vars
+
+CSV templates
+
+Example curl requests
+
+Notes for switching to Postgres
+
+Acceptance Criteria
+
+I can: create teams/players; add measurements; filter by team and birth year; see tables + charts; import CSVs with preview; export filtered CSVs; view combined Fly‑10 vs Vertical scatter; and switch DB by setting DATABASE_URL
