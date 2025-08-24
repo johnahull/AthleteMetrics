@@ -1,11 +1,14 @@
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Menu, X } from "lucide-react";
 import Sidebar from "./sidebar";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   useEffect(() => {
     if (!isLoading && !user && location !== "/login") {
@@ -34,9 +37,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 lg:ml-0">
-        {children}
+      {isSidebarOpen && <Sidebar />}
+      <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'lg:ml-0' : 'ml-0'}`}>
+        {/* Toggle Button */}
+        <div className="p-4 border-b border-gray-200 bg-white">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="mb-2"
+            data-testid="toggle-sidebar"
+          >
+            {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            <span className="ml-2">{isSidebarOpen ? 'Hide Menu' : 'Show Menu'}</span>
+          </Button>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
       </main>
     </div>
   );
