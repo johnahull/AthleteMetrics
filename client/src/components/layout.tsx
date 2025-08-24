@@ -38,21 +38,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex bg-gray-50">
       {isSidebarOpen && <Sidebar />}
-      <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'lg:ml-0' : 'ml-0'}`}>
-        {/* Toggle Button */}
-        <div className="p-4 border-b border-gray-200 bg-white">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Toggle Button Bar */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="mb-2"
+            className="flex items-center gap-2"
             data-testid="toggle-sidebar"
           >
             {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-            <span className="ml-2">{isSidebarOpen ? 'Hide Menu' : 'Show Menu'}</span>
+            <span>{isSidebarOpen ? 'Hide Menu' : 'Show Menu'}</span>
           </Button>
+          <div className="text-sm text-gray-500">
+            Athlete Performance Hub
+          </div>
         </div>
-        <div className="p-6">
+        {/* Main Content */}
+        <div className="flex-1 overflow-auto">
           {children}
         </div>
       </main>
