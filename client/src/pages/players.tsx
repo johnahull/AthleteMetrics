@@ -13,7 +13,7 @@ import PlayerModal from "@/components/player-modal";
 export default function Players() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [filters, setFilters] = useState({
     teamId: "",
     birthYearFrom: "",
@@ -109,7 +109,12 @@ export default function Players() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
         <h1 className="text-2xl font-semibold text-gray-900">Players Management</h1>
         <div className="flex space-x-3">
-          <Button variant="outline" className="bg-gray-600 text-white hover:bg-gray-700">
+          <Button 
+            variant="outline" 
+            className="bg-gray-600 text-white hover:bg-gray-700"
+            onClick={() => setLocation('/import-export')}
+            data-testid="button-import-csv"
+          >
             <FileUp className="h-4 w-4 mr-2" />
             Import CSV
           </Button>
