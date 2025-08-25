@@ -405,6 +405,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         try {
+          // Validate required fields first with helpful error messages
+          if (!row.firstName || !row.lastName) {
+            errors.push({ 
+              row: i, 
+              error: `Missing required fields: firstName and lastName are required`, 
+              valid: false 
+            });
+            continue;
+          }
+
+          if (!row.birthYear || isNaN(parseInt(row.birthYear))) {
+            errors.push({ 
+              row: i, 
+              error: `Invalid birthYear: "${row.birthYear}" - must be a number (e.g., 2009)`, 
+              valid: false 
+            });
+            continue;
+          }
+
+          if (!row.date) {
+            errors.push({ 
+              row: i, 
+              error: `Missing required field: date is required (format: YYYY-MM-DD)`, 
+              valid: false 
+            });
+            continue;
+          }
+
+          if (!row.metric || !["FLY10_TIME", "VERTICAL_JUMP"].includes(row.metric)) {
+            errors.push({ 
+              row: i, 
+              error: `Invalid metric: "${row.metric}" - must be either "FLY10_TIME" or "VERTICAL_JUMP"`, 
+              valid: false 
+            });
+            continue;
+          }
+
+          if (!row.value || isNaN(parseFloat(row.value))) {
+            errors.push({ 
+              row: i, 
+              error: `Invalid value: "${row.value}" - must be a positive number (e.g., 1.26 for fly time or 21.5 for vertical jump)`, 
+              valid: false 
+            });
+            continue;
+          }
+
+          const parsedValue = parseFloat(row.value);
+          if (parsedValue <= 0) {
+            errors.push({ 
+              row: i, 
+              error: `Invalid value: "${row.value}" - must be a positive number greater than 0`, 
+              valid: false 
+            });
+            continue;
+          }
+
+          // Validate flyInDistance if provided
+          if (row.flyInDistance && row.flyInDistance.trim() && isNaN(parseFloat(row.flyInDistance))) {
+            errors.push({ 
+              row: i, 
+              error: `Invalid flyInDistance: "${row.flyInDistance}" - must be a number or left empty`, 
+              valid: false 
+            });
+            continue;
+          }
+
           // Find player by firstName, lastName and birthYear
           const player = await storage.getPlayerByNameAndBirthYear(
             row.firstName,
@@ -415,7 +481,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!player) {
             errors.push({ 
               row: i, 
-              error: `Player "${row.firstName} ${row.lastName}" with birth year ${row.birthYear} not found`, 
+              error: `Player "${row.firstName} ${row.lastName}" with birth year ${row.birthYear} not found. Make sure the player exists or use "create" mode.`, 
               valid: false 
             });
             continue;
@@ -425,12 +491,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             playerId: player.id,
             date: row.date,
             metric: row.metric,
-            value: row.value,
-            flyInDistance: row.flyInDistance ? parseFloat(row.flyInDistance) : undefined,
+            value: parsedValue,
+            flyInDistance: row.flyInDistance && row.flyInDistance.trim() ? parseFloat(row.flyInDistance) : undefined,
             notes: row.notes || "",
           };
 
-          // Validate the data
+          // Final validation with schema
           insertMeasurementSchema.parse(measurementData);
           
           // Create the measurement in the database
@@ -445,9 +511,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             measurementId: createdMeasurement.id
           });
         } catch (error) {
+          let errorMessage = String(error);
+          if (error instanceof z.ZodError) {
+            // More detailed error messages for Zod validation
+            errorMessage = error.errors.map(e => {
+              const field = e.path.join('.');
+              return `${field}: ${e.message}`;
+            }).join(', ');
+          }
           errors.push({ 
             row: i, 
-            error: error instanceof z.ZodError ? error.errors.map(e => e.message).join(', ') : String(error), 
+            error: errorMessage, 
             valid: false 
           });
         }
