@@ -313,23 +313,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         try {
+          // Find team by name if teamName is provided in CSV
+          let resolvedTeamId = teamId; // From form selection
+          
+          if (!resolvedTeamId && row.teamName) {
+            const allTeams = await storage.getTeams();
+            const matchingTeam = allTeams.find(team => team.name.trim() === row.teamName.trim());
+            
+            if (!matchingTeam) {
+              errors.push({ 
+                row: i, 
+                error: `Team "${row.teamName}" not found`, 
+                valid: false 
+              });
+              continue;
+            }
+            resolvedTeamId = matchingTeam.id;
+          }
+          
+          if (!resolvedTeamId) {
+            errors.push({ 
+              row: i, 
+              error: "No team specified", 
+              valid: false 
+            });
+            continue;
+          }
+
           const playerData = {
             firstName: row.firstName,
             lastName: row.lastName,
             birthYear: parseInt(row.birthYear),
-            teamId: teamId || row.teamId,
+            teamId: resolvedTeamId,
             school: row.school || "",
           };
 
           // Validate the data
           insertPlayerSchema.parse(playerData);
           
-          // If createMissing is true, we'll create the player during confirmation
+          // Create the player in the database
+          const createdPlayer = await storage.createPlayer(playerData);
+          
           results.push({ 
             row: i, 
             data: playerData, 
             valid: true,
-            playerName: `${playerData.firstName} ${playerData.lastName}` 
+            playerName: `${playerData.firstName} ${playerData.lastName}`,
+            playerId: createdPlayer.id
           });
         } catch (error) {
           errors.push({ 
@@ -402,12 +432,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Validate the data
           insertMeasurementSchema.parse(measurementData);
           
+          // Create the measurement in the database
+          const createdMeasurement = await storage.createMeasurement(measurementData);
+          
           results.push({ 
             row: i, 
             data: measurementData, 
             valid: true,
             playerName: row.fullName,
-            metricDisplay: row.metric === "FLY10_TIME" ? "Fly-10" : "Vertical Jump"
+            metricDisplay: row.metric === "FLY10_TIME" ? "Fly-10" : "Vertical Jump",
+            measurementId: createdMeasurement.id
           });
         } catch (error) {
           errors.push({ 
