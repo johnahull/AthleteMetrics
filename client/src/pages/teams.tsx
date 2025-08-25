@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Edit, Trash2, Users } from "lucide-react";
@@ -11,6 +12,7 @@ import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState(null);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -155,7 +157,12 @@ export default function Teams() {
                 )}
 
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                  <Button variant="ghost" className="w-full text-primary hover:bg-blue-50">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full text-primary hover:bg-blue-50"
+                    onClick={() => setLocation(`/players?teamId=${team.id}`)}
+                    data-testid={`button-view-players-${team.id}`}
+                  >
                     <Users className="h-4 w-4 mr-2" />
                     View Players
                   </Button>
