@@ -405,16 +405,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         try {
-          // Find player by fullName and birthYear
+          // Find player by firstName, lastName and birthYear
           const player = await storage.getPlayerByNameAndBirthYear(
-            row.fullName, 
+            row.firstName,
+            row.lastName, 
             parseInt(row.birthYear)
           );
 
           if (!player) {
             errors.push({ 
               row: i, 
-              error: `Player "${row.fullName}" with birth year ${row.birthYear} not found`, 
+              error: `Player "${row.firstName} ${row.lastName}" with birth year ${row.birthYear} not found`, 
               valid: false 
             });
             continue;
@@ -439,7 +440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             row: i, 
             data: measurementData, 
             valid: true,
-            playerName: row.fullName,
+            playerName: `${row.firstName} ${row.lastName}`,
             metricDisplay: row.metric === "FLY10_TIME" ? "Fly-10" : "Vertical Jump",
             measurementId: createdMeasurement.id
           });
@@ -497,9 +498,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
       
-      const csvHeader = "fullName,birthYear,date,metric,value,units,flyInDistance,notes\n";
+      const csvHeader = "firstName,lastName,birthYear,date,metric,value,units,flyInDistance,notes\n";
       const csvBody = measurements.map(measurement => 
-        `"${measurement.player.fullName}",${measurement.player.birthYear},${measurement.date},${measurement.metric},${measurement.value},${measurement.units},${measurement.flyInDistance || ""},"${measurement.notes || ""}"`
+        `"${measurement.player.firstName}","${measurement.player.lastName}",${measurement.player.birthYear},${measurement.date},${measurement.metric},${measurement.value},${measurement.units},${measurement.flyInDistance || ""},"${measurement.notes || ""}"`
       ).join('\n');
       
       res.send(csvHeader + csvBody);
