@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +13,26 @@ import PlayerModal from "@/components/player-modal";
 export default function Players() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
+  const [location] = useLocation();
   const [filters, setFilters] = useState({
     teamId: "",
     birthYearFrom: "",
     birthYearTo: "",
     search: "",
   });
+
+  // Check for URL parameters on load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const teamIdParam = urlParams.get('teamId');
+    
+    if (teamIdParam) {
+      setFilters(prev => ({
+        ...prev,
+        teamId: teamIdParam
+      }));
+    }
+  }, [location]);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
