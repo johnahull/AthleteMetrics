@@ -21,7 +21,7 @@ export interface IStorage {
   createPlayer(player: InsertPlayer): Promise<Player>;
   updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player>;
   deletePlayer(id: string): Promise<void>;
-  getPlayerByNameAndBirthYear(fullName: string, birthYear: number): Promise<Player | undefined>;
+  getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined>;
 
   // Measurements
   getMeasurements(filters?: { 
@@ -164,10 +164,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(players).where(eq(players.id, id));
   }
 
-  async getPlayerByNameAndBirthYear(fullName: string, birthYear: number): Promise<Player | undefined> {
+  async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined> {
     const [player] = await db.select()
       .from(players)
-      .where(and(eq(players.fullName, fullName), eq(players.birthYear, birthYear)));
+      .where(and(eq(players.firstName, firstName), eq(players.lastName, lastName), eq(players.birthYear, birthYear)));
     return player || undefined;
   }
 
