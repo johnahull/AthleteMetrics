@@ -41,22 +41,28 @@ export default function ImportExport() {
       });
 
       if (!response.ok) {
-        throw new Error('Import failed');
+        const errorText = await response.text();
+        throw new Error(`Import failed: ${errorText}`);
       }
 
       return response.json();
     },
     onSuccess: (data) => {
       setImportResults(data);
+      const hasResults = data.results.length > 0;
+      const hasErrors = data.errors.length > 0;
+      
       toast({
-        title: "Import Complete",
+        title: hasResults ? "Import Complete" : "Import Issues",
         description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors.`,
+        variant: hasResults ? "default" : "destructive",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error("Import error:", error);
       toast({
         title: "Import Failed",
-        description: "Failed to process CSV file",
+        description: error?.message || "Failed to process CSV file",
         variant: "destructive",
       });
     },
