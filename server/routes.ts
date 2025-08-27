@@ -148,16 +148,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/players/:id", requireAuth, async (req, res) => {
     try {
-      console.log("GET /api/players/:id called with ID:", req.params.id);
       const { id } = req.params;
       const player = await storage.getPlayer(id);
-      console.log("Player retrieved from storage:", player);
       if (!player) {
-        console.log("Player not found, returning 404");
         return res.status(404).json({ message: "Player not found" });
       }
-      console.log("Sending player response:", player);
-      res.setHeader('Content-Type', 'application/json');
       res.json(player);
     } catch (error) {
       console.error("Failed to fetch player:", error);
