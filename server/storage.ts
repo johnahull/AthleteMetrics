@@ -371,8 +371,14 @@ export class DatabaseStorage implements IStorage {
     const result = [];
 
     for (const team of teamsData) {
-      const teamPlayers = await db.select().from(players).where(eq(players.teamId, team.id));
-      const playerIds = teamPlayers.map(p => p.id);
+      // Get players for this team using the junction table
+      const teamPlayerRecords = await db.select({
+        playerId: playerTeams.playerId
+      })
+      .from(playerTeams)
+      .where(eq(playerTeams.teamId, team.id));
+      
+      const playerIds = teamPlayerRecords.map(p => p.playerId);
       
       if (playerIds.length === 0) {
         result.push({
@@ -402,7 +408,7 @@ export class DatabaseStorage implements IStorage {
       result.push({
         teamId: team.id,
         teamName: team.name,
-        playerCount: teamPlayers.length,
+        playerCount: playerIds.length,
         bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
         bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
         latestTest: teamMeasurements.length > 0 ? teamMeasurements[0].date : undefined,
