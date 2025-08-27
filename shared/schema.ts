@@ -101,13 +101,13 @@ export type Player = typeof players.$inferSelect;
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
 });
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
 
 // Enums
 export const MetricType = {
