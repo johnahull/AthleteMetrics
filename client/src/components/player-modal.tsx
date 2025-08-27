@@ -225,9 +225,24 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                   <FormItem>
                     <FormLabel className="flex items-center">
                       <Users className="h-4 w-4 mr-2" />
-                      Teams <span className="text-red-500">*</span>
+                      Teams (optional)
                     </FormLabel>
                     <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                      <div className="flex justify-between items-center pb-2 border-b">
+                        <span className="text-sm text-gray-600">
+                          {form.watch("teamIds")?.length || 0} team(s) selected
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => form.setValue("teamIds", [])}
+                          disabled={isPending}
+                          data-testid="button-clear-teams"
+                        >
+                          Clear All
+                        </Button>
+                      </div>
                       {teams.map((team) => (
                         <FormField
                           key={team.id}
