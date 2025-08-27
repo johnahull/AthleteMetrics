@@ -4,6 +4,8 @@
 
 The Athlete Performance Hub is a comprehensive full-stack web application designed for tracking and analyzing athlete performance data. The platform focuses specifically on two key metrics: 10-yard fly time and vertical jump measurements. It provides team management, player tracking, data entry, analytics, and comprehensive import/export functionality for coaches and performance analysts.
 
+The system supports flexible player management where athletes can be assigned to multiple teams, participate in multiple sports, or exist as independent players without any team affiliations.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -37,6 +39,8 @@ Preferred communication style: Simple, everyday language.
 - **Flexible Import Modes**: Support for both matching existing players and creating new ones
 - **Data Validation**: Comprehensive validation using Zod schemas at both client and server levels
 - **Real-time Analytics**: Dynamic filtering and aggregation for performance insights
+- **Multi-Value Support**: Players can have multiple teams, sports, and contact methods
+- **Independent Players**: Support for players without team assignments, labeled as "Independent Players"
 
 ### Authentication & Security
 - **Environment-based Admin Credentials**: Simple admin login using ADMIN_USER and ADMIN_PASS
