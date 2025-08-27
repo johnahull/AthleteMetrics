@@ -15,14 +15,19 @@ export default function PlayerProfile() {
   const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
     queryKey: ["/api/players", playerId],
     queryFn: async () => {
+      console.log('Fetching player with ID:', playerId);
       const response = await fetch(`/api/players/${playerId}`);
+      console.log('Response status:', response.status);
       if (!response.ok) {
+        console.log('Response not ok:', response.status);
         throw new Error('Player not found');
       }
       const data = await response.json();
+      console.log('Player data received:', data);
       return data;
     },
     enabled: !!playerId,
+    retry: false,
   });
 
   const { data: measurements = [], isLoading: measurementsLoading } = useQuery({
@@ -32,6 +37,14 @@ export default function PlayerProfile() {
       if (!response.ok) throw new Error('Failed to fetch measurements');
       return response.json();
     },
+  });
+
+  console.log('Component state:', { 
+    playerId, 
+    playerLoading, 
+    measurementsLoading, 
+    playerError, 
+    player: !!player 
   });
 
   if (playerLoading || measurementsLoading) {
