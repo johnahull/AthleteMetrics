@@ -67,12 +67,23 @@ export default function Analytics() {
   const fly10Data = measurements?.filter((m: any) => m.metric === "FLY10_TIME").map((m: any) => parseFloat(m.value)) || [];
   const verticalData = measurements?.filter((m: any) => m.metric === "VERTICAL_JUMP").map((m: any) => parseFloat(m.value)) || [];
 
-  const calculatePercentiles = (data: number[]) => {
+  const calculatePercentiles = (data: number[], metric: string) => {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
     
+    // For time-based metrics, lower values are better, so we need to reverse the percentile logic
+    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(metric);
     const sorted = [...data].sort((a, b) => a - b);
+    
     const getPercentile = (p: number) => {
-      const index = Math.ceil((p / 100) * sorted.length) - 1;
+      let index: number;
+      if (isTimeBased) {
+        // For time-based metrics, reverse the percentile calculation
+        // 90th percentile = fastest times (best performance)
+        index = Math.ceil(((100 - p) / 100) * sorted.length) - 1;
+      } else {
+        // For other metrics like vertical jump, higher values are better
+        index = Math.ceil((p / 100) * sorted.length) - 1;
+      }
       return sorted[Math.max(0, index)];
     };
 
@@ -84,8 +95,8 @@ export default function Analytics() {
     };
   };
 
-  const fly10Percentiles = calculatePercentiles(fly10Data);
-  const verticalPercentiles = calculatePercentiles(verticalData);
+  const fly10Percentiles = calculatePercentiles(fly10Data, "FLY10_TIME");
+  const verticalPercentiles = calculatePercentiles(verticalData, "VERTICAL_JUMP");
 
   const leaderboards = {
     fly10: measurements
