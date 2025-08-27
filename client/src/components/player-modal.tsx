@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
-import { Plus, Trash2, Mail, Phone, Users } from "lucide-react";
+import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -33,7 +33,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       birthYear: new Date().getFullYear() - 15,
       teamIds: [],
       school: "",
-      sport: "",
+      sports: [],
       emails: [],
       phoneNumbers: [],
     },
@@ -49,6 +49,11 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     name: "phoneNumbers"
   });
 
+  const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
+    control: form.control,
+    name: "sports"
+  });
+
   useEffect(() => {
     if (player) {
       form.reset({
@@ -57,7 +62,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         birthYear: player.birthYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
-        sport: player.sport || "",
+        sports: player.sports || [],
         emails: player.emails || [],
         phoneNumbers: player.phoneNumbers || [],
       });
@@ -68,7 +73,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         birthYear: new Date().getFullYear() - 15,
         teamIds: [],
         school: "",
-        sport: "",
+        sports: [],
         emails: [],
         phoneNumbers: [],
       });
@@ -284,39 +289,74 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="sport"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Sport</FormLabel>
-                  <Select 
-                    value={field.value || ""} 
-                    onValueChange={field.onChange}
-                    disabled={isPending}
-                  >
-                    <FormControl>
-                      <SelectTrigger data-testid="select-player-sport">
-                        <SelectValue placeholder="Select sport (optional)" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">No sport selected</SelectItem>
-                      <SelectItem value="Soccer">Soccer</SelectItem>
-                      <SelectItem value="Track & Field">Track & Field</SelectItem>
-                      <SelectItem value="Basketball">Basketball</SelectItem>
-                      <SelectItem value="Football">Football</SelectItem>
-                      <SelectItem value="Tennis">Tennis</SelectItem>
-                      <SelectItem value="Baseball">Baseball</SelectItem>
-                      <SelectItem value="Volleyball">Volleyball</SelectItem>
-                      <SelectItem value="Cross Country">Cross Country</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Sports */}
+            <FormItem>
+              <FormLabel className="flex items-center">
+                <Trophy className="h-4 w-4 mr-2" />
+                Sports
+              </FormLabel>
+              <div className="space-y-2">
+                {sportsFields.map((field, index) => (
+                  <div key={field.id} className="flex space-x-2">
+                    <FormField
+                      control={form.control}
+                      name={`sports.${index}`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Select 
+                              value={field.value || ""} 
+                              onValueChange={field.onChange}
+                              disabled={isPending}
+                            >
+                              <SelectTrigger data-testid={`select-sport-${index}`}>
+                                <SelectValue placeholder="Select sport" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Soccer">Soccer</SelectItem>
+                                <SelectItem value="Track & Field">Track & Field</SelectItem>
+                                <SelectItem value="Basketball">Basketball</SelectItem>
+                                <SelectItem value="Football">Football</SelectItem>
+                                <SelectItem value="Tennis">Tennis</SelectItem>
+                                <SelectItem value="Baseball">Baseball</SelectItem>
+                                <SelectItem value="Volleyball">Volleyball</SelectItem>
+                                <SelectItem value="Cross Country">Cross Country</SelectItem>
+                                <SelectItem value="Swimming">Swimming</SelectItem>
+                                <SelectItem value="Wrestling">Wrestling</SelectItem>
+                                <SelectItem value="Golf">Golf</SelectItem>
+                                <SelectItem value="Other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeSport(index)}
+                      disabled={isPending}
+                      data-testid={`button-remove-sport-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendSport("")}
+                  disabled={isPending}
+                  data-testid="button-add-sport"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Sport
+                </Button>
+              </div>
+            </FormItem>
 
             {/* Email Addresses */}
             <FormItem>

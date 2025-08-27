@@ -126,8 +126,12 @@ export default function PlayerProfile() {
                 {player.school}
               </span>
             )}
-            {player?.sport && (
-              <Badge variant="secondary">{player.sport}</Badge>
+            {player?.sports && player.sports.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {player.sports.map((sport, index) => (
+                  <Badge key={index} variant="secondary">{sport}</Badge>
+                ))}
+              </div>
             )}
           </div>
         </div>
