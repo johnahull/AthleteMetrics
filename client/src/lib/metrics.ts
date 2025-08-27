@@ -61,3 +61,20 @@ export function getMetricColor(metric: string): string {
       return "bg-gray-100 text-gray-800";
   }
 }
+
+export function getMetricUnits(metric: string): string {
+  switch (metric) {
+    case "FLY10_TIME":
+    case "AGILITY_505":
+    case "AGILITY_5105":
+    case "T_TEST":
+    case "DASH_40YD":
+      return "s";
+    case "VERTICAL_JUMP":
+      return "in";
+    case "RSI":
+      return "";
+    default:
+      return "";
+  }
+}

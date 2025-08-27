@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Download } from "lucide-react";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
+import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 
 export default function Analytics() {
   const [, setLocation] = useLocation();
@@ -412,19 +413,22 @@ export default function Analytics() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{measurement.player.team.name}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {measurement.player.teams && measurement.player.teams.length > 0 
+                          ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                          : "Independent Player"
+                        }
+                      </td>
                       <td className="px-4 py-3 text-gray-600">{measurement.player.sport || "N/A"}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          measurement.metric === "FLY10_TIME" 
-                            ? "bg-blue-100 text-blue-800" 
-                            : "bg-green-100 text-green-800"
+                          getMetricColor(measurement.metric)
                         }`}>
-                          {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical Jump"}
+                          {getMetricDisplayName(measurement.metric)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-900">
-                        {measurement.value}{measurement.metric === "FLY10_TIME" ? "s" : "in"}
+                        {measurement.value}{getMetricUnits(measurement.metric)}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {new Date(measurement.date).toLocaleDateString()}
