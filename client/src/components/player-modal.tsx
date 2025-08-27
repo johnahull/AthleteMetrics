@@ -31,6 +31,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       birthYear: new Date().getFullYear() - 15,
       teamId: "",
       school: "",
+      sport: "",
     },
   });
 
@@ -42,6 +43,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         birthYear: player.birthYear,
         teamId: player.teamId,
         school: player.school || "",
+        sport: player.sport || "",
       });
     } else {
       form.reset({
@@ -50,6 +52,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         birthYear: new Date().getFullYear() - 15,
         teamId: "",
         school: "",
+        sport: "",
       });
     }
   }, [player, form]);
@@ -232,12 +235,47 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                   <FormLabel>School</FormLabel>
                   <FormControl>
                     <Input 
-                      {...field} 
+                      {...field}
+                      value={field.value || ""}
                       placeholder="School name (optional)"
                       disabled={isPending}
                       data-testid="input-player-school"
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="sport"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Sport</FormLabel>
+                  <Select 
+                    value={field.value || ""} 
+                    onValueChange={field.onChange}
+                    disabled={isPending}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-player-sport">
+                        <SelectValue placeholder="Select sport (optional)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="">No sport selected</SelectItem>
+                      <SelectItem value="Soccer">Soccer</SelectItem>
+                      <SelectItem value="Track & Field">Track & Field</SelectItem>
+                      <SelectItem value="Basketball">Basketball</SelectItem>
+                      <SelectItem value="Football">Football</SelectItem>
+                      <SelectItem value="Tennis">Tennis</SelectItem>
+                      <SelectItem value="Baseball">Baseball</SelectItem>
+                      <SelectItem value="Volleyball">Volleyball</SelectItem>
+                      <SelectItem value="Cross Country">Cross Country</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

@@ -19,6 +19,7 @@ export const players = pgTable("players", {
   fullName: text("full_name").notNull(),
   birthYear: integer("birth_year").notNull(),
   school: text("school"),
+  sport: text("sport"), // "Soccer", "Track & Field", "Basketball", etc.
   teamId: varchar("team_id").notNull().references(() => teams.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -270,6 +270,7 @@ export default function Players() {
                     <th className="px-6 py-3">Team</th>
                     <th className="px-6 py-3">Birth Year</th>
                     <th className="px-6 py-3">School</th>
+                    <th className="px-6 py-3">Sport</th>
                     <th className="px-6 py-3">Actions</th>
                   </tr>
                 </thead>
@@ -292,11 +293,13 @@ export default function Players() {
                       <td className="px-6 py-4 text-gray-600">{player.team.name}</td>
                       <td className="px-6 py-4 text-gray-600">{player.birthYear}</td>
                       <td className="px-6 py-4 text-gray-600">{player.school || "N/A"}</td>
+                      <td className="px-6 py-4 text-gray-600">{player.sport || "N/A"}</td>
                       <td className="px-6 py-4">
                         <div className="flex space-x-2">
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setLocation(`/players/${player.id}`)}
                             data-testid={`button-view-player-${player.id}`}
                           >
                             <Eye className="h-4 w-4" />

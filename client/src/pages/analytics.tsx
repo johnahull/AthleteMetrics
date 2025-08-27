@@ -9,11 +9,12 @@ import ScatterChart from "@/components/charts/scatter-chart";
 
 export default function Analytics() {
   const [filters, setFilters] = useState({
-    teamIds: [],
+    teamIds: [] as string[],
     birthYearFrom: "2009",
     birthYearTo: "2009",
     metric: "",
     dateRange: "last30",
+    sport: "",
   });
 
   const { data: teams } = useQuery({
@@ -28,6 +29,7 @@ export default function Analytics() {
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (filters.metric) params.append('metric', filters.metric);
+      if (filters.sport) params.append('sport', filters.sport);
       
       // Add date filtering based on dateRange
       const now = new Date();
@@ -50,16 +52,17 @@ export default function Analytics() {
 
   const clearFilters = () => {
     setFilters({
-      teamIds: [],
+      teamIds: [] as string[],
       birthYearFrom: "",
       birthYearTo: "",
       metric: "",
       dateRange: "last30",
+      sport: "",
     });
   };
 
-  const fly10Data = measurements?.filter(m => m.metric === "FLY10_TIME").map(m => parseFloat(m.value)) || [];
-  const verticalData = measurements?.filter(m => m.metric === "VERTICAL_JUMP").map(m => parseFloat(m.value)) || [];
+  const fly10Data = measurements?.filter((m: any) => m.metric === "FLY10_TIME").map((m: any) => parseFloat(m.value)) || [];
+  const verticalData = measurements?.filter((m: any) => m.metric === "VERTICAL_JUMP").map((m: any) => parseFloat(m.value)) || [];
 
   const calculatePercentiles = (data: number[]) => {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
@@ -83,12 +86,12 @@ export default function Analytics() {
 
   const leaderboards = {
     fly10: measurements
-      ?.filter(m => m.metric === "FLY10_TIME")
-      .sort((a, b) => parseFloat(a.value) - parseFloat(b.value))
+      ?.filter((m: any) => m.metric === "FLY10_TIME")
+      .sort((a: any, b: any) => parseFloat(a.value) - parseFloat(b.value))
       .slice(0, 3) || [],
     vertical: measurements
-      ?.filter(m => m.metric === "VERTICAL_JUMP")
-      .sort((a, b) => parseFloat(b.value) - parseFloat(a.value))
+      ?.filter((m: any) => m.metric === "VERTICAL_JUMP")
+      .sort((a: any, b: any) => parseFloat(b.value) - parseFloat(a.value))
       .slice(0, 3) || [],
   };
 
@@ -106,7 +109,7 @@ export default function Analytics() {
       {/* Filters Bar */}
       <Card className="bg-white mb-6 sticky top-4 z-20">
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Teams</label>
               <Select value={filters.teamIds[0] || ""} onValueChange={(value) => setFilters(prev => ({ ...prev, teamIds: value ? [value] : [] }))}>
@@ -115,7 +118,7 @@ export default function Analytics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
-                  {teams?.map((team) => (
+                  {teams?.map((team: any) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -177,6 +180,26 @@ export default function Analytics() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Sport</label>
+              <Select value={filters.sport} onValueChange={(value) => setFilters(prev => ({ ...prev, sport: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Sports" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Sports</SelectItem>
+                  <SelectItem value="Soccer">Soccer</SelectItem>
+                  <SelectItem value="Track & Field">Track & Field</SelectItem>
+                  <SelectItem value="Basketball">Basketball</SelectItem>
+                  <SelectItem value="Football">Football</SelectItem>
+                  <SelectItem value="Tennis">Tennis</SelectItem>
+                  <SelectItem value="Baseball">Baseball</SelectItem>
+                  <SelectItem value="Volleyball">Volleyball</SelectItem>
+                  <SelectItem value="Cross Country">Cross Country</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
@@ -191,6 +214,11 @@ export default function Analytics() {
                 {filters.birthYearFrom && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.birthYearFrom === filters.birthYearTo ? filters.birthYearFrom : `${filters.birthYearFrom}-${filters.birthYearTo}`} Birth Year
+                  </span>
+                )}
+                {filters.sport && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                    {filters.sport}
                   </span>
                 )}
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
@@ -320,6 +348,73 @@ export default function Analytics() {
           </CardContent>
         </Card>
       </div>
+
+      {/* All Players Section */}
+      <Card className="bg-white mb-6">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">All Players ({measurements?.length || 0} measurements)</h3>
+          </div>
+          
+          {measurements && measurements.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-sm font-medium text-gray-500">
+                    <th className="px-4 py-3">Player</th>
+                    <th className="px-4 py-3">Team</th>
+                    <th className="px-4 py-3">Sport</th>
+                    <th className="px-4 py-3">Metric</th>
+                    <th className="px-4 py-3">Value</th>
+                    <th className="px-4 py-3">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-gray-100">
+                  {measurements.map((measurement: any, index: number) => (
+                    <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                            <span className="text-white font-medium text-xs">
+                              {measurement.player.fullName.split(' ').map((n: string) => n[0]).join('')}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{measurement.player.fullName}</p>
+                            <p className="text-gray-500 text-xs">Birth Year: {measurement.player.birthYear}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{measurement.player.team.name}</td>
+                      <td className="px-4 py-3 text-gray-600">{measurement.player.sport || "N/A"}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          measurement.metric === "FLY10_TIME" 
+                            ? "bg-blue-100 text-blue-800" 
+                            : "bg-green-100 text-green-800"
+                        }`}>
+                          {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical Jump"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-gray-900">
+                        {measurement.value}{measurement.metric === "FLY10_TIME" ? "s" : "in"}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {new Date(measurement.date).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>No measurements found matching the current filters.</p>
+              <p className="text-sm mt-1">Try adjusting your filters to see more results.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
