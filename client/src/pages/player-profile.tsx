@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
 import PlayerModal from "@/components/player-modal";
 import PlayerMeasurementForm from "@/components/player-measurement-form";
@@ -201,6 +201,64 @@ export default function PlayerProfile() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Contact Information */}
+      {((player?.emails && player.emails.length > 0) || (player?.phoneNumbers && player.phoneNumbers.length > 0)) && (
+        <Card className="bg-white mb-8">
+          <CardHeader>
+            <CardTitle>Contact Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Email Addresses */}
+              {player?.emails && player.emails.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-3 flex items-center">
+                    <Mail className="h-4 w-4 mr-2" />
+                    Email Addresses
+                  </h4>
+                  <div className="space-y-2">
+                    {player.emails.map((email, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <a 
+                          href={`mailto:${email}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                          data-testid={`link-email-${index}`}
+                        >
+                          {email}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Phone Numbers */}
+              {player?.phoneNumbers && player.phoneNumbers.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-3 flex items-center">
+                    <Phone className="h-4 w-4 mr-2" />
+                    Phone Numbers
+                  </h4>
+                  <div className="space-y-2">
+                    {player.phoneNumbers.map((phone, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <a 
+                          href={`tel:${phone}`}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                          data-testid={`link-phone-${index}`}
+                        >
+                          {phone}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Measurements */}
       <Card className="bg-white">

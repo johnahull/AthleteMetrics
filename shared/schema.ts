@@ -20,6 +20,8 @@ export const players = pgTable("players", {
   birthYear: integer("birth_year").notNull(),
   school: text("school"),
   sport: text("sport"), // "Soccer", "Track & Field", "Basketball", etc.
+  emails: text("emails").array(),
+  phoneNumbers: text("phone_numbers").array(),
   teamId: varchar("team_id").notNull().references(() => teams.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -77,6 +79,8 @@ export const insertPlayerSchema = createInsertSchema(players).omit({
   lastName: z.string().min(1, "Last name is required"),
   birthYear: z.number().min(1990).max(2020),
   teamId: z.string().min(1, "Team is required"),
+  emails: z.array(z.string().email("Invalid email format")).optional(),
+  phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
 });
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({

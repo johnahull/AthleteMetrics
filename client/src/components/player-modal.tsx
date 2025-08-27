@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
+import { Plus, Trash2, Mail, Phone } from "lucide-react";
 
 interface PlayerModalProps {
   isOpen: boolean;
@@ -32,7 +33,19 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       teamId: "",
       school: "",
       sport: "",
+      emails: [],
+      phoneNumbers: [],
     },
+  });
+
+  const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
+    control: form.control,
+    name: "emails"
+  });
+
+  const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
+    control: form.control,
+    name: "phoneNumbers"
   });
 
   useEffect(() => {
@@ -44,6 +57,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         teamId: player.teamId,
         school: player.school || "",
         sport: player.sport || "",
+        emails: player.emails || [],
+        phoneNumbers: player.phoneNumbers || [],
       });
     } else {
       form.reset({
@@ -53,6 +68,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         teamId: "",
         school: "",
         sport: "",
+        emails: [],
+        phoneNumbers: [],
       });
     }
   }, [player, form]);
@@ -280,6 +297,112 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 </FormItem>
               )}
             />
+
+            {/* Email Addresses */}
+            <FormItem>
+              <FormLabel className="flex items-center">
+                <Mail className="h-4 w-4 mr-2" />
+                Email Addresses
+              </FormLabel>
+              <div className="space-y-2">
+                {emailFields.map((field, index) => (
+                  <div key={field.id} className="flex space-x-2">
+                    <FormField
+                      control={form.control}
+                      name={`emails.${index}`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input 
+                              {...field}
+                              type="email"
+                              placeholder="Enter email address"
+                              disabled={isPending}
+                              data-testid={`input-email-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeEmail(index)}
+                      disabled={isPending}
+                      data-testid={`button-remove-email-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendEmail("")}
+                  disabled={isPending}
+                  data-testid="button-add-email"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Email
+                </Button>
+              </div>
+            </FormItem>
+
+            {/* Phone Numbers */}
+            <FormItem>
+              <FormLabel className="flex items-center">
+                <Phone className="h-4 w-4 mr-2" />
+                Phone Numbers
+              </FormLabel>
+              <div className="space-y-2">
+                {phoneFields.map((field, index) => (
+                  <div key={field.id} className="flex space-x-2">
+                    <FormField
+                      control={form.control}
+                      name={`phoneNumbers.${index}`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input 
+                              {...field}
+                              type="tel"
+                              placeholder="Enter phone number"
+                              disabled={isPending}
+                              data-testid={`input-phone-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removePhone(index)}
+                      disabled={isPending}
+                      data-testid={`button-remove-phone-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendPhone("")}
+                  disabled={isPending}
+                  data-testid="button-add-phone"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Phone
+                </Button>
+              </div>
+            </FormItem>
 
             <div className="flex justify-end space-x-3 pt-4">
               <Button 
