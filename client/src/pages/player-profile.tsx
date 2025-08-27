@@ -115,7 +115,10 @@ export default function PlayerProfile() {
             </span>
             <span className="flex items-center">
               <Trophy className="h-4 w-4 mr-1" />
-              {player?.team?.name}
+              {player?.teams && player.teams.length > 0 
+                ? player.teams.map(team => team.name).join(', ')
+                : 'No teams assigned'
+              }
             </span>
             {player?.school && (
               <span className="flex items-center">

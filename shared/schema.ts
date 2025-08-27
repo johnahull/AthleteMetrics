@@ -22,6 +22,12 @@ export const players = pgTable("players", {
   sport: text("sport"), // "Soccer", "Track & Field", "Basketball", etc.
   emails: text("emails").array(),
   phoneNumbers: text("phone_numbers").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const playerTeams = pgTable("player_teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").notNull().references(() => players.id),
   teamId: varchar("team_id").notNull().references(() => teams.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -46,15 +52,23 @@ export const users = pgTable("users", {
 
 // Relations
 export const teamsRelations = relations(teams, ({ many }) => ({
-  players: many(players),
+  playerTeams: many(playerTeams),
 }));
 
-export const playersRelations = relations(players, ({ one, many }) => ({
+export const playersRelations = relations(players, ({ many }) => ({
+  playerTeams: many(playerTeams),
+  measurements: many(measurements),
+}));
+
+export const playerTeamsRelations = relations(playerTeams, ({ one }) => ({
+  player: one(players, {
+    fields: [playerTeams.playerId],
+    references: [players.id],
+  }),
   team: one(teams, {
-    fields: [players.teamId],
+    fields: [playerTeams.teamId],
     references: [teams.id],
   }),
-  measurements: many(measurements),
 }));
 
 export const measurementsRelations = relations(measurements, ({ one }) => ({
@@ -78,9 +92,14 @@ export const insertPlayerSchema = createInsertSchema(players).omit({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   birthYear: z.number().min(1990).max(2020),
-  teamId: z.string().min(1, "Team is required"),
+  teamIds: z.array(z.string().min(1, "Team ID required")).min(1, "At least one team is required"),
   emails: z.array(z.string().email("Invalid email format")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
+});
+
+export const insertPlayerTeamSchema = createInsertSchema(playerTeams).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
@@ -101,6 +120,9 @@ export type Team = typeof teams.$inferSelect;
 
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
 export type Player = typeof players.$inferSelect;
+
+export type InsertPlayerTeam = z.infer<typeof insertPlayerTeamSchema>;
+export type PlayerTeam = typeof playerTeams.$inferSelect;
 
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
