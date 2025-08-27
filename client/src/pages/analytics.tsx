@@ -29,7 +29,7 @@ export default function Analytics() {
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (filters.metric) params.append('metric', filters.metric);
-      if (filters.sport) params.append('sport', filters.sport);
+      if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       
       // Add date filtering based on dateRange
       const now = new Date();
@@ -187,7 +187,7 @@ export default function Analytics() {
                   <SelectValue placeholder="All Sports" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Sports</SelectItem>
+                  <SelectItem value="all">All Sports</SelectItem>
                   <SelectItem value="Soccer">Soccer</SelectItem>
                   <SelectItem value="Track & Field">Track & Field</SelectItem>
                   <SelectItem value="Basketball">Basketball</SelectItem>
@@ -216,7 +216,7 @@ export default function Analytics() {
                     {filters.birthYearFrom === filters.birthYearTo ? filters.birthYearFrom : `${filters.birthYearFrom}-${filters.birthYearTo}`} Birth Year
                   </span>
                 )}
-                {filters.sport && (
+                {filters.sport && filters.sport !== "all" && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.sport}
                   </span>
