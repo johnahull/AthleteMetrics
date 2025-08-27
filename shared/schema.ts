@@ -36,7 +36,7 @@ export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("player_id").notNull().references(() => players.id),
   date: date("date").notNull(),
-  metric: text("metric").notNull(), // "FLY10_TIME" or "VERTICAL_JUMP"
+  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
@@ -110,7 +110,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   playerId: z.string().min(1, "Player is required"),
   date: z.string().min(1, "Date is required"),
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP"]),
+  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
 });
@@ -140,6 +140,10 @@ export type User = typeof users.$inferSelect;
 export const MetricType = {
   FLY10_TIME: "FLY10_TIME",
   VERTICAL_JUMP: "VERTICAL_JUMP",
+  AGILITY_505: "AGILITY_505",
+  AGILITY_5105: "AGILITY_5105", 
+  T_TEST: "T_TEST",
+  DASH_40YD: "DASH_40YD",
 } as const;
 
 export const TeamLevel = {

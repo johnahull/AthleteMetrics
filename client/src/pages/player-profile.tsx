@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getMetricDisplayName, getMetricBadgeVariant } from "@/lib/metrics";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
@@ -297,8 +298,8 @@ export default function PlayerProfile() {
                         {formatDate(measurement.date)}
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        <Badge variant={measurement.metric === "FLY10_TIME" ? "default" : "secondary"}>
-                          {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical Jump"}
+                        <Badge variant={getMetricBadgeVariant(measurement.metric)}>
+                          {getMetricDisplayName(measurement.metric)}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-900">
