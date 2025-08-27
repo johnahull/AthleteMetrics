@@ -285,7 +285,12 @@ export default function Players() {
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{player.fullName}</p>
+                            <button 
+                              onClick={() => setLocation(`/players/${player.id}`)}
+                              className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                            >
+                              {player.fullName}
+                            </button>
                             <p className="text-gray-500 text-xs">ID: #{player.id.slice(0, 8)}</p>
                           </div>
                         </div>
