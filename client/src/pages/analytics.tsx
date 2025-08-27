@@ -269,7 +269,12 @@ export default function Analytics() {
                           >
                             {measurement.player.fullName}
                           </button>
-                          <p className="text-xs text-gray-500">{measurement.player.team.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {measurement.player.teams && measurement.player.teams.length > 0 
+                              ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                              : "Independent Player"
+                            }
+                          </p>
                         </div>
                       </div>
                       <span className="font-mono text-sm">{measurement.value}s</span>
@@ -296,7 +301,12 @@ export default function Analytics() {
                           >
                             {measurement.player.fullName}
                           </button>
-                          <p className="text-xs text-gray-500">{measurement.player.team.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {measurement.player.teams && measurement.player.teams.length > 0 
+                              ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                              : "Independent Player"
+                            }
+                          </p>
                         </div>
                       </div>
                       <span className="font-mono text-sm">{measurement.value}in</span>
