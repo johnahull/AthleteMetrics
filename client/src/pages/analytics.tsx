@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +9,7 @@ import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 
 export default function Analytics() {
+  const [, setLocation] = useLocation();
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
     birthYearFrom: "2009",
@@ -118,7 +120,7 @@ export default function Analytics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
-                  {teams?.map((team: any) => (
+                  {(teams || []).map((team: any) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -252,7 +254,7 @@ export default function Analytics() {
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Fastest Fly-10 Times</h4>
                 <div className="space-y-2">
-                  {leaderboards.fly10.map((measurement, index) => (
+                  {leaderboards.fly10.map((measurement: any, index: number) => (
                     <div key={measurement.id} className="flex items-center justify-between py-2">
                       <div className="flex items-center space-x-3">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
@@ -261,7 +263,12 @@ export default function Analytics() {
                           {index + 1}
                         </span>
                         <div>
-                          <p className="font-medium text-gray-900">{measurement.player.fullName}</p>
+                          <button 
+                            onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                            className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                          >
+                            {measurement.player.fullName}
+                          </button>
                           <p className="text-xs text-gray-500">{measurement.player.team.name}</p>
                         </div>
                       </div>
@@ -274,7 +281,7 @@ export default function Analytics() {
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Highest Vertical Jumps</h4>
                 <div className="space-y-2">
-                  {leaderboards.vertical.map((measurement, index) => (
+                  {leaderboards.vertical.map((measurement: any, index: number) => (
                     <div key={measurement.id} className="flex items-center justify-between py-2">
                       <div className="flex items-center space-x-3">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
@@ -283,7 +290,12 @@ export default function Analytics() {
                           {index + 1}
                         </span>
                         <div>
-                          <p className="font-medium text-gray-900">{measurement.player.fullName}</p>
+                          <button 
+                            onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                            className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                          >
+                            {measurement.player.fullName}
+                          </button>
                           <p className="text-xs text-gray-500">{measurement.player.team.name}</p>
                         </div>
                       </div>
@@ -380,7 +392,12 @@ export default function Analytics() {
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{measurement.player.fullName}</p>
+                            <button 
+                              onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                              className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                            >
+                              {measurement.player.fullName}
+                            </button>
                             <p className="text-gray-500 text-xs">Birth Year: {measurement.player.birthYear}</p>
                           </div>
                         </div>

@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const { data: dashboardStats, isLoading } = useQuery({
     queryKey: ["/api/analytics/dashboard"],
   });
@@ -181,7 +183,12 @@ export default function Dashboard() {
                             {measurement.player.firstName.charAt(0)}{measurement.player.lastName.charAt(0)}
                           </span>
                         </div>
-                        <span className="font-medium">{measurement.player.fullName}</span>
+                        <button 
+                          onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                          className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                        >
+                          {measurement.player.fullName}
+                        </button>
                       </div>
                     </td>
                     <td className="py-3 text-gray-600">{measurement.player.team.name}</td>
