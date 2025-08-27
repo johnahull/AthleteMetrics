@@ -12,13 +12,17 @@ export default function PlayerProfile() {
   const { id: playerId } = useParams();
   const [, setLocation] = useLocation();
 
-  const { data: player, isLoading: playerLoading } = useQuery({
+  const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
     queryKey: ["/api/players", playerId],
     queryFn: async () => {
       const response = await fetch(`/api/players/${playerId}`);
-      if (!response.ok) throw new Error('Player not found');
-      return response.json();
+      if (!response.ok) {
+        throw new Error('Player not found');
+      }
+      const data = await response.json();
+      return data;
     },
+    enabled: !!playerId,
   });
 
   const { data: measurements = [], isLoading: measurementsLoading } = useQuery({
@@ -42,13 +46,25 @@ export default function PlayerProfile() {
     );
   }
 
-  if (!player) {
+  if (playerError) {
     return (
       <div className="p-6">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Player Not Found</h2>
           <p className="text-gray-600 mb-4">The player you're looking for doesn't exist.</p>
           <Button onClick={() => setLocation('/players')}>Back to Players</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!player) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-64"></div>
+          <div className="h-32 bg-gray-200 rounded-xl"></div>
+          <div className="h-96 bg-gray-200 rounded-xl"></div>
         </div>
       </div>
     );
