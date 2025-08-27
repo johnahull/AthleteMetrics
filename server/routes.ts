@@ -146,6 +146,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/players/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const player = await storage.getPlayer(id);
+      if (!player) {
+        return res.status(404).json({ message: "Player not found" });
+      }
+      res.json(player);
+    } catch (error) {
+      console.error("Failed to fetch player:", error);
+      res.status(500).json({ message: "Failed to fetch player" });
+    }
+  });
+
   app.post("/api/players", requireAuth, async (req, res) => {
     try {
       const playerData = insertPlayerSchema.parse(req.body);
