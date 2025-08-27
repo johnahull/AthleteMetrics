@@ -26,7 +26,9 @@ export default function ScatterChart({ data }: ScatterChartProps) {
     measurements.forEach(measurement => {
       const playerId = measurement.player.id;
       const playerName = measurement.player.fullName;
-      const teamName = measurement.player.team.name;
+      const teamName = measurement.player.teams && measurement.player.teams.length > 0 
+        ? measurement.player.teams.map((team: any) => team.name).join(", ")
+        : "Independent Player";
       const value = parseFloat(measurement.value);
       
       if (!playerData.has(playerId)) {
