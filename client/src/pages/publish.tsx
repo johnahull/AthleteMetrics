@@ -42,20 +42,44 @@ export default function Publish() {
     enabled: !!filters.metric,
   });
 
-  // Sort measurements from best to worst based on metric type
-  const sortedMeasurements = measurements ? [...measurements].sort((a: any, b: any) => {
-    const aValue = parseFloat(a.value);
-    const bValue = parseFloat(b.value);
-    
-    // For time-based metrics, lower values are better
+  // Get each athlete's best performance for the selected metric
+  const bestMeasurements = measurements ? (() => {
+    const playerBest = new Map();
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
     
-    if (isTimeBased) {
-      return aValue - bValue; // ascending for time (lower is better)
-    } else {
-      return bValue - aValue; // descending for others (higher is better)
-    }
-  }) : [];
+    measurements.forEach((measurement: any) => {
+      const playerId = measurement.player.id;
+      const value = parseFloat(measurement.value);
+      
+      if (!playerBest.has(playerId)) {
+        playerBest.set(playerId, measurement);
+      } else {
+        const current = playerBest.get(playerId);
+        const currentValue = parseFloat(current.value);
+        
+        // For time-based metrics, lower is better; for others, higher is better
+        const isBetter = isTimeBased ? value < currentValue : value > currentValue;
+        
+        if (isBetter) {
+          playerBest.set(playerId, measurement);
+        }
+      }
+    });
+    
+    // Convert to array and sort from best to worst
+    return Array.from(playerBest.values()).sort((a: any, b: any) => {
+      const aValue = parseFloat(a.value);
+      const bValue = parseFloat(b.value);
+      
+      if (isTimeBased) {
+        return aValue - bValue; // ascending for time (lower is better)
+      } else {
+        return bValue - aValue; // descending for others (higher is better)
+      }
+    });
+  })() : [];
+
+  const sortedMeasurements = bestMeasurements;
 
   const exportToPDF = () => {
     if (!sortedMeasurements || sortedMeasurements.length === 0) {
