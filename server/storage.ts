@@ -120,7 +120,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (conditions.length > 0) {
-      query = query.where(and(...conditions));
+      query = query.where(and(...conditions)) as any;
     }
 
     const result = await query.orderBy(asc(players.lastName), asc(players.firstName));
@@ -147,7 +147,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
-    const updateData = { ...player };
+    const updateData: any = { ...player };
     if (player.firstName || player.lastName) {
       // Fetch current player to build full name
       const current = await this.getPlayer(id);
@@ -210,7 +210,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (conditions.length > 0) {
-      query = query.where(and(...conditions));
+      query = query.where(and(...conditions)) as any;
     }
 
     const result = await query.orderBy(desc(measurements.date), desc(measurements.createdAt));
@@ -230,6 +230,7 @@ export class DatabaseStorage implements IStorage {
     const [newMeasurement] = await db.insert(measurements).values({
       ...measurement,
       value: measurement.value.toString(),
+      flyInDistance: measurement.flyInDistance?.toString(),
       units,
     }).returning();
     return newMeasurement;
