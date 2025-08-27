@@ -191,7 +191,14 @@ export default function Dashboard() {
                         </button>
                       </div>
                     </td>
-                    <td className="py-3 text-gray-600">{measurement.player.team.name}</td>
+                    <td className="py-3 text-gray-600">
+                      {measurement.player.teams && measurement.player.teams.length > 0 
+                        ? measurement.player.teams.length > 1 
+                          ? `${measurement.player.teams[0].name} (+${measurement.player.teams.length - 1})`
+                          : measurement.player.teams[0].name
+                        : "Independent"
+                      }
+                    </td>
                     <td className="py-3">
                       <span className={`px-2 py-1 rounded-full text-xs ${
                         measurement.metric === "FLY10_TIME" 
