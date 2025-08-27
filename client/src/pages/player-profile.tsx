@@ -4,13 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
+import PlayerModal from "@/components/player-modal";
+import PlayerMeasurementForm from "@/components/player-measurement-form";
 import type { Player, Team, Measurement } from "@shared/schema";
 
 export default function PlayerProfile() {
   const { id: playerId } = useParams();
   const [, setLocation] = useLocation();
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
 
   const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
     queryKey: ["/api/players", playerId],
@@ -24,6 +29,10 @@ export default function PlayerProfile() {
       if (!response.ok) throw new Error('Failed to fetch measurements');
       return response.json();
     },
+  });
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/teams"],
   });
 
   if (playerLoading || measurementsLoading) {
@@ -97,27 +106,44 @@ export default function PlayerProfile() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Players
         </Button>
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{player.fullName}</h1>
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold text-gray-900">{player?.fullName}</h1>
           <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
             <span className="flex items-center">
               <User className="h-4 w-4 mr-1" />
-              Birth Year: {player.birthYear}
+              Birth Year: {player?.birthYear}
             </span>
             <span className="flex items-center">
               <Trophy className="h-4 w-4 mr-1" />
-              {player.team.name}
+              {player?.team?.name}
             </span>
-            {player.school && (
+            {player?.school && (
               <span className="flex items-center">
                 <MapPin className="h-4 w-4 mr-1" />
                 {player.school}
               </span>
             )}
-            {player.sport && (
+            {player?.sport && (
               <Badge variant="secondary">{player.sport}</Badge>
             )}
           </div>
+        </div>
+        <div className="flex space-x-3">
+          <Button 
+            onClick={() => setShowEditModal(true)}
+            variant="outline"
+            data-testid="button-edit-player"
+          >
+            <Edit className="h-4 w-4 mr-2" />
+            Edit Player
+          </Button>
+          <Button 
+            onClick={() => setShowAddMeasurementModal(true)}
+            data-testid="button-add-measurement"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Measurement
+          </Button>
         </div>
       </div>
 
@@ -233,6 +259,35 @@ export default function PlayerProfile() {
           )}
         </CardContent>
       </Card>
+
+      {/* Player Edit Modal */}
+      {player && (
+        <PlayerModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          player={player}
+          teams={teams}
+        />
+      )}
+
+      {/* Add Measurement Modal */}
+      {player && (
+        <Dialog open={showAddMeasurementModal} onOpenChange={setShowAddMeasurementModal}>
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Measurement for {player.fullName}</DialogTitle>
+              <DialogDescription>
+                Record a new performance measurement for this player.
+              </DialogDescription>
+            </DialogHeader>
+            <PlayerMeasurementForm 
+              playerId={player.id}
+              playerName={player.fullName}
+              onSuccess={() => setShowAddMeasurementModal(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
