@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Download } from "lucide-react";
+import { Download, RotateCcw } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import jsPDF from "jspdf";
 
@@ -83,6 +83,18 @@ export default function Publish() {
 
   const sortedMeasurements = bestMeasurements;
 
+  const resetFilters = () => {
+    setFilters({
+      teamIds: [],
+      birthYearFrom: "",
+      birthYearTo: "",
+      metric: "",
+      sport: "",
+      dateFrom: "",
+      dateTo: "",
+    });
+  };
+
   const exportToPDF = () => {
     if (!sortedMeasurements || sortedMeasurements.length === 0) {
       alert("No data to export");
@@ -158,15 +170,26 @@ export default function Publish() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Publish Results</h1>
-        <Button 
-          onClick={exportToPDF}
-          disabled={!sortedMeasurements || sortedMeasurements.length === 0}
-          className="flex items-center gap-2"
-          data-testid="export-pdf-button"
-        >
-          <Download className="h-4 w-4" />
-          Export PDF
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            onClick={resetFilters}
+            variant="outline"
+            className="flex items-center gap-2"
+            data-testid="reset-filters-button"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset Filters
+          </Button>
+          <Button 
+            onClick={exportToPDF}
+            disabled={!sortedMeasurements || sortedMeasurements.length === 0}
+            className="flex items-center gap-2"
+            data-testid="export-pdf-button"
+          >
+            <Download className="h-4 w-4" />
+            Export PDF
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
