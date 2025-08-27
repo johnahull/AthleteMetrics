@@ -115,7 +115,7 @@ export default function MeasurementForm() {
   ) || [];
 
   const metric = form.watch("metric");
-  const units = metric === "VERTICAL_JUMP" ? "in" : "s";
+  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
 
   const onSubmit = (data: InsertMeasurement) => {
     if (!selectedPlayer) {
@@ -249,6 +249,7 @@ export default function MeasurementForm() {
                     <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
                     <SelectItem value="T_TEST">T-Test</SelectItem>
                     <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
+                    <SelectItem value="RSI">Reactive Strength Index</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -273,15 +274,17 @@ export default function MeasurementForm() {
                       step="0.01"
                       placeholder="Enter value"
                       disabled={createMeasurementMutation.isPending}
-                      className="rounded-r-none"
+                      className={units ? "rounded-r-none" : ""}
                       data-testid="input-measurement-value"
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                       value={field.value || ''}
                     />
                   </FormControl>
-                  <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                    {units}
-                  </div>
+                  {units && (
+                    <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
+                      {units}
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
                 <FormMessage />
