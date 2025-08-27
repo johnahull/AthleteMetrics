@@ -264,7 +264,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">No sport selected</SelectItem>
+                      <SelectItem value="none">No sport selected</SelectItem>
                       <SelectItem value="Soccer">Soccer</SelectItem>
                       <SelectItem value="Track & Field">Track & Field</SelectItem>
                       <SelectItem value="Basketball">Basketball</SelectItem>
