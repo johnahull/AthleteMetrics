@@ -31,6 +31,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       firstName: "",
       lastName: "",
       birthYear: new Date().getFullYear() - 15,
+      graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
       school: "",
       sports: [],
@@ -60,6 +61,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: player.firstName,
         lastName: player.lastName,
         birthYear: player.birthYear,
+        graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sports: player.sports || [],
@@ -71,6 +73,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: "",
         lastName: "",
         birthYear: new Date().getFullYear() - 15,
+        graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
         sports: [],
@@ -218,6 +221,31 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="graduationYear"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Graduation Year</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        type="number"
+                        min="2020"
+                        max="2035"
+                        disabled={isPending}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        data-testid="input-player-graduationyear"
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
               <FormField
                 control={form.control}
                 name="teamIds"

@@ -18,6 +18,7 @@ export const players = pgTable("players", {
   lastName: text("last_name").notNull(),
   fullName: text("full_name").notNull(),
   birthYear: integer("birth_year").notNull(),
+  graduationYear: integer("graduation_year"),
   school: text("school"),
   sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
   emails: text("emails").array(),
