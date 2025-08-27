@@ -14,6 +14,8 @@ export function getMetricDisplayName(metric: string): string {
       return "T-Test";
     case "DASH_40YD":
       return "40yd Dash";
+    case "RSI":
+      return "RSI";
     default:
       return metric;
   }
@@ -32,6 +34,8 @@ export function getMetricBadgeVariant(metric: string): "default" | "secondary" |
       return "destructive";
     case "DASH_40YD":
       return "default";
+    case "RSI":
+      return "outline";
     default:
       return "secondary";
   }
@@ -51,6 +55,8 @@ export function getMetricColor(metric: string): string {
       return "bg-red-100 text-red-800";
     case "DASH_40YD":
       return "bg-indigo-100 text-indigo-800";
+    case "RSI":
+      return "bg-orange-100 text-orange-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
