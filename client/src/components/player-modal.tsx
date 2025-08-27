@@ -7,15 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
-import { Plus, Trash2, Mail, Phone } from "lucide-react";
+import { Plus, Trash2, Mail, Phone, Users } from "lucide-react";
 
 interface PlayerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  player: (Player & { team: Team }) | null;
+  player: (Player & { teams: Team[] }) | null;
   teams: Team[];
 }
 
@@ -30,7 +31,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       firstName: "",
       lastName: "",
       birthYear: new Date().getFullYear() - 15,
-      teamId: "",
+      teamIds: [],
       school: "",
       sport: "",
       emails: [],
@@ -54,7 +55,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: player.firstName,
         lastName: player.lastName,
         birthYear: player.birthYear,
-        teamId: player.teamId,
+        teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sport: player.sport || "",
         emails: player.emails || [],
@@ -65,7 +66,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: "",
         lastName: "",
         birthYear: new Date().getFullYear() - 15,
-        teamId: "",
+        teamIds: [],
         school: "",
         sport: "",
         emails: [],
@@ -214,30 +215,49 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
               <FormField
                 control={form.control}
-                name="teamId"
-                render={({ field }) => (
+                name="teamIds"
+                render={() => (
                   <FormItem>
-                    <FormLabel>
-                      Team <span className="text-red-500">*</span>
+                    <FormLabel className="flex items-center">
+                      <Users className="h-4 w-4 mr-2" />
+                      Teams <span className="text-red-500">*</span>
                     </FormLabel>
-                    <Select 
-                      value={field.value} 
-                      onValueChange={field.onChange}
-                      disabled={isPending}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-player-team">
-                          <SelectValue placeholder="Select team..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {teams.map((team) => (
-                          <SelectItem key={team.id} value={team.id}>
-                            {team.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                      {teams.map((team) => (
+                        <FormField
+                          key={team.id}
+                          control={form.control}
+                          name="teamIds"
+                          render={({ field }) => {
+                            return (
+                              <FormItem
+                                key={team.id}
+                                className="flex flex-row items-start space-x-3 space-y-0"
+                              >
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(team.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...field.value, team.id])
+                                        : field.onChange(
+                                            field.value?.filter(
+                                              (value) => value !== team.id
+                                            )
+                                          )
+                                    }}
+                                    data-testid={`checkbox-team-${team.id}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-sm font-normal">
+                                  {team.name}
+                                </FormLabel>
+                              </FormItem>
+                            )
+                          }}
+                        />
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

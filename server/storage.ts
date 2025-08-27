@@ -1,4 +1,4 @@
-import { teams, players, measurements, users, type Team, type Player, type Measurement, type User, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser } from "@shared/schema";
+import { teams, players, measurements, users, playerTeams, type Team, type Player, type Measurement, type User, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser, type PlayerTeam, type InsertPlayerTeam } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
 
@@ -16,12 +16,18 @@ export interface IStorage {
   deleteTeam(id: string): Promise<void>;
 
   // Players
-  getPlayers(filters?: { teamId?: string; birthYearFrom?: number; birthYearTo?: number; search?: string }): Promise<(Player & { team: Team })[]>;
-  getPlayer(id: string): Promise<(Player & { team: Team }) | undefined>;
+  getPlayers(filters?: { teamId?: string; birthYearFrom?: number; birthYearTo?: number; search?: string }): Promise<(Player & { teams: Team[] })[]>;
+  getPlayer(id: string): Promise<(Player & { teams: Team[] }) | undefined>;
   createPlayer(player: InsertPlayer): Promise<Player>;
   updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player>;
   deletePlayer(id: string): Promise<void>;
   getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined>;
+
+  // Player Teams
+  getPlayerTeams(playerId: string): Promise<Team[]>;
+  addPlayerToTeam(playerId: string, teamId: string): Promise<PlayerTeam>;
+  removePlayerFromTeam(playerId: string, teamId: string): Promise<void>;
+  setPlayerTeams(playerId: string, teamIds: string[]): Promise<void>;
 
   // Measurements
   getMeasurements(filters?: { 
@@ -32,7 +38,7 @@ export interface IStorage {
     dateTo?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
-  }): Promise<(Measurement & { player: Player & { team: Team } })[]>;
+  }): Promise<(Measurement & { player: Player & { teams: Team[] } })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
   createMeasurement(measurement: InsertMeasurement): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
@@ -102,13 +108,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Players
-  async getPlayers(filters?: { teamId?: string; birthYearFrom?: number; birthYearTo?: number; search?: string }): Promise<(Player & { team: Team })[]> {
-    let query = db.select().from(players).innerJoin(teams, eq(players.teamId, teams.id));
-    
+  async getPlayers(filters?: { teamId?: string; birthYearFrom?: number; birthYearTo?: number; search?: string }): Promise<(Player & { teams: Team[] })[]> {
     const conditions = [];
-    if (filters?.teamId) {
-      conditions.push(eq(players.teamId, filters.teamId));
-    }
     if (filters?.birthYearFrom) {
       conditions.push(gte(players.birthYear, filters.birthYearFrom));
     }
@@ -119,35 +120,63 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${players.fullName} ILIKE ${'%' + filters.search + '%'}`);
     }
 
+    let query = db.select().from(players);
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
     }
 
-    const result = await query.orderBy(asc(players.lastName), asc(players.firstName));
-    return result.map(({ players: player, teams: team }) => ({ ...player, team }));
+    const playersResult = await query.orderBy(asc(players.lastName), asc(players.firstName));
+    
+    // Get teams for each player
+    const playersWithTeams = await Promise.all(
+      playersResult.map(async (player) => {
+        const playerTeams = await this.getPlayerTeams(player.id);
+        return { ...player, teams: playerTeams };
+      })
+    );
+
+    // Filter by team if specified
+    if (filters?.teamId) {
+      return playersWithTeams.filter(player => 
+        player.teams.some(team => team.id === filters.teamId)
+      );
+    }
+
+    return playersWithTeams;
   }
 
-  async getPlayer(id: string): Promise<(Player & { team: Team }) | undefined> {
-    const [result] = await db.select()
+  async getPlayer(id: string): Promise<(Player & { teams: Team[] }) | undefined> {
+    const [player] = await db.select()
       .from(players)
-      .innerJoin(teams, eq(players.teamId, teams.id))
       .where(eq(players.id, id));
     
-    if (!result) return undefined;
-    return { ...result.players, team: result.teams };
+    if (!player) return undefined;
+    
+    const playerTeams = await this.getPlayerTeams(id);
+    return { ...player, teams: playerTeams };
   }
 
   async createPlayer(player: InsertPlayer): Promise<Player> {
+    const { teamIds, ...playerData } = player;
     const fullName = `${player.firstName} ${player.lastName}`;
+    
     const [newPlayer] = await db.insert(players).values({
-      ...player,
+      ...playerData,
       fullName,
     }).returning();
+
+    // Add player to teams
+    if (teamIds && teamIds.length > 0) {
+      await this.setPlayerTeams(newPlayer.id, teamIds);
+    }
+
     return newPlayer;
   }
 
   async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
-    const updateData: any = { ...player };
+    const { teamIds, ...playerData } = player;
+    const updateData: any = { ...playerData };
+    
     if (player.firstName || player.lastName) {
       // Fetch current player to build full name
       const current = await this.getPlayer(id);
@@ -157,6 +186,12 @@ export class DatabaseStorage implements IStorage {
     }
     
     const [updatedPlayer] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();
+    
+    // Update team associations if provided
+    if (teamIds) {
+      await this.setPlayerTeams(id, teamIds);
+    }
+    
     return updatedPlayer;
   }
 
@@ -171,6 +206,40 @@ export class DatabaseStorage implements IStorage {
     return player || undefined;
   }
 
+  // Player Teams
+  async getPlayerTeams(playerId: string): Promise<Team[]> {
+    const result = await db.select()
+      .from(playerTeams)
+      .innerJoin(teams, eq(playerTeams.teamId, teams.id))
+      .where(eq(playerTeams.playerId, playerId));
+    
+    return result.map(({ teams: team }) => team);
+  }
+
+  async addPlayerToTeam(playerId: string, teamId: string): Promise<PlayerTeam> {
+    const [newPlayerTeam] = await db.insert(playerTeams).values({
+      playerId,
+      teamId,
+    }).returning();
+    return newPlayerTeam;
+  }
+
+  async removePlayerFromTeam(playerId: string, teamId: string): Promise<void> {
+    await db.delete(playerTeams)
+      .where(and(eq(playerTeams.playerId, playerId), eq(playerTeams.teamId, teamId)));
+  }
+
+  async setPlayerTeams(playerId: string, teamIds: string[]): Promise<void> {
+    // Remove all existing team associations
+    await db.delete(playerTeams).where(eq(playerTeams.playerId, playerId));
+    
+    // Add new team associations
+    if (teamIds.length > 0) {
+      const values = teamIds.map(teamId => ({ playerId, teamId }));
+      await db.insert(playerTeams).values(values);
+    }
+  }
+
   // Measurements
   async getMeasurements(filters?: { 
     playerId?: string; 
@@ -180,18 +249,14 @@ export class DatabaseStorage implements IStorage {
     dateTo?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
-  }): Promise<(Measurement & { player: Player & { team: Team } })[]> {
+  }): Promise<(Measurement & { player: Player & { teams: Team[] } })[]> {
     let query = db.select()
       .from(measurements)
-      .innerJoin(players, eq(measurements.playerId, players.id))
-      .innerJoin(teams, eq(players.teamId, teams.id));
+      .innerJoin(players, eq(measurements.playerId, players.id));
     
     const conditions = [];
     if (filters?.playerId) {
       conditions.push(eq(measurements.playerId, filters.playerId));
-    }
-    if (filters?.teamIds && filters.teamIds.length > 0) {
-      conditions.push(inArray(players.teamId, filters.teamIds));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));
@@ -214,10 +279,26 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await query.orderBy(desc(measurements.date), desc(measurements.createdAt));
-    return result.map(({ measurements: measurement, players: player, teams: team }) => ({
-      ...measurement,
-      player: { ...player, team }
-    }));
+    
+    // Get teams for each player and filter by team if needed
+    const measurementsWithTeams = await Promise.all(
+      result.map(async ({ measurements: measurement, players: player }) => {
+        const playerTeams = await this.getPlayerTeams(player.id);
+        return {
+          ...measurement,
+          player: { ...player, teams: playerTeams }
+        };
+      })
+    );
+
+    // Filter by team if specified
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      return measurementsWithTeams.filter(measurement => 
+        measurement.player.teams.some(team => filters.teamIds!.includes(team.id))
+      );
+    }
+
+    return measurementsWithTeams;
   }
 
   async getMeasurement(id: string): Promise<Measurement | undefined> {
