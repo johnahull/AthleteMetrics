@@ -15,7 +15,8 @@ export default function Publish() {
     birthYearTo: "",
     metric: "",
     sport: "",
-    date: "",
+    dateFrom: "",
+    dateTo: "",
   });
 
   const { data: teams } = useQuery({
@@ -34,7 +35,8 @@ export default function Publish() {
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
-      if (filters.date) params.append('date', filters.date);
+      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.append('dateTo', filters.dateTo);
       
       const response = await fetch(`/api/measurements?${params}`);
       return response.json();
@@ -98,8 +100,9 @@ export default function Publish() {
     // Date and filters info
     pdf.setFontSize(10);
     let yPos = 35;
-    if (filters.date) {
-      pdf.text(`Date: ${new Date(filters.date).toLocaleDateString()}`, 20, yPos);
+    if (filters.dateFrom || filters.dateTo) {
+      const dateRange = `Date Range: ${filters.dateFrom ? new Date(filters.dateFrom).toLocaleDateString() : 'Any'} - ${filters.dateTo ? new Date(filters.dateTo).toLocaleDateString() : 'Any'}`;
+      pdf.text(dateRange, 20, yPos);
       yPos += 10;
     }
     if (filters.teamIds.length > 0) {
@@ -146,7 +149,8 @@ export default function Publish() {
     });
     
     // Save the PDF
-    const fileName = `${getMetricDisplayName(filters.metric)}_Results_${filters.date || new Date().toISOString().split('T')[0]}.pdf`;
+    const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
+    const fileName = `${getMetricDisplayName(filters.metric)}_Results_${dateStr}.pdf`;
     pdf.save(fileName);
   };
 
@@ -194,14 +198,25 @@ export default function Publish() {
               </Select>
             </div>
 
-            {/* Date - Specific Date */}
+            {/* Date From */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
               <Input
                 type="date"
-                value={filters.date}
-                onChange={(e) => setFilters(prev => ({ ...prev, date: e.target.value }))}
-                data-testid="input-date"
+                value={filters.dateFrom}
+                onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                data-testid="input-date-from"
+              />
+            </div>
+
+            {/* Date To */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
+              <Input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                data-testid="input-date-to"
               />
             </div>
 
