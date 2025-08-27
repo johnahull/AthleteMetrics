@@ -66,7 +66,7 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
   });
 
   const metric = form.watch("metric");
-  const units = metric === "FLY10_TIME" ? "s" : "in";
+  const units = metric === "VERTICAL_JUMP" ? "in" : "s";
 
   const onSubmit = (data: InsertMeasurement) => {
     createMeasurementMutation.mutate({
@@ -128,6 +128,10 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
                     <SelectContent>
                       <SelectItem value="FLY10_TIME">10-Yard Fly Time</SelectItem>
                       <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
+                      <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
+                      <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
+                      <SelectItem value="T_TEST">T-Test</SelectItem>
+                      <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

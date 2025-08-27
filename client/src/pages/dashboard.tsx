@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
+import { getMetricDisplayName, getMetricColor } from "@/lib/metrics";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -200,12 +201,8 @@ export default function Dashboard() {
                       }
                     </td>
                     <td className="py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        measurement.metric === "FLY10_TIME" 
-                          ? "bg-blue-100 text-blue-800" 
-                          : "bg-purple-100 text-purple-800"
-                      }`}>
-                        {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical"}
+                      <span className={`px-2 py-1 rounded-full text-xs ${getMetricColor(measurement.metric)}`}>
+                        {getMetricDisplayName(measurement.metric)}
                       </span>
                     </td>
                     <td className="py-3 font-mono">

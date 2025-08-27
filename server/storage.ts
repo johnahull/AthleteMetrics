@@ -307,7 +307,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMeasurement(measurement: InsertMeasurement): Promise<Measurement> {
-    const units = measurement.metric === "FLY10_TIME" ? "s" : "in";
+    const units = measurement.metric === "VERTICAL_JUMP" ? "in" : "s";
     const [newMeasurement] = await db.insert(measurements).values({
       ...measurement,
       value: measurement.value.toString(),
@@ -320,7 +320,7 @@ export class DatabaseStorage implements IStorage {
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
     const updateData: any = { ...measurement };
     if (measurement.metric) {
-      updateData.units = measurement.metric === "FLY10_TIME" ? "s" : "in";
+      updateData.units = measurement.metric === "VERTICAL_JUMP" ? "in" : "s";
     }
     if (measurement.value !== undefined) {
       updateData.value = measurement.value.toString();
