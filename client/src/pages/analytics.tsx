@@ -176,6 +176,11 @@ export default function Analytics() {
                   <SelectItem value="all">All Metrics</SelectItem>
                   <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
                   <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
+                  <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
+                  <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
+                  <SelectItem value="T_TEST">T-Test</SelectItem>
+                  <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
+                  <SelectItem value="RSI">Reactive Strength Index</SelectItem>
                 </SelectContent>
               </Select>
             </div>
