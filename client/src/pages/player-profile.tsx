@@ -117,7 +117,7 @@ export default function PlayerProfile() {
               <Trophy className="h-4 w-4 mr-1" />
               {player?.teams && player.teams.length > 0 
                 ? player.teams.map(team => team.name).join(', ')
-                : 'No teams assigned'
+                : 'Independent Player'
               }
             </span>
             {player?.school && (

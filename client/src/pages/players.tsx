@@ -141,6 +141,7 @@ export default function Players() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="none">Independent Players (No Team)</SelectItem>
                   {teams?.map((team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -295,10 +296,24 @@ export default function Players() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{player.team.name}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {player.teams && player.teams.length > 0 
+                          ? player.teams.length > 1 
+                            ? `${player.teams[0].name} (+${player.teams.length - 1} more)`
+                            : player.teams[0].name
+                          : "Independent"
+                        }
+                      </td>
                       <td className="px-6 py-4 text-gray-600">{player.birthYear}</td>
                       <td className="px-6 py-4 text-gray-600">{player.school || "N/A"}</td>
-                      <td className="px-6 py-4 text-gray-600">{player.sport || "N/A"}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {player.sports && player.sports.length > 0 
+                          ? player.sports.length > 1 
+                            ? `${player.sports[0]} (+${player.sports.length - 1} more)`
+                            : player.sports[0]
+                          : "N/A"
+                        }
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex space-x-2">
                           <Button

@@ -165,7 +165,7 @@ export class DatabaseStorage implements IStorage {
       fullName,
     }).returning();
 
-    // Add player to teams
+    // Add player to teams if any are specified
     if (teamIds && teamIds.length > 0) {
       await this.setPlayerTeams(newPlayer.id, teamIds);
     }
@@ -187,8 +187,8 @@ export class DatabaseStorage implements IStorage {
     
     const [updatedPlayer] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();
     
-    // Update team associations if provided
-    if (teamIds) {
+    // Update team associations if provided (empty array removes all teams)
+    if (teamIds !== undefined) {
       await this.setPlayerTeams(id, teamIds);
     }
     

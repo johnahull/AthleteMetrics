@@ -92,7 +92,7 @@ export const insertPlayerSchema = createInsertSchema(players).omit({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   birthYear: z.number().min(1990).max(2020),
-  teamIds: z.array(z.string().min(1, "Team ID required")).min(1, "At least one team is required"),
+  teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
   sports: z.array(z.string().min(1, "Sport cannot be empty")).optional(),
   emails: z.array(z.string().email("Invalid email format")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
