@@ -8,6 +8,7 @@ import {
   PlusCircle, 
   BarChart3, 
   FileText,
+  FileCheck,
   LogOut 
 } from "lucide-react";
 
@@ -17,6 +18,7 @@ const navigation = [
   { name: "Players", href: "/players", icon: UsersRound },
   { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
+  { name: "Publish", href: "/publish", icon: FileCheck },
   { name: "Import/Export", href: "/import-export", icon: FileText },
 ];
 
