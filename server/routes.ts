@@ -96,7 +96,6 @@ export function registerRoutes(app: Express) {
             console.error('Session save error:', err);
             return res.status(500).json({ message: "Session save failed" });
           }
-          console.log('Session saved successfully for admin with role:', req.session.user.role);
           return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
         });
         return; // Prevent double response
@@ -146,10 +145,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/auth/me", (req, res) => {
-    console.log('Auth check - session.user:', JSON.stringify(req.session.user));
-    console.log('Full session during auth check:', JSON.stringify(req.session));
     if (req.session.user) {
-      console.log('Returning user:', JSON.stringify(req.session.user));
       return res.json({ user: req.session.user });
     }
     res.status(401).json({ message: "Not authenticated" });
@@ -431,8 +427,20 @@ export function registerRoutes(app: Express) {
   // User management routes
   app.get("/api/organizations-with-users", requireAuth, async (req, res) => {
     try {
-      const orgsWithUsers = await storage.getOrganizationsWithUsers();
-      res.json(orgsWithUsers);
+      const currentUser = req.session.user;
+      
+      // Site admins can see all organizations
+      if (currentUser?.role === "site_admin" || currentUser?.username === "admin") {
+        const orgsWithUsers = await storage.getOrganizationsWithUsers();
+        res.json(orgsWithUsers);
+      } else if (currentUser?.role === "org_admin" && currentUser?.id) {
+        // Org admins can only see their own organizations
+        const orgsWithUsers = await storage.getOrganizationsWithUsersForUser(currentUser.id);
+        res.json(orgsWithUsers);
+      } else {
+        // Other roles have no access
+        res.json([]);
+      }
     } catch (error) {
       console.error("Error fetching organizations with users:", error);
       res.status(500).json({ message: "Failed to fetch organizations with users" });

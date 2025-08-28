@@ -47,7 +47,6 @@ export default function Sidebar() {
   
   // Get user role - fallback to 'athlete' if not defined
   const userRole = user?.role || 'athlete';
-  console.log('User in sidebar:', user, 'Role:', userRole);
   const navigation = getNavigation(userRole);
 
   return (
