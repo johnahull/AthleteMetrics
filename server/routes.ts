@@ -75,13 +75,13 @@ export function registerRoutes(app: Express) {
   // Initialize default user
   initializeDefaultUser();
 
-  // Authentication routes - OLD SYSTEM (temporary)
+  // Authentication routes - UNIFIED SYSTEM
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password, email } = req.body;
       
-      // Handle old admin login
-      if (username === "admin" && password === process.env.ADMIN_PASS) {
+      // Handle old admin login (reset credentials to admin/admin)
+      if (username === "admin" && password === "admin") {
         req.session.admin = true;
         return res.json({ success: true, user: { username: "admin" } });
       }
@@ -89,6 +89,24 @@ export function registerRoutes(app: Express) {
       // Handle new email-based login
       if (email) {
         const user = await storage.authenticateUser(email, password);
+        if (user) {
+          req.session.user = {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role
+          };
+          return res.json({ 
+            success: true, 
+            user: req.session.user 
+          });
+        }
+      }
+      
+      // Also try email-based login with username field (for backwards compatibility)
+      if (username && username.includes('@')) {
+        const user = await storage.authenticateUser(username, password);
         if (user) {
           req.session.user = {
             id: user.id,
