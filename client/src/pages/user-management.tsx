@@ -77,20 +77,28 @@ export default function UserManagement() {
       return res.json();
     },
     onSuccess: (data) => {
+      // Refresh the organizations and users list
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      
       if (data.inviteLink) {
         navigator.clipboard.writeText(data.inviteLink);
         toast({ 
           title: "Invitation sent successfully!", 
-          description: `Link for ${data.email} copied to clipboard`
+          description: `Invitation link copied to clipboard. ${data.email} will receive access once they accept the invitation.`
         });
       } else {
         toast({ 
           title: "Invitation created successfully!", 
-          description: `Invitation token: ${data.token || 'generated'}`
+          description: `Invitation sent to ${data.email}. They will appear in the user list once they accept the invitation.`
         });
       }
       setUserDialogOpen(false);
       inviteForm.reset();
+      
+      // Reset form to first organization
+      if (organizations && organizations.length > 0) {
+        inviteForm.setValue("organizationId", organizations[0].id);
+      }
     },
     onError: (error: any) => {
       toast({ 
@@ -162,16 +170,19 @@ export default function UserManagement() {
       });
       const data = await res.json();
       
+      // Refresh the user list
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      
       if (data.inviteLink) {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({
-          title: "Invitation link copied!",
-          description: `Link copied: ${data.inviteLink.substring(0, 50)}...`,
+          title: "New invitation link generated!",
+          description: `Link for ${firstName} ${lastName} copied to clipboard. They will appear in the user list once they accept.`,
         });
       } else {
         toast({
-          title: "Invitation created",
-          description: `Token: ${data.token}`,
+          title: "New invitation created",
+          description: `Invitation sent to ${firstName} ${lastName}. They will appear once they accept.`,
         });
       }
     } catch (error: any) {
