@@ -160,11 +160,11 @@ export default function Teams() {
                   <Button 
                     variant="ghost" 
                     className="w-full text-primary hover:bg-blue-50"
-                    onClick={() => setLocation(`/players?teamId=${team.id}`)}
-                    data-testid={`button-view-players-${team.id}`}
+                    onClick={() => setLocation(`/athletes?teamId=${team.id}`)}
+                    data-testid={`button-view-athletes-${team.id}`}
                   >
                     <Users className="h-4 w-4 mr-2" />
-                    View Players
+                    View Athletes
                   </Button>
                 </div>
               </CardContent>

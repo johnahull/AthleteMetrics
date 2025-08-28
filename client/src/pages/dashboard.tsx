@@ -36,7 +36,7 @@ export default function Dashboard() {
   }
 
   const stats = (dashboardStats as any) || {
-    totalPlayers: 0,
+    totalAthletes: 0,
     totalTeams: 0,
     bestFly10Today: null,
     bestVerticalToday: null,
@@ -56,9 +56,9 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Players</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-players">
-                  {stats.totalPlayers}
+                <p className="text-sm font-medium text-gray-600">Total Athletes</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-athletes">
+                  {stats.totalAthletes}
                 </p>
                 <p className="text-sm text-green-600 mt-1">
                   <ArrowUp className="inline h-3 w-3 mr-1" />
@@ -97,7 +97,7 @@ export default function Dashboard() {
                 <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-fly10">
                   {stats.bestFly10Today ? formatFly10TimeWithSpeed(parseFloat(stats.bestFly10Today.value)) : "N/A"}
                 </p>
-                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-player">
+                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-athlete">
                   {stats.bestFly10Today?.playerName || "No data today"}
                 </p>
               </div>
