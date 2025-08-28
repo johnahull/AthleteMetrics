@@ -105,10 +105,18 @@ export default function AdminPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ 
-        title: "Invitation sent successfully!", 
-        description: `Invitation link generated for ${data.email}` 
-      });
+      if (data.inviteLink) {
+        navigator.clipboard.writeText(data.inviteLink);
+        toast({ 
+          title: "Invitation sent successfully!", 
+          description: `Link for ${data.email} copied to clipboard`
+        });
+      } else {
+        toast({ 
+          title: "Invitation created successfully!", 
+          description: `Invitation token: ${data.token || 'generated'}`
+        });
+      }
       setUserDialogOpen(false);
       inviteForm.reset();
     },
@@ -186,11 +194,20 @@ export default function AdminPage() {
       });
       const data = await res.json();
       
-      navigator.clipboard.writeText(data.inviteLink);
-      toast({
-        title: "Invitation link copied!",
-        description: `Link for ${firstName} ${lastName} copied to clipboard`
-      });
+      console.log("Invitation response:", data);
+      
+      if (data.inviteLink) {
+        await navigator.clipboard.writeText(data.inviteLink);
+        toast({
+          title: "Invitation link copied!",
+          description: `Link copied: ${data.inviteLink.substring(0, 50)}...`,
+        });
+      } else {
+        toast({
+          title: "Invitation created",
+          description: `Token: ${data.token}`,
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Error generating invite link",

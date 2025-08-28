@@ -333,6 +333,8 @@ export function registerRoutes(app: Express) {
       // Generate invitation link
       const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
       
+      console.log("Generated invitation link:", inviteLink);
+      
       // For now, just return the invitation info without sending email
       res.status(201).json({
         id: invitation.id,
