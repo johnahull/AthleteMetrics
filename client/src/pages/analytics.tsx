@@ -16,6 +16,8 @@ export default function Analytics() {
     teamIds: [] as string[],
     birthYearFrom: "2009",
     birthYearTo: "2009",
+    ageFrom: "",
+    ageTo: "",
     metric: "",
     dateRange: "last30",
     sport: "",
@@ -33,6 +35,8 @@ export default function Analytics() {
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+      if (filters.ageFrom) params.append('ageFrom', filters.ageFrom);
+      if (filters.ageTo) params.append('ageTo', filters.ageTo);
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.search.trim()) params.append('search', filters.search.trim());
@@ -61,6 +65,8 @@ export default function Analytics() {
       teamIds: [] as string[],
       birthYearFrom: "",
       birthYearTo: "",
+      ageFrom: "",
+      ageTo: "",
       metric: "",
       dateRange: "last30",
       sport: "",
@@ -141,7 +147,7 @@ export default function Analytics() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Teams</label>
               <Select value={filters.teamIds[0] || ""} onValueChange={(value) => setFilters(prev => ({ ...prev, teamIds: value ? [value] : [] }))}>
@@ -180,6 +186,34 @@ export default function Analytics() {
                   <SelectItem value="any">Any</SelectItem>
                   {Array.from({ length: 13 }, (_, i) => 2008 + i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Age From</label>
+              <Select value={filters.ageFrom || "any"} onValueChange={(value) => setFilters(prev => ({ ...prev, ageFrom: value === "any" ? "" : value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {Array.from({ length: 21 }, (_, i) => 10 + i).map(age => (
+                    <SelectItem key={age} value={age.toString()}>{age}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Age To</label>
+              <Select value={filters.ageTo || "any"} onValueChange={(value) => setFilters(prev => ({ ...prev, ageTo: value === "any" ? "" : value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {Array.from({ length: 21 }, (_, i) => 10 + i).map(age => (
+                    <SelectItem key={age} value={age.toString()}>{age}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -251,6 +285,13 @@ export default function Analytics() {
                 {filters.birthYearFrom && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.birthYearFrom === filters.birthYearTo ? filters.birthYearFrom : `${filters.birthYearFrom}-${filters.birthYearTo}`} Birth Year
+                  </span>
+                )}
+                {(filters.ageFrom || filters.ageTo) && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                    {filters.ageFrom && filters.ageTo ? `Ages ${filters.ageFrom}-${filters.ageTo}` :
+                     filters.ageFrom ? `Age ${filters.ageFrom}+` :
+                     `Age ≤${filters.ageTo}`}
                   </span>
                 )}
                 {filters.sport && filters.sport !== "all" && (
