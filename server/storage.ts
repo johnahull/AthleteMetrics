@@ -14,6 +14,10 @@ export interface IStorage {
   authenticateUser(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUsers(): Promise<User[]>;
+  getUser(id: string): Promise<User | undefined>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
@@ -24,6 +28,7 @@ export interface IStorage {
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
   getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]>;
+  getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]>;
 
   // Teams
   getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]>;
@@ -136,6 +141,35 @@ export class DatabaseStorage implements IStorage {
     return newUser;
   }
 
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(asc(users.lastName), asc(users.firstName));
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+    const updateData: any = { ...user };
+    if (user.password) {
+      updateData.password = await bcrypt.hash(user.password, 10);
+    }
+    
+    const [updatedUser] = await db.update(users)
+      .set(updateData)
+      .where(eq(users.id, id))
+      .returning();
+    return updatedUser;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    // Delete related records first
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+    await db.delete(userTeams).where(eq(userTeams.userId, id));
+    await db.delete(users).where(eq(users.id, id));
+  }
+
   async getUserOrganizations(userId: string): Promise<any[]> {
     const result: any = await db.select()
       .from(userOrganizations)
@@ -195,6 +229,22 @@ export class DatabaseStorage implements IStorage {
       ...user_organizations,
       user
     }));
+  }
+
+  async getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]> {
+    const organizations = await this.getOrganizations();
+    
+    const orgsWithUsers = await Promise.all(
+      organizations.map(async (org) => {
+        const users = await this.getOrganizationUsers(org.id);
+        return {
+          ...org,
+          users
+        };
+      })
+    );
+
+    return orgsWithUsers;
   }
 
   // Teams

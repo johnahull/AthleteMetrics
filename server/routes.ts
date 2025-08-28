@@ -402,5 +402,40 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // User management routes
+  app.get("/api/organizations-with-users", requireAuth, async (req, res) => {
+    try {
+      const orgsWithUsers = await storage.getOrganizationsWithUsers();
+      res.json(orgsWithUsers);
+    } catch (error) {
+      console.error("Error fetching organizations with users:", error);
+      res.status(500).json({ message: "Failed to fetch organizations with users" });
+    }
+  });
+
+  app.put("/api/users/:id/role", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+      
+      const user = await storage.updateUser(id, { role });
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteUser(id);
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
   return server;
 }
