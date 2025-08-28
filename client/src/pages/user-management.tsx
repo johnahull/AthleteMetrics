@@ -11,7 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Link } from "lucide-react";
+import { UserPlus, Trash2, Link, Clock, CheckCircle, XCircle } from "lucide-react";
 
 type Organization = {
   id: string;
@@ -33,6 +33,15 @@ type Organization = {
       isActive: string;
       createdAt: string;
     };
+  }[];
+  invitations: {
+    id: string;
+    email: string;
+    role: string;
+    organizationId: string;
+    isUsed: string;
+    expiresAt: string;
+    createdAt: string;
   }[];
 };
 
@@ -351,72 +360,133 @@ export default function UserManagement() {
                     </span>
                   </div>
                   
-                  {org.users && org.users.length > 0 ? (
-                    <div className="space-y-2">
-                      {org.users.map((userOrg) => (
+                  <div className="space-y-2">
+                    {/* Active Users */}
+                    {org.users?.map((userOrg) => (
+                      <div 
+                        key={userOrg.user.id} 
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <div>
+                              <p className="font-medium text-gray-900" data-testid={`user-name-${userOrg.user.id}`}>
+                                {userOrg.user.firstName} {userOrg.user.lastName}
+                              </p>
+                              <p className="text-sm text-gray-600" data-testid={`user-email-${userOrg.user.id}`}>
+                                {userOrg.user.email} • <span className="text-green-600">Active</span>
+                              </p>
+                            </div>
+                            <div className="ml-4">
+                              <select
+                                value={userOrg.user.role}
+                                onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
+                                className="text-sm border border-gray-300 rounded px-2 py-1"
+                                data-testid={`user-role-select-${userOrg.user.id}`}
+                              >
+                                <option value="athlete">Athlete</option>
+                                <option value="coach">Coach</option>
+                                <option value="org_admin">Org Admin</option>
+                                <option value="site_admin">Site Admin</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => generateInviteLink(
+                              userOrg.user.email,
+                              userOrg.user.firstName,
+                              userOrg.user.lastName,
+                              userOrg.user.role,
+                              org.id
+                            )}
+                            data-testid={`user-invite-link-${userOrg.user.id}`}
+                          >
+                            <Link className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteUser(
+                              userOrg.user.id,
+                              `${userOrg.user.firstName} ${userOrg.user.lastName}`
+                            )}
+                            data-testid={`user-delete-${userOrg.user.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Pending Invitations */}
+                    {org.invitations?.map((invitation) => {
+                      const isExpired = new Date() > new Date(invitation.expiresAt);
+                      const isUsed = invitation.isUsed === "true";
+                      
+                      return (
                         <div 
-                          key={userOrg.user.id} 
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                          key={invitation.id} 
+                          className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-3">
+                              {isUsed ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : isExpired ? (
+                                <XCircle className="h-4 w-4 text-red-600" />
+                              ) : (
+                                <Clock className="h-4 w-4 text-yellow-600" />
+                              )}
                               <div>
-                                <p className="font-medium text-gray-900" data-testid={`user-name-${userOrg.user.id}`}>
-                                  {userOrg.user.firstName} {userOrg.user.lastName}
+                                <p className="font-medium text-gray-900" data-testid={`invitation-email-${invitation.id}`}>
+                                  {invitation.email}
                                 </p>
-                                <p className="text-sm text-gray-600" data-testid={`user-email-${userOrg.user.id}`}>
-                                  {userOrg.user.email}
+                                <p className="text-sm text-gray-600">
+                                  {invitation.role} • 
+                                  {isUsed ? (
+                                    <span className="text-green-600 ml-1">Accepted</span>
+                                  ) : isExpired ? (
+                                    <span className="text-red-600 ml-1">Expired</span>
+                                  ) : (
+                                    <span className="text-yellow-600 ml-1">Pending</span>
+                                  )}
                                 </p>
-                              </div>
-                              <div className="ml-4">
-                                <select
-                                  value={userOrg.user.role}
-                                  onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
-                                  className="text-sm border border-gray-300 rounded px-2 py-1"
-                                  data-testid={`user-role-select-${userOrg.user.id}`}
-                                >
-                                  <option value="athlete">Athlete</option>
-                                  <option value="coach">Coach</option>
-                                  <option value="org_admin">Org Admin</option>
-                                  <option value="site_admin">Site Admin</option>
-                                </select>
                               </div>
                             </div>
                           </div>
                           
                           <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => generateInviteLink(
-                                userOrg.user.email,
-                                userOrg.user.firstName,
-                                userOrg.user.lastName,
-                                userOrg.user.role,
-                                org.id
-                              )}
-                              data-testid={`user-invite-link-${userOrg.user.id}`}
-                            >
-                              <Link className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteUser(
-                                userOrg.user.id,
-                                `${userOrg.user.firstName} ${userOrg.user.lastName}`
-                              )}
-                              data-testid={`user-delete-${userOrg.user.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
+                            {!isUsed && !isExpired && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => generateInviteLink(
+                                  invitation.email,
+                                  invitation.email.split('@')[0],
+                                  '',
+                                  invitation.role,
+                                  org.id
+                                )}
+                                data-testid={`invitation-resend-${invitation.id}`}
+                              >
+                                <Link className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-sm py-4">No users in this organization</p>
-                  )}
+                      );
+                    })}
+
+                    {(!org.users || org.users.length === 0) && (!org.invitations || org.invitations.length === 0) && (
+                      <p className="text-gray-500 text-sm py-4">No users or pending invitations in this organization</p>
+                    )}
+                  </div>
                 </div>
               ))}
 

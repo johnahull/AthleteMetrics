@@ -231,15 +231,17 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]> {
+  async getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[], invitations: Invitation[] })[]> {
     const organizations = await this.getOrganizations();
     
     const orgsWithUsers = await Promise.all(
       organizations.map(async (org) => {
         const users = await this.getOrganizationUsers(org.id);
+        const invitations = await this.getOrganizationInvitations(org.id);
         return {
           ...org,
-          users
+          users,
+          invitations
         };
       })
     );
@@ -247,7 +249,7 @@ export class DatabaseStorage implements IStorage {
     return orgsWithUsers;
   }
 
-  async getOrganizationsWithUsersForUser(userId: string): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]> {
+  async getOrganizationsWithUsersForUser(userId: string): Promise<(Organization & { users: (UserOrganization & { user: User })[], invitations: Invitation[] })[]> {
     // Get organizations where the user is a member
     const userOrgs = await db.select()
       .from(userOrganizations)
@@ -267,14 +269,25 @@ export class DatabaseStorage implements IStorage {
     const orgsWithUsers = await Promise.all(
       orgsData.map(async (org) => {
         const users = await this.getOrganizationUsers(org.id);
+        const invitations = await this.getOrganizationInvitations(org.id);
         return {
           ...org,
-          users
+          users,
+          invitations
         };
       })
     );
 
     return orgsWithUsers;
+  }
+
+  async getOrganizationInvitations(organizationId: string): Promise<Invitation[]> {
+    const result = await db.select()
+      .from(invitations)
+      .where(eq(invitations.organizationId, organizationId))
+      .orderBy(desc(invitations.createdAt));
+    
+    return result;
   }
 
   // Teams
