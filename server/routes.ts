@@ -64,8 +64,8 @@ export function registerRoutes(app: Express) {
   // Session setup
   app.use(session({
     secret: process.env.SESSION_SECRET || 'default-secret-key',
-    resave: false,
-    saveUninitialized: false,
+    resave: true,  // Changed to true to force session save
+    saveUninitialized: true,  // Changed to true to ensure session creation
     cookie: { 
       secure: false,
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -82,11 +82,24 @@ export function registerRoutes(app: Express) {
       
       // Handle old admin login (reset credentials to admin/admin)
       if (username === "admin" && password === "admin") {
-        // Don't set both admin and user in session - causes conflicts
+        // Ensure session exists
+        if (!req.session) {
+          console.error('No session available during login!');
+          return res.status(500).json({ message: "Session error" });
+        }
+        
         req.session.user = { username: "admin", role: "site_admin" };
-        console.log('Setting session for admin:', JSON.stringify(req.session.user));
-        console.log('Full session after login:', JSON.stringify(req.session));
-        return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
+        
+        // Force session save
+        req.session.save((err) => {
+          if (err) {
+            console.error('Session save error:', err);
+            return res.status(500).json({ message: "Session save failed" });
+          }
+          console.log('Session saved successfully for admin with role:', req.session.user.role);
+          return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
+        });
+        return; // Prevent double response
       }
       
       // Handle new email-based login
