@@ -111,7 +111,7 @@ export default function MeasurementForm() {
 
   const filteredPlayers = players?.filter(player =>
     player.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    player.team.name.toLowerCase().includes(searchTerm.toLowerCase())
+    player.teams.some(team => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
   ) || [];
 
   const metric = form.watch("metric");
