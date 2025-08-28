@@ -11,7 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, Users, UserPlus } from "lucide-react";
+import { Plus, Building2, Users, UserPlus, Trash2, Edit3, Link } from "lucide-react";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -31,6 +31,22 @@ type Organization = {
   name: string;
   description?: string;
   createdAt: string;
+  users: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    role: string;
+    createdAt: string;
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      isActive: string;
+      createdAt: string;
+    };
+  }[];
 };
 
 export default function AdminPage() {
@@ -40,7 +56,7 @@ export default function AdminPage() {
   const [userDialogOpen, setUserDialogOpen] = useState(false);
 
   const { data: organizations } = useQuery({
-    queryKey: ["/api/organizations"],
+    queryKey: ["/api/organizations-with-users"],
   });
 
   const orgForm = useForm({
@@ -69,6 +85,7 @@ export default function AdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
       toast({ title: "Organization created successfully!" });
       setOrgDialogOpen(false);
       orgForm.reset();
@@ -110,6 +127,77 @@ export default function AdminPage() {
 
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
     sendInviteMutation.mutate(data);
+  };
+
+  const updateUserRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+      const res = await apiRequest("PUT", `/api/users/${userId}/role`, { role });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      toast({ title: "User role updated successfully!" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error updating user role", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/users/${userId}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      toast({ title: "User deleted successfully!" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error deleting user", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleRoleChange = (userId: string, newRole: string) => {
+    updateUserRoleMutation.mutate({ userId, role: newRole });
+  };
+
+  const handleDeleteUser = (userId: string, userName: string) => {
+    if (confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
+      deleteUserMutation.mutate(userId);
+    }
+  };
+
+  const generateInviteLink = async (email: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
+    try {
+      const res = await apiRequest("POST", "/api/invitations", {
+        email,
+        firstName,
+        lastName,
+        role,
+        organizationId
+      });
+      const data = await res.json();
+      
+      navigator.clipboard.writeText(data.inviteLink);
+      toast({
+        title: "Invitation link copied!",
+        description: `Link for ${firstName} ${lastName} copied to clipboard`
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error generating invite link",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -364,25 +452,110 @@ export default function AdminPage() {
             </Dialog>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="font-semibold text-blue-900">Getting Started</h3>
-                <ol className="mt-2 text-sm text-blue-800 space-y-1">
-                  <li>1. Create organizations for different schools, clubs, or teams</li>
-                  <li>2. Add users and assign them to organizations</li>
-                  <li>3. Create teams within organizations</li>
-                  <li>4. Invite athletes or let coaches manage their teams</li>
-                </ol>
-              </div>
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h4 className="font-semibold text-green-900">Default Admin Account</h4>
-                <p className="text-sm text-green-800 mt-1">
-                  <strong>Email:</strong> admin@athleteperformancehub.com<br />
-                  <strong>Password:</strong> admin123
-                </p>
-                <p className="text-xs text-green-700 mt-2">
-                  Use this account to log in with the new email-based system
-                </p>
+            <div className="space-y-6">
+              {/* Users by Organization */}
+              {organizations?.map((org: Organization) => (
+                <div key={org.id} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900">{org.name}</h3>
+                    <span className="text-sm text-gray-500">
+                      {org.users?.length || 0} users
+                    </span>
+                  </div>
+                  
+                  {org.users && org.users.length > 0 ? (
+                    <div className="space-y-2">
+                      {org.users.map((userOrg) => (
+                        <div 
+                          key={userOrg.user.id} 
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <p className="font-medium text-gray-900" data-testid={`user-name-${userOrg.user.id}`}>
+                                  {userOrg.user.firstName} {userOrg.user.lastName}
+                                </p>
+                                <p className="text-sm text-gray-600" data-testid={`user-email-${userOrg.user.id}`}>
+                                  {userOrg.user.email}
+                                </p>
+                              </div>
+                              <div className="ml-4">
+                                <select
+                                  value={userOrg.user.role}
+                                  onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
+                                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                                  data-testid={`user-role-select-${userOrg.user.id}`}
+                                >
+                                  <option value="athlete">Athlete</option>
+                                  <option value="coach">Coach</option>
+                                  <option value="org_admin">Org Admin</option>
+                                  <option value="site_admin">Site Admin</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateInviteLink(
+                                userOrg.user.email,
+                                userOrg.user.firstName,
+                                userOrg.user.lastName,
+                                userOrg.user.role,
+                                org.id
+                              )}
+                              data-testid={`user-invite-link-${userOrg.user.id}`}
+                            >
+                              <Link className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteUser(
+                                userOrg.user.id,
+                                `${userOrg.user.firstName} ${userOrg.user.lastName}`
+                              )}
+                              data-testid={`user-delete-${userOrg.user.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm py-4">No users in this organization</p>
+                  )}
+                </div>
+              ))}
+
+              {!organizations?.length && (
+                <p className="text-gray-500 text-center py-8">No organizations created yet</p>
+              )}
+
+              <div className="space-y-4 pt-6 border-t">
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h3 className="font-semibold text-blue-900">Getting Started</h3>
+                  <ol className="mt-2 text-sm text-blue-800 space-y-1">
+                    <li>1. Create organizations for different schools, clubs, or teams</li>
+                    <li>2. Send invitations to users via email</li>
+                    <li>3. Manage user roles and permissions</li>
+                    <li>4. Create teams within organizations</li>
+                  </ol>
+                </div>
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-semibold text-green-900">Default Admin Account</h4>
+                  <p className="text-sm text-green-800 mt-1">
+                    <strong>Email:</strong> admin@athleteperformancehub.com<br />
+                    <strong>Password:</strong> admin123
+                  </p>
+                  <p className="text-xs text-green-700 mt-2">
+                    Use this account to log in with the new email-based system
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
