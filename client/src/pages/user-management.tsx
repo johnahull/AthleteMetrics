@@ -203,6 +203,7 @@ export default function UserManagement() {
     }
   };
 
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -395,20 +396,6 @@ export default function UserManagement() {
                         </div>
                         
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => generateInviteLink(
-                              userOrg.user.email,
-                              userOrg.user.firstName,
-                              userOrg.user.lastName,
-                              userOrg.user.role,
-                              org.id
-                            )}
-                            data-testid={`user-invite-link-${userOrg.user.id}`}
-                          >
-                            <Link className="h-4 w-4" />
-                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
