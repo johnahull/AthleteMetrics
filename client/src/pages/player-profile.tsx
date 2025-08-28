@@ -284,6 +284,7 @@ export default function PlayerProfile() {
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Age</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Metric</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Value</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Speed (mph)</th>
@@ -296,6 +297,9 @@ export default function PlayerProfile() {
                     <tr key={measurement.id} className="border-b border-gray-100">
                       <td className="py-3 px-4 text-sm text-gray-900">
                         {formatDate(measurement.date)}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {measurement.age}
                       </td>
                       <td className="py-3 px-4 text-sm">
                         <Badge variant={getMetricBadgeVariant(measurement.metric)}>

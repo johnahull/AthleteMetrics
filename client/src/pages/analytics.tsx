@@ -405,6 +405,7 @@ export default function Analytics() {
                     <th className="px-4 py-3">Sport</th>
                     <th className="px-4 py-3">Metric</th>
                     <th className="px-4 py-3">Value</th>
+                    <th className="px-4 py-3">Age</th>
                     <th className="px-4 py-3">Date</th>
                   </tr>
                 </thead>
@@ -445,6 +446,9 @@ export default function Analytics() {
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-900">
                         {measurement.value}{getMetricUnits(measurement.metric)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 font-mono">
+                        {measurement.age}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {new Date(measurement.date).toLocaleDateString()}
