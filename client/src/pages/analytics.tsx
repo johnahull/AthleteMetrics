@@ -4,7 +4,8 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Download, Search } from "lucide-react";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
@@ -18,6 +19,7 @@ export default function Analytics() {
     metric: "",
     dateRange: "last30",
     sport: "",
+    search: "",
   });
 
   const { data: teams } = useQuery({
@@ -33,6 +35,7 @@ export default function Analytics() {
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
+      if (filters.search.trim()) params.append('search', filters.search.trim());
       
       // Add date filtering based on dateRange
       const now = new Date();
@@ -61,6 +64,7 @@ export default function Analytics() {
       metric: "",
       dateRange: "last30",
       sport: "",
+      search: "",
     });
   };
 
@@ -123,6 +127,20 @@ export default function Analytics() {
       {/* Filters Bar */}
       <Card className="bg-white mb-6 sticky top-4 z-20">
         <CardContent className="p-6">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Players</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                type="text"
+                placeholder="Search by player name..."
+                value={filters.search}
+                onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                className="pl-10"
+                data-testid="input-search-players"
+              />
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Teams</label>
@@ -238,6 +256,11 @@ export default function Analytics() {
                 {filters.sport && filters.sport !== "all" && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.sport}
+                  </span>
+                )}
+                {filters.search && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                    Search: "{filters.search}"
                   </span>
                 )}
                 <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
