@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,13 @@ export default function UserManagement() {
       organizationId: "",
     },
   });
+
+  // Auto-select first organization when data loads
+  useEffect(() => {
+    if (organizations && organizations.length > 0) {
+      inviteForm.setValue("organizationId", organizations[0].id);
+    }
+  }, [organizations, inviteForm]);
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: z.infer<typeof inviteSchema>) => {
