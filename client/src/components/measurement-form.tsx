@@ -47,7 +47,7 @@ export default function MeasurementForm() {
       firstName: "",
       lastName: "",
       birthYear: new Date().getFullYear() - 15,
-      teamId: "",
+      teamIds: [],
       school: "",
     },
   });
@@ -109,10 +109,10 @@ export default function MeasurementForm() {
     },
   });
 
-  const filteredPlayers = players?.filter(player =>
+  const filteredPlayers = (players || []).filter(player =>
     player.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    player.teams.some(team => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  ) || [];
+    player.teams?.some(team => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const metric = form.watch("metric");
   const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
@@ -191,7 +191,7 @@ export default function MeasurementForm() {
                     >
                       <div>
                         <p className="font-medium">{player.fullName}</p>
-                        <p className="text-sm text-gray-500">{player.team.name} • {player.birthYear}</p>
+                        <p className="text-sm text-gray-500">{player.teams.map(t => t.name).join(', ')} • {player.birthYear}</p>
                       </div>
                     </button>
                   ))}
