@@ -114,7 +114,8 @@ export function registerRoutes(app: Express) {
           };
           return res.json({ 
             success: true, 
-            user: req.session.user 
+            user: req.session.user,
+            redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
           });
         }
       }
@@ -132,7 +133,8 @@ export function registerRoutes(app: Express) {
           };
           return res.json({ 
             success: true, 
-            user: req.session.user 
+            user: req.session.user,
+            redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
           });
         }
       }
@@ -426,7 +428,8 @@ export function registerRoutes(app: Express) {
       res.json({ 
         success: true, 
         user: req.session.user,
-        message: "Account created successfully!" 
+        message: "Account created successfully!",
+        redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);

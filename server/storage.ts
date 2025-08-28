@@ -404,7 +404,7 @@ export class DatabaseStorage implements IStorage {
     // Create user
     const user = await this.createUser({
       ...userInfo,
-      role: invitation.role
+      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
     });
 
     // Add user to organization
@@ -414,6 +414,25 @@ export class DatabaseStorage implements IStorage {
     if (invitation.teamIds && invitation.teamIds.length > 0) {
       for (const teamId of invitation.teamIds) {
         await this.addUserToTeam(user.id, teamId);
+      }
+    }
+
+    // If user is an athlete, also create a player record
+    if (user.role === "athlete") {
+      const player = await this.createPlayer({
+        firstName: user.firstName,
+        lastName: user.lastName,
+        birthYear: new Date().getFullYear() - 18, // Default age, can be updated later
+        school: "",
+        sports: [],
+        emails: [user.email]
+      });
+      
+      // Add player to teams if specified
+      if (invitation.teamIds && invitation.teamIds.length > 0) {
+        for (const teamId of invitation.teamIds) {
+          await this.addPlayerToTeam(player.id, teamId);
+        }
       }
     }
 
