@@ -247,6 +247,36 @@ export class DatabaseStorage implements IStorage {
     return orgsWithUsers;
   }
 
+  async getOrganizationsWithUsersForUser(userId: string): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]> {
+    // Get organizations where the user is a member
+    const userOrgs = await db.select()
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, userId));
+    
+    const orgIds = userOrgs.map(uo => uo.organizationId);
+    
+    if (orgIds.length === 0) {
+      return [];
+    }
+    
+    // Get organizations data
+    const organizations = await db.select()
+      .from(organizationsSchema)
+      .where(inArray(organizationsSchema.id, orgIds));
+    
+    const orgsWithUsers = await Promise.all(
+      organizations.map(async (org) => {
+        const users = await this.getOrganizationUsers(org.id);
+        return {
+          ...org,
+          users
+        };
+      })
+    );
+
+    return orgsWithUsers;
+  }
+
   // Teams
   async getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]> {
     let query = db.select()
