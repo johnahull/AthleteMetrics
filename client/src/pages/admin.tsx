@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -135,6 +135,9 @@ export default function AdminPage() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create New Organization</DialogTitle>
+                  <DialogDescription>
+                    Add a new organization to the system. Organizations can contain multiple teams and users.
+                  </DialogDescription>
                 </DialogHeader>
                 <Form {...orgForm}>
                   <form onSubmit={orgForm.handleSubmit(onCreateOrg)} className="space-y-4">
@@ -232,6 +235,9 @@ export default function AdminPage() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create New User</DialogTitle>
+                  <DialogDescription>
+                    Add a new user to the system. Users can be assigned roles and organizations.
+                  </DialogDescription>
                 </DialogHeader>
                 <Form {...userForm}>
                   <form onSubmit={userForm.handleSubmit(onCreateUser)} className="space-y-4">
