@@ -4,7 +4,12 @@ import { apiRequest } from "./queryClient";
 import { useLocation } from "wouter";
 
 interface User {
-  username: string;
+  username?: string;
+  id?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
 }
 
 interface AuthContextType {

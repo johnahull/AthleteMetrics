@@ -10,23 +10,44 @@ import {
   FileText,
   FileCheck,
   LogOut,
-  Settings
+  Settings,
+  Building2,
+  UserCog
 } from "lucide-react";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Teams", href: "/teams", icon: Users },
-  { name: "Players", href: "/players", icon: UsersRound },
-  { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Publish", href: "/publish", icon: FileCheck },
-  { name: "Import/Export", href: "/import-export", icon: FileText },
-  { name: "Administration", href: "/admin", icon: Settings },
-];
+const getNavigation = (userRole: string) => {
+  const baseNavigation = [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Teams", href: "/teams", icon: Users },
+    { name: "Players", href: "/players", icon: UsersRound },
+    { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Publish", href: "/publish", icon: FileCheck },
+    { name: "Import/Export", href: "/import-export", icon: FileText },
+  ];
+
+  // Add admin items based on role
+  if (userRole === "site_admin") {
+    baseNavigation.push(
+      { name: "Organizations", href: "/organizations", icon: Building2 },
+      { name: "User Management", href: "/user-management", icon: UserCog }
+    );
+  } else if (userRole === "org_admin") {
+    baseNavigation.push(
+      { name: "User Management", href: "/user-management", icon: UserCog }
+    );
+  }
+
+  return baseNavigation;
+};
 
 export default function Sidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  
+  // Get user role - fallback to 'athlete' if not defined
+  const userRole = user?.role || 'athlete';
+  const navigation = getNavigation(userRole);
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0">

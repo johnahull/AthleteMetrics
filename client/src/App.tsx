@@ -15,6 +15,8 @@ import Analytics from "./pages/analytics";
 import Publish from "./pages/publish";
 import ImportExport from "./pages/import-export";
 import AdminPage from "./pages/admin";
+import Organizations from "./pages/organizations";
+import UserManagement from "./pages/user-management";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -30,6 +32,8 @@ function Router() {
       <Route path="/publish" component={Publish} />
       <Route path="/import-export" component={ImportExport} />
       <Route path="/admin" component={AdminPage} />
+      <Route path="/organizations" component={Organizations} />
+      <Route path="/user-management" component={UserManagement} />
       <Route component={NotFound} />
     </Switch>
   );
