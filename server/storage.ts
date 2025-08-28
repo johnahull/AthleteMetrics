@@ -249,6 +249,8 @@ export class DatabaseStorage implements IStorage {
     dateTo?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
+    ageFrom?: number;
+    ageTo?: number;
     search?: string;
     sport?: string;
   }): Promise<(Measurement & { player: Player & { teams: Team[] } })[]> {
@@ -277,6 +279,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.search) {
       conditions.push(sql`${players.fullName} ILIKE ${'%' + filters.search + '%'}`);
+    }
+    if (filters?.ageFrom) {
+      conditions.push(gte(measurements.age, filters.ageFrom));
+    }
+    if (filters?.ageTo) {
+      conditions.push(lte(measurements.age, filters.ageTo));
     }
 
     if (conditions.length > 0) {
