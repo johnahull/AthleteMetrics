@@ -144,7 +144,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
           <DialogDescription>
