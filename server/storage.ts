@@ -1,30 +1,64 @@
-import { teams, players, measurements, users, playerTeams, type Team, type Player, type Measurement, type User, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser, type PlayerTeam, type InsertPlayerTeam } from "@shared/schema";
+import { 
+  organizations, teams, players, measurements, users, userOrganizations, userTeams, invitations, playerTeams,
+  type Organization, type Team, type Player, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
+  type InsertOrganization, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation,
+  type PlayerTeam, type InsertPlayerTeam
+} from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 export interface IStorage {
-  // Users
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
+  // Authentication & Users
+  authenticateUser(email: string, password: string): Promise<User | null>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
+  getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
+
+  // Organizations
+  getOrganizations(): Promise<Organization[]>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  createOrganization(organization: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
+  deleteOrganization(id: string): Promise<void>;
+  getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]>;
 
   // Teams
-  getTeams(): Promise<Team[]>;
-  getTeam(id: string): Promise<Team | undefined>;
+  getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]>;
+  getTeam(id: string): Promise<(Team & { organization: Organization }) | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
   updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team>;
   deleteTeam(id: string): Promise<void>;
 
-  // Players
-  getPlayers(filters?: { teamId?: string; birthYearFrom?: number; birthYearTo?: number; search?: string }): Promise<(Player & { teams: Team[] })[]>;
-  getPlayer(id: string): Promise<(Player & { teams: Team[] }) | undefined>;
+  // User Management
+  addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
+  addUserToTeam(userId: string, teamId: string): Promise<UserTeam>;
+  removeUserFromOrganization(userId: string, organizationId: string): Promise<void>;
+  removeUserFromTeam(userId: string, teamId: string): Promise<void>;
+
+  // Invitations
+  createInvitation(invitation: InsertInvitation): Promise<Invitation>;
+  getInvitation(token: string): Promise<Invitation | undefined>;
+  acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<User>;
+
+  // Players (legacy athletes)
+  getPlayers(filters?: { 
+    teamId?: string; 
+    organizationId?: string;
+    birthYearFrom?: number; 
+    birthYearTo?: number; 
+    search?: string 
+  }): Promise<(Player & { teams: (Team & { organization: Organization })[] })[]>;
+  getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined>;
   createPlayer(player: InsertPlayer): Promise<Player>;
   updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player>;
   deletePlayer(id: string): Promise<void>;
   getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined>;
 
   // Player Teams
-  getPlayerTeams(playerId: string): Promise<Team[]>;
+  getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]>;
   addPlayerToTeam(playerId: string, teamId: string): Promise<PlayerTeam>;
   removePlayerFromTeam(playerId: string, teamId: string): Promise<void>;
   setPlayerTeams(playerId: string, teamIds: string[]): Promise<void>;
@@ -33,16 +67,27 @@ export interface IStorage {
   getMeasurements(filters?: { 
     playerId?: string; 
     teamIds?: string[]; 
+    organizationId?: string;
     metric?: string; 
     dateFrom?: string; 
     dateTo?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
-  }): Promise<(Measurement & { player: Player & { teams: Team[] } })[]>;
+    ageFrom?: number;
+    ageTo?: number;
+    search?: string;
+    sport?: string;
+    includeUnverified?: boolean;
+  }): Promise<(Measurement & { 
+    player: Player & { teams: (Team & { organization: Organization })[] };
+    submittedBy: User;
+    verifiedBy?: User;
+  })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
   createMeasurement(measurement: InsertMeasurement): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
+  verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
 
   // Analytics
   getPlayerStats(playerId: string): Promise<{
@@ -50,15 +95,16 @@ export interface IStorage {
     bestVertical?: number;
     measurementCount: number;
   }>;
-  getTeamStats(): Promise<Array<{
+  getTeamStats(organizationId?: string): Promise<Array<{
     teamId: string;
     teamName: string;
+    organizationName: string;
     playerCount: number;
     bestFly10?: number;
     bestVertical?: number;
     latestTest?: string;
   }>>;
-  getDashboardStats(): Promise<{
+  getDashboardStats(organizationId?: string): Promise<{
     totalPlayers: number;
     totalTeams: number;
     bestFly10Today?: { value: number; playerName: string };
@@ -67,30 +113,118 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // Users
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+  // Authentication & Users
+  async authenticateUser(email: string, password: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (!user) return null;
+    
+    const isValid = await bcrypt.compare(password, user.password);
+    return isValid ? user : null;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user || undefined;
+  async createUser(user: InsertUser): Promise<User> {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
+    const [newUser] = await db.insert(users).values({
+      ...user,
+      password: hashedPassword
+    }).returning();
+    return newUser;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
+  async getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]> {
+    const result = await db.select()
+      .from(userOrganizations)
+      .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
+      .where(eq(userOrganizations.userId, userId));
+    
+    return result.map(({ user_organizations, organizations }) => ({
+      ...user_organizations,
+      organization: organizations
+    }));
+  }
+
+  async getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]> {
+    const result = await db.select()
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(userTeams.userId, userId));
+    
+    return result.map(({ user_teams, teams: team, organizations }) => ({
+      ...user_teams,
+      team: { ...team, organization: organizations }
+    }));
+  }
+
+  // Organizations
+  async getOrganizations(): Promise<Organization[]> {
+    return db.select().from(organizations).orderBy(asc(organizations.name));
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org || undefined;
+  }
+
+  async createOrganization(organization: InsertOrganization): Promise<Organization> {
+    const [newOrg] = await db.insert(organizations).values(organization).returning();
+    return newOrg;
+  }
+
+  async updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization> {
+    const [updated] = await db.update(organizations).set(organization).where(eq(organizations.id, id)).returning();
+    return updated;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  async getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]> {
+    const result = await db.select()
+      .from(userOrganizations)
+      .innerJoin(users, eq(userOrganizations.userId, users.id))
+      .where(eq(userOrganizations.organizationId, organizationId));
+    
+    return result.map(({ user_organizations, users: user }) => ({
+      ...user_organizations,
+      user
+    }));
   }
 
   // Teams
-  async getTeams(): Promise<Team[]> {
-    return await db.select().from(teams).orderBy(asc(teams.name));
+  async getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]> {
+    let query = db.select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .orderBy(asc(teams.name));
+    
+    if (organizationId) {
+      query = query.where(eq(teams.organizationId, organizationId)) as any;
+    }
+    
+    const result = await query;
+    return result.map(({ teams: team, organizations: org }) => ({
+      ...team,
+      organization: org
+    }));
   }
 
-  async getTeam(id: string): Promise<Team | undefined> {
-    const [team] = await db.select().from(teams).where(eq(teams.id, id));
-    return team || undefined;
+  async getTeam(id: string): Promise<(Team & { organization: Organization }) | undefined> {
+    const result = await db.select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(teams.id, id));
+    
+    if (result.length === 0) return undefined;
+    
+    const { teams: team, organizations } = result[0];
+    return { ...team, organization: organizations };
   }
 
   async createTeam(team: InsertTeam): Promise<Team> {
@@ -99,17 +233,109 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team> {
-    const [updatedTeam] = await db.update(teams).set(team).where(eq(teams.id, id)).returning();
-    return updatedTeam;
+    const [updated] = await db.update(teams).set(team).where(eq(teams.id, id)).returning();
+    return updated;
   }
 
   async deleteTeam(id: string): Promise<void> {
     await db.delete(teams).where(eq(teams.id, id));
   }
 
-  // Players
-  async getPlayers(filters?: { teamId?: string; birthYearFrom?: number; birthYearTo?: number; search?: string }): Promise<(Player & { teams: Team[] })[]> {
+  // User Management
+  async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
+    const [userOrg] = await db.insert(userOrganizations).values({
+      userId,
+      organizationId,
+      role
+    }).returning();
+    return userOrg;
+  }
+
+  async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
+    const [userTeam] = await db.insert(userTeams).values({
+      userId,
+      teamId
+    }).returning();
+    return userTeam;
+  }
+
+  async removeUserFromOrganization(userId: string, organizationId: string): Promise<void> {
+    await db.delete(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+  }
+
+  async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
+    await db.delete(userTeams)
+      .where(and(
+        eq(userTeams.userId, userId),
+        eq(userTeams.teamId, teamId)
+      ));
+  }
+
+  // Invitations
+  async createInvitation(invitation: InsertInvitation): Promise<Invitation> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
+    
+    const [newInvitation] = await db.insert(invitations).values({
+      ...invitation,
+      token,
+      expiresAt
+    }).returning();
+    return newInvitation;
+  }
+
+  async getInvitation(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(and(
+        eq(invitations.token, token),
+        eq(invitations.isUsed, "false"),
+        gte(invitations.expiresAt, new Date())
+      ));
+    return invitation || undefined;
+  }
+
+  async acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<User> {
+    const invitation = await this.getInvitation(token);
+    if (!invitation) throw new Error("Invalid or expired invitation");
+
+    // Create user
+    const user = await this.createUser({
+      ...userInfo,
+      role: "athlete" // Default role for invited users
+    });
+
+    // Add user to organization
+    await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+
+    // Add user to teams if specified
+    if (invitation.teamIds && invitation.teamIds.length > 0) {
+      for (const teamId of invitation.teamIds) {
+        await this.addUserToTeam(user.id, teamId);
+      }
+    }
+
+    // Mark invitation as used
+    await db.update(invitations).set({ isUsed: "true" }).where(eq(invitations.token, token));
+
+    return user;
+  }
+
+  // Players (legacy athletes)
+  async getPlayers(filters?: { 
+    teamId?: string; 
+    organizationId?: string;
+    birthYearFrom?: number; 
+    birthYearTo?: number; 
+    search?: string 
+  }): Promise<(Player & { teams: (Team & { organization: Organization })[] })[]> {
+    let query = db.select().from(players);
     const conditions = [];
+
     if (filters?.birthYearFrom) {
       conditions.push(gte(players.birthYear, filters.birthYearFrom));
     }
@@ -120,79 +346,81 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${players.fullName} ILIKE ${'%' + filters.search + '%'}`);
     }
 
-    let query = db.select().from(players);
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
     }
 
-    const playersResult = await query.orderBy(asc(players.lastName), asc(players.firstName));
+    const result = await query.orderBy(asc(players.lastName), asc(players.firstName));
     
-    // Get teams for each player
+    // Get teams for each player with organization info
     const playersWithTeams = await Promise.all(
-      playersResult.map(async (player) => {
+      result.map(async (player) => {
         const playerTeams = await this.getPlayerTeams(player.id);
-        return { ...player, teams: playerTeams };
+        return {
+          ...player,
+          teams: playerTeams
+        };
       })
     );
 
-    // Filter by team if specified
+    // Apply team/organization filters
+    let filteredPlayers = playersWithTeams;
     if (filters?.teamId) {
-      return playersWithTeams.filter(player => 
+      filteredPlayers = filteredPlayers.filter(player => 
         player.teams.some(team => team.id === filters.teamId)
       );
     }
+    if (filters?.organizationId) {
+      filteredPlayers = filteredPlayers.filter(player => 
+        player.teams.some(team => team.organization.id === filters.organizationId)
+      );
+    }
 
-    return playersWithTeams;
+    return filteredPlayers;
   }
 
-  async getPlayer(id: string): Promise<(Player & { teams: Team[] }) | undefined> {
-    const [player] = await db.select()
-      .from(players)
-      .where(eq(players.id, id));
-    
+  async getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined> {
+    const [player] = await db.select().from(players).where(eq(players.id, id));
     if (!player) return undefined;
-    
-    const playerTeams = await this.getPlayerTeams(id);
+
+    const playerTeams = await this.getPlayerTeams(player.id);
     return { ...player, teams: playerTeams };
   }
 
   async createPlayer(player: InsertPlayer): Promise<Player> {
-    const { teamIds, ...playerData } = player;
     const fullName = `${player.firstName} ${player.lastName}`;
-    
     const [newPlayer] = await db.insert(players).values({
-      ...playerData,
-      fullName,
+      ...player,
+      fullName
     }).returning();
-
-    // Add player to teams if any are specified
-    if (teamIds && teamIds.length > 0) {
-      await this.setPlayerTeams(newPlayer.id, teamIds);
+    
+    // Add to teams if specified
+    if (player.teamIds && player.teamIds.length > 0) {
+      await this.setPlayerTeams(newPlayer.id, player.teamIds);
     }
-
+    
     return newPlayer;
   }
 
   async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
-    const { teamIds, ...playerData } = player;
-    const updateData: any = { ...playerData };
-    
+    const updateData: any = { ...player };
     if (player.firstName || player.lastName) {
-      // Fetch current player to build full name
-      const current = await this.getPlayer(id);
-      if (current) {
-        updateData.fullName = `${player.firstName || current.firstName} ${player.lastName || current.lastName}`;
+      const existing = await this.getPlayer(id);
+      if (existing) {
+        const firstName = player.firstName || existing.firstName;
+        const lastName = player.lastName || existing.lastName;
+        updateData.fullName = `${firstName} ${lastName}`;
       }
     }
     
-    const [updatedPlayer] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();
+    const [updated] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();
     
-    // Update team associations if provided (empty array removes all teams)
-    if (teamIds !== undefined) {
-      await this.setPlayerTeams(id, teamIds);
+    // Update teams if specified
+    if (player.teamIds !== undefined) {
+      await this.setPlayerTeams(id, player.teamIds);
     }
     
-    return updatedPlayer;
+    return updated;
   }
 
   async deletePlayer(id: string): Promise<void> {
@@ -200,43 +428,54 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined> {
-    const [player] = await db.select()
-      .from(players)
-      .where(and(eq(players.firstName, firstName), eq(players.lastName, lastName), eq(players.birthYear, birthYear)));
+    const [player] = await db.select().from(players)
+      .where(and(
+        eq(players.firstName, firstName),
+        eq(players.lastName, lastName),
+        eq(players.birthYear, birthYear)
+      ));
     return player || undefined;
   }
 
   // Player Teams
-  async getPlayerTeams(playerId: string): Promise<Team[]> {
+  async getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]> {
     const result = await db.select()
       .from(playerTeams)
       .innerJoin(teams, eq(playerTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(playerTeams.playerId, playerId));
-    
-    return result.map(({ teams: team }) => team);
+
+    return result.map(({ teams: team, organizations }) => ({
+      ...team,
+      organization: organizations
+    }));
   }
 
   async addPlayerToTeam(playerId: string, teamId: string): Promise<PlayerTeam> {
-    const [newPlayerTeam] = await db.insert(playerTeams).values({
+    const [playerTeam] = await db.insert(playerTeams).values({
       playerId,
-      teamId,
+      teamId
     }).returning();
-    return newPlayerTeam;
+    return playerTeam;
   }
 
   async removePlayerFromTeam(playerId: string, teamId: string): Promise<void> {
     await db.delete(playerTeams)
-      .where(and(eq(playerTeams.playerId, playerId), eq(playerTeams.teamId, teamId)));
+      .where(and(
+        eq(playerTeams.playerId, playerId),
+        eq(playerTeams.teamId, teamId)
+      ));
   }
 
   async setPlayerTeams(playerId: string, teamIds: string[]): Promise<void> {
-    // Remove all existing team associations
+    // Remove existing teams
     await db.delete(playerTeams).where(eq(playerTeams.playerId, playerId));
     
-    // Add new team associations
+    // Add new teams
     if (teamIds.length > 0) {
-      const values = teamIds.map(teamId => ({ playerId, teamId }));
-      await db.insert(playerTeams).values(values);
+      await db.insert(playerTeams).values(
+        teamIds.map(teamId => ({ playerId, teamId }))
+      );
     }
   }
 
@@ -244,6 +483,7 @@ export class DatabaseStorage implements IStorage {
   async getMeasurements(filters?: { 
     playerId?: string; 
     teamIds?: string[]; 
+    organizationId?: string;
     metric?: string; 
     dateFrom?: string; 
     dateTo?: string;
@@ -253,10 +493,16 @@ export class DatabaseStorage implements IStorage {
     ageTo?: number;
     search?: string;
     sport?: string;
-  }): Promise<(Measurement & { player: Player & { teams: Team[] } })[]> {
+    includeUnverified?: boolean;
+  }): Promise<(Measurement & { 
+    player: Player & { teams: (Team & { organization: Organization })[] };
+    submittedBy: User;
+    verifiedBy?: User;
+  })[]> {
     let query = db.select()
       .from(measurements)
-      .innerJoin(players, eq(measurements.playerId, players.id));
+      .innerJoin(players, eq(measurements.playerId, players.id))
+      .innerJoin(users, eq(measurements.submittedBy, users.id));
     
     const conditions = [];
     if (filters?.playerId) {
@@ -286,6 +532,9 @@ export class DatabaseStorage implements IStorage {
     if (filters?.ageTo) {
       conditions.push(lte(measurements.age, filters.ageTo));
     }
+    if (!filters?.includeUnverified) {
+      conditions.push(eq(measurements.isVerified, "true"));
+    }
 
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
@@ -293,23 +542,38 @@ export class DatabaseStorage implements IStorage {
 
     const result = await query.orderBy(desc(measurements.date), desc(measurements.createdAt));
     
-    // Get teams for each player and filter by team if needed
-    const measurementsWithTeams = await Promise.all(
-      result.map(async ({ measurements: measurement, players: player }) => {
+    // Get teams for each player and additional user info
+    const measurementsWithDetails = await Promise.all(
+      result.map(async ({ measurements: measurement, players: player, users: submittedBy }) => {
         const playerTeams = await this.getPlayerTeams(player.id);
+        
+        let verifiedBy;
+        if (measurement.verifiedBy) {
+          const [verifier] = await db.select().from(users).where(eq(users.id, measurement.verifiedBy));
+          verifiedBy = verifier;
+        }
+        
         return {
           ...measurement,
-          player: { ...player, teams: playerTeams }
+          player: { ...player, teams: playerTeams },
+          submittedBy,
+          verifiedBy
         };
       })
     );
 
-    // Filter by team if specified
-    let filteredMeasurements = measurementsWithTeams;
+    // Apply team/organization filters
+    let filteredMeasurements = measurementsWithDetails;
     
     if (filters?.teamIds && filters.teamIds.length > 0) {
       filteredMeasurements = filteredMeasurements.filter(measurement => 
         measurement.player.teams.some(team => filters.teamIds!.includes(team.id))
+      );
+    }
+
+    if (filters?.organizationId) {
+      filteredMeasurements = filteredMeasurements.filter(measurement => 
+        measurement.player.teams.some(team => team.organization.id === filters.organizationId)
       );
     }
 
@@ -329,65 +593,63 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMeasurement(measurement: InsertMeasurement): Promise<Measurement> {
-    const units = measurement.metric === "VERTICAL_JUMP" ? "in" : measurement.metric === "RSI" ? "" : "s";
-    
-    // Get the player's data to calculate age at measurement date
-    const [player] = await db.select({ 
-      birthYear: players.birthYear, 
-      birthday: players.birthday 
-    }).from(players).where(eq(players.id, measurement.playerId));
-    
-    if (!player) {
-      throw new Error("Player not found");
-    }
-    
+    // Calculate age and units based on metric
+    const player = await this.getPlayer(measurement.playerId);
+    if (!player) throw new Error("Player not found");
+
     const measurementDate = new Date(measurement.date);
+    let age = measurementDate.getFullYear() - player.birthYear;
     
-    // Use player's birthday if available for precise age calculation, otherwise use birth year
-    let ageAtMeasurement;
+    // Use birthday for more precise age calculation if available
     if (player.birthday) {
       const birthday = new Date(player.birthday);
-      ageAtMeasurement = measurementDate.getFullYear() - birthday.getFullYear();
-      
-      // Adjust if birthday hasn't occurred yet this year for the measurement date
-      const measurementMonth = measurementDate.getMonth();
-      const measurementDay = measurementDate.getDate();
-      const birthdayMonth = birthday.getMonth();
-      const birthdayDay = birthday.getDate();
-      
-      if (measurementMonth < birthdayMonth || (measurementMonth === birthdayMonth && measurementDay < birthdayDay)) {
-        ageAtMeasurement--;
+      const birthdayThisYear = new Date(measurementDate.getFullYear(), birthday.getMonth(), birthday.getDate());
+      if (measurementDate < birthdayThisYear) {
+        age -= 1;
       }
-    } else {
-      // Fall back to birth year calculation
-      ageAtMeasurement = measurementDate.getFullYear() - player.birthYear;
     }
+
+    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" : 
+                  measurement.metric === "RSI" ? "ratio" : "in";
+
+    // Get submitter info to determine if auto-verify
+    const [submitter] = await db.select().from(users).where(eq(users.id, measurement.submittedBy));
+    const isCoach = submitter?.role === "coach" || submitter?.role === "org_admin" || submitter?.role === "site_admin";
     
     const [newMeasurement] = await db.insert(measurements).values({
       ...measurement,
-      age: ageAtMeasurement,
       value: measurement.value.toString(),
-      flyInDistance: measurement.flyInDistance?.toString(),
+      age,
       units,
+      isVerified: isCoach ? "true" : "false",
+      verifiedBy: isCoach ? measurement.submittedBy : undefined
     }).returning();
+    
     return newMeasurement;
   }
 
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
-    const updateData: any = { ...measurement };
-    if (measurement.metric) {
-      updateData.units = measurement.metric === "VERTICAL_JUMP" ? "in" : measurement.metric === "RSI" ? "" : "s";
-    }
+    const updateData = { ...measurement };
     if (measurement.value !== undefined) {
       updateData.value = measurement.value.toString();
     }
-    
-    const [updatedMeasurement] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();
-    return updatedMeasurement;
+    const [updated] = await db.update(measurements).set(updateData as any).where(eq(measurements.id, id)).returning();
+    return updated;
   }
 
   async deleteMeasurement(id: string): Promise<void> {
     await db.delete(measurements).where(eq(measurements.id, id));
+  }
+
+  async verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement> {
+    const [updated] = await db.update(measurements)
+      .set({ 
+        isVerified: "true", 
+        verifiedBy 
+      })
+      .where(eq(measurements.id, id))
+      .returning();
+    return updated;
   }
 
   // Analytics
@@ -396,121 +658,96 @@ export class DatabaseStorage implements IStorage {
     bestVertical?: number;
     measurementCount: number;
   }> {
-    const playerMeasurements = await db.select()
-      .from(measurements)
-      .where(eq(measurements.playerId, playerId));
-
-    const fly10Times = playerMeasurements
+    const measurements = await this.getMeasurements({ playerId, includeUnverified: false });
+    
+    const fly10Times = measurements
       .filter(m => m.metric === "FLY10_TIME")
       .map(m => parseFloat(m.value));
-    
-    const verticalJumps = playerMeasurements
+    const verticalJumps = measurements
       .filter(m => m.metric === "VERTICAL_JUMP")
       .map(m => parseFloat(m.value));
 
     return {
       bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
       bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
-      measurementCount: playerMeasurements.length,
+      measurementCount: measurements.length
     };
   }
 
-  async getTeamStats(): Promise<Array<{
+  async getTeamStats(organizationId?: string): Promise<Array<{
     teamId: string;
     teamName: string;
+    organizationName: string;
     playerCount: number;
     bestFly10?: number;
     bestVertical?: number;
     latestTest?: string;
   }>> {
-    const teamsData = await db.select().from(teams);
-    const result = [];
-
-    for (const team of teamsData) {
-      // Get players for this team using the junction table
-      const teamPlayerRecords = await db.select({
-        playerId: playerTeams.playerId
-      })
-      .from(playerTeams)
-      .where(eq(playerTeams.teamId, team.id));
-      
-      const playerIds = teamPlayerRecords.map(p => p.playerId);
-      
-      if (playerIds.length === 0) {
-        result.push({
+    const teams = await this.getTeams(organizationId);
+    
+    const teamStats = await Promise.all(
+      teams.map(async (team) => {
+        const players = await this.getPlayers({ teamId: team.id });
+        const measurements = await this.getMeasurements({ teamIds: [team.id], includeUnverified: false });
+        
+        const fly10Times = measurements
+          .filter(m => m.metric === "FLY10_TIME")
+          .map(m => parseFloat(m.value));
+        const verticalJumps = measurements
+          .filter(m => m.metric === "VERTICAL_JUMP")
+          .map(m => parseFloat(m.value));
+        
+        const latestMeasurement = measurements[0]; // Already ordered by date desc
+        
+        return {
           teamId: team.id,
           teamName: team.name,
-          playerCount: 0,
-          bestFly10: undefined,
-          bestVertical: undefined,
-          latestTest: undefined,
-        });
-        continue;
-      }
+          organizationName: team.organization.name,
+          playerCount: players.length,
+          bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
+          bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
+          latestTest: latestMeasurement ? latestMeasurement.date : undefined
+        };
+      })
+    );
 
-      const teamMeasurements = await db.select()
-        .from(measurements)
-        .where(inArray(measurements.playerId, playerIds))
-        .orderBy(desc(measurements.date));
-
-      const fly10Times = teamMeasurements
-        .filter(m => m.metric === "FLY10_TIME")
-        .map(m => parseFloat(m.value));
-      
-      const verticalJumps = teamMeasurements
-        .filter(m => m.metric === "VERTICAL_JUMP")
-        .map(m => parseFloat(m.value));
-
-      result.push({
-        teamId: team.id,
-        teamName: team.name,
-        playerCount: playerIds.length,
-        bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
-        bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
-        latestTest: teamMeasurements.length > 0 ? teamMeasurements[0].date : undefined,
-      });
-    }
-
-    return result;
+    return teamStats;
   }
 
-  async getDashboardStats(): Promise<{
+  async getDashboardStats(organizationId?: string): Promise<{
     totalPlayers: number;
     totalTeams: number;
     bestFly10Today?: { value: number; playerName: string };
     bestVerticalToday?: { value: number; playerName: string };
   }> {
-    const totalPlayers = await db.select({ count: sql<number>`count(*)` }).from(players);
-    const totalTeams = await db.select({ count: sql<number>`count(*)` }).from(teams);
-
+    const players = await this.getPlayers({ organizationId });
+    const teams = await this.getTeams(organizationId);
+    
     const today = new Date().toISOString().split('T')[0];
+    const todaysMeasurements = await this.getMeasurements({ 
+      dateFrom: today, 
+      dateTo: today,
+      organizationId,
+      includeUnverified: false
+    });
     
-    const todayMeasurements = await db.select()
-      .from(measurements)
-      .innerJoin(players, eq(measurements.playerId, players.id))
-      .where(eq(measurements.date, today));
-
-    const todayFly10 = todayMeasurements
-      .filter(m => m.measurements.metric === "FLY10_TIME")
-      .map(m => ({ value: parseFloat(m.measurements.value), playerName: m.players.fullName }));
+    const todaysFly10 = todaysMeasurements
+      .filter(m => m.metric === "FLY10_TIME")
+      .map(m => ({ value: parseFloat(m.value), playerName: m.player.fullName }));
     
-    const todayVertical = todayMeasurements
-      .filter(m => m.measurements.metric === "VERTICAL_JUMP")
-      .map(m => ({ value: parseFloat(m.measurements.value), playerName: m.players.fullName }));
-
-    const bestFly10Today = todayFly10.length > 0 
-      ? todayFly10.reduce((best, current) => current.value < best.value ? current : best)
-      : undefined;
+    const todaysVertical = todaysMeasurements
+      .filter(m => m.metric === "VERTICAL_JUMP")
+      .map(m => ({ value: parseFloat(m.value), playerName: m.player.fullName }));
     
-    const bestVerticalToday = todayVertical.length > 0
-      ? todayVertical.reduce((best, current) => current.value > best.value ? current : best)
-      : undefined;
-
     return {
-      totalPlayers: totalPlayers[0].count,
-      totalTeams: totalTeams[0].count,
-      bestFly10Today,
-      bestVerticalToday,
+      totalPlayers: players.length,
+      totalTeams: teams.length,
+      bestFly10Today: todaysFly10.length > 0 ? todaysFly10.reduce((best, current) => 
+        current.value < best.value ? current : best
+      ) : undefined,
+      bestVerticalToday: todaysVertical.length > 0 ? todaysVertical.reduce((best, current) => 
+        current.value > best.value ? current : best
+      ) : undefined
     };
   }
 }
