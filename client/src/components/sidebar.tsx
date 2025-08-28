@@ -57,8 +57,13 @@ export default function Sidebar() {
           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Performance Hub</h1>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold text-gray-900">Performance Hub</h1>
+              <span className="px-1.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-800 rounded border border-orange-200">
+                BETA
+              </span>
+            </div>
             <p className="text-sm text-gray-500">Analytics Platform</p>
           </div>
         </div>
