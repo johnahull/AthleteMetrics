@@ -260,12 +260,12 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Get organizations data
-    const organizations = await db.select()
-      .from(organizationsSchema)
-      .where(inArray(organizationsSchema.id, orgIds));
+    const orgsData = await db.select()
+      .from(organizations)
+      .where(inArray(organizations.id, orgIds));
     
     const orgsWithUsers = await Promise.all(
-      organizations.map(async (org) => {
+      orgsData.map(async (org) => {
         const users = await this.getOrganizationUsers(org.id);
         return {
           ...org,
