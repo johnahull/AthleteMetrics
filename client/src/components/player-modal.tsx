@@ -61,7 +61,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: player.firstName,
         lastName: player.lastName,
         birthYear: player.birthYear,
-        age: player.age,
+        birthday: player.birthday,
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
@@ -74,7 +74,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: "",
         lastName: "",
         birthYear: new Date().getFullYear() - 15,
-        age: undefined,
+        birthday: undefined,
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
@@ -250,26 +250,23 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             <div className="grid grid-cols-1 gap-4">
               <FormField
                 control={form.control}
-                name="age"
+                name="birthday"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Current Age (optional)</FormLabel>
+                    <FormLabel>Birthday (optional)</FormLabel>
                     <FormControl>
                       <Input 
                         {...field} 
-                        type="number"
-                        min="10"
-                        max="50"
+                        type="date"
                         disabled={isPending}
-                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        data-testid="input-player-age"
+                        data-testid="input-player-birthday"
                         value={field.value || ""}
-                        placeholder="Enter current age for more precise calculations"
+                        placeholder="YYYY-MM-DD"
                       />
                     </FormControl>
                     <FormMessage />
                     <p className="text-sm text-gray-500">
-                      If provided, this will be used for more accurate age calculations in measurements
+                      If provided, this will be used for precise age calculations in measurements
                     </p>
                   </FormItem>
                 )}

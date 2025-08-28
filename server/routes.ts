@@ -485,13 +485,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          // Validate age if provided (optional field for more precise age calculations)
-          if (row.age && row.age.trim()) {
-            const ageValue = parseInt(row.age);
-            if (isNaN(ageValue) || ageValue < 10 || ageValue > 50) {
+          // Validate birthday if provided (optional field for more precise age calculations)
+          if (row.birthday && row.birthday.trim()) {
+            const birthdayDate = new Date(row.birthday);
+            if (isNaN(birthdayDate.getTime())) {
               errors.push({ 
                 row: i, 
-                error: `Invalid age: "${row.age}" - must be a number between 10 and 50, or left empty`, 
+                error: `Invalid birthday: "${row.birthday}" - must be in YYYY-MM-DD format, or left empty`, 
+                valid: false 
+              });
+              continue;
+            }
+            
+            // Check if birthday is reasonable (between 1980-2020)
+            const birthYear = birthdayDate.getFullYear();
+            if (birthYear < 1980 || birthYear > 2020) {
+              errors.push({ 
+                row: i, 
+                error: `Invalid birthday: "${row.birthday}" - birth year must be between 1980 and 2020`, 
                 valid: false 
               });
               continue;
@@ -514,10 +525,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          // Update player's age if provided in CSV for more precise calculations
-          if (row.age && row.age.trim()) {
-            const ageValue = parseInt(row.age);
-            await storage.updatePlayer(player.id, { age: ageValue });
+          // Update player's birthday if provided in CSV for more precise calculations
+          if (row.birthday && row.birthday.trim()) {
+            await storage.updatePlayer(player.id, { birthday: row.birthday });
           }
 
           const measurementData = {
@@ -605,9 +615,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
       
-      const csvHeader = "firstName,lastName,birthYear,age,date,metric,value,units,flyInDistance,notes\n";
+      const csvHeader = "firstName,lastName,birthYear,birthday,date,metric,value,units,flyInDistance,notes\n";
       const csvBody = measurements.map(measurement => 
-        `"${measurement.player.firstName}","${measurement.player.lastName}",${measurement.player.birthYear},${measurement.player.age || ""},${measurement.date},${measurement.metric},${measurement.value},${measurement.units},${measurement.flyInDistance || ""},"${measurement.notes || ""}"`
+        `"${measurement.player.firstName}","${measurement.player.lastName}",${measurement.player.birthYear},${measurement.player.birthday || ""},${measurement.date},${measurement.metric},${measurement.value},${measurement.units},${measurement.flyInDistance || ""},"${measurement.notes || ""}"`
       ).join('\n');
       
       res.send(csvHeader + csvBody);
