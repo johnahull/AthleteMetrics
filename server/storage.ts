@@ -290,6 +290,11 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async deleteInvitation(invitationId: string): Promise<void> {
+    await db.delete(invitations)
+      .where(eq(invitations.id, invitationId));
+  }
+
   // Teams
   async getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]> {
     let query = db.select()

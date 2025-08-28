@@ -387,6 +387,16 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.delete("/api/invitations/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteInvitation(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting invitation:", error);
+      res.status(500).json({ error: "Failed to delete invitation" });
+    }
+  });
+
   app.post("/api/invitations/:token/accept", async (req, res) => {
     try {
       const { token } = req.params;

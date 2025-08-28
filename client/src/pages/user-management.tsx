@@ -203,6 +203,33 @@ export default function UserManagement() {
     }
   };
 
+  const deleteInvitationMutation = useMutation({
+    mutationFn: async (invitationId: string) => {
+      const res = await apiRequest("DELETE", `/api/invitations/${invitationId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      toast({
+        title: "Invitation deleted",
+        description: "The invitation has been removed successfully."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error deleting invitation",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const handleDeleteInvitation = (invitationId: string, email: string) => {
+    if (window.confirm(`Are you sure you want to delete the invitation for ${email}?`)) {
+      deleteInvitationMutation.mutate(invitationId);
+    }
+  };
+
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -465,6 +492,14 @@ export default function UserManagement() {
                                 <Link className="h-4 w-4" />
                               </Button>
                             )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteInvitation(invitation.id, invitation.email)}
+                              data-testid={`invitation-delete-${invitation.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
                           </div>
                         </div>
                       );
