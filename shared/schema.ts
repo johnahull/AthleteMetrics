@@ -4,9 +4,17 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const teams = pgTable("teams", {
+export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const teams = pgTable("teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
+  name: text("name").notNull(),
   level: text("level"), // "Club", "HS", "College"
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -37,6 +45,9 @@ export const playerTeams = pgTable("player_teams", {
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("player_id").notNull().references(() => players.id),
+  submittedBy: varchar("submitted_by").notNull().references(() => users.id),
+  verifiedBy: varchar("verified_by").references(() => users.id),
+  isVerified: text("is_verified").default("false").notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // Player's age at time of measurement
   metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"
@@ -49,13 +60,98 @@ export const measurements = pgTable("measurements", {
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  role: text("role").notNull(), // "site_admin", "org_admin", "coach", "athlete"
+  isActive: text("is_active").default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const userOrganizations = pgTable("user_organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
+  role: text("role").notNull(), // "org_admin", "coach", "athlete"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const userTeams = pgTable("user_teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  teamId: varchar("team_id").notNull().references(() => teams.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const invitations = pgTable("invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
+  teamIds: text("team_ids").array(),
+  role: text("role").notNull(), // "athlete", "coach", "org_admin"
+  invitedBy: varchar("invited_by").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  isUsed: text("is_used").default("false").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Relations
-export const teamsRelations = relations(teams, ({ many }) => ({
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  teams: many(teams),
+  userOrganizations: many(userOrganizations),
+  invitations: many(invitations),
+}));
+
+export const teamsRelations = relations(teams, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [teams.organizationId],
+    references: [organizations.id],
+  }),
   playerTeams: many(playerTeams),
+  userTeams: many(userTeams),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  userOrganizations: many(userOrganizations),
+  userTeams: many(userTeams),
+  submittedMeasurements: many(measurements, { relationName: "submittedMeasurements" }),
+  verifiedMeasurements: many(measurements, { relationName: "verifiedMeasurements" }),
+  invitationsSent: many(invitations),
+}));
+
+export const userOrganizationsRelations = relations(userOrganizations, ({ one }) => ({
+  user: one(users, {
+    fields: [userOrganizations.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [userOrganizations.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
+export const userTeamsRelations = relations(userTeams, ({ one }) => ({
+  user: one(users, {
+    fields: [userTeams.userId],
+    references: [users.id],
+  }),
+  team: one(teams, {
+    fields: [userTeams.teamId],
+    references: [teams.id],
+  }),
+}));
+
+export const invitationsRelations = relations(invitations, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [invitations.organizationId],
+    references: [organizations.id],
+  }),
+  invitedBy: one(users, {
+    fields: [invitations.invitedBy],
+    references: [users.id],
+  }),
 }));
 
 export const playersRelations = relations(players, ({ many }) => ({
@@ -79,12 +175,59 @@ export const measurementsRelations = relations(measurements, ({ one }) => ({
     fields: [measurements.playerId],
     references: [players.id],
   }),
+  submittedBy: one(users, {
+    fields: [measurements.submittedBy],
+    references: [users.id],
+    relationName: "submittedMeasurements",
+  }),
+  verifiedBy: one(users, {
+    fields: [measurements.verifiedBy],
+    references: [users.id],
+    relationName: "verifiedMeasurements",
+  }),
 }));
 
 // Insert schemas
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertTeamSchema = createInsertSchema(teams).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]),
+});
+
+export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserTeamSchema = createInsertSchema(userTeams).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertInvitationSchema = createInsertSchema(invitations).omit({
+  id: true,
+  createdAt: true,
+  token: true,
+  isUsed: true,
+}).extend({
+  email: z.string().email("Invalid email format"),
+  role: z.enum(["athlete", "coach", "org_admin"]),
+  teamIds: z.array(z.string()).optional(),
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
@@ -112,8 +255,11 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   age: true, // Age is calculated automatically
   createdAt: true,
   units: true,
+  verifiedBy: true,
+  isVerified: true,
 }).extend({
   playerId: z.string().min(1, "Player is required"),
+  submittedBy: z.string().min(1, "Submitted by is required"),
   date: z.string().min(1, "Date is required"),
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"]),
   value: z.number().positive("Value must be positive"),
@@ -121,8 +267,23 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 });
 
 // Types
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+
 export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type Team = typeof teams.$inferSelect;
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
+export type InsertUserOrganization = z.infer<typeof insertUserOrganizationSchema>;
+export type UserOrganization = typeof userOrganizations.$inferSelect;
+
+export type InsertUserTeam = z.infer<typeof insertUserTeamSchema>;
+export type UserTeam = typeof userTeams.$inferSelect;
+
+export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
+export type Invitation = typeof invitations.$inferSelect;
 
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
 export type Player = typeof players.$inferSelect;
@@ -132,14 +293,6 @@ export type PlayerTeam = typeof playerTeams.$inferSelect;
 
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 
 // Enums
 export const MetricType = {
@@ -156,4 +309,17 @@ export const TeamLevel = {
   CLUB: "Club",
   HS: "HS", 
   COLLEGE: "College",
+} as const;
+
+export const UserRole = {
+  SITE_ADMIN: "site_admin",
+  ORG_ADMIN: "org_admin",
+  COACH: "coach",
+  ATHLETE: "athlete",
+} as const;
+
+export const OrganizationRole = {
+  ORG_ADMIN: "org_admin",
+  COACH: "coach",
+  ATHLETE: "athlete",
 } as const;
