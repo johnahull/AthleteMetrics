@@ -65,11 +65,10 @@ export default function AdminPage() {
   });
 
   const createOrgMutation = useMutation({
-    mutationFn: (data: z.infer<typeof organizationSchema>) =>
-      apiRequest("/api/organizations", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async (data: z.infer<typeof organizationSchema>) => {
+      const res = await apiRequest("POST", "/api/organizations", data);
+      return res.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
       toast({ title: "Organization created successfully!" });
@@ -86,11 +85,10 @@ export default function AdminPage() {
   });
 
   const createUserMutation = useMutation({
-    mutationFn: (data: z.infer<typeof userSchema>) =>
-      apiRequest("/api/users", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async (data: z.infer<typeof userSchema>) => {
+      const res = await apiRequest("POST", "/api/users", data);
+      return res.json();
+    },
     onSuccess: () => {
       toast({ title: "User created successfully!" });
       setUserDialogOpen(false);
