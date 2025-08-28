@@ -84,6 +84,7 @@ export function registerRoutes(app: Express) {
       if (username === "admin" && password === "admin") {
         req.session.admin = true;
         req.session.user = { username: "admin", role: "site_admin" };
+        console.log('Setting session for admin:', req.session.user);
         return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
       }
       
