@@ -557,9 +557,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="players.csv"');
       
-      const csvHeader = "firstName,lastName,birthYear,teamName,school\n";
+      const csvHeader = "firstName,lastName,birthYear,teamNames,school\n";
       const csvBody = players.map(player => 
-        `"${player.firstName}","${player.lastName}",${player.birthYear},"${player.team.name}","${player.school || ""}"`
+        `"${player.firstName}","${player.lastName}",${player.birthYear},"${player.teams.map(t => t.name).join('; ')}","${player.school || ""}"`
       ).join('\n');
       
       res.send(csvHeader + csvBody);
