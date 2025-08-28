@@ -205,7 +205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Measurements routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
-      const { playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo } = req.query;
+      const { playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, search, sport } = req.query;
       const filters = {
         playerId: playerId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
@@ -214,6 +214,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dateTo: dateTo as string,
         birthYearFrom: birthYearFrom ? parseInt(birthYearFrom as string) : undefined,
         birthYearTo: birthYearTo ? parseInt(birthYearTo as string) : undefined,
+        search: search as string,
+        sport: sport as string,
       };
       
       const measurements = await storage.getMeasurements(filters);

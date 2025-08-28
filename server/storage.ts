@@ -249,6 +249,8 @@ export class DatabaseStorage implements IStorage {
     dateTo?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
+    search?: string;
+    sport?: string;
   }): Promise<(Measurement & { player: Player & { teams: Team[] } })[]> {
     let query = db.select()
       .from(measurements)
@@ -273,6 +275,9 @@ export class DatabaseStorage implements IStorage {
     if (filters?.birthYearTo) {
       conditions.push(lte(players.birthYear, filters.birthYearTo));
     }
+    if (filters?.search) {
+      conditions.push(sql`${players.fullName} ILIKE ${'%' + filters.search + '%'}`);
+    }
 
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
@@ -292,13 +297,22 @@ export class DatabaseStorage implements IStorage {
     );
 
     // Filter by team if specified
+    let filteredMeasurements = measurementsWithTeams;
+    
     if (filters?.teamIds && filters.teamIds.length > 0) {
-      return measurementsWithTeams.filter(measurement => 
+      filteredMeasurements = filteredMeasurements.filter(measurement => 
         measurement.player.teams.some(team => filters.teamIds!.includes(team.id))
       );
     }
 
-    return measurementsWithTeams;
+    // Filter by sport if specified
+    if (filters?.sport && filters.sport !== "all") {
+      filteredMeasurements = filteredMeasurements.filter(measurement => 
+        measurement.player.sports?.includes(filters.sport!)
+      );
+    }
+
+    return filteredMeasurements;
   }
 
   async getMeasurement(id: string): Promise<Measurement | undefined> {
