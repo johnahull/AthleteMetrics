@@ -84,7 +84,8 @@ export function registerRoutes(app: Express) {
       if (username === "admin" && password === "admin") {
         // Don't set both admin and user in session - causes conflicts
         req.session.user = { username: "admin", role: "site_admin" };
-        console.log('Setting session for admin:', req.session.user);
+        console.log('Setting session for admin:', JSON.stringify(req.session.user));
+        console.log('Full session after login:', JSON.stringify(req.session));
         return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
       }
       
@@ -132,8 +133,10 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/auth/me", (req, res) => {
-    console.log('Auth check - session.user:', req.session.user);
+    console.log('Auth check - session.user:', JSON.stringify(req.session.user));
+    console.log('Full session during auth check:', JSON.stringify(req.session));
     if (req.session.user) {
+      console.log('Returning user:', JSON.stringify(req.session.user));
       return res.json({ user: req.session.user });
     }
     res.status(401).json({ message: "Not authenticated" });
