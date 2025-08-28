@@ -131,6 +131,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/auth/me", (req, res) => {
+    console.log('Auth check - session.admin:', req.session.admin, 'session.user:', req.session.user);
     if (req.session.admin) {
       return res.json({ user: { username: "admin", role: "site_admin" } });
     }
