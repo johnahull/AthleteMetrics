@@ -25,8 +25,8 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/" component={Dashboard} />
       <Route path="/teams" component={Teams} />
-      <Route path="/players" component={Players} />
-      <Route path="/players/:id" component={PlayerProfile} />
+      <Route path="/athletes" component={Players} />
+      <Route path="/athletes/:id" component={PlayerProfile} />
       <Route path="/data-entry" component={DataEntry} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/publish" component={Publish} />

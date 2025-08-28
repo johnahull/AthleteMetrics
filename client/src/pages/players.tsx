@@ -64,13 +64,13 @@ export default function Players() {
       queryClient.invalidateQueries({ queryKey: ["/api/players"] });
       toast({
         title: "Success",
-        description: "Player deleted successfully",
+        description: "Athlete deleted successfully",
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to delete player",
+        description: "Failed to delete athlete",
         variant: "destructive",
       });
     },
@@ -107,7 +107,7 @@ export default function Players() {
     <div className="p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
-        <h1 className="text-2xl font-semibold text-gray-900">Players Management</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Athletes Management</h1>
         <div className="flex space-x-3">
           <Button 
             variant="outline" 
@@ -124,7 +124,7 @@ export default function Players() {
             data-testid="button-add-player"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Player
+            Add Athlete
           </Button>
         </div>
       </div>
@@ -141,7 +141,7 @@ export default function Players() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
-                  <SelectItem value="none">Independent Players (No Team)</SelectItem>
+                  <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
                   {teams?.map((team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -181,11 +181,11 @@ export default function Players() {
               <div className="relative">
                 <Input
                   type="text"
-                  placeholder="Search players..."
+                  placeholder="Search athletes..."
                   value={filters.search}
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   className="pl-10"
-                  data-testid="input-search-players"
+                  data-testid="input-search-athletes"
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               </div>
@@ -237,9 +237,9 @@ export default function Players() {
         <CardContent className="p-0">
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">All Players</h3>
-              <span className="text-sm text-gray-500" data-testid="players-count">
-                {players?.length || 0} players
+              <h3 className="text-lg font-semibold text-gray-900">All Athletes</h3>
+              <span className="text-sm text-gray-500" data-testid="athletes-count">
+                {players?.length || 0} athletes
               </span>
             </div>
           </div>
@@ -247,19 +247,19 @@ export default function Players() {
           {players?.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <UsersRound className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No players found</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes found</h3>
               <p className="text-gray-600 text-center mb-4">
                 {Object.values(filters).some(v => v) ? 
-                  "Try adjusting your filters or add new players." :
-                  "Get started by adding your first player."
+                  "Try adjusting your filters or add new athletes." :
+                  "Get started by adding your first athlete."
                 }
               </p>
               <Button 
                 onClick={() => setShowAddModal(true)}
-                data-testid="button-add-first-player"
+                data-testid="button-add-first-athlete"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Player
+                Add Athlete
               </Button>
             </div>
           ) : (
@@ -267,7 +267,7 @@ export default function Players() {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr className="text-left text-sm font-medium text-gray-500">
-                    <th className="px-6 py-3">Player</th>
+                    <th className="px-6 py-3">Athlete</th>
                     <th className="px-6 py-3">Team</th>
                     <th className="px-6 py-3">Birth Year</th>
                     <th className="px-6 py-3">School</th>

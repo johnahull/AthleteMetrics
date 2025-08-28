@@ -19,7 +19,7 @@ const getNavigation = (userRole: string) => {
   const baseNavigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Teams", href: "/teams", icon: Users },
-    { name: "Players", href: "/players", icon: UsersRound },
+    { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Publish", href: "/publish", icon: FileCheck },
