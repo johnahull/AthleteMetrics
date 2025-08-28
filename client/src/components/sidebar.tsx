@@ -15,7 +15,16 @@ import {
   UserCog
 } from "lucide-react";
 
-const getNavigation = (userRole: string) => {
+const getNavigation = (userRole: string, userId?: string) => {
+  // Athletes get a restricted navigation menu
+  if (userRole === "athlete") {
+    return [
+      { name: "My Profile", href: `/athletes/${userId}`, icon: UsersRound },
+      { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    ];
+  }
+
+  // All other roles get the full navigation
   const baseNavigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Teams", href: "/teams", icon: Users },
@@ -47,7 +56,7 @@ export default function Sidebar() {
   
   // Get user role - fallback to 'athlete' if not defined
   const userRole = user?.role || 'athlete';
-  const navigation = getNavigation(userRole);
+  const navigation = getNavigation(userRole, user?.id);
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0">
