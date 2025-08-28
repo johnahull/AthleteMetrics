@@ -136,13 +136,13 @@ export class DatabaseStorage implements IStorage {
     return newUser;
   }
 
-  async getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]> {
-    const result = await db.select()
+  async getUserOrganizations(userId: string): Promise<any[]> {
+    const result: any = await db.select()
       .from(userOrganizations)
       .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
       .where(eq(userOrganizations.userId, userId));
     
-    return result.map(({ user_organizations, organizations }) => ({
+    return result.map(({ user_organizations, organizations }: any) => ({
       ...user_organizations,
       organization: organizations
     }));
@@ -208,7 +208,7 @@ export class DatabaseStorage implements IStorage {
       query = query.where(eq(teams.organizationId, organizationId)) as any;
     }
     
-    const result = await query;
+    const result: any[] = await query;
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
       organization: org
@@ -494,11 +494,7 @@ export class DatabaseStorage implements IStorage {
     search?: string;
     sport?: string;
     includeUnverified?: boolean;
-  }): Promise<(Measurement & { 
-    player: Player & { teams: (Team & { organization: Organization })[] };
-    submittedBy: User;
-    verifiedBy?: User;
-  })[]> {
+  }): Promise<any[]> {
     let query = db.select()
       .from(measurements)
       .innerJoin(players, eq(measurements.playerId, players.id))
@@ -617,8 +613,13 @@ export class DatabaseStorage implements IStorage {
     const isCoach = submitter?.role === "coach" || submitter?.role === "org_admin" || submitter?.role === "site_admin";
     
     const [newMeasurement] = await db.insert(measurements).values({
-      ...measurement,
+      playerId: measurement.playerId,
+      submittedBy: measurement.submittedBy,
+      date: measurement.date,
+      metric: measurement.metric,
       value: measurement.value.toString(),
+      notes: measurement.notes,
+      flyInDistance: measurement.flyInDistance?.toString(),
       age,
       units,
       isVerified: isCoach ? "true" : "false",
@@ -629,11 +630,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
-    const updateData = { ...measurement };
-    if (measurement.value !== undefined) {
-      updateData.value = measurement.value.toString();
-    }
-    const [updated] = await db.update(measurements).set(updateData as any).where(eq(measurements.id, id)).returning();
+    const updateData: any = {};
+    if (measurement.playerId) updateData.playerId = measurement.playerId;
+    if (measurement.submittedBy) updateData.submittedBy = measurement.submittedBy;
+    if (measurement.date) updateData.date = measurement.date;
+    if (measurement.metric) updateData.metric = measurement.metric;
+    if (measurement.value !== undefined) updateData.value = measurement.value.toString();
+    if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+    if (measurement.flyInDistance !== undefined) updateData.flyInDistance = measurement.flyInDistance?.toString();
+    
+    const [updated] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();
     return updated;
   }
 

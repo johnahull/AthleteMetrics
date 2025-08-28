@@ -9,7 +9,8 @@ import {
   BarChart3, 
   FileText,
   FileCheck,
-  LogOut 
+  LogOut,
+  Settings
 } from "lucide-react";
 
 const navigation = [
@@ -20,6 +21,7 @@ const navigation = [
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Publish", href: "/publish", icon: FileCheck },
   { name: "Import/Export", href: "/import-export", icon: FileText },
+  { name: "Administration", href: "/admin", icon: Settings },
 ];
 
 export default function Sidebar() {

@@ -14,6 +14,7 @@ import DataEntry from "./pages/data-entry";
 import Analytics from "./pages/analytics";
 import Publish from "./pages/publish";
 import ImportExport from "./pages/import-export";
+import AdminPage from "./pages/admin";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/publish" component={Publish} />
       <Route path="/import-export" component={ImportExport} />
+      <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>
   );
