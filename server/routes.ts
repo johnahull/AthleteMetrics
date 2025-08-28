@@ -82,7 +82,7 @@ export function registerRoutes(app: Express) {
       
       // Handle old admin login (reset credentials to admin/admin)
       if (username === "admin" && password === "admin") {
-        req.session.admin = true;
+        // Don't set both admin and user in session - causes conflicts
         req.session.user = { username: "admin", role: "site_admin" };
         console.log('Setting session for admin:', req.session.user);
         return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
@@ -132,10 +132,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/auth/me", (req, res) => {
-    console.log('Auth check - session.admin:', req.session.admin, 'session.user:', req.session.user);
-    if (req.session.admin) {
-      return res.json({ user: { username: "admin", role: "site_admin" } });
-    }
+    console.log('Auth check - session.user:', req.session.user);
     if (req.session.user) {
       return res.json({ user: req.session.user });
     }
