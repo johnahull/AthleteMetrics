@@ -42,6 +42,7 @@ type Organization = {
     isUsed: string;
     expiresAt: string;
     createdAt: string;
+    token: string;
   }[];
 };
 
@@ -227,6 +228,25 @@ export default function UserManagement() {
   const handleDeleteInvitation = (invitationId: string, email: string) => {
     if (window.confirm(`Are you sure you want to delete the invitation for ${email}?`)) {
       deleteInvitationMutation.mutate(invitationId);
+    }
+  };
+
+  const copyExistingInviteLink = async (invitation: any) => {
+    try {
+      // Get the invitation details to build the link
+      const inviteLink = `${window.location.protocol}//${window.location.host}/register?token=${invitation.token}`;
+      
+      await navigator.clipboard.writeText(inviteLink);
+      toast({
+        title: "Invitation link copied!",
+        description: `Link for ${invitation.email} copied to clipboard.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error copying invite link",
+        description: error.message,
+        variant: "destructive"
+      });
     }
   };
 
@@ -480,14 +500,8 @@ export default function UserManagement() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => generateInviteLink(
-                                  invitation.email,
-                                  invitation.email.split('@')[0],
-                                  '',
-                                  invitation.role,
-                                  org.id
-                                )}
-                                data-testid={`invitation-resend-${invitation.id}`}
+                                onClick={() => copyExistingInviteLink(invitation)}
+                                data-testid={`invitation-copy-link-${invitation.id}`}
                               >
                                 <Link className="h-4 w-4" />
                               </Button>
