@@ -61,6 +61,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: player.firstName,
         lastName: player.lastName,
         birthYear: player.birthYear,
+        age: player.age,
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
@@ -73,6 +74,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: "",
         lastName: "",
         birthYear: new Date().getFullYear() - 15,
+        age: undefined,
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
@@ -240,6 +242,35 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                       />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <FormField
+                control={form.control}
+                name="age"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Current Age (optional)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        type="number"
+                        min="10"
+                        max="50"
+                        disabled={isPending}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        data-testid="input-player-age"
+                        value={field.value || ""}
+                        placeholder="Enter current age for more precise calculations"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-sm text-gray-500">
+                      If provided, this will be used for more accurate age calculations in measurements
+                    </p>
                   </FormItem>
                 )}
               />
