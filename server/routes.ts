@@ -310,13 +310,23 @@ export function registerRoutes(app: Express) {
       const { email, firstName, lastName, role, organizationId } = req.body;
       
       // Get current user info for invitedBy
-      const currentUser = req.session.user || { id: "admin" };
+      let invitedById = req.session.user?.id;
+      
+      // If using old admin system, find the site admin user
+      if (!invitedById && req.session.admin) {
+        const siteAdmin = await storage.getUserByEmail("admin@athleteperformancehub.com");
+        invitedById = siteAdmin?.id;
+      }
+      
+      if (!invitedById) {
+        return res.status(400).json({ message: "Unable to determine current user" });
+      }
       
       const invitation = await storage.createInvitation({
         email,
         organizationId: organizationId || null,
         role,
-        invitedBy: currentUser.id,
+        invitedBy: invitedById,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
       });
       

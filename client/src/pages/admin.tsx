@@ -55,7 +55,7 @@ export default function AdminPage() {
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
 
-  const { data: organizations } = useQuery({
+  const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations-with-users"],
   });
 
