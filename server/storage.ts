@@ -306,7 +306,7 @@ export class DatabaseStorage implements IStorage {
     // Create user
     const user = await this.createUser({
       ...userInfo,
-      role: "athlete" // Default role for invited users
+      role: invitation.role
     });
 
     // Add user to organization

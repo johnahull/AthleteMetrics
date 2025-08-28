@@ -18,14 +18,8 @@ const organizationSchema = z.object({
   description: z.string().optional(),
 });
 
-const userSchema = z.object({
+const inviteSchema = z.object({
   email: z.string().email("Invalid email"),
-  password: z.string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   role: z.enum(["site_admin", "org_admin", "coach", "athlete"]),
@@ -57,11 +51,10 @@ export default function AdminPage() {
     },
   });
 
-  const userForm = useForm({
-    resolver: zodResolver(userSchema),
+  const inviteForm = useForm({
+    resolver: zodResolver(inviteSchema),
     defaultValues: {
       email: "",
-      password: "",
       firstName: "",
       lastName: "",
       role: "athlete" as const,
@@ -89,19 +82,22 @@ export default function AdminPage() {
     },
   });
 
-  const createUserMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof userSchema>) => {
-      const res = await apiRequest("POST", "/api/users", data);
+  const sendInviteMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof inviteSchema>) => {
+      const res = await apiRequest("POST", "/api/invitations", data);
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "User created successfully!" });
+    onSuccess: (data) => {
+      toast({ 
+        title: "Invitation sent successfully!", 
+        description: `Invitation link generated for ${data.email}` 
+      });
       setUserDialogOpen(false);
-      userForm.reset();
+      inviteForm.reset();
     },
     onError: (error: any) => {
       toast({ 
-        title: "Error creating user", 
+        title: "Error sending invitation", 
         description: error.message,
         variant: "destructive" 
       });
@@ -112,8 +108,8 @@ export default function AdminPage() {
     createOrgMutation.mutate(data);
   };
 
-  const onCreateUser = (data: z.infer<typeof userSchema>) => {
-    createUserMutation.mutate(data);
+  const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
+    sendInviteMutation.mutate(data);
   };
 
   return (
@@ -232,23 +228,23 @@ export default function AdminPage() {
             </CardTitle>
             <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" data-testid="button-create-user">
+                <Button size="sm" data-testid="button-send-invitation">
                   <UserPlus className="h-4 w-4 mr-2" />
-                  Add User
+                  Send Invitation
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create New User</DialogTitle>
+                  <DialogTitle>Send User Invitation</DialogTitle>
                   <DialogDescription>
-                    Add a new user to the system. Users can be assigned roles and organizations.
+                    Send an invitation email to a new user. They will receive a secure link to set their password and join the system.
                   </DialogDescription>
                 </DialogHeader>
-                <Form {...userForm}>
-                  <form onSubmit={userForm.handleSubmit(onCreateUser)} className="space-y-4">
+                <Form {...inviteForm}>
+                  <form onSubmit={inviteForm.handleSubmit(onSendInvite)} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
-                        control={userForm.control}
+                        control={inviteForm.control}
                         name="firstName"
                         render={({ field }) => (
                           <FormItem>
@@ -265,7 +261,7 @@ export default function AdminPage() {
                         )}
                       />
                       <FormField
-                        control={userForm.control}
+                        control={inviteForm.control}
                         name="lastName"
                         render={({ field }) => (
                           <FormItem>
@@ -283,7 +279,7 @@ export default function AdminPage() {
                       />
                     </div>
                     <FormField
-                      control={userForm.control}
+                      control={inviteForm.control}
                       name="email"
                       render={({ field }) => (
                         <FormItem>
@@ -301,25 +297,7 @@ export default function AdminPage() {
                       )}
                     />
                     <FormField
-                      control={userForm.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="password"
-                              placeholder="At least 6 characters" 
-                              {...field} 
-                              data-testid="input-user-password"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={userForm.control}
+                      control={inviteForm.control}
                       name="role"
                       render={({ field }) => (
                         <FormItem>
@@ -341,7 +319,7 @@ export default function AdminPage() {
                       )}
                     />
                     <FormField
-                      control={userForm.control}
+                      control={inviteForm.control}
                       name="organizationId"
                       render={({ field }) => (
                         <FormItem>
@@ -374,10 +352,10 @@ export default function AdminPage() {
                       </Button>
                       <Button 
                         type="submit" 
-                        disabled={createUserMutation.isPending}
-                        data-testid="button-submit-user"
+                        disabled={sendInviteMutation.isPending}
+                        data-testid="button-send-invitation"
                       >
-                        {createUserMutation.isPending ? "Creating..." : "Create User"}
+                        {sendInviteMutation.isPending ? "Sending..." : "Send Invitation"}
                       </Button>
                     </div>
                   </form>

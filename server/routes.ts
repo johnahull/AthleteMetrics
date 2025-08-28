@@ -304,5 +304,103 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Invitation routes
+  app.post("/api/invitations", requireAuth, async (req, res) => {
+    try {
+      const { email, firstName, lastName, role, organizationId } = req.body;
+      
+      // Get current user info for invitedBy
+      const currentUser = req.session.user || { id: "admin" };
+      
+      const invitation = await storage.createInvitation({
+        email,
+        organizationId: organizationId || null,
+        role,
+        invitedBy: currentUser.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      });
+      
+      // Generate invitation link
+      const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
+      
+      // For now, just return the invitation info without sending email
+      res.status(201).json({
+        id: invitation.id,
+        email: invitation.email,
+        token: invitation.token,
+        inviteLink,
+        message: `Invitation created for ${firstName} ${lastName} (${email})`
+      });
+    } catch (error) {
+      console.error("Error creating invitation:", error);
+      res.status(500).json({ message: "Failed to create invitation" });
+    }
+  });
+
+  app.get("/api/invitations/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const invitation = await storage.getInvitation(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+      
+      if (invitation.isUsed === "true") {
+        return res.status(400).json({ message: "Invitation already used" });
+      }
+      
+      if (new Date() > invitation.expiresAt) {
+        return res.status(400).json({ message: "Invitation expired" });
+      }
+      
+      res.json({
+        email: invitation.email,
+        role: invitation.role,
+        organizationId: invitation.organizationId
+      });
+    } catch (error) {
+      console.error("Error fetching invitation:", error);
+      res.status(500).json({ message: "Failed to fetch invitation" });
+    }
+  });
+
+  app.post("/api/invitations/:token/accept", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password, firstName, lastName } = req.body;
+      
+      const invitation = await storage.getInvitation(token);
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+      
+      const user = await storage.acceptInvitation(token, {
+        email: invitation.email,
+        password,
+        firstName,
+        lastName
+      });
+      
+      // Log the new user in
+      req.session.user = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      };
+      
+      res.json({ 
+        success: true, 
+        user: req.session.user,
+        message: "Account created successfully!" 
+      });
+    } catch (error) {
+      console.error("Error accepting invitation:", error);
+      res.status(500).json({ message: "Failed to accept invitation" });
+    }
+  });
+
   return server;
 }
