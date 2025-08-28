@@ -308,8 +308,19 @@ export class DatabaseStorage implements IStorage {
 
   async createMeasurement(measurement: InsertMeasurement): Promise<Measurement> {
     const units = measurement.metric === "VERTICAL_JUMP" ? "in" : measurement.metric === "RSI" ? "" : "s";
+    
+    // Get the player's birth year to calculate age at measurement date
+    const [player] = await db.select({ birthYear: players.birthYear }).from(players).where(eq(players.id, measurement.playerId));
+    if (!player) {
+      throw new Error("Player not found");
+    }
+    
+    const measurementYear = new Date(measurement.date).getFullYear();
+    const age = measurementYear - player.birthYear;
+    
     const [newMeasurement] = await db.insert(measurements).values({
       ...measurement,
+      age,
       value: measurement.value.toString(),
       flyInDistance: measurement.flyInDistance?.toString(),
       units,

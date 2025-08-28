@@ -37,6 +37,7 @@ export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("player_id").notNull().references(() => players.id),
   date: date("date").notNull(),
+  age: integer("age").notNull(), // Player's age at time of measurement
   metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
@@ -106,6 +107,7 @@ export const insertPlayerTeamSchema = createInsertSchema(playerTeams).omit({
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   id: true,
+  age: true, // Age is calculated automatically
   createdAt: true,
   units: true,
 }).extend({
