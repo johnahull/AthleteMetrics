@@ -83,7 +83,8 @@ export function registerRoutes(app: Express) {
       // Handle old admin login (reset credentials to admin/admin)
       if (username === "admin" && password === "admin") {
         req.session.admin = true;
-        return res.json({ success: true, user: { username: "admin" } });
+        req.session.user = { username: "admin", role: "site_admin" };
+        return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
       }
       
       // Handle new email-based login
@@ -131,7 +132,7 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/auth/me", (req, res) => {
     if (req.session.admin) {
-      return res.json({ user: { username: "admin" } });
+      return res.json({ user: { username: "admin", role: "site_admin" } });
     }
     if (req.session.user) {
       return res.json({ user: req.session.user });
