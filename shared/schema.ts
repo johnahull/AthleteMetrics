@@ -18,7 +18,7 @@ export const players = pgTable("players", {
   lastName: text("last_name").notNull(),
   fullName: text("full_name").notNull(),
   birthYear: integer("birth_year").notNull(),
-  age: integer("age"), // Current age - more precise than birth year
+  birthday: date("birthday"), // Full birthday - more precise than birth year
   graduationYear: integer("graduation_year"),
   school: text("school"),
   sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
@@ -95,7 +95,7 @@ export const insertPlayerSchema = createInsertSchema(players).omit({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   birthYear: z.number().min(1990).max(2020),
-  age: z.number().min(10).max(50).optional(),
+  birthday: z.string().optional(),
   teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
   sports: z.array(z.string().min(1, "Sport cannot be empty")).optional(),
   emails: z.array(z.string().email("Invalid email format")).optional(),

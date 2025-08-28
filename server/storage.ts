@@ -312,24 +312,33 @@ export class DatabaseStorage implements IStorage {
     // Get the player's data to calculate age at measurement date
     const [player] = await db.select({ 
       birthYear: players.birthYear, 
-      age: players.age 
+      birthday: players.birthday 
     }).from(players).where(eq(players.id, measurement.playerId));
     
     if (!player) {
       throw new Error("Player not found");
     }
     
-    const measurementYear = new Date(measurement.date).getFullYear();
-    const currentYear = new Date().getFullYear();
+    const measurementDate = new Date(measurement.date);
     
-    // Use player's age if available, otherwise calculate from birth year
+    // Use player's birthday if available for precise age calculation, otherwise use birth year
     let ageAtMeasurement;
-    if (player.age !== null && player.age !== undefined) {
-      // Use current age as base and adjust for measurement year
-      ageAtMeasurement = player.age + (measurementYear - currentYear);
+    if (player.birthday) {
+      const birthday = new Date(player.birthday);
+      ageAtMeasurement = measurementDate.getFullYear() - birthday.getFullYear();
+      
+      // Adjust if birthday hasn't occurred yet this year for the measurement date
+      const measurementMonth = measurementDate.getMonth();
+      const measurementDay = measurementDate.getDate();
+      const birthdayMonth = birthday.getMonth();
+      const birthdayDay = birthday.getDate();
+      
+      if (measurementMonth < birthdayMonth || (measurementMonth === birthdayMonth && measurementDay < birthdayDay)) {
+        ageAtMeasurement--;
+      }
     } else {
       // Fall back to birth year calculation
-      ageAtMeasurement = measurementYear - player.birthYear;
+      ageAtMeasurement = measurementDate.getFullYear() - player.birthYear;
     }
     
     const [newMeasurement] = await db.insert(measurements).values({
