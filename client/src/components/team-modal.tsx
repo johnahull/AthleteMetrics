@@ -29,6 +29,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       name: "",
       level: "",
       notes: "",
+      organizationId: undefined,
     },
   });
 
@@ -38,12 +39,14 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         name: team.name,
         level: team.level || "",
         notes: team.notes || "",
+        organizationId: team.organizationId,
       });
     } else {
       form.reset({
         name: "",
         level: "",
         notes: "",
+        organizationId: undefined,
       });
     }
   }, [team, form]);

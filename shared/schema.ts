@@ -196,6 +196,9 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
 export const insertTeamSchema = createInsertSchema(teams).omit({
   id: true,
   createdAt: true,
+}).extend({
+  name: z.string().min(1, "Team name is required"),
+  organizationId: z.string().optional(), // Made optional for client-side, server will provide it
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
