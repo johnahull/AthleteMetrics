@@ -144,17 +144,19 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
-          <DialogDescription>
-            {isEditing ? "Update player information below." : "Add a new player to your team by filling out the form below."}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+        <div className="p-6 border-b flex-shrink-0">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
+            <DialogDescription>
+              {isEditing ? "Update player information below." : "Add a new player to your team by filling out the form below."}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
         
         <Form {...form}>
-          <div className="flex-1 overflow-y-auto pr-2">
-            <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto px-6">
+            <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -538,24 +540,26 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </div>
           </div>
           
-          <div className="flex justify-end space-x-3 pt-4 border-t flex-shrink-0">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={onClose}
-              disabled={isPending}
-              data-testid="button-cancel-player"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={isPending}
-              data-testid="button-save-player"
-              onClick={form.handleSubmit(onSubmit)}
-            >
-              {isPending ? "Saving..." : isEditing ? "Update Player" : "Add Player"}
-            </Button>
+          <div className="px-6 py-4 border-t flex-shrink-0">
+            <div className="flex justify-end space-x-3">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose}
+                disabled={isPending}
+                data-testid="button-cancel-player"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isPending}
+                data-testid="button-save-player"
+                onClick={form.handleSubmit(onSubmit)}
+              >
+                {isPending ? "Saving..." : isEditing ? "Update Player" : "Add Player"}
+              </Button>
+            </div>
           </div>
         </Form>
       </DialogContent>
