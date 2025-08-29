@@ -1,10 +1,40 @@
 import { useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Users, UserCog, MapPin, Mail, Phone } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send } from "lucide-react";
 import { Link } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+// Form schemas
+const createUserSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  role: z.enum(["org_admin", "coach", "athlete"]),
+});
+
+const invitationSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  role: z.enum(["org_admin", "coach", "athlete"]),
+});
+
+type CreateUserForm = z.infer<typeof createUserSchema>;
+type InvitationForm = z.infer<typeof invitationSchema>;
 
 type OrganizationProfile = {
   id: string;
@@ -42,6 +72,260 @@ type OrganizationProfile = {
     }>;
   }>;
 };
+
+// User Management Modal Component
+function UserManagementModal({ organizationId }: { organizationId: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  const createUserForm = useForm<CreateUserForm>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      firstName: "",
+      lastName: "",
+      role: "athlete",
+    },
+  });
+
+  const invitationForm = useForm<InvitationForm>({
+    resolver: zodResolver(invitationSchema),
+    defaultValues: {
+      email: "",
+      role: "athlete",
+    },
+  });
+
+  const createUserMutation = useMutation({
+    mutationFn: async (data: CreateUserForm) => {
+      const response = await fetch(`/api/organizations/${organizationId}/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
+      createUserForm.reset();
+      toast({ title: "Success", description: "User created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to create user",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const invitationMutation = useMutation({
+    mutationFn: async (data: InvitationForm) => {
+      const response = await fetch(`/api/organizations/${organizationId}/invitations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to send invitation");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      invitationForm.reset();
+      toast({ title: "Success", description: "Invitation sent successfully" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to send invitation",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Only show for org admins and site admins
+  if (user?.role !== "org_admin" && user?.role !== "site_admin") {
+    return null;
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          Manage Users
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>User Management</DialogTitle>
+        </DialogHeader>
+        
+        <Tabs defaultValue="create" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="create">Create User</TabsTrigger>
+            <TabsTrigger value="invite">Send Invitation</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="create" className="space-y-4">
+            <Form {...createUserForm}>
+              <form onSubmit={createUserForm.handleSubmit((data) => createUserMutation.mutate(data))} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={createUserForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-first-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={createUserForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-last-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
+                <FormField
+                  control={createUserForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" {...field} data-testid="input-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={createUserForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" {...field} data-testid="input-password" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={createUserForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-role">
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="athlete">Athlete</SelectItem>
+                          <SelectItem value="coach">Coach</SelectItem>
+                          <SelectItem value="org_admin">Organization Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={createUserMutation.isPending}
+                  data-testid="button-create-user"
+                >
+                  {createUserMutation.isPending ? "Creating..." : "Create User"}
+                </Button>
+              </form>
+            </Form>
+          </TabsContent>
+          
+          <TabsContent value="invite" className="space-y-4">
+            <Form {...invitationForm}>
+              <form onSubmit={invitationForm.handleSubmit((data) => invitationMutation.mutate(data))} className="space-y-4">
+                <FormField
+                  control={invitationForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" {...field} data-testid="input-invite-email" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={invitationForm.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-invite-role">
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="athlete">Athlete</SelectItem>
+                          <SelectItem value="coach">Coach</SelectItem>
+                          <SelectItem value="org_admin">Organization Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={invitationMutation.isPending}
+                  data-testid="button-send-invitation"
+                >
+                  {invitationMutation.isPending ? "Sending..." : "Send Invitation"}
+                </Button>
+              </form>
+            </Form>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function OrganizationProfile() {
   const { id } = useParams<{ id: string }>();
@@ -92,6 +376,8 @@ export default function OrganizationProfile() {
             <p className="text-gray-600 mt-2">{organization.description}</p>
           )}
         </div>
+        
+        <UserManagementModal organizationId={id!} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

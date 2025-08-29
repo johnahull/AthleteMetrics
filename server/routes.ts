@@ -620,6 +620,112 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Organization User Management Routes (for org admins)
+  app.post("/api/organizations/:id/users", requireAuth, async (req, res) => {
+    try {
+      const { id: organizationId } = req.params;
+      const currentUser = req.session.user;
+      
+      // Check if user has access to manage this organization
+      if (currentUser?.role === "site_admin") {
+        // Site admins can manage any organization
+      } else if (currentUser?.role === "org_admin" && currentUser?.id) {
+        const userOrgs = await storage.getOrganizationsWithUsersForUser(currentUser.id);
+        const hasAccess = userOrgs.some(org => org.id === organizationId);
+        
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this organization" });
+        }
+      } else {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const userData = insertUserSchema.parse(req.body);
+      
+      // Org admins cannot create site admins
+      if (currentUser?.role === "org_admin" && userData.role === "site_admin") {
+        return res.status(403).json({ message: "Cannot create site administrators" });
+      }
+      
+      const user = await storage.createUser(userData);
+      await storage.addUserToOrganization(user.id, organizationId, userData.role);
+      
+      // If user is an athlete, also create a player record
+      if (userData.role === "athlete") {
+        await storage.createPlayer({
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          birthYear: new Date().getFullYear() - 18, // Default age
+          school: "",
+          sports: [],
+          emails: [userData.email],
+          phoneNumbers: []
+        });
+      }
+      
+      res.status(201).json({ 
+        id: user.id, 
+        email: user.email, 
+        firstName: user.firstName, 
+        lastName: user.lastName, 
+        role: user.role,
+        message: "User created successfully"
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error creating user:", error);
+        res.status(500).json({ message: "Failed to create user" });
+      }
+    }
+  });
+
+  app.post("/api/organizations/:id/invitations", requireAuth, async (req, res) => {
+    try {
+      const { id: organizationId } = req.params;
+      const currentUser = req.session.user;
+      
+      // Check if user has access to manage this organization
+      if (currentUser?.role === "site_admin") {
+        // Site admins can manage any organization
+      } else if (currentUser?.role === "org_admin" && currentUser?.id) {
+        const userOrgs = await storage.getOrganizationsWithUsersForUser(currentUser.id);
+        const hasAccess = userOrgs.some(org => org.id === organizationId);
+        
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this organization" });
+        }
+      } else {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const invitationData = insertInvitationSchema.parse(req.body);
+      
+      // Org admins cannot invite site admins
+      if (currentUser?.role === "org_admin" && invitationData.role === "site_admin") {
+        return res.status(403).json({ message: "Cannot invite site administrators" });
+      }
+      
+      const invitation = await storage.createInvitation({
+        ...invitationData,
+        organizationId
+      });
+      
+      res.status(201).json({ 
+        invitation,
+        message: "Invitation created successfully"
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error creating invitation:", error);
+        res.status(500).json({ message: "Failed to create invitation" });
+      }
+    }
+  });
+
   // Site Admin Management Routes
   app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {
