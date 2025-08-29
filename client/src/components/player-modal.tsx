@@ -30,7 +30,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthYear: new Date().getFullYear() - 15,
+      birthday: "",
       graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
       school: "",
@@ -60,8 +60,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: player.firstName,
         lastName: player.lastName,
-        birthYear: player.birthYear,
-        birthday: player.birthday || undefined,
+        birthday: player.birthday || "",
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
@@ -73,8 +72,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: "",
         lastName: "",
-        birthYear: new Date().getFullYear() - 15,
-        birthday: undefined,
+        birthday: "",
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
@@ -209,21 +207,21 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="birthYear"
+                name="birthday"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Birth Year <span className="text-red-500">*</span>
+                      Birth Date <span className="text-red-500">*</span>
                     </FormLabel>
                     <FormControl>
                       <Input 
                         {...field} 
-                        type="number"
-                        min="1990"
-                        max="2020"
+                        type="date"
                         disabled={isPending}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        data-testid="input-player-birthyear"
+                        data-testid="input-player-birthday"
+                        value={field.value || ""}
+                        placeholder="YYYY-MM-DD"
+                        max={new Date().toISOString().split('T')[0]} // Prevent future dates
                       />
                     </FormControl>
                     <FormMessage />
@@ -250,32 +248,6 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                       />
                     </FormControl>
                     <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              <FormField
-                control={form.control}
-                name="birthday"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Birthday (optional)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        {...field} 
-                        type="date"
-                        disabled={isPending}
-                        data-testid="input-player-birthday"
-                        value={field.value || ""}
-                        placeholder="YYYY-MM-DD"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                    <p className="text-sm text-gray-500">
-                      If provided, this will be used for precise age calculations in measurements
-                    </p>
                   </FormItem>
                 )}
               />
