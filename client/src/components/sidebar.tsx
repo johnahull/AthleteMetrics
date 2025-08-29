@@ -105,8 +105,8 @@ export default function Sidebar() {
       {/* User Section */}
       <div className="p-4 border-t border-gray-200">
         <div className="space-y-2">
-          {/* Profile Link for admins and coaches */}
-          {user && (user.role === "site_admin" || user.role === "org_admin" || user.role === "coach") && (
+          {/* Profile Link for admins and coaches - but not for legacy admin */}
+          {user && (user.role === "site_admin" || user.role === "org_admin" || user.role === "coach") && user.id && (
             <Link href="/profile">
               <div
                 className={cn(
