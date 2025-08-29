@@ -34,10 +34,11 @@ export default function MeasurementForm() {
     defaultValues: {
       playerId: "",
       date: new Date().toISOString().split('T')[0],
-      metric: "",
+      metric: "FLY10_TIME",
       value: 0,
       flyInDistance: undefined,
       notes: "",
+      submittedBy: "",
     },
   });
 
@@ -67,10 +68,11 @@ export default function MeasurementForm() {
       form.reset({
         playerId: "",
         date: new Date().toISOString().split('T')[0],
-        metric: "",
+        metric: "FLY10_TIME",
         value: 0,
         flyInDistance: undefined,
         notes: "",
+        submittedBy: "",
       });
       setSelectedPlayer(null);
       setSearchTerm("");
@@ -109,7 +111,7 @@ export default function MeasurementForm() {
     },
   });
 
-  const filteredPlayers = (players || []).filter(player =>
+  const filteredPlayers = (players || []).filter((player: any) =>
     player.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     player.teams?.some(team => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -141,10 +143,11 @@ export default function MeasurementForm() {
     form.reset({
       playerId: "",
       date: new Date().toISOString().split('T')[0],
-      metric: "",
+      metric: "FLY10_TIME",
       value: 0,
       flyInDistance: undefined,
       notes: "",
+      submittedBy: "",
     });
     setSelectedPlayer(null);
     setSearchTerm("");
