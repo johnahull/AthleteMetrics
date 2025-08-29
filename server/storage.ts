@@ -241,6 +241,27 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getOrganizationProfile(organizationId: string): Promise<Organization & { 
+    coaches: (UserOrganization & { user: User })[], 
+    players: (Player & { teams: (Team & { organization: Organization })[] })[] 
+  } | null> {
+    const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
+    if (!organization) return null;
+
+    // Get users (coaches and other roles)
+    const allUsers = await this.getOrganizationUsers(organizationId);
+    const coaches = allUsers.filter(userOrg => userOrg.role === 'coach' || userOrg.role === 'org_admin');
+    
+    // Get players via organization filter
+    const players = await this.getPlayers({ organizationId });
+    
+    return {
+      ...organization,
+      coaches,
+      players
+    };
+  }
+
   async getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[], invitations: Invitation[] })[]> {
     const organizations = await this.getOrganizations();
     

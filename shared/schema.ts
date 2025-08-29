@@ -8,6 +8,7 @@ export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   description: text("description"),
+  location: text("location"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

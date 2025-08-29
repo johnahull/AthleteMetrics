@@ -113,10 +113,22 @@ export function registerRoutes(app: Express) {
             lastName: user.lastName,
             role: user.role
           };
+          
+          let redirectUrl = "/";
+          if (user.role === "athlete") {
+            redirectUrl = `/athletes/${user.id}`;
+          } else if (user.role === "org_admin") {
+            // Get the org admin's organization to redirect to their org profile
+            const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
+            if (userOrgs.length > 0) {
+              redirectUrl = `/organizations/${userOrgs[0].id}`;
+            }
+          }
+          
           return res.json({ 
             success: true, 
             user: req.session.user,
-            redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
+            redirectUrl
           });
         }
       }
@@ -132,10 +144,22 @@ export function registerRoutes(app: Express) {
             lastName: user.lastName,
             role: user.role
           };
+          
+          let redirectUrl = "/";
+          if (user.role === "athlete") {
+            redirectUrl = `/athletes/${user.id}`;
+          } else if (user.role === "org_admin") {
+            // Get the org admin's organization to redirect to their org profile
+            const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
+            if (userOrgs.length > 0) {
+              redirectUrl = `/organizations/${userOrgs[0].id}`;
+            }
+          }
+          
           return res.json({ 
             success: true, 
             user: req.session.user,
-            redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
+            redirectUrl
           });
         }
       }
@@ -152,10 +176,22 @@ export function registerRoutes(app: Express) {
             lastName: user.lastName,
             role: user.role
           };
+          
+          let redirectUrl = "/";
+          if (user.role === "athlete") {
+            redirectUrl = `/athletes/${user.id}`;
+          } else if (user.role === "org_admin") {
+            // Get the org admin's organization to redirect to their org profile
+            const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
+            if (userOrgs.length > 0) {
+              redirectUrl = `/organizations/${userOrgs[0].id}`;
+            }
+          }
+          
           return res.json({ 
             success: true, 
             user: req.session.user,
-            redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
+            redirectUrl
           });
         }
       }
@@ -544,6 +580,43 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error("Error fetching organizations with users:", error);
       res.status(500).json({ message: "Failed to fetch organizations with users" });
+    }
+  });
+
+  app.get("/api/organizations/:id/profile", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user;
+      
+      // Check if user has access to this organization
+      if (currentUser?.role === "site_admin" || currentUser?.username === "admin") {
+        // Site admins can access any organization
+        const orgProfile = await storage.getOrganizationProfile(id);
+        if (!orgProfile) {
+          return res.status(404).json({ message: "Organization not found" });
+        }
+        res.json(orgProfile);
+      } else if (currentUser?.role === "org_admin" && currentUser?.id) {
+        // Check if org admin belongs to this organization
+        const userOrgs = await storage.getOrganizationsWithUsersForUser(currentUser.id);
+        const hasAccess = userOrgs.some(org => org.id === id);
+        
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this organization" });
+        }
+        
+        const orgProfile = await storage.getOrganizationProfile(id);
+        if (!orgProfile) {
+          return res.status(404).json({ message: "Organization not found" });
+        }
+        res.json(orgProfile);
+      } else {
+        // Other roles have no access
+        res.status(403).json({ message: "Access denied" });
+      }
+    } catch (error) {
+      console.error("Error fetching organization profile:", error);
+      res.status(500).json({ message: "Failed to fetch organization profile" });
     }
   });
 
