@@ -294,9 +294,23 @@ export class DatabaseStorage implements IStorage {
     // Get players via organization filter
     const players = await this.getPlayers({ organizationId });
     
-    // Get pending invitations for this organization
-    const organizationInvitations = await db.select()
+    // Get pending invitations for this organization with user names
+    const organizationInvitations = await db.select({
+      id: invitations.id,
+      email: invitations.email,
+      organizationId: invitations.organizationId,
+      teamIds: invitations.teamIds,
+      role: invitations.role,
+      invitedBy: invitations.invitedBy,
+      token: invitations.token,
+      isUsed: invitations.isUsed,
+      expiresAt: invitations.expiresAt,
+      createdAt: invitations.createdAt,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    })
       .from(invitations)
+      .leftJoin(users, eq(invitations.email, users.email))
       .where(and(
         eq(invitations.organizationId, organizationId),
         eq(invitations.isUsed, "false"),
