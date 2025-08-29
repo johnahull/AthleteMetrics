@@ -89,33 +89,6 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Function to send invitation for a user
-  const sendInvitation = async (email: string, roles: string[]) => {
-    try {
-      const response = await fetch(`/api/organizations/${organizationId}/invitations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, roles }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to send invitation");
-      }
-      
-      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
-      toast({
-        title: "Invitation sent",
-        description: `Invitation sent to ${email}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   const createUserForm = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema.refine((data) => {
@@ -437,6 +410,36 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
 export default function OrganizationProfile() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Function to send invitation for a user
+  const sendInvitation = async (email: string, roles: string[]) => {
+    try {
+      const response = await fetch(`/api/organizations/${id}/invitations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, roles }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to send invitation");
+      }
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      toast({
+        title: "Invitation sent",
+        description: `Invitation sent to ${email}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
     queryKey: [`/api/organizations/${id}/profile`],
