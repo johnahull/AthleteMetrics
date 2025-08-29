@@ -12,7 +12,8 @@ import {
   LogOut,
   Settings,
   Building2,
-  UserCog
+  UserCog,
+  User
 } from "lucide-react";
 
 const getNavigation = (userRole: string, userId?: string) => {
@@ -59,7 +60,7 @@ export default function Sidebar() {
   const navigation = getNavigation(userRole, user?.id);
 
   return (
-    <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0">
+    <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
       {/* Logo */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">
@@ -79,7 +80,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="p-4 space-y-2">
+      <nav className="p-4 space-y-2 flex-1">
         {navigation.map((item) => {
           const isActive = location === item.href;
           return (
@@ -100,6 +101,44 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* User Section */}
+      <div className="p-4 border-t border-gray-200">
+        <div className="space-y-2">
+          {/* Profile Link for admins and coaches */}
+          {user && (user.role === "site_admin" || user.role === "org_admin" || user.role === "coach") && (
+            <Link href="/profile">
+              <div
+                className={cn(
+                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+                  location === "/profile"
+                    ? "bg-primary text-white" 
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+                data-testid="nav-profile"
+              >
+                <User className="h-5 w-5" />
+                <span>Profile</span>
+              </div>
+            </Link>
+          )}
+          
+          {/* User Info & Logout */}
+          <div className="text-sm text-gray-600 px-3 py-2">
+            <p className="font-medium">{user?.firstName} {user?.lastName}</p>
+            <p className="text-xs">{user?.role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+          </div>
+          
+          <button
+            onClick={logout}
+            className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+            data-testid="nav-logout"
+          >
+            <LogOut className="h-5 w-5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </div>
 
     </aside>
   );

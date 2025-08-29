@@ -2,8 +2,9 @@ import type { Express } from "express";
 import { createServer } from "http";
 import session from "express-session";
 import { storage } from "./storage";
-import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema } from "@shared/schema";
+import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema } from "@shared/schema";
 import { z } from "zod";
+import bcrypt from "bcrypt";
 
 // Session configuration
 declare module 'express-session' {
@@ -547,6 +548,77 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error("Error deleting user:", error);
       res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // Profile management routes
+  app.put("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const profileData = updateProfileSchema.parse(req.body);
+      const updatedUser = await storage.updateUser(currentUser.id, profileData);
+      
+      // Update session with new data
+      req.session.user = {
+        ...req.session.user,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+      };
+
+      res.json({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        role: updatedUser.role,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error updating profile:", error);
+        res.status(500).json({ message: "Failed to update profile" });
+      }
+    }
+  });
+
+  app.put("/api/profile/password", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const passwordData = changePasswordSchema.parse(req.body);
+      
+      // Get current user from database to check password
+      const dbUser = await storage.getUser(currentUser.id);
+      if (!dbUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await bcrypt.compare(passwordData.currentPassword, dbUser.password);
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Update password
+      await storage.updateUser(currentUser.id, { password: passwordData.newPassword });
+      
+      res.json({ message: "Password updated successfully" });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error changing password:", error);
+        res.status(500).json({ message: "Failed to change password" });
+      }
     }
   });
 
