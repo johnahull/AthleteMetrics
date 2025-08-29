@@ -332,6 +332,37 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.post("/api/measurements", requireAuth, async (req, res) => {
+    try {
+      // Get current user info for submittedBy
+      let submittedById = req.session.user?.id;
+      
+      // If using old admin system, find the site admin user
+      if (!submittedById && req.session.admin) {
+        const siteAdmin = await storage.getUserByEmail("admin@athleteperformancehub.com");
+        submittedById = siteAdmin?.id;
+      }
+      
+      if (!submittedById) {
+        return res.status(400).json({ message: "Unable to determine current user" });
+      }
+      
+      const measurementData = insertMeasurementSchema.parse({
+        ...req.body,
+        submittedBy: submittedById
+      });
+      const measurement = await storage.createMeasurement(measurementData);
+      res.status(201).json(measurement);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error creating measurement:", error);
+        res.status(500).json({ message: "Failed to create measurement" });
+      }
+    }
+  });
+
   // Keep existing analytics routes
   app.get("/api/analytics/dashboard", requireAuth, async (req, res) => {
     try {
