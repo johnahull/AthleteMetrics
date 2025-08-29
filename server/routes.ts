@@ -228,12 +228,14 @@ export function registerRoutes(app: Express) {
   app.get("/api/auth/me/organizations", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
+      console.log("Current user in /me/organizations:", currentUser);
       
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
       const userOrganizations = await storage.getUserOrganizations(currentUser.id);
+      console.log("Fetched user organizations:", userOrganizations);
       res.json(userOrganizations);
     } catch (error) {
       console.error("Error fetching user organizations:", error);
