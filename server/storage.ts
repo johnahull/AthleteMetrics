@@ -151,6 +151,10 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
+  async getInvitations(): Promise<any[]> {
+    return await db.select().from(invitations).orderBy(asc(invitations.createdAt));
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user || undefined;

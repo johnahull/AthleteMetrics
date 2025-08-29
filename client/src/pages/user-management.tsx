@@ -57,7 +57,7 @@ const inviteSchema = z.object({
 });
 
 const siteAdminSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  username: z.string().min(3, "Username must be at least 3 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   password: z.string().min(6, "Password must be at least 6 characters").optional(),
@@ -117,7 +117,7 @@ export default function UserManagement() {
   const siteAdminForm = useForm({
     resolver: zodResolver(siteAdminSchema),
     defaultValues: {
-      email: "",
+      username: "",
       firstName: "",
       lastName: "",
       password: "",
@@ -184,7 +184,7 @@ export default function UserManagement() {
         navigator.clipboard.writeText(data.inviteLink);
         toast({ 
           title: "Site admin invitation sent!", 
-          description: `Invitation link copied to clipboard. ${data.email} will receive access once they accept the invitation.`
+          description: `Invitation link copied to clipboard. The user will receive access once they accept the invitation.`
         });
       } else {
         toast({ 
@@ -357,10 +357,10 @@ export default function UserManagement() {
     }
   };
 
-  const sendNewSiteAdminInvitation = async (email: string) => {
+  const sendNewSiteAdminInvitation = async (username: string) => {
     try {
       const res = await apiRequest("POST", "/api/site-admins", {
-        email,
+        username,
         firstName: "Site",
         lastName: "Admin", 
         sendInvitation: true
@@ -374,7 +374,7 @@ export default function UserManagement() {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({
           title: "New site admin invitation sent!",
-          description: `Link for ${email} copied to clipboard.`,
+          description: `Link for ${username} copied to clipboard.`,
         });
       }
     } catch (error: any) {
@@ -591,12 +591,12 @@ export default function UserManagement() {
                             </div>
                             <FormField
                               control={siteAdminForm.control}
-                              name="email"
+                              name="username"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>Email Address</FormLabel>
+                                  <FormLabel>Username</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="john.doe@example.com" {...field} data-testid="site-admin-email-input" />
+                                    <Input placeholder="johndoe" {...field} data-testid="site-admin-username-input" />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -686,7 +686,7 @@ export default function UserManagement() {
                               </Link>
                             </p>
                             <p className="text-sm text-gray-600" data-testid={`site-admin-email-${admin.id}`}>
-                              {admin.email} • <span className="text-green-600">Active</span>
+                              {admin.email.replace('@admin.local', '')} • <span className="text-green-600">Active</span>
                             </p>
                           </div>
                         </div>
@@ -729,7 +729,7 @@ export default function UserManagement() {
                             )}
                             <div>
                               <p className="font-medium text-gray-900" data-testid={`site-admin-invitation-email-${invitation.id}`}>
-                                {invitation.email}
+                                {invitation.email.replace('@admin.local', '')}
                               </p>
                               <p className="text-sm text-gray-600">
                                 Site Admin • 
@@ -760,7 +760,7 @@ export default function UserManagement() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => sendNewSiteAdminInvitation(invitation.email)}
+                              onClick={() => sendNewSiteAdminInvitation(invitation.email.replace('@admin.local', ''))}
                               data-testid={`site-admin-invitation-resend-${invitation.id}`}
                             >
                               <Mail className="h-4 w-4" />

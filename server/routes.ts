@@ -559,7 +559,7 @@ export function registerRoutes(app: Express) {
         }
 
         const invitation = await storage.createInvitation({
-          email: adminData.email,
+          email: adminData.username + "@admin.local", // Use username as email with dummy domain
           firstName: adminData.firstName,
           lastName: adminData.lastName,
           role: "site_admin",
@@ -573,7 +573,7 @@ export function registerRoutes(app: Express) {
         res.json({
           invitation,
           inviteLink,
-          email: adminData.email,
+          email: adminData.username + "@admin.local",
           message: "Site admin invitation created successfully"
         });
       } else {
@@ -583,7 +583,7 @@ export function registerRoutes(app: Express) {
         }
 
         const newUser = await storage.createUser({
-          email: adminData.email,
+          email: adminData.username + "@admin.local", // Use username as email with dummy domain
           firstName: adminData.firstName,
           lastName: adminData.lastName,
           password: adminData.password,
