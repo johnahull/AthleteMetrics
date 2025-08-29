@@ -224,6 +224,23 @@ export function registerRoutes(app: Express) {
     res.status(401).json({ message: "Not authenticated" });
   });
 
+  // Get current user's organizations
+  app.get("/api/auth/me/organizations", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userOrganizations = await storage.getUserOrganizations(currentUser.id);
+      res.json(userOrganizations);
+    } catch (error) {
+      console.error("Error fetching user organizations:", error);
+      res.status(500).json({ message: "Failed to fetch user organizations" });
+    }
+  });
+
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
       if (err) {
