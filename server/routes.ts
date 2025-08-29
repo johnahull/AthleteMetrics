@@ -915,7 +915,6 @@ export function registerRoutes(app: Express) {
       }
       
       // Org admins cannot invite site admins
-      const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
       if (userRoles.includes("org_admin") && !await hasRole(currentUser?.id || "", "site_admin") && roles.includes("site_admin")) {
         return res.status(403).json({ message: "Cannot invite site administrators" });
       }
