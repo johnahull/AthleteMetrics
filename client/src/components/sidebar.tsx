@@ -49,7 +49,7 @@ function OrganizationProfileLink({ user, location }: { user: any, location: stri
   );
 }
 
-const getNavigation = (userRole: string, userId?: string) => {
+const getNavigation = (userRole: string, userId?: string, isInOrganizationContext?: boolean) => {
   // Athletes get a restricted navigation menu
   if (userRole === "athlete") {
     return [
@@ -58,8 +58,21 @@ const getNavigation = (userRole: string, userId?: string) => {
     ];
   }
 
-  // Site admins get a restricted navigation menu
+  // Site admins get different navigation based on context
   if (userRole === "site_admin") {
+    // When viewing an organization, show org admin menu
+    if (isInOrganizationContext) {
+      return [
+        { name: "Dashboard", href: "/", icon: LayoutDashboard },
+        { name: "Teams", href: "/teams", icon: Users },
+        { name: "Athletes", href: "/athletes", icon: UsersRound },
+        { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+        { name: "Analytics", href: "/analytics", icon: BarChart3 },
+        { name: "Publish", href: "/publish", icon: FileCheck },
+        { name: "Import/Export", href: "/import-export", icon: FileText },
+      ];
+    }
+    // Default site admin menu
     return [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -89,7 +102,13 @@ export default function Sidebar() {
   
   // Get user role - fallback to 'athlete' if not defined
   const userRole = user?.role || 'athlete';
-  const navigation = getNavigation(userRole, user?.id);
+  
+  // Check if we're in an organization context (site admin viewing specific org)
+  const isInOrganizationContext = userRole === 'site_admin' && 
+    location.startsWith('/organizations/') && 
+    location !== '/organizations';
+  
+  const navigation = getNavigation(userRole, user?.id, isInOrganizationContext);
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
@@ -140,6 +159,34 @@ export default function Sidebar() {
           {/* Profile Link for admins and coaches - but not for legacy admin */}
           {user && user.role === "org_admin" && user.id && (
             <OrganizationProfileLink user={user} location={location} />
+          )}
+          
+          {/* Site admin organization profile link when in organization context */}
+          {user && user.role === "site_admin" && isInOrganizationContext && (
+            (() => {
+              const orgIdMatch = location.match(/\/organizations\/([^\/]+)/);
+              if (orgIdMatch) {
+                const orgId = orgIdMatch[1];
+                const isActive = location === `/organizations/${orgId}`;
+                return (
+                  <Link href={`/organizations/${orgId}`}>
+                    <div
+                      className={cn(
+                        "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+                        isActive
+                          ? "bg-primary text-white" 
+                          : "text-gray-700 hover:bg-gray-100"
+                      )}
+                      data-testid="nav-organization-profile"
+                    >
+                      <Building2 className="h-5 w-5" />
+                      <span>Organization Profile</span>
+                    </div>
+                  </Link>
+                );
+              }
+              return null;
+            })()
           )}
           
           {user && (user.role === "site_admin" || user.role === "org_admin" || user.role === "coach") && user.id && (
