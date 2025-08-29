@@ -819,6 +819,7 @@ export function registerRoutes(app: Express) {
       }
       
       const { roles, ...invitationData } = req.body;
+      console.log("Invitation data to parse:", invitationData);
       const parsedInvitationData = insertInvitationSchema.omit({ role: true }).parse(invitationData);
       
       // Validate roles array
@@ -856,6 +857,7 @@ export function registerRoutes(app: Express) {
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Invitation validation error:", error.errors);
         res.status(400).json({ message: "Validation error", errors: error.errors });
       } else {
         console.error("Error creating invitation:", error);
