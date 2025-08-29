@@ -503,10 +503,12 @@ export class DatabaseStorage implements IStorage {
 
     // If user is an athlete, also create a player record
     if (user.role === "athlete") {
+      const today = new Date();
+      const defaultBirthDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
       const player = await this.createPlayer({
         firstName: user.firstName,
         lastName: user.lastName,
-        birthYear: new Date().getFullYear() - 18, // Default age, can be updated later
+        birthday: defaultBirthDate.toISOString().split('T')[0], // Default birth date 18 years ago
         school: "",
         sports: [],
         emails: [user.email]
