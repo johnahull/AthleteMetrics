@@ -26,12 +26,12 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  roles: z.array(z.enum(["org_admin", "coach", "athlete"])).min(1, "At least one role must be selected"),
+  roles: z.array(z.enum(["org_admin", "coach"])).min(1, "At least one role must be selected"),
 });
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
-  roles: z.array(z.enum(["org_admin", "coach", "athlete"])).min(1, "At least one role must be selected"),
+  roles: z.array(z.enum(["org_admin", "coach"])).min(1, "At least one role must be selected"),
 });
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
@@ -91,39 +91,21 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
 
   const createUserForm = useForm<CreateUserForm>({
-    resolver: zodResolver(createUserSchema.refine((data) => {
-      // Athletes cannot have other roles
-      if (data.roles.includes("athlete") && data.roles.length > 1) {
-        return false;
-      }
-      return true;
-    }, {
-      message: "Athletes cannot have additional roles",
-      path: ["roles"],
-    })),
+    resolver: zodResolver(createUserSchema),
     defaultValues: {
       email: "",
       password: "",
       firstName: "",
       lastName: "",
-      roles: ["athlete"],
+      roles: ["coach"],
     },
   });
 
   const invitationForm = useForm<InvitationForm>({
-    resolver: zodResolver(invitationSchema.refine((data) => {
-      // Athletes cannot have other roles
-      if (data.roles.includes("athlete") && data.roles.length > 1) {
-        return false;
-      }
-      return true;
-    }, {
-      message: "Athletes cannot have additional roles",
-      path: ["roles"],
-    })),
+    resolver: zodResolver(invitationSchema),
     defaultValues: {
       email: "",
-      roles: ["athlete"],
+      roles: ["coach"],
     },
   });
 
@@ -272,7 +254,6 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                       <FormLabel>Roles</FormLabel>
                       <div className="space-y-2">
                         {[
-                          { value: "athlete", label: "Athlete" },
                           { value: "coach", label: "Coach" },
                           { value: "org_admin", label: "Organization Admin" },
                         ].map((role) => (
@@ -283,16 +264,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                               onCheckedChange={(checked) => {
                                 const currentRoles = field.value || [];
                                 if (checked) {
-                                  // If selecting athlete, clear other roles
-                                  if (role.value === "athlete") {
-                                    field.onChange(["athlete"]);
-                                  } else {
-                                    // If selecting other role while athlete is selected, replace athlete
-                                    const newRoles = currentRoles.includes("athlete") 
-                                      ? [role.value] 
-                                      : [...currentRoles, role.value];
-                                    field.onChange(newRoles);
-                                  }
+                                  field.onChange([...currentRoles, role.value]);
                                 } else {
                                   field.onChange(currentRoles.filter((r: string) => r !== role.value));
                                 }
@@ -350,7 +322,6 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                       <FormLabel>Roles</FormLabel>
                       <div className="space-y-2">
                         {[
-                          { value: "athlete", label: "Athlete" },
                           { value: "coach", label: "Coach" },
                           { value: "org_admin", label: "Organization Admin" },
                         ].map((role) => (
@@ -361,16 +332,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                               onCheckedChange={(checked) => {
                                 const currentRoles = field.value || [];
                                 if (checked) {
-                                  // If selecting athlete, clear other roles
-                                  if (role.value === "athlete") {
-                                    field.onChange(["athlete"]);
-                                  } else {
-                                    // If selecting other role while athlete is selected, replace athlete
-                                    const newRoles = currentRoles.includes("athlete") 
-                                      ? [role.value] 
-                                      : [...currentRoles, role.value];
-                                    field.onChange(newRoles);
-                                  }
+                                  field.onChange([...currentRoles, role.value]);
                                 } else {
                                   field.onChange(currentRoles.filter((r: string) => r !== role.value));
                                 }
