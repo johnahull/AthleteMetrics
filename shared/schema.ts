@@ -212,6 +212,21 @@ export const insertUserSchema = createInsertSchema(users).omit({
   role: z.enum(["site_admin", "org_admin", "coach", "athlete"]),
 });
 
+export const updateProfileSchema = z.object({
+  email: z.string().email("Invalid email format").optional(),
+  firstName: z.string().min(1, "First name is required").optional(),
+  lastName: z.string().min(1, "Last name is required").optional(),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
 export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).omit({
   id: true,
   createdAt: true,
@@ -278,6 +293,8 @@ export type Team = typeof teams.$inferSelect;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type UpdateProfile = z.infer<typeof updateProfileSchema>;
+export type ChangePassword = z.infer<typeof changePasswordSchema>;
 
 export type InsertUserOrganization = z.infer<typeof insertUserOrganizationSchema>;
 export type UserOrganization = typeof userOrganizations.$inferSelect;

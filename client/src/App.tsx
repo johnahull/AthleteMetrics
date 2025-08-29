@@ -17,6 +17,7 @@ import ImportExport from "./pages/import-export";
 import AdminPage from "./pages/admin";
 import Organizations from "./pages/organizations";
 import UserManagement from "./pages/user-management";
+import Profile from "./pages/profile";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/admin" component={AdminPage} />
       <Route path="/organizations" component={Organizations} />
       <Route path="/user-management" component={UserManagement} />
+      <Route path="/profile" component={Profile} />
       <Route component={NotFound} />
     </Switch>
   );
