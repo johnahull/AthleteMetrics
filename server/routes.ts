@@ -555,6 +555,12 @@ export function registerRoutes(app: Express) {
   app.put("/api/profile", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
+      
+      // Handle old admin system
+      if (req.session.admin && !currentUser) {
+        return res.status(400).json({ message: "Profile updates not available for legacy admin account. Please use the new user system." });
+      }
+      
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
@@ -590,6 +596,12 @@ export function registerRoutes(app: Express) {
   app.put("/api/profile/password", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
+      
+      // Handle old admin system
+      if (req.session.admin && !currentUser) {
+        return res.status(400).json({ message: "Password changes not available for legacy admin account. Please use the new user system." });
+      }
+      
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
