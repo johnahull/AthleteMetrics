@@ -134,7 +134,14 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     // For invited users, password might be empty - use a placeholder
+    console.log("createUser called with:", JSON.stringify(user, null, 2));
     const password = user.password || "INVITATION_PENDING";
+    console.log("Password to hash:", password, "Type:", typeof password);
+    
+    if (!password || password === null || password === undefined) {
+      throw new Error("Password cannot be null or undefined");
+    }
+    
     const hashedPassword = await bcrypt.hash(password, 10);
     const [newUser] = await db.insert(users).values({
       ...user,
