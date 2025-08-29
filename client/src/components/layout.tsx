@@ -59,7 +59,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500">Welcome,</span>
-                  <span className="font-medium text-gray-900">{user.username}</span>
+                  <span className="font-medium text-gray-900">{user.firstName || user.username}</span>
                 </div>
                 <Button
                   variant="ghost"
