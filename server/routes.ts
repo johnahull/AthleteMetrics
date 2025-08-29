@@ -760,14 +760,35 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Cannot create site administrators" });
       }
       
-      const user = await storage.createUser({
-        ...parsedUserData,
-        role: roles[0] // Keep primary role for backwards compatibility
-      });
+      // Check if user already exists with this email
+      let user = await storage.getUserByEmail(parsedUserData.email);
       
-      // Add user to organization with all specified roles
-      for (const role of roles) {
-        await storage.addUserToOrganization(user.id, organizationId, role);
+      if (!user) {
+        // Create new user if they don't exist
+        user = await storage.createUser({
+          ...parsedUserData,
+          role: roles[0] // Keep primary role for backwards compatibility
+        });
+      } else {
+        // Update existing user's basic info if needed
+        if (parsedUserData.firstName || parsedUserData.lastName) {
+          await storage.updateUser(user.id, {
+            firstName: parsedUserData.firstName || user.firstName,
+            lastName: parsedUserData.lastName || user.lastName
+          });
+          // Refresh user data
+          user = await storage.getUser(user.id) || user;
+        }
+      }
+      
+      // Add user to organization with all specified roles (only if not already in org)
+      const existingUserOrgs = await storage.getUserOrganizations(user.id);
+      const isAlreadyInOrg = existingUserOrgs.some(org => org.organizationId === organizationId);
+      
+      if (!isAlreadyInOrg) {
+        for (const role of roles) {
+          await storage.addUserToOrganization(user.id, organizationId, role);
+        }
       }
       
       // If user is an athlete, also create a player record
