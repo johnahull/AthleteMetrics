@@ -724,9 +724,13 @@ export default function OrganizationProfile() {
                   return (
                     <div key={`${coach.user.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">
+                        <Link 
+                          href={`/users/${coach.user.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                          data-testid={`user-profile-link-${coach.user.id}`}
+                        >
                           {coach.user.firstName} {coach.user.lastName}
-                        </p>
+                        </Link>
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Mail className="h-3 w-3" />
                           <span>{coach.user.email}</span>

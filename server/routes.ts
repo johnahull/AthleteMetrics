@@ -938,6 +938,68 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // GET /api/users/:id/profile - Get user profile information
+  app.get("/api/users/:id/profile", requireAuth, async (req, res) => {
+    try {
+      const { id: userId } = req.params;
+      const currentUser = req.session.user;
+      
+      // Check if user has access (site admin, org admin, or viewing own profile)
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      
+      if (!isSiteAdmin && currentUser?.id !== userId) {
+        // Check if current user is an org admin in any shared organization
+        const userOrgs = await storage.getUserOrganizations(userId);
+        const currentUserOrgs = await storage.getUserOrganizations(currentUser?.id || "");
+        
+        const hasSharedOrg = userOrgs.some(userOrg => 
+          currentUserOrgs.some(currentUserOrg => 
+            currentUserOrg.organizationId === userOrg.organizationId && 
+            currentUserOrg.role === "org_admin"
+          )
+        );
+
+        if (!hasSharedOrg) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // Get user information
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get user's organizations and roles
+      const userOrgs = await storage.getUserOrganizations(userId);
+      const organizations = await Promise.all(
+        userOrgs.map(async (userOrg) => {
+          const org = await storage.getOrganization(userOrg.organizationId);
+          return {
+            id: org?.id,
+            name: org?.name,
+            role: userOrg.role
+          };
+        })
+      );
+
+      const userProfile = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        organizations: organizations.filter(org => org.id && org.name)
+      };
+
+      res.json(userProfile);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Site Admin Management Routes
   app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {
