@@ -193,15 +193,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
-    let query = db.select({ role: userOrganizations.role })
-      .from(userOrganizations)
-      .where(eq(userOrganizations.userId, userId));
+    let whereCondition = eq(userOrganizations.userId, userId);
     
     if (organizationId) {
-      query = query.and(eq(userOrganizations.organizationId, organizationId));
+      whereCondition = and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      );
     }
     
-    const result = await query;
+    const result = await db.select({ role: userOrganizations.role })
+      .from(userOrganizations)
+      .where(whereCondition);
+      
     return result.map(r => r.role);
   }
 
