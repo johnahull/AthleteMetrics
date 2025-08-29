@@ -42,17 +42,17 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
     control: form.control,
-    name: "emails"
+    name: "emails" as const
   });
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
-    name: "phoneNumbers"
+    name: "phoneNumbers" as const
   });
 
   const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
     control: form.control,
-    name: "sports"
+    name: "sports" as const
   });
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         firstName: player.firstName,
         lastName: player.lastName,
         birthYear: player.birthYear,
-        birthday: player.birthday,
+        birthday: player.birthday || undefined,
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
@@ -144,8 +144,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
           <DialogDescription>
             {isEditing ? "Update player information below." : "Add a new player to your team by filling out the form below."}
@@ -153,8 +153,9 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1 overflow-y-auto pr-2">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="firstName"
@@ -315,9 +316,9 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                                     checked={field.value?.includes(team.id)}
                                     onCheckedChange={(checked) => {
                                       return checked
-                                        ? field.onChange([...field.value, team.id])
+                                        ? field.onChange([...(field.value || []), team.id])
                                         : field.onChange(
-                                            field.value?.filter(
+                                            (field.value || []).filter(
                                               (value) => value !== team.id
                                             )
                                           )
@@ -534,26 +535,28 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 </Button>
               </div>
             </FormItem>
-
-            <div className="flex justify-end space-x-3 pt-4">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={onClose}
-                disabled={isPending}
-                data-testid="button-cancel-player"
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={isPending}
-                data-testid="button-save-player"
-              >
-                {isPending ? "Saving..." : isEditing ? "Update Player" : "Add Player"}
-              </Button>
             </div>
-          </form>
+          </div>
+          
+          <div className="flex justify-end space-x-3 pt-4 border-t flex-shrink-0">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onClose}
+              disabled={isPending}
+              data-testid="button-cancel-player"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={isPending}
+              data-testid="button-save-player"
+              onClick={form.handleSubmit(onSubmit)}
+            >
+              {isPending ? "Saving..." : isEditing ? "Update Player" : "Add Player"}
+            </Button>
+          </div>
         </Form>
       </DialogContent>
     </Dialog>
