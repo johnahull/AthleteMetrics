@@ -145,7 +145,8 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
         body: JSON.stringify({
           email: data.email,
           roles: data.roles,
-          teamIds: [] // Optional field that the schema expects
+          organizationId: organizationId,
+          teamIds: []
         }),
       });
       if (!response.ok) {
