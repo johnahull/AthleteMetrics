@@ -898,6 +898,46 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // DELETE /api/organizations/:id/invitations/:invitationId - Delete pending invitation
+  app.delete("/api/organizations/:id/invitations/:invitationId", requireAuth, async (req, res) => {
+    try {
+      const { id: organizationId, invitationId } = req.params;
+      const currentUser = req.session.user;
+      
+      // Check if user has admin access to this organization
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      
+      if (!isSiteAdmin) {
+        const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
+        const isOrgAdmin = userRoles.includes("org_admin") || await hasRole(currentUser.id, "org_admin", organizationId);
+        if (!isOrgAdmin) {
+          return res.status(403).json({ message: "Access denied. Only organization admins can delete invitations." });
+        }
+      }
+
+      // Get the invitation to find the email
+      const invitation = await storage.getInvitationById(invitationId);
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+
+      // Find the user by email and remove them from organization if they exist
+      const invitedUser = await storage.getUserByEmail(invitation.email);
+      if (invitedUser) {
+        await storage.removeUserFromOrganization(invitedUser.id, organizationId);
+      }
+
+      // Delete the invitation
+      await storage.deleteInvitation(invitationId);
+
+      res.json({ message: "Invitation deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting invitation:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Site Admin Management Routes
   app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {

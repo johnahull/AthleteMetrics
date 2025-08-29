@@ -373,6 +373,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invitations.id, invitationId));
   }
 
+  async getInvitationById(invitationId: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.id, invitationId));
+    return invitation || undefined;
+  }
+
   // Teams
   async getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]> {
     let query = db.select()
