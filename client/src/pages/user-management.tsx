@@ -60,7 +60,12 @@ const siteAdminSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string()
+    .min(12, "Password must be at least 12 characters")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
 });
 
 type SiteAdmin = {
@@ -541,11 +546,15 @@ export default function UserManagement() {
                                   <FormControl>
                                     <Input 
                                       type="password" 
-                                      placeholder="Password" 
+                                      placeholder="Min 12 chars, uppercase, lowercase, number, special char" 
                                       {...field} 
                                       data-testid="site-admin-password-input" 
                                     />
                                   </FormControl>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Password must be at least 12 characters and include:
+                                    <br />• Uppercase letter (A-Z) • Lowercase letter (a-z) • Number (0-9) • Special character (!@#$%^&*)
+                                  </div>
                                   <FormMessage />
                                 </FormItem>
                               )}
