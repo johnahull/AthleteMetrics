@@ -663,7 +663,18 @@ export function registerRoutes(app: Express) {
 
       // Prevent users from deleting themselves
       if (currentUser.id === userId) {
-        return res.status(400).json({ message: "You cannot delete yourself from the organization." });
+        const isSiteAdminUser = currentUser?.role === "site_admin" || 
+                               (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+        const userRolesToCheck = await storage.getUserRoles(userId, organizationId);
+        const isOrgAdminUser = userRolesToCheck.includes("org_admin");
+        
+        if (isSiteAdminUser) {
+          return res.status(400).json({ message: "Site administrators cannot delete themselves. Please have another administrator remove your access." });
+        } else if (isOrgAdminUser) {
+          return res.status(400).json({ message: "Organization administrators cannot delete themselves. Please have another administrator remove your access." });
+        } else {
+          return res.status(400).json({ message: "You cannot delete yourself from the organization." });
+        }
       }
 
       // Check if the organization exists
