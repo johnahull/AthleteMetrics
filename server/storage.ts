@@ -590,9 +590,14 @@ export class DatabaseStorage implements IStorage {
 
   async createPlayer(player: InsertPlayer): Promise<Player> {
     const fullName = `${player.firstName} ${player.lastName}`;
+    
+    // Calculate birth year from birthday
+    const birthYear = new Date(player.birthday).getFullYear();
+    
     const [newPlayer] = await db.insert(players).values({
       ...player,
-      fullName
+      fullName,
+      birthYear
     }).returning();
     
     // Add to teams if specified
@@ -605,6 +610,8 @@ export class DatabaseStorage implements IStorage {
 
   async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
     const updateData: any = { ...player };
+    
+    // Update full name if first or last name changed
     if (player.firstName || player.lastName) {
       const existing = await this.getPlayer(id);
       if (existing) {
@@ -612,6 +619,11 @@ export class DatabaseStorage implements IStorage {
         const lastName = player.lastName || existing.lastName;
         updateData.fullName = `${firstName} ${lastName}`;
       }
+    }
+    
+    // Calculate birth year if birthday changed
+    if (player.birthday) {
+      updateData.birthYear = new Date(player.birthday).getFullYear();
     }
     
     const [updated] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();

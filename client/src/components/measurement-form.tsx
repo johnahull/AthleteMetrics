@@ -47,7 +47,7 @@ export default function MeasurementForm() {
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthYear: new Date().getFullYear() - 15,
+      birthday: "",
       teamIds: [],
       school: "",
     },
@@ -407,19 +407,17 @@ export default function MeasurementForm() {
                     
                     <FormField
                       control={quickAddForm.control}
-                      name="birthYear"
+                      name="birthday"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Birth Year</FormLabel>
+                          <FormLabel>Birth Date</FormLabel>
                           <FormControl>
                             <Input 
                               {...field}
-                              type="number"
-                              min="2000"
-                              max="2015"
+                              type="date"
                               disabled={createPlayerMutation.isPending}
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
-                              data-testid="input-quick-add-birthyear"
+                              data-testid="input-quick-add-birthday"
+                              max={new Date().toISOString().split('T')[0]} // Prevent future dates
                             />
                           </FormControl>
                           <FormMessage />
