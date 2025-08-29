@@ -25,7 +25,17 @@ const getNavigation = (userRole: string, userId?: string) => {
     ];
   }
 
-  // All other roles get the full navigation
+  // Site admins get a restricted navigation menu
+  if (userRole === "site_admin") {
+    return [
+      { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Analytics", href: "/analytics", icon: BarChart3 },
+      { name: "Organizations", href: "/organizations", icon: Building2 },
+      { name: "User Management", href: "/user-management", icon: UserCog }
+    ];
+  }
+
+  // All other roles (org_admin, coach) get the full navigation
   const baseNavigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Teams", href: "/teams", icon: Users },
@@ -36,13 +46,8 @@ const getNavigation = (userRole: string, userId?: string) => {
     { name: "Import/Export", href: "/import-export", icon: FileText },
   ];
 
-  // Add admin items based on role
-  if (userRole === "site_admin") {
-    baseNavigation.push(
-      { name: "Organizations", href: "/organizations", icon: Building2 },
-      { name: "User Management", href: "/user-management", icon: UserCog }
-    );
-  } else if (userRole === "org_admin") {
+  // Add admin items for org_admin
+  if (userRole === "org_admin") {
     baseNavigation.push(
       { name: "User Management", href: "/user-management", icon: UserCog }
     );
