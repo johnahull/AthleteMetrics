@@ -20,6 +20,11 @@ export default function PlayerProfile() {
 
   const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
     queryKey: ["/api/players", playerId],
+    queryFn: async () => {
+      const response = await fetch(`/api/players/${playerId}`);
+      if (!response.ok) throw new Error('Failed to fetch player');
+      return response.json();
+    },
     enabled: !!playerId,
   });
 
@@ -54,7 +59,7 @@ export default function PlayerProfile() {
         <div className="text-center">
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Player Not Found</h2>
           <p className="text-gray-600 mb-4">The player you're looking for doesn't exist.</p>
-          <Button onClick={() => setLocation('/players')}>Back to Players</Button>
+          <Button onClick={() => setLocation('/athletes')}>Back to Athletes</Button>
         </div>
       </div>
     );
