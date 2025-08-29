@@ -51,23 +51,19 @@ export default function Players() {
   const { data: athleteInvitations } = useQuery({
     queryKey: ["/api/invitations/athletes"],
     queryFn: async () => {
-      console.log("Fetching athlete invitations, userOrgs:", userOrgs);
       if (!userOrgs || userOrgs.length === 0) return [];
       
       // For now, get invitations for the first organization
       // In a real app, you'd need to determine which org context we're in
       const orgId = userOrgs[0]?.organization?.id;
-      console.log("Using organization ID:", orgId);
       if (!orgId) return [];
       
       const response = await fetch(`/api/organizations/${orgId}/profile`);
       if (!response.ok) throw new Error('Failed to fetch organization profile');
       const orgData = await response.json();
-      console.log("Organization data:", orgData);
       
       // Filter for athlete invitations only
       const athleteInvitations = orgData.invitations?.filter((inv: any) => inv.role === 'athlete') || [];
-      console.log("Athlete invitations:", athleteInvitations);
       return athleteInvitations;
     },
     enabled: !!userOrgs && userOrgs.length > 0,
