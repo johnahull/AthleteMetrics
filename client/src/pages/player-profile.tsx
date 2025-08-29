@@ -100,7 +100,7 @@ export default function PlayerProfile() {
       <div className="flex items-center mb-6">
         <Button 
           variant="ghost" 
-          onClick={() => setLocation('/players')}
+          onClick={() => setLocation('/athletes')}
           className="mr-4"
           data-testid="button-back-to-players"
         >
