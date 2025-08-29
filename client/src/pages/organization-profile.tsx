@@ -156,6 +156,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       return response.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
       invitationForm.reset();
       toast({ title: "Success", description: "Invitation sent successfully" });
     },

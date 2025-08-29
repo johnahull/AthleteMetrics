@@ -819,7 +819,6 @@ export function registerRoutes(app: Express) {
       }
       
       const { roles, ...invitationData } = req.body;
-      console.log("Invitation data to parse:", invitationData);
       
       // Add server-generated fields
       const invitationWithDefaults = {
@@ -853,6 +852,31 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Cannot invite site administrators" });
       }
       
+      // Check if user already exists, if not create them
+      let existingUser = await storage.getUserByEmail(parsedInvitationData.email);
+      
+      if (!existingUser) {
+        // Create a new user with invitation email
+        const newUser = await storage.createUser({
+          email: parsedInvitationData.email,
+          firstName: "", // Will be filled when they accept invitation
+          lastName: "",
+          role: "athlete" // Default role, will be overridden by organization roles
+        });
+        existingUser = newUser;
+      }
+
+      // Check if user is already in the organization and add them with the specified roles
+      const existingUserOrgs = await storage.getUserOrganizations(existingUser.id);
+      const isAlreadyInOrg = existingUserOrgs.some(org => org.organizationId === organizationId);
+      
+      if (!isAlreadyInOrg) {
+        // Add user to organization with the specified roles
+        for (const role of roles) {
+          await storage.addUserToOrganization(existingUser.id, organizationId, role);
+        }
+      }
+
       const invitation = await storage.createInvitation({
         ...parsedInvitationData,
         role: roles[0], // Keep primary role for backwards compatibility
