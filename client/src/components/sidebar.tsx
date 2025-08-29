@@ -79,13 +79,7 @@ const getNavigation = (userRole: string, userId?: string) => {
     { name: "Import/Export", href: "/import-export", icon: FileText },
   ];
 
-  // Add admin items for org_admin
-  if (userRole === "org_admin") {
-    baseNavigation.push(
-      { name: "User Management", href: "/user-management", icon: UserCog }
-    );
-  }
-
+  // Org admins don't get User Management access (they manage users through their organization profile)
   return baseNavigation;
 };
 
