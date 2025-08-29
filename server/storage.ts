@@ -192,6 +192,19 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
+    let query = db.select({ role: userOrganizations.role })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, userId));
+    
+    if (organizationId) {
+      query = query.and(eq(userOrganizations.organizationId, organizationId));
+    }
+    
+    const result = await query;
+    return result.map(r => r.role);
+  }
+
   async getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]> {
     const result = await db.select()
       .from(userTeams)
@@ -242,15 +255,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrganizationProfile(organizationId: string): Promise<Organization & { 
-    coaches: (UserOrganization & { user: User })[], 
+    coaches: Array<{ user: User, roles: string[] }>, 
     players: (Player & { teams: (Team & { organization: Organization })[] })[] 
   } | null> {
     const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
     if (!organization) return null;
 
-    // Get users (coaches and other roles)
+    // Get users with all their roles grouped
     const allUsers = await this.getOrganizationUsers(organizationId);
-    const coaches = allUsers.filter(userOrg => userOrg.role === 'coach' || userOrg.role === 'org_admin');
+    
+    // Group users by userId and collect all their roles
+    const userRoleMap = new Map<string, { user: User, roles: string[] }>();
+    
+    for (const userOrg of allUsers) {
+      const userId = userOrg.user.id;
+      if (userRoleMap.has(userId)) {
+        userRoleMap.get(userId)!.roles.push(userOrg.role);
+      } else {
+        userRoleMap.set(userId, {
+          user: userOrg.user,
+          roles: [userOrg.role]
+        });
+      }
+    }
+    
+    // Filter coaches (users with coach or org_admin roles, excluding pure athletes)
+    const coaches = Array.from(userRoleMap.values()).filter(
+      userWithRoles => userWithRoles.roles.some(role => role === 'coach' || role === 'org_admin')
+    );
     
     // Get players via organization filter
     const players = await this.getPlayers({ organizationId });
