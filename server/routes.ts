@@ -228,14 +228,12 @@ export function registerRoutes(app: Express) {
   app.get("/api/auth/me/organizations", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
-      console.log("Current user in /me/organizations:", currentUser);
       
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
       const userOrganizations = await storage.getUserOrganizations(currentUser.id);
-      console.log("Fetched user organizations:", userOrganizations);
       res.json(userOrganizations);
     } catch (error) {
       console.error("Error fetching user organizations:", error);
@@ -653,8 +651,12 @@ export function registerRoutes(app: Express) {
                         currentUser?.username === "admin" ||
                         (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
       
-      if (isSiteAdmin) {
-        // Site admins can access any organization
+      // Check if user belongs to this organization (as org_admin or coach)
+      const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, id) : [];
+      const hasOrgAccess = userRoles.length > 0; // User has any role in this org
+      
+      if (isSiteAdmin || hasOrgAccess) {
+        // Site admins can access any organization, org members can access their org
         const orgProfile = await storage.getOrganizationProfile(id);
         if (!orgProfile) {
           return res.status(404).json({ message: "Organization not found" });
@@ -866,10 +868,12 @@ export function registerRoutes(app: Express) {
       const isSiteAdmin = currentUser?.role === "site_admin" || 
                         (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
       
-      if (isSiteAdmin) {
-        // Site admins can manage any organization
-      } else if (currentUser?.id && await hasRole(currentUser.id, "org_admin", organizationId)) {
-        // User is org admin for this specific organization
+      // Check if user belongs to this organization (as org_admin or coach)
+      const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
+      const hasOrgAccess = userRoles.length > 0; // User has any role in this org
+      
+      if (isSiteAdmin || hasOrgAccess) {
+        // Site admins can manage any organization, org members can manage their org
       } else {
         return res.status(403).json({ message: "Access denied" });
       }
@@ -966,9 +970,9 @@ export function registerRoutes(app: Express) {
       
       if (!isSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
-        const isOrgAdmin = userRoles.includes("org_admin") || await hasRole(currentUser.id, "org_admin", organizationId);
-        if (!isOrgAdmin) {
-          return res.status(403).json({ message: "Access denied. Only organization admins can delete invitations." });
+        const hasOrgAccess = userRoles.length > 0; // User has any role in this org
+        if (!hasOrgAccess) {
+          return res.status(403).json({ message: "Access denied. Only organization members can delete invitations." });
         }
       }
 

@@ -114,8 +114,6 @@ export default function Sidebar() {
     enabled: !!user?.id,
   });
 
-  // Debug: Log the organizations data
-  console.log("User organizations data:", userOrganizations);
   
   const navigation = getNavigation(userRole, user?.id, isInOrganizationContext);
 
