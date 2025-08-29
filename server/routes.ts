@@ -655,13 +655,6 @@ export function registerRoutes(app: Express) {
       const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, id) : [];
       const hasOrgAccess = userRoles.length > 0; // User has any role in this org
       
-      console.log("Permission check for org profile:", {
-        userId: currentUser?.id,
-        orgId: id,
-        isSiteAdmin,
-        userRoles,
-        hasOrgAccess
-      });
       
       if (isSiteAdmin || hasOrgAccess) {
         // Site admins can access any organization, org members can access their org
