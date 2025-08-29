@@ -679,6 +679,22 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ message: "User not found in this organization" });
       }
 
+      // Check if user is an org admin and if they're the last one
+      const userRolesToDelete = await storage.getUserRoles(userId, organizationId);
+      if (userRolesToDelete.includes("org_admin")) {
+        // Count total org admins in this organization
+        const orgProfile = await storage.getOrganizationProfile(organizationId);
+        const orgAdmins = orgProfile?.coaches.filter(coach => 
+          coach.roles.includes("org_admin")
+        ) || [];
+        
+        if (orgAdmins.length <= 1) {
+          return res.status(400).json({ 
+            message: "Cannot delete the last organization administrator. Each organization must have at least one admin." 
+          });
+        }
+      }
+
       // Remove user from organization
       await storage.removeUserFromOrganization(userId, organizationId);
 
