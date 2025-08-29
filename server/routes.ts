@@ -642,6 +642,53 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // DELETE /api/organizations/:id/users/:userId - Remove user from organization
+  app.delete("/api/organizations/:id/users/:userId", requireAuth, async (req, res) => {
+    try {
+      const { id: organizationId, userId } = req.params;
+      const currentUser = req.session.user;
+      
+      // Check if user has admin access to this organization
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        currentUser?.username === "admin" ||
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      
+      if (!isSiteAdmin) {
+        const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
+        const isOrgAdmin = userRoles.includes("org_admin") || await hasRole(currentUser.id, "org_admin", organizationId);
+        if (!isOrgAdmin) {
+          return res.status(403).json({ message: "Access denied. Only organization admins can delete users." });
+        }
+      }
+
+      // Prevent users from deleting themselves
+      if (currentUser.id === userId) {
+        return res.status(400).json({ message: "You cannot delete yourself from the organization." });
+      }
+
+      // Check if the organization exists
+      const organization = await storage.getOrganization(organizationId);
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      // Check if the user exists and is part of this organization
+      const userOrgs = await storage.getUserOrganizations(userId);
+      const isUserInOrg = userOrgs.some(org => org.organizationId === organizationId);
+      if (!isUserInOrg) {
+        return res.status(404).json({ message: "User not found in this organization" });
+      }
+
+      // Remove user from organization
+      await storage.removeUserFromOrganization(userId, organizationId);
+
+      res.json({ message: "User removed from organization successfully" });
+    } catch (error) {
+      console.error("Error removing user from organization:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Organization User Management Routes (for org admins)
   app.post("/api/organizations/:id/users", requireAuth, async (req, res) => {
     try {
