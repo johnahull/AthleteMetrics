@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer } from "http";
 import session from "express-session";
 import { storage } from "./storage";
-import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema } from "@shared/schema";
+import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 
@@ -524,6 +524,101 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error("Error fetching organizations with users:", error);
       res.status(500).json({ message: "Failed to fetch organizations with users" });
+    }
+  });
+
+  // Site Admin Management Routes
+  app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
+    try {
+      const siteAdmins = await storage.getSiteAdminUsers();
+      res.json(siteAdmins);
+    } catch (error) {
+      console.error("Error fetching site admins:", error);
+      res.status(500).json({ message: "Failed to fetch site admins" });
+    }
+  });
+
+  app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      const adminData = createSiteAdminSchema.parse(req.body);
+      
+      if (adminData.sendInvitation) {
+        // Create invitation for site admin (no organization required)
+        const invitedBy = currentUser?.id || req.session.admin;
+        if (!invitedBy) {
+          return res.status(400).json({ message: "Unable to determine who is sending the invitation" });
+        }
+
+        // Use the first organization or create a placeholder for site admin invitations
+        const organizations = await storage.getOrganizations();
+        const organizationId = organizations.length > 0 ? organizations[0].id : null;
+        
+        if (!organizationId) {
+          return res.status(400).json({ message: "No organization available for invitation" });
+        }
+
+        const invitation = await storage.createInvitation({
+          email: adminData.email,
+          firstName: adminData.firstName,
+          lastName: adminData.lastName,
+          role: "site_admin",
+          organizationId,
+          invitedBy,
+          teamIds: [],
+        });
+
+        const inviteLink = `${req.protocol}://${req.get('host')}/register?token=${invitation.token}`;
+        
+        res.json({
+          invitation,
+          inviteLink,
+          email: adminData.email,
+          message: "Site admin invitation created successfully"
+        });
+      } else {
+        // Create user directly with password
+        if (!adminData.password) {
+          return res.status(400).json({ message: "Password is required when not sending invitation" });
+        }
+
+        const newUser = await storage.createUser({
+          email: adminData.email,
+          firstName: adminData.firstName,
+          lastName: adminData.lastName,
+          password: adminData.password,
+          role: "site_admin",
+        });
+
+        res.json({
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            firstName: newUser.firstName,
+            lastName: newUser.lastName,
+            role: newUser.role,
+          },
+          message: "Site admin created successfully"
+        });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error creating site admin:", error);
+        res.status(500).json({ message: "Failed to create site admin" });
+      }
+    }
+  });
+
+  app.get("/api/site-admin-invitations", requireSiteAdmin, async (req, res) => {
+    try {
+      const allInvitations = await storage.getInvitations();
+      const siteAdminInvitations = allInvitations.filter(inv => inv.role === "site_admin");
+      res.json(siteAdminInvitations);
+    } catch (error) {
+      console.error("Error fetching site admin invitations:", error);
+      res.status(500).json({ message: "Failed to fetch site admin invitations" });
     }
   });
 

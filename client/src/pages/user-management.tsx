@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Link, Clock, CheckCircle, XCircle } from "lucide-react";
+import { UserPlus, Trash2, Link as LinkIcon, Clock, CheckCircle, XCircle, User, Mail } from "lucide-react";
+import { Link } from "wouter";
 
 type Organization = {
   id: string;
@@ -54,13 +56,51 @@ const inviteSchema = z.object({
   organizationId: z.string().optional(),
 });
 
+const siteAdminSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  password: z.string().min(6, "Password must be at least 6 characters").optional(),
+  sendInvitation: z.boolean().default(false),
+});
+
+type SiteAdmin = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isActive: string;
+  createdAt: string;
+};
+
+type SiteAdminInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  organizationId: string;
+  isUsed: string;
+  expiresAt: string;
+  createdAt: string;
+  token: string;
+};
+
 export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
 
   const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations-with-users"],
+  });
+
+  const { data: siteAdmins = [] } = useQuery<SiteAdmin[]>({
+    queryKey: ["/api/site-admins"],
+  });
+
+  const { data: siteAdminInvitations = [] } = useQuery<SiteAdminInvitation[]>({
+    queryKey: ["/api/site-admin-invitations"],
   });
 
   const inviteForm = useForm({
@@ -71,6 +111,17 @@ export default function UserManagement() {
       lastName: "",
       role: "athlete" as const,
       organizationId: "",
+    },
+  });
+
+  const siteAdminForm = useForm({
+    resolver: zodResolver(siteAdminSchema),
+    defaultValues: {
+      email: "",
+      firstName: "",
+      lastName: "",
+      password: "",
+      sendInvitation: false,
     },
   });
 
@@ -119,6 +170,40 @@ export default function UserManagement() {
     },
   });
 
+  const createSiteAdminMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof siteAdminSchema>) => {
+      const res = await apiRequest("POST", "/api/site-admins", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Refresh the site admins and invitations list
+      queryClient.invalidateQueries({ queryKey: ["/api/site-admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/site-admin-invitations"] });
+      
+      if (data.inviteLink) {
+        navigator.clipboard.writeText(data.inviteLink);
+        toast({ 
+          title: "Site admin invitation sent!", 
+          description: `Invitation link copied to clipboard. ${data.email} will receive access once they accept the invitation.`
+        });
+      } else {
+        toast({ 
+          title: "Site admin created successfully!", 
+          description: `${data.user.firstName} ${data.user.lastName} has been created as a site admin.`
+        });
+      }
+      setSiteAdminDialogOpen(false);
+      siteAdminForm.reset();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error creating site admin", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const updateUserRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       const res = await apiRequest("PUT", `/api/users/${userId}/role`, { role });
@@ -157,6 +242,10 @@ export default function UserManagement() {
 
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
     sendInviteMutation.mutate(data);
+  };
+
+  const onCreateSiteAdmin = (data: z.infer<typeof siteAdminSchema>) => {
+    createSiteAdminMutation.mutate(data);
   };
 
   const handleRoleChange = (userId: string, newRole: string) => {
@@ -244,6 +333,53 @@ export default function UserManagement() {
     } catch (error: any) {
       toast({
         title: "Error copying invite link",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const copySiteAdminInviteLink = async (invitation: SiteAdminInvitation) => {
+    try {
+      const inviteLink = `${window.location.protocol}//${window.location.host}/register?token=${invitation.token}`;
+      
+      await navigator.clipboard.writeText(inviteLink);
+      toast({
+        title: "Site admin invitation link copied!",
+        description: `Link for ${invitation.email} copied to clipboard.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error copying invite link",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  const sendNewSiteAdminInvitation = async (email: string) => {
+    try {
+      const res = await apiRequest("POST", "/api/site-admins", {
+        email,
+        firstName: "Site",
+        lastName: "Admin", 
+        sendInvitation: true
+      });
+      const data = await res.json();
+      
+      // Refresh the lists
+      queryClient.invalidateQueries({ queryKey: ["/api/site-admin-invitations"] });
+      
+      if (data.inviteLink) {
+        await navigator.clipboard.writeText(data.inviteLink);
+        toast({
+          title: "New site admin invitation sent!",
+          description: `Link for ${email} copied to clipboard.`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error sending invitation",
         description: error.message,
         variant: "destructive"
       });
@@ -398,6 +534,257 @@ export default function UserManagement() {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+              {/* Site Administrators Section */}
+              <div className="space-y-3 border-b pb-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Site
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">
+                      {siteAdmins.length} site admins
+                    </span>
+                    <Dialog open={siteAdminDialogOpen} onOpenChange={setSiteAdminDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" data-testid="add-site-admin-button">
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Add new site admin
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Add Site Administrator</DialogTitle>
+                          <DialogDescription>
+                            Create a new site administrator account
+                          </DialogDescription>
+                        </DialogHeader>
+                        <Form {...siteAdminForm}>
+                          <form onSubmit={siteAdminForm.handleSubmit(onCreateSiteAdmin)} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <FormField
+                                control={siteAdminForm.control}
+                                name="firstName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>First Name</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="John" {...field} data-testid="site-admin-firstname-input" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={siteAdminForm.control}
+                                name="lastName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Last Name</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder="Doe" {...field} data-testid="site-admin-lastname-input" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <FormField
+                              control={siteAdminForm.control}
+                              name="email"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Email Address</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="john.doe@example.com" {...field} data-testid="site-admin-email-input" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={siteAdminForm.control}
+                              name="sendInvitation"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                      data-testid="site-admin-send-invitation-checkbox"
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none">
+                                    <FormLabel>
+                                      Send invitation
+                                    </FormLabel>
+                                    <div className="text-sm text-gray-500">
+                                      Send an invitation link instead of setting a password
+                                    </div>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />
+                            {!siteAdminForm.watch("sendInvitation") && (
+                              <FormField
+                                control={siteAdminForm.control}
+                                name="password"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Password</FormLabel>
+                                    <FormControl>
+                                      <Input 
+                                        type="password" 
+                                        placeholder="Password" 
+                                        {...field} 
+                                        data-testid="site-admin-password-input" 
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                            <div className="flex justify-end space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setSiteAdminDialogOpen(false)}
+                                data-testid="cancel-site-admin-button"
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                type="submit" 
+                                disabled={createSiteAdminMutation.isPending}
+                                data-testid="submit-site-admin-button"
+                              >
+                                {createSiteAdminMutation.isPending ? "Creating..." : "Create Site Admin"}
+                              </Button>
+                            </div>
+                          </form>
+                        </Form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  {/* Active Site Admins */}
+                  {siteAdmins.map((admin) => (
+                    <div 
+                      key={admin.id} 
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <div>
+                            <p className="font-medium text-gray-900" data-testid={`site-admin-name-${admin.id}`}>
+                              <Link href={`/profile`} className="hover:text-primary">
+                                {admin.firstName} {admin.lastName}
+                              </Link>
+                            </p>
+                            <p className="text-sm text-gray-600" data-testid={`site-admin-email-${admin.id}`}>
+                              {admin.email} • <span className="text-green-600">Active</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500 px-2 py-1 bg-gray-200 rounded">
+                          Site Admin
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteUser(admin.id, `${admin.firstName} ${admin.lastName}`)}
+                          data-testid={`site-admin-delete-${admin.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Pending Site Admin Invitations */}
+                  {siteAdminInvitations.map((invitation) => {
+                    const isExpired = new Date() > new Date(invitation.expiresAt);
+                    const isUsed = invitation.isUsed === "true";
+                    
+                    return (
+                      <div 
+                        key={invitation.id} 
+                        className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            {isUsed ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : isExpired ? (
+                              <XCircle className="h-4 w-4 text-red-600" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-yellow-600" />
+                            )}
+                            <div>
+                              <p className="font-medium text-gray-900" data-testid={`site-admin-invitation-email-${invitation.id}`}>
+                                {invitation.email}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Site Admin • 
+                                {isUsed ? (
+                                  <span className="text-green-600 ml-1">Accepted</span>
+                                ) : isExpired ? (
+                                  <span className="text-red-600 ml-1">Expired</span>
+                                ) : (
+                                  <span className="text-yellow-600 ml-1">Pending</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {!isUsed && !isExpired && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => copySiteAdminInviteLink(invitation)}
+                              data-testid={`site-admin-invitation-copy-link-${invitation.id}`}
+                            >
+                              <LinkIcon className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {isExpired && !isUsed && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => sendNewSiteAdminInvitation(invitation.email)}
+                              data-testid={`site-admin-invitation-resend-${invitation.id}`}
+                            >
+                              <Mail className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteInvitation(invitation.id, invitation.email)}
+                            data-testid={`site-admin-invitation-delete-${invitation.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {siteAdmins.length === 0 && siteAdminInvitations.length === 0 && (
+                    <p className="text-gray-500 text-sm py-4">No site administrators</p>
+                  )}
+                </div>
+              </div>
+
               {/* Users by Organization */}
               {organizations?.map((org: Organization) => (
                 <div key={org.id} className="space-y-3">
