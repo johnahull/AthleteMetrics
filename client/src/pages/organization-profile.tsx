@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -403,6 +404,32 @@ export default function OrganizationProfile() {
     }
   };
 
+  // Function to delete a user from the organization
+  const deleteUser = async (userId: string, userName: string) => {
+    try {
+      const response = await fetch(`/api/organizations/${id}/users/${userId}`, {
+        method: "DELETE",
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete user");
+      }
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      toast({
+        title: "User deleted",
+        description: `${userName} has been removed from the organization`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
     queryKey: [`/api/organizations/${id}/profile`],
   });
@@ -543,17 +570,52 @@ export default function OrganizationProfile() {
                           ))}
                         </div>
                         
-                        {/* Send Invitation Button - only for admin users and if no pending invitation */}
-                        {(user?.role === "site_admin" || user?.role === "org_admin") && !pendingInvitation && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => sendInvitation(coach.user.email, coach.roles)}
-                            className="ml-2"
-                            data-testid={`send-invitation-${coach.user.id}`}
-                          >
-                            <Send className="h-3 w-3" />
-                          </Button>
+                        {/* Action Buttons - only for admin users */}
+                        {(user?.role === "site_admin" || user?.role === "org_admin") && (
+                          <div className="flex items-center gap-1">
+                            {/* Send Invitation Button - only if no pending invitation */}
+                            {!pendingInvitation && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => sendInvitation(coach.user.email, coach.roles)}
+                                data-testid={`send-invitation-${coach.user.id}`}
+                              >
+                                <Send className="h-3 w-3" />
+                              </Button>
+                            )}
+                            
+                            {/* Delete User Button */}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  data-testid={`delete-user-${coach.user.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to remove {coach.user.firstName} {coach.user.lastName} from this organization? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteUser(coach.user.id, `${coach.user.firstName} ${coach.user.lastName}`)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete User
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         )}
                       </div>
                     </div>
