@@ -111,10 +111,10 @@ export default function MeasurementForm() {
     },
   });
 
-  const filteredPlayers = (players || []).filter((player: any) =>
+  const filteredPlayers = Array.isArray(players) ? players.filter((player: any) =>
     player.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    player.teams?.some(team => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+    player.teams?.some((team: any) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  ) : [];
 
   const metric = form.watch("metric");
   const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
@@ -194,7 +194,7 @@ export default function MeasurementForm() {
                     >
                       <div>
                         <p className="font-medium">{player.fullName}</p>
-                        <p className="text-sm text-gray-500">{player.teams.map(t => t.name).join(', ')} • {player.birthYear}</p>
+                        <p className="text-sm text-gray-500">{(player as any).teams?.map((t: any) => t.name).join(', ')} • {(player as any).birthYear}</p>
                       </div>
                     </button>
                   ))}
@@ -339,6 +339,7 @@ export default function MeasurementForm() {
               <FormControl>
                 <Textarea 
                   {...field}
+                  value={field.value || ""}
                   placeholder="Optional notes about this measurement..."
                   disabled={createMeasurementMutation.isPending}
                   rows={3}
@@ -356,7 +357,7 @@ export default function MeasurementForm() {
             <Checkbox 
               id="quick-add-player" 
               checked={showQuickAdd}
-              onCheckedChange={setShowQuickAdd}
+              onCheckedChange={(checked) => setShowQuickAdd(checked === true)}
               data-testid="checkbox-quick-add-player"
             />
             <label htmlFor="quick-add-player" className="text-sm font-medium text-gray-700">
@@ -427,13 +428,13 @@ export default function MeasurementForm() {
                     
                     <FormField
                       control={quickAddForm.control}
-                      name="teamId"
+                      name="teamIds"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Team</FormLabel>
                           <Select 
-                            value={field.value} 
-                            onValueChange={field.onChange}
+                            value={Array.isArray(field.value) ? field.value[0] || "" : field.value || ""} 
+                            onValueChange={(value) => field.onChange([value])}
                             disabled={createPlayerMutation.isPending}
                           >
                             <FormControl>
@@ -442,11 +443,11 @@ export default function MeasurementForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {teams?.map((team) => (
+                              {Array.isArray(teams) ? teams.map((team: any) => (
                                 <SelectItem key={team.id} value={team.id}>
                                   {team.name}
                                 </SelectItem>
-                              ))}
+                              )) : null}
                             </SelectContent>
                           </Select>
                           <FormMessage />

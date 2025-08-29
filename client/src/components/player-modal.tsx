@@ -43,17 +43,17 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
   const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
     control: form.control,
     name: "emails"
-  });
+  }) as any;
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
     name: "phoneNumbers"
-  });
+  }) as any;
 
   const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
     control: form.control,
     name: "sports"
-  });
+  }) as any;
 
   useEffect(() => {
     if (player) {
