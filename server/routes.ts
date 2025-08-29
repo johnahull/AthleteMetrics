@@ -376,6 +376,22 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.patch("/api/players/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const playerData = insertPlayerSchema.partial().parse(req.body);
+      const updatedPlayer = await storage.updatePlayer(id, playerData);
+      res.json(updatedPlayer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error updating player:", error);
+        res.status(500).json({ message: "Failed to update player" });
+      }
+    }
+  });
+
   // Keep existing measurement routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
