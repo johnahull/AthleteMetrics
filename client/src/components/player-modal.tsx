@@ -144,8 +144,13 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full p-0" style={{ height: '90vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+      <DialogContent className="max-w-4xl w-full p-0" style={{ 
+        height: '90vh', 
+        display: 'grid', 
+        gridTemplateRows: 'auto 1fr auto',
+        gridTemplateAreas: '"header" "content" "footer"'
+      }}>
+        <div className="px-6 pt-6 pb-4 border-b" style={{ gridArea: 'header' }}>
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
             <DialogDescription>
@@ -155,7 +160,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         </div>
         
         <Form {...form}>
-          <div className="px-6 py-4 flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+          <div className="px-6 py-4 overflow-y-auto" style={{ gridArea: 'content', minHeight: 0 }}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -540,7 +545,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t flex-shrink-0 bg-white" style={{ minHeight: '80px' }}>
+          <div className="px-6 py-4 border-t bg-white" style={{ gridArea: 'footer' }}>
             <div className="flex justify-end space-x-3">
               <Button 
                 type="button" 
