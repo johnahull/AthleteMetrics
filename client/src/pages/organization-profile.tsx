@@ -451,7 +451,7 @@ export default function OrganizationProfile() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Coaches Section */}
+        {/* Coaches Section - First */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -492,7 +492,7 @@ export default function OrganizationProfile() {
           </CardContent>
         </Card>
 
-        {/* Players Section */}
+        {/* Players Section - Second */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
