@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Link as LinkIcon, User } from "lucide-react";
+import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock } from "lucide-react";
 import { Link } from "wouter";
 
 type Organization = {
