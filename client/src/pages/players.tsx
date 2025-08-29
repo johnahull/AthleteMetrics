@@ -5,10 +5,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import PlayerModal from "@/components/player-modal";
+import { Badge } from "@/components/ui/badge";
 
 export default function Players() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -39,6 +40,32 @@ export default function Players() {
 
   const { data: teams } = useQuery({
     queryKey: ["/api/teams"],
+  });
+
+  // Get current user's organizations to fetch invitations
+  const { data: userOrgs } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+  });
+
+  // Get athlete invitations for the current organization
+  const { data: athleteInvitations } = useQuery({
+    queryKey: ["/api/invitations/athletes"],
+    queryFn: async () => {
+      if (!userOrgs || userOrgs.length === 0) return [];
+      
+      // For now, get invitations for the first organization
+      // In a real app, you'd need to determine which org context we're in
+      const orgId = userOrgs[0]?.organization?.id;
+      if (!orgId) return [];
+      
+      const response = await fetch(`/api/organizations/${orgId}/profile`);
+      if (!response.ok) throw new Error('Failed to fetch organization profile');
+      const orgData = await response.json();
+      
+      // Filter for athlete invitations only
+      return orgData.invitations?.filter((inv: any) => inv.role === 'athlete') || [];
+    },
+    enabled: !!userOrgs && userOrgs.length > 0,
   });
 
   const { data: players, isLoading } = useQuery({
@@ -80,6 +107,116 @@ export default function Players() {
     if (window.confirm(`Are you sure you want to delete "${playerName}"? This action cannot be undone.`)) {
       deletePlayerMutation.mutate(playerId);
     }
+  };
+
+  // Send invitation mutation
+  const sendInvitationMutation = useMutation({
+    mutationFn: async ({ email, organizationId }: { email: string; organizationId: string }) => {
+      const response = await apiRequest("POST", `/api/organizations/${organizationId}/invitations`, {
+        email,
+        roles: ["athlete"],
+        teamIds: []
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      toast({
+        title: "Success",
+        description: "Invitation sent successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to send invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete invitation mutation
+  const deleteInvitationMutation = useMutation({
+    mutationFn: async ({ organizationId, invitationId }: { organizationId: string; invitationId: string }) => {
+      await apiRequest("DELETE", `/api/organizations/${organizationId}/invitations/${invitationId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      toast({
+        title: "Success",
+        description: "Invitation deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Helper functions
+  const isInvitationExpired = (expiresAt: string) => {
+    return new Date() > new Date(expiresAt);
+  };
+
+  const formatExpirationDate = (expiresAt: string) => {
+    const expDate = new Date(expiresAt);
+    const now = new Date();
+    const diffTime = expDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return `Expired ${Math.abs(diffDays)} days ago`;
+    } else if (diffDays === 0) {
+      return 'Expires today';
+    } else {
+      return `Expires in ${diffDays} days`;
+    }
+  };
+
+  const handleSendInvitation = (email: string) => {
+    if (!userOrgs || userOrgs.length === 0) {
+      toast({
+        title: "Error",
+        description: "No organization context found",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const orgId = userOrgs[0]?.organization?.id;
+    if (!orgId) {
+      toast({
+        title: "Error",
+        description: "Organization ID not found",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    sendInvitationMutation.mutate({ email, organizationId: orgId });
+  };
+
+  const handleDeleteInvitation = (invitationId: string) => {
+    if (!userOrgs || userOrgs.length === 0) return;
+    
+    const orgId = userOrgs[0]?.organization?.id;
+    if (!orgId) return;
+    
+    if (window.confirm('Are you sure you want to delete this invitation?')) {
+      deleteInvitationMutation.mutate({ organizationId: orgId, invitationId });
+    }
+  };
+
+  const copyInviteLink = (token: string) => {
+    const inviteLink = `${window.location.origin}/accept-invitation?token=${token}`;
+    navigator.clipboard.writeText(inviteLink);
+    toast({
+      title: "Success",
+      description: "Invitation link copied to clipboard",
+    });
   };
 
   const clearFilters = () => {
@@ -232,6 +369,82 @@ export default function Players() {
         </CardContent>
       </Card>
 
+      {/* Pending Athlete Invitations */}
+      {athleteInvitations && athleteInvitations.length > 0 && (
+        <Card className="bg-white mb-6">
+          <CardContent className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Pending Athlete Invitations ({athleteInvitations.length})
+            </h3>
+            <div className="space-y-3">
+              {athleteInvitations.map((invitation: any) => {
+                const isExpired = isInvitationExpired(invitation.expiresAt);
+                return (
+                  <div 
+                    key={invitation.id} 
+                    className={`flex items-center justify-between p-4 rounded-lg border ${
+                      isExpired ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-600">
+                          Invited {new Date(invitation.createdAt).toLocaleDateString()}
+                        </p>
+                        <p className={`text-xs ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                          {formatExpirationDate(invitation.expiresAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        Athlete {isExpired ? '(Expired)' : '(Pending)'}
+                      </Badge>
+                      <div className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                        {isExpired ? (
+                          <>
+                            <AlertCircle className="h-3 w-3" />
+                            <span>Expired</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-3 w-3" />
+                            <span>Awaiting response</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyInviteLink(invitation.token)}
+                          title="Copy invitation link"
+                          data-testid={`button-copy-link-${invitation.id}`}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteInvitation(invitation.id)}
+                          title="Delete invitation"
+                          className="text-red-600 hover:text-red-700"
+                          data-testid={`button-delete-invitation-${invitation.id}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Players Table */}
       <Card className="bg-white">
         <CardContent className="p-0">
@@ -332,6 +545,20 @@ export default function Players() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+                          {/* Send Invitation Button - only show if player has email and no pending invitation */}
+                          {(player as any).emails && (player as any).emails.length > 0 && !athleteInvitations?.some((inv: any) => (player as any).emails.includes(inv.email)) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSendInvitation((player as any).emails[0])}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              disabled={sendInvitationMutation.isPending}
+                              title="Send invitation to access the system"
+                              data-testid={`button-invite-player-${player.id}`}
+                            >
+                              <Mail className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
