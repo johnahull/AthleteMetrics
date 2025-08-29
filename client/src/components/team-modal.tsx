@@ -145,7 +145,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                 <FormItem>
                   <FormLabel>Level</FormLabel>
                   <Select 
-                    value={field.value} 
+                    value={field.value || ""} 
                     onValueChange={field.onChange}
                     disabled={isPending}
                   >
@@ -174,6 +174,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                   <FormControl>
                     <Textarea 
                       {...field} 
+                      value={field.value || ""}
                       placeholder="Optional notes about this team..."
                       disabled={isPending}
                       rows={3}

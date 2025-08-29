@@ -223,7 +223,26 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/teams", requireAuth, async (req, res) => {
     try {
-      const teamData = insertTeamSchema.parse(req.body);
+      const currentUser = req.session.user;
+      
+      // Get user's organization for non-site-admins
+      let organizationId = req.body.organizationId;
+      
+      if (!organizationId && currentUser?.id) {
+        // For org admins and other users, get their primary organization
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        if (userOrgs.length > 0) {
+          organizationId = userOrgs[0].organizationId;
+        } else {
+          return res.status(400).json({ message: "User is not associated with any organization" });
+        }
+      }
+      
+      if (!organizationId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+      
+      const teamData = insertTeamSchema.parse({ ...req.body, organizationId });
       const team = await storage.createTeam(teamData);
       res.status(201).json(team);
     } catch (error) {
