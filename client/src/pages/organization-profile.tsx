@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -436,6 +436,50 @@ export default function OrganizationProfile() {
     }
   };
 
+  // Function to delete a pending invitation
+  const deletePendingUser = async (invitationId: string, email: string) => {
+    try {
+      const response = await fetch(`/api/organizations/${id}/invitations/${invitationId}`, {
+        method: "DELETE",
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete invitation");
+      }
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      toast({
+        title: "Invitation deleted",
+        description: `Invitation for ${email} has been removed`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Function to copy invitation URL to clipboard
+  const copyInvitationUrl = async (token: string, email: string) => {
+    try {
+      const inviteUrl = `${window.location.origin}/accept-invitation?token=${token}`;
+      await navigator.clipboard.writeText(inviteUrl);
+      toast({
+        title: "Copied to clipboard",
+        description: `Invitation link for ${email} copied successfully`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to copy invitation link",
+        variant: "destructive",
+      });
+    }
+  };
+
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
     queryKey: [`/api/organizations/${id}/profile`],
   });
@@ -521,6 +565,53 @@ export default function OrganizationProfile() {
                             <AlertCircle className="h-3 w-3" />
                             <span>Awaiting response</span>
                           </div>
+                          
+                          {/* Action buttons for pending invitations */}
+                          {(user?.role === "site_admin" || user?.role === "org_admin") && (
+                            <div className="flex items-center gap-1 ml-2">
+                              {/* Copy invitation URL button */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                data-testid={`copy-invitation-${invitation.id}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                              
+                              {/* Delete pending invitation button */}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    data-testid={`delete-pending-${invitation.id}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Pending Invitation</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete the pending invitation for {invitation.email}? This will remove their access and they won't be able to join the organization.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deletePendingUser(invitation.id, invitation.email)}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Delete Invitation
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
