@@ -199,7 +199,7 @@ export class DatabaseStorage implements IStorage {
       whereCondition = and(
         eq(userOrganizations.userId, userId),
         eq(userOrganizations.organizationId, organizationId)
-      );
+      ) as any;
     }
     
     const result = await db.select({ role: userOrganizations.role })
@@ -260,7 +260,8 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationProfile(organizationId: string): Promise<Organization & { 
     coaches: Array<{ user: User, roles: string[] }>, 
-    players: (Player & { teams: (Team & { organization: Organization })[] })[] 
+    players: (Player & { teams: (Team & { organization: Organization })[] })[], 
+    invitations: Invitation[] 
   } | null> {
     const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
     if (!organization) return null;
@@ -291,10 +292,20 @@ export class DatabaseStorage implements IStorage {
     // Get players via organization filter
     const players = await this.getPlayers({ organizationId });
     
+    // Get pending invitations for this organization
+    const organizationInvitations = await db.select()
+      .from(invitations)
+      .where(and(
+        eq(invitations.organizationId, organizationId),
+        eq(invitations.isUsed, "false"),
+        gte(invitations.expiresAt, new Date())
+      ));
+    
     return {
       ...organization,
       coaches,
-      players
+      players,
+      invitations: organizationInvitations
     };
   }
 

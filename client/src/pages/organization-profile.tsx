@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -71,6 +71,16 @@ type OrganizationProfile = {
       };
     }>;
   }>;
+  invitations: Array<{
+    id: string;
+    email: string;
+    role: string;
+    invitedBy: string;
+    token: string;
+    isUsed: string;
+    expiresAt: string;
+    createdAt: string;
+  }>;
 };
 
 // User Management Modal Component
@@ -78,6 +88,34 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Function to send invitation for a user
+  const sendInvitation = async (email: string, roles: string[]) => {
+    try {
+      const response = await fetch(`/api/organizations/${organizationId}/invitations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, roles }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to send invitation");
+      }
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
+      toast({
+        title: "Invitation sent",
+        description: `Invitation sent to ${email}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const createUserForm = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema.refine((data) => {
@@ -461,32 +499,101 @@ export default function OrganizationProfile() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {/* Pending Invitations Section */}
+              {organization.invitations && organization.invitations.filter(inv => inv.role !== 'athlete').length > 0 && (
+                <div className="border-b pb-3 mb-3">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    Pending Invitations ({organization.invitations.filter(inv => inv.role !== 'athlete').length})
+                  </h4>
+                  <div className="space-y-2">
+                    {organization.invitations.filter(inv => inv.role !== 'athlete').map((invitation) => (
+                      <div key={invitation.id} className="flex items-center justify-between p-2 bg-amber-50 rounded-lg border border-amber-200">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                          <p className="text-xs text-gray-600">
+                            Invited {new Date(invitation.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {invitation.role === 'org_admin' ? 'Admin' : 'Coach'} (Pending)
+                          </Badge>
+                          <div className="flex items-center gap-1 text-xs text-amber-600">
+                            <AlertCircle className="h-3 w-3" />
+                            <span>Awaiting response</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               {organization.coaches.length === 0 ? (
                 <p className="text-gray-500 text-sm">No coaches assigned</p>
               ) : (
-                organization.coaches.map((coach, index) => (
-                  <div key={`${coach.user.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">
-                        {coach.user.firstName} {coach.user.lastName}
-                      </p>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Mail className="h-3 w-3" />
-                        <span>{coach.user.email}</span>
+                organization.coaches.map((coach, index) => {
+                  // Check if there's a pending invitation for this user
+                  const pendingInvitation = organization.invitations?.find(
+                    inv => inv.email === coach.user.email && inv.isUsed === "false"
+                  );
+                  
+                  return (
+                    <div key={`${coach.user.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
+                          {coach.user.firstName} {coach.user.lastName}
+                        </p>
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Mail className="h-3 w-3" />
+                          <span>{coach.user.email}</span>
+                        </div>
+                        
+                        {/* Invitation Status */}
+                        <div className="flex items-center gap-2 mt-1">
+                          {pendingInvitation ? (
+                            <div className="flex items-center gap-1 text-xs text-amber-600">
+                              <Clock className="h-3 w-3" />
+                              <span>Invitation pending</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-xs text-green-600">
+                              <CheckCircle className="h-3 w-3" />
+                              <span>Active user</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {coach.roles.map((role) => (
+                            <Badge 
+                              key={role} 
+                              variant={role === 'org_admin' ? 'default' : 'secondary'}
+                            >
+                              {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}
+                            </Badge>
+                          ))}
+                        </div>
+                        
+                        {/* Send Invitation Button - only for admin users and if no pending invitation */}
+                        {(user?.role === "site_admin" || user?.role === "org_admin") && !pendingInvitation && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => sendInvitation(coach.user.email, coach.roles)}
+                            className="ml-2"
+                            data-testid={`send-invitation-${coach.user.id}`}
+                          >
+                            <Send className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      {coach.roles.map((role) => (
-                        <Badge 
-                          key={role} 
-                          variant={role === 'org_admin' ? 'default' : 'secondary'}
-                        >
-                          {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </CardContent>
