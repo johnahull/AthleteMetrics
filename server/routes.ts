@@ -921,7 +921,8 @@ export function registerRoutes(app: Express) {
           email: parsedInvitationData.email,
           firstName: "", // Will be filled when they accept invitation
           lastName: "",
-          role: "athlete" // Default role, will be overridden by organization roles
+          role: "athlete", // Default role, will be overridden by organization roles
+          password: "INVITATION_PENDING" // Placeholder password until they set one
         });
         existingUser = newUser;
       }
