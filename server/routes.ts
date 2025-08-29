@@ -140,6 +140,26 @@ export function registerRoutes(app: Express) {
         }
       }
       
+      // Try site admin login with username (convert to email format)
+      if (username && !username.includes('@')) {
+        const siteAdminEmail = username + "@admin.local";
+        const user = await storage.authenticateUser(siteAdminEmail, password);
+        if (user) {
+          req.session.user = {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role
+          };
+          return res.json({ 
+            success: true, 
+            user: req.session.user,
+            redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
+          });
+        }
+      }
+      
       res.status(401).json({ message: "Invalid credentials" });
     } catch (error) {
       console.error("Login error:", error);
