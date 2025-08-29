@@ -64,6 +64,7 @@ export default function Players() {
       
       // Filter for athlete invitations only
       const athleteInvitations = orgData.invitations?.filter((inv: any) => inv.role === 'athlete') || [];
+      console.log("Invitation data received:", athleteInvitations);
       return athleteInvitations;
     },
     enabled: !!userOrgs && userOrgs.length > 0,
