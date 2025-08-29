@@ -142,7 +142,11 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       const response = await fetch(`/api/organizations/${organizationId}/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          email: data.email,
+          roles: data.roles,
+          teamIds: [] // Optional field that the schema expects
+        }),
       });
       if (!response.ok) {
         const error = await response.json();
