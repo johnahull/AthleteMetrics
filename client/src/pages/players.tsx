@@ -390,7 +390,14 @@ export default function Players() {
                     }`}
                   >
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                      {invitation.firstName && invitation.lastName ? (
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{invitation.firstName} {invitation.lastName}</p>
+                          <p className="text-gray-600 text-xs">{invitation.email}</p>
+                        </div>
+                      ) : (
+                        <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                      )}
                       <div className="space-y-1">
                         <p className="text-xs text-gray-600">
                           Invited {new Date(invitation.createdAt).toLocaleDateString()}
