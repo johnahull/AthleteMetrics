@@ -820,7 +820,15 @@ export function registerRoutes(app: Express) {
       
       const { roles, ...invitationData } = req.body;
       console.log("Invitation data to parse:", invitationData);
-      const parsedInvitationData = insertInvitationSchema.omit({ role: true }).parse(invitationData);
+      
+      // Add server-generated fields
+      const invitationWithDefaults = {
+        ...invitationData,
+        invitedBy: currentUser.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
+      };
+      
+      const parsedInvitationData = insertInvitationSchema.omit({ role: true }).parse(invitationWithDefaults);
       
       // Validate roles array
       if (!roles || !Array.isArray(roles) || roles.length === 0) {
