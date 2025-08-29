@@ -108,6 +108,12 @@ export default function Sidebar() {
     location.startsWith('/organizations/') && 
     location !== '/organizations';
   
+  // Get user's organizations
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id,
+  });
+  
   const navigation = getNavigation(userRole, user?.id, isInOrganizationContext);
 
   return (
@@ -210,6 +216,13 @@ export default function Sidebar() {
           <div className="text-sm text-gray-600 px-3 py-2">
             <p className="font-medium">{user?.firstName} {user?.lastName}</p>
             <p className="text-xs">{user?.role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+            {userOrganizations && userOrganizations.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {userOrganizations.length === 1 
+                  ? userOrganizations[0].organization?.name 
+                  : `${userOrganizations[0].organization?.name} (+${userOrganizations.length - 1} more)`}
+              </p>
+            )}
           </div>
           
           <button
