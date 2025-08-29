@@ -12,6 +12,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Building2 } from "lucide-react";
+import { Link } from "wouter";
 
 type Organization = {
   id: string;
@@ -154,10 +155,14 @@ export default function Organizations() {
               {organizations?.map((org) => (
                 <div
                   key={org.id}
-                  className="p-4 border border-gray-200 rounded-lg"
+                  className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
                   data-testid={`organization-${org.id}`}
                 >
-                  <h3 className="font-semibold text-gray-900">{org.name}</h3>
+                  <Link href={`/organizations/${org.id}`}>
+                    <h3 className="font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer" data-testid={`organization-link-${org.id}`}>
+                      {org.name}
+                    </h3>
+                  </Link>
                   {org.description && (
                     <p className="text-sm text-gray-600 mt-1">{org.description}</p>
                   )}
