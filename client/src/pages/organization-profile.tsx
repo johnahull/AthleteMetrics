@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -480,6 +480,67 @@ export default function OrganizationProfile() {
     }
   };
 
+  // Function to resend invitation
+  const resendInvitation = async (email: string, role: string) => {
+    try {
+      const response = await fetch(`/api/organizations/${id}/invitations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          roles: [role],
+          teamIds: []
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to resend invitation");
+      }
+
+      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      toast({
+        title: "Invitation resent",
+        description: `New invitation sent to ${email}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Helper function to check if invitation is expired
+  const isInvitationExpired = (expiresAt: string) => {
+    return new Date(expiresAt) < new Date();
+  };
+
+  // Helper function to format expiration date
+  const formatExpirationDate = (expiresAt: string) => {
+    const expDate = new Date(expiresAt);
+    const now = new Date();
+    const isExpired = expDate < now;
+    
+    if (isExpired) {
+      return `Expired ${expDate.toLocaleDateString()}`;
+    } else {
+      const diffTime = expDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 1) {
+        return "Expires tomorrow";
+      } else if (diffDays <= 7) {
+        return `Expires in ${diffDays} days`;
+      } else {
+        return `Expires ${expDate.toLocaleDateString()}`;
+      }
+    }
+  };
+
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
     queryKey: [`/api/organizations/${id}/profile`],
   });
@@ -549,72 +610,104 @@ export default function OrganizationProfile() {
                     Pending Invitations ({organization.invitations.filter(inv => inv.role !== 'athlete').length})
                   </h4>
                   <div className="space-y-2">
-                    {organization.invitations.filter(inv => inv.role !== 'athlete').map((invitation) => (
-                      <div key={invitation.id} className="flex items-center justify-between p-2 bg-amber-50 rounded-lg border border-amber-200">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
-                          <p className="text-xs text-gray-600">
-                            Invited {new Date(invitation.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            {invitation.role === 'org_admin' ? 'Admin' : 'Coach'} (Pending)
-                          </Badge>
-                          <div className="flex items-center gap-1 text-xs text-amber-600">
-                            <AlertCircle className="h-3 w-3" />
-                            <span>Awaiting response</span>
+                    {organization.invitations.filter(inv => inv.role !== 'athlete').map((invitation) => {
+                      const isExpired = isInvitationExpired(invitation.expiresAt);
+                      return (
+                        <div key={invitation.id} className={`flex items-center justify-between p-2 rounded-lg border ${isExpired ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                            <div className="space-y-1">
+                              <p className="text-xs text-gray-600">
+                                Invited {new Date(invitation.createdAt).toLocaleDateString()}
+                              </p>
+                              <p className={`text-xs ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                                {formatExpirationDate(invitation.expiresAt)}
+                              </p>
+                            </div>
                           </div>
-                          
-                          {/* Action buttons for pending invitations */}
-                          {(user?.role === "site_admin" || user?.role === "org_admin") && (
-                            <div className="flex items-center gap-1 ml-2">
-                              {/* Copy invitation URL button */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
-                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                data-testid={`copy-invitation-${invitation.id}`}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                              
-                              {/* Delete pending invitation button */}
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {invitation.role === 'org_admin' ? 'Admin' : 'Coach'} {isExpired ? '(Expired)' : '(Pending)'}
+                            </Badge>
+                            <div className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                              {isExpired ? (
+                                <>
+                                  <AlertCircle className="h-3 w-3" />
+                                  <span>Expired</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="h-3 w-3" />
+                                  <span>Awaiting response</span>
+                                </>
+                              )}
+                            </div>
+                            
+                            {/* Action buttons for pending invitations */}
+                            {(user?.role === "site_admin" || user?.role === "org_admin") && (
+                              <div className="flex items-center gap-1 ml-2">
+                                {/* Resend invitation button for expired invitations */}
+                                {isExpired && (
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    data-testid={`delete-pending-${invitation.id}`}
+                                    onClick={() => resendInvitation(invitation.email, invitation.role)}
+                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    data-testid={`resend-invitation-${invitation.id}`}
                                   >
-                                    <Trash2 className="h-3 w-3" />
+                                    <RefreshCw className="h-3 w-3" />
                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Pending Invitation</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to delete the pending invitation for {invitation.email}? This will remove their access and they won't be able to join the organization.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deletePendingUser(invitation.id, invitation.email)}
-                                      className="bg-red-600 hover:bg-red-700"
+                                )}
+                                
+                                {/* Copy invitation URL button (only for non-expired) */}
+                                {!isExpired && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
+                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    data-testid={`copy-invitation-${invitation.id}`}
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                
+                                {/* Delete pending invitation button */}
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      data-testid={`delete-pending-${invitation.id}`}
                                     >
-                                      Delete Invitation
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          )}
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete {isExpired ? 'Expired' : 'Pending'} Invitation</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete the {isExpired ? 'expired' : 'pending'} invitation for {invitation.email}? This will remove their access and they won't be able to join the organization.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deletePendingUser(invitation.id, invitation.email)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                      >
+                                        Delete Invitation
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
