@@ -185,7 +185,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <button 
-                          onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                          onClick={() => setLocation(`/athletes/${measurement.player.id}`)}
                           className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                         >
                           {measurement.player.fullName}

@@ -287,7 +287,7 @@ export default function Players() {
                           </div>
                           <div>
                             <button 
-                              onClick={() => setLocation(`/players/${player.id}`)}
+                              onClick={() => setLocation(`/athletes/${player.id}`)}
                               className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                             >
                               {player.fullName}
@@ -319,7 +319,7 @@ export default function Players() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setLocation(`/players/${player.id}`)}
+                            onClick={() => setLocation(`/athletes/${player.id}`)}
                             data-testid={`button-view-player-${player.id}`}
                           >
                             <Eye className="h-4 w-4" />
