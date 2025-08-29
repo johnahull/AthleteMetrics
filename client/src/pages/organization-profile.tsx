@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
@@ -25,12 +26,12 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["org_admin", "coach", "athlete"]),
+  roles: z.array(z.enum(["org_admin", "coach", "athlete"])).min(1, "At least one role must be selected"),
 });
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
-  role: z.enum(["org_admin", "coach", "athlete"]),
+  roles: z.array(z.enum(["org_admin", "coach", "athlete"])).min(1, "At least one role must be selected"),
 });
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
@@ -42,14 +43,13 @@ type OrganizationProfile = {
   description?: string;
   location?: string;
   coaches: Array<{
-    id: string;
-    role: string;
     user: {
       id: string;
       firstName: string;
       lastName: string;
       email: string;
     };
+    roles: string[];
   }>;
   players: Array<{
     id: string;
@@ -80,21 +80,39 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
   const { user } = useAuth();
 
   const createUserForm = useForm<CreateUserForm>({
-    resolver: zodResolver(createUserSchema),
+    resolver: zodResolver(createUserSchema.refine((data) => {
+      // Athletes cannot have other roles
+      if (data.roles.includes("athlete") && data.roles.length > 1) {
+        return false;
+      }
+      return true;
+    }, {
+      message: "Athletes cannot have additional roles",
+      path: ["roles"],
+    })),
     defaultValues: {
       email: "",
       password: "",
       firstName: "",
       lastName: "",
-      role: "athlete",
+      roles: ["athlete"],
     },
   });
 
   const invitationForm = useForm<InvitationForm>({
-    resolver: zodResolver(invitationSchema),
+    resolver: zodResolver(invitationSchema.refine((data) => {
+      // Athletes cannot have other roles
+      if (data.roles.includes("athlete") && data.roles.length > 1) {
+        return false;
+      }
+      return true;
+    }, {
+      message: "Athletes cannot have additional roles",
+      path: ["roles"],
+    })),
     defaultValues: {
       email: "",
-      role: "athlete",
+      roles: ["athlete"],
     },
   });
 
@@ -237,22 +255,48 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                 
                 <FormField
                   control={createUserForm.control}
-                  name="role"
+                  name="roles"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Role</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-role">
-                            <SelectValue placeholder="Select a role" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="athlete">Athlete</SelectItem>
-                          <SelectItem value="coach">Coach</SelectItem>
-                          <SelectItem value="org_admin">Organization Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Roles</FormLabel>
+                      <div className="space-y-2">
+                        {[
+                          { value: "athlete", label: "Athlete" },
+                          { value: "coach", label: "Coach" },
+                          { value: "org_admin", label: "Organization Admin" },
+                        ].map((role) => (
+                          <div key={role.value} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`role-${role.value}`}
+                              checked={field.value?.includes(role.value as any)}
+                              onCheckedChange={(checked) => {
+                                const currentRoles = field.value || [];
+                                if (checked) {
+                                  // If selecting athlete, clear other roles
+                                  if (role.value === "athlete") {
+                                    field.onChange(["athlete"]);
+                                  } else {
+                                    // If selecting other role while athlete is selected, replace athlete
+                                    const newRoles = currentRoles.includes("athlete") 
+                                      ? [role.value] 
+                                      : [...currentRoles, role.value];
+                                    field.onChange(newRoles);
+                                  }
+                                } else {
+                                  field.onChange(currentRoles.filter((r: string) => r !== role.value));
+                                }
+                              }}
+                              data-testid={`checkbox-role-${role.value}`}
+                            />
+                            <label
+                              htmlFor={`role-${role.value}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {role.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -289,22 +333,48 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                 
                 <FormField
                   control={invitationForm.control}
-                  name="role"
+                  name="roles"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Role</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-invite-role">
-                            <SelectValue placeholder="Select a role" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="athlete">Athlete</SelectItem>
-                          <SelectItem value="coach">Coach</SelectItem>
-                          <SelectItem value="org_admin">Organization Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Roles</FormLabel>
+                      <div className="space-y-2">
+                        {[
+                          { value: "athlete", label: "Athlete" },
+                          { value: "coach", label: "Coach" },
+                          { value: "org_admin", label: "Organization Admin" },
+                        ].map((role) => (
+                          <div key={role.value} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`invite-role-${role.value}`}
+                              checked={field.value?.includes(role.value as any)}
+                              onCheckedChange={(checked) => {
+                                const currentRoles = field.value || [];
+                                if (checked) {
+                                  // If selecting athlete, clear other roles
+                                  if (role.value === "athlete") {
+                                    field.onChange(["athlete"]);
+                                  } else {
+                                    // If selecting other role while athlete is selected, replace athlete
+                                    const newRoles = currentRoles.includes("athlete") 
+                                      ? [role.value] 
+                                      : [...currentRoles, role.value];
+                                    field.onChange(newRoles);
+                                  }
+                                } else {
+                                  field.onChange(currentRoles.filter((r: string) => r !== role.value));
+                                }
+                              }}
+                              data-testid={`checkbox-invite-role-${role.value}`}
+                            />
+                            <label
+                              htmlFor={`invite-role-${role.value}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {role.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -394,8 +464,8 @@ export default function OrganizationProfile() {
               {organization.coaches.length === 0 ? (
                 <p className="text-gray-500 text-sm">No coaches assigned</p>
               ) : (
-                organization.coaches.map((coach) => (
-                  <div key={coach.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                organization.coaches.map((coach, index) => (
+                  <div key={`${coach.user.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">
                         {coach.user.firstName} {coach.user.lastName}
@@ -405,9 +475,16 @@ export default function OrganizationProfile() {
                         <span>{coach.user.email}</span>
                       </div>
                     </div>
-                    <Badge variant={coach.role === 'org_admin' ? 'default' : 'secondary'}>
-                      {coach.role === 'org_admin' ? 'Admin' : 'Coach'}
-                    </Badge>
+                    <div className="flex gap-1">
+                      {coach.roles.map((role) => (
+                        <Badge 
+                          key={role} 
+                          variant={role === 'org_admin' ? 'default' : 'secondary'}
+                        >
+                          {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 ))
               )}
