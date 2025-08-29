@@ -113,6 +113,9 @@ export default function Sidebar() {
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id,
   });
+
+  // Debug: Log the organizations data
+  console.log("User organizations data:", userOrganizations);
   
   const navigation = getNavigation(userRole, user?.id, isInOrganizationContext);
 
@@ -216,11 +219,11 @@ export default function Sidebar() {
           <div className="text-sm text-gray-600 px-3 py-2">
             <p className="font-medium">{user?.firstName} {user?.lastName}</p>
             <p className="text-xs">{user?.role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
-            {userOrganizations && userOrganizations.length > 0 && (
+            {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
               <p className="text-xs text-gray-500 mt-1">
                 {userOrganizations.length === 1 
-                  ? userOrganizations[0].organization?.name 
-                  : `${userOrganizations[0].organization?.name} (+${userOrganizations.length - 1} more)`}
+                  ? userOrganizations[0]?.organization?.name 
+                  : `${userOrganizations[0]?.organization?.name} (+${userOrganizations.length - 1} more)`}
               </p>
             )}
           </div>
