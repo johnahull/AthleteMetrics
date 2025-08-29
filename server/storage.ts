@@ -398,19 +398,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTeam(id: string): Promise<(Team & { organization: Organization }) | undefined> {
-    const result = await db.select()
+    const result: any[] = await db.select()
       .from(teams)
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(teams.id, id));
     
     if (result.length === 0) return undefined;
     
-    const { teams: team, organizations } = result[0];
-    return { ...team, organization: organizations };
+    const { teams: team, organizations: org } = result[0];
+    return { ...team, organization: org };
   }
 
   async createTeam(team: InsertTeam): Promise<Team> {
-    const [newTeam] = await db.insert(teams).values(team).returning();
+    const [newTeam] = await db.insert(teams).values({
+      name: team.name,
+      organizationId: team.organizationId!,
+      level: team.level || null,
+      notes: team.notes || null
+    }).returning();
     return newTeam;
   }
 
