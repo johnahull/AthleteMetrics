@@ -244,7 +244,7 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   isUsed: true,
 }).extend({
   email: z.string().email("Invalid email format"),
-  role: z.enum(["athlete", "coach", "org_admin"]),
+  role: z.enum(["athlete", "coach", "org_admin", "site_admin"]),
   teamIds: z.array(z.string()).optional(),
 });
 
@@ -295,6 +295,17 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type ChangePassword = z.infer<typeof changePasswordSchema>;
+
+// Schema for creating site admin users
+export const createSiteAdminSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  password: z.string().min(6, "Password must be at least 6 characters").optional(),
+  sendInvitation: z.boolean().default(false),
+});
+
+export type CreateSiteAdmin = z.infer<typeof createSiteAdminSchema>;
 
 export type InsertUserOrganization = z.infer<typeof insertUserOrganizationSchema>;
 export type UserOrganization = typeof userOrganizations.$inferSelect;
