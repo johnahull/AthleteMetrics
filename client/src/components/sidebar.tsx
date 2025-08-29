@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { 
   LayoutDashboard, 
   Users, 
@@ -15,6 +16,38 @@ import {
   UserCog,
   User
 } from "lucide-react";
+
+// Component to handle organization profile link for org admins
+function OrganizationProfileLink({ user, location }: { user: any, location: string }) {
+  const { data: organizations } = useQuery({
+    queryKey: ["/api/organizations-with-users"],
+    enabled: !!user?.id && user?.role === "org_admin",
+  });
+
+  if (!organizations || !Array.isArray(organizations) || organizations.length === 0) {
+    return null;
+  }
+
+  const orgId = organizations[0]?.id;
+  const isActive = location === `/organizations/${orgId}`;
+
+  return (
+    <Link href={`/organizations/${orgId}`}>
+      <div
+        className={cn(
+          "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+          isActive
+            ? "bg-primary text-white" 
+            : "text-gray-700 hover:bg-gray-100"
+        )}
+        data-testid="nav-organization-profile"
+      >
+        <Building2 className="h-5 w-5" />
+        <span>My Organization</span>
+      </div>
+    </Link>
+  );
+}
 
 const getNavigation = (userRole: string, userId?: string) => {
   // Athletes get a restricted navigation menu
@@ -111,6 +144,10 @@ export default function Sidebar() {
       <div className="p-4 border-t border-gray-200">
         <div className="space-y-2">
           {/* Profile Link for admins and coaches - but not for legacy admin */}
+          {user && user.role === "org_admin" && user.id && (
+            <OrganizationProfileLink user={user} location={location} />
+          )}
+          
           {user && (user.role === "site_admin" || user.role === "org_admin" || user.role === "coach") && user.id && (
             <Link href="/profile">
               <div
