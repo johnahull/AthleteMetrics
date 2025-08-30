@@ -1179,8 +1179,41 @@ export function registerRoutes(app: Express) {
       const { id } = req.params;
       const { role } = req.body;
       
-      const user = await storage.updateUser(id, { role });
-      res.json(user);
+      // Get the user to check current role and organization membership
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check if user belongs to any organization
+      const userOrgs = await storage.getUserOrganizations(id);
+      const isOrgUser = userOrgs && userOrgs.length > 0;
+
+      // Role validation rules
+      if (isOrgUser && role === "site_admin") {
+        return res.status(400).json({ 
+          message: "Users from organizations cannot be made site admins" 
+        });
+      }
+
+      // Prevent conflicting role combinations: athlete vs coach/org_admin
+      const currentRole = user.role;
+      if ((currentRole === 'athlete' && (role === 'coach' || role === 'org_admin')) ||
+          ((currentRole === 'coach' || currentRole === 'org_admin') && role === 'athlete')) {
+        return res.status(400).json({ 
+          message: "Athletes cannot have coach/admin roles and vice versa" 
+        });
+      }
+
+      // Valid roles for organization users
+      if (isOrgUser && !['athlete', 'coach', 'org_admin'].includes(role)) {
+        return res.status(400).json({ 
+          message: "Invalid role for organization user" 
+        });
+      }
+      
+      const updatedUser = await storage.updateUser(id, { role });
+      res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user role:", error);
       res.status(500).json({ message: "Failed to update user role" });
