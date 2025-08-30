@@ -60,14 +60,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500">Welcome,</span>
                   <span className="font-medium text-gray-900">{user.firstName || user.username}</span>
-                  {user.role && (
-                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-md">
-                      {user.role === 'site_admin' ? 'Site Admin' : 
-                       user.role === 'org_admin' ? 'Org Admin' : 
-                       user.role === 'coach' ? 'Coach' : 
-                       user.role === 'athlete' ? 'Athlete' : user.role}
-                    </span>
-                  )}
                 </div>
                 <Button
                   variant="ghost"
