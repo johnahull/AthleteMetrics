@@ -502,7 +502,7 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
-  async acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<User> {
+  async acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }> {
     const invitation = await this.getInvitation(token);
     if (!invitation) throw new Error("Invalid or expired invitation");
 
@@ -551,6 +551,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // If user is an athlete, ensure player record exists and is linked to teams
+    let playerId: string | undefined;
     if (invitation.role === "athlete") {
       // Check if player already exists for this email
       const existingPlayers = await db.select().from(players)
@@ -559,6 +560,7 @@ export class DatabaseStorage implements IStorage {
       if (existingPlayers.length > 0) {
         // Player exists - just add to teams if specified
         const player = existingPlayers[0];
+        playerId = player.id;
         if (invitation.teamIds && invitation.teamIds.length > 0) {
           for (const teamId of invitation.teamIds) {
             try {
@@ -581,6 +583,7 @@ export class DatabaseStorage implements IStorage {
           sports: [],
           emails: [user.email]
         });
+        playerId = player.id;
         
         // Add player to teams if specified
         if (invitation.teamIds && invitation.teamIds.length > 0) {
@@ -594,7 +597,7 @@ export class DatabaseStorage implements IStorage {
     // Mark invitation as used
     await db.update(invitations).set({ isUsed: "true" }).where(eq(invitations.token, token));
 
-    return user;
+    return { user, playerId };
   }
 
   // Players (legacy athletes)

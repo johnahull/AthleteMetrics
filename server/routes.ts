@@ -593,7 +593,7 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Invitation not found" });
       }
       
-      const user = await storage.acceptInvitation(token, {
+      const result = await storage.acceptInvitation(token, {
         email: invitation.email,
         password,
         firstName,
@@ -602,18 +602,24 @@ export function registerRoutes(app: Express) {
       
       // Log the new user in
       req.session.user = {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role
+        id: result.user.id,
+        email: result.user.email,
+        firstName: result.user.firstName,
+        lastName: result.user.lastName,
+        role: result.user.role
       };
+      
+      // Determine redirect URL - use playerId for athletes
+      let redirectUrl = "/";
+      if (result.user.role === "athlete" && result.playerId) {
+        redirectUrl = `/athletes/${result.playerId}`;
+      }
       
       res.json({ 
         success: true, 
         user: req.session.user,
         message: "Account created successfully!",
-        redirectUrl: user.role === "athlete" ? `/athletes/${user.id}` : "/"
+        redirectUrl
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);
