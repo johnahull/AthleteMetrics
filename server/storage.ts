@@ -46,7 +46,7 @@ export interface IStorage {
   // Invitations
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
-  acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<User>;
+  acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }>;
 
   // Players (legacy athletes)
   getPlayers(filters?: { 
