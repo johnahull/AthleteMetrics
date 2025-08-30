@@ -11,8 +11,10 @@ import crypto from "crypto";
 
 export interface IStorage {
   // Authentication & Users
-  authenticateUser(email: string, password: string): Promise<User | null>;
+  authenticateUser(username: string, password: string): Promise<User | null>;
+  authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
@@ -46,7 +48,7 @@ export interface IStorage {
   // Invitations
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
-  acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }>;
+  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }>;
 
   // Players (legacy athletes)
   getPlayers(filters?: { 
@@ -119,7 +121,15 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   // Authentication & Users
-  async authenticateUser(email: string, password: string): Promise<User | null> {
+  async authenticateUser(username: string, password: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    if (!user) return null;
+    
+    const isValid = await bcrypt.compare(password, user.password);
+    return isValid ? user : null;
+  }
+
+  async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     if (!user) return null;
     
@@ -129,6 +139,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
     return user || undefined;
   }
 
@@ -502,7 +517,7 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
-  async acceptInvitation(token: string, userInfo: { email: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }> {
+  async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }> {
     const invitation = await this.getInvitation(token);
     if (!invitation) throw new Error("Invalid or expired invitation");
 
@@ -514,6 +529,7 @@ export class DatabaseStorage implements IStorage {
       await db.update(users)
         .set({ 
           password: await bcrypt.hash(userInfo.password, 10),
+          username: userInfo.username,
           firstName: userInfo.firstName,
           lastName: userInfo.lastName
         })

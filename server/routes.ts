@@ -116,12 +116,13 @@ export function registerRoutes(app: Express) {
         return; // Prevent double response
       }
       
-      // Handle new email-based login
-      if (email) {
-        const user = await storage.authenticateUser(email, password);
+      // Handle username-based login
+      if (username && username !== "admin") {
+        const user = await storage.authenticateUser(username, password);
         if (user) {
           req.session.user = {
             id: user.id,
+            username: user.username,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
@@ -149,10 +150,11 @@ export function registerRoutes(app: Express) {
       
       // Also try email-based login with username field (for backwards compatibility)
       if (username && username.includes('@')) {
-        const user = await storage.authenticateUser(username, password);
+        const user = await storage.authenticateUserByEmail(username, password);
         if (user) {
           req.session.user = {
             id: user.id,
+            username: user.username,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
@@ -443,7 +445,7 @@ export function registerRoutes(app: Express) {
       
       // If using old admin system, find the site admin user
       if (!submittedById && req.session.admin) {
-        const siteAdmin = await storage.getUserByEmail("admin@athleteperformancehub.com");
+        const siteAdmin = await storage.getUserByUsername("admin");
         submittedById = siteAdmin?.id;
       }
       
@@ -518,7 +520,7 @@ export function registerRoutes(app: Express) {
       
       // If using old admin system, find the site admin user
       if (!invitedById && req.session.admin) {
-        const siteAdmin = await storage.getUserByEmail("admin@athleteperformancehub.com");
+        const siteAdmin = await storage.getUserByUsername("admin");
         invitedById = siteAdmin?.id;
       }
       
@@ -606,7 +608,21 @@ export function registerRoutes(app: Express) {
   app.post("/api/invitations/:token/accept", async (req, res) => {
     try {
       const { token } = req.params;
-      const { password, firstName, lastName } = req.body;
+      const { password, firstName, lastName, username } = req.body;
+      
+      if (!username || typeof username !== 'string' || username.trim().length < 3) {
+        return res.status(400).json({ message: "Username must be at least 3 characters long" });
+      }
+      
+      if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
+        return res.status(400).json({ message: "Username can only contain letters, numbers, periods, hyphens, and underscores" });
+      }
+      
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already taken. Please choose a different username." });
+      }
       
       const invitation = await storage.getInvitation(token);
       if (!invitation) {
@@ -615,6 +631,7 @@ export function registerRoutes(app: Express) {
       
       const result = await storage.acceptInvitation(token, {
         email: invitation.email,
+        username,
         password,
         firstName,
         lastName
@@ -623,6 +640,7 @@ export function registerRoutes(app: Express) {
       // Log the new user in
       req.session.user = {
         id: result.user.id,
+        username: result.user.username,
         email: result.user.email,
         firstName: result.user.firstName,
         lastName: result.user.lastName,

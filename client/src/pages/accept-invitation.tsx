@@ -31,6 +31,7 @@ export default function AcceptInvitation() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    username: '',
     password: '',
     confirmPassword: ''
   });
@@ -80,6 +81,21 @@ export default function AcceptInvitation() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.username.trim()) {
+      setError('Username is required');
+      return;
+    }
+    
+    if (formData.username.length < 3) {
+      setError('Username must be at least 3 characters long');
+      return;
+    }
+    
+    if (!/^[a-zA-Z0-9._-]+$/.test(formData.username)) {
+      setError('Username can only contain letters, numbers, periods, hyphens, and underscores');
+      return;
+    }
+    
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -102,6 +118,7 @@ export default function AcceptInvitation() {
         body: JSON.stringify({
           firstName: formData.firstName,
           lastName: formData.lastName,
+          username: formData.username,
           password: formData.password,
         }),
       });
@@ -214,6 +231,22 @@ export default function AcceptInvitation() {
                   data-testid="input-last-name"
                 />
               </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                value={formData.username}
+                onChange={handleInputChange('username')}
+                placeholder="Choose a unique username"
+                required
+                data-testid="input-username"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Username must be unique and can contain letters, numbers, periods, hyphens, and underscores
+              </p>
             </div>
 
             <div>
