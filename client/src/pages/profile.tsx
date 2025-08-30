@@ -181,6 +181,19 @@ export default function Profile() {
                   )}
                 />
 
+                <div>
+                  <FormLabel>Username</FormLabel>
+                  <Input
+                    value={user?.username || ""}
+                    disabled
+                    className="bg-gray-50"
+                    data-testid="input-profile-username"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Username cannot be changed
+                  </p>
+                </div>
+
                 <FormField
                   control={profileForm.control}
                   name="email"
