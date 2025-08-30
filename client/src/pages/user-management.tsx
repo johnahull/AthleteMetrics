@@ -221,6 +221,27 @@ export default function UserManagement() {
     },
   });
 
+  const toggleUserStatusMutation = useMutation({
+    mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
+      const res = await apiRequest("PUT", `/api/users/${userId}/status`, { isActive });
+      return res.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      toast({ 
+        title: "User status updated!", 
+        description: `User has been ${variables.isActive ? 'activated' : 'deactivated'}`
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error updating user status", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    },
+  });
+
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
     sendInviteMutation.mutate(data);
   };
@@ -236,6 +257,15 @@ export default function UserManagement() {
   const handleDeleteUser = (userId: string, userName: string) => {
     if (confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
       deleteUserMutation.mutate(userId);
+    }
+  };
+
+  const handleToggleUserStatus = (userId: string, userName: string, currentStatus: string) => {
+    const isCurrentlyActive = currentStatus === "true";
+    const action = isCurrentlyActive ? "deactivate" : "activate";
+    
+    if (confirm(`Are you sure you want to ${action} ${userName}?`)) {
+      toggleUserStatusMutation.mutate({ userId, isActive: !isCurrentlyActive });
     }
   };
 
@@ -647,13 +677,19 @@ export default function UserManagement() {
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            {userOrg.user.isActive === "true" ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-600" />
+                            )}
                             <div>
                               <p className="font-medium text-gray-900" data-testid={`user-name-${userOrg.user.id}`}>
                                 {userOrg.user.firstName} {userOrg.user.lastName}
                               </p>
                               <p className="text-sm text-gray-600" data-testid={`user-email-${userOrg.user.id}`}>
-                                {userOrg.user.email} • <span className="text-green-600">Active</span>
+                                {userOrg.user.email} • <span className={userOrg.user.isActive === "true" ? "text-green-600" : "text-red-600"}>
+                                  {userOrg.user.isActive === "true" ? "Active" : "Inactive"}
+                                </span>
                               </p>
                             </div>
                             <div className="ml-4">
@@ -673,6 +709,23 @@ export default function UserManagement() {
                         </div>
                         
                         <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleUserStatus(
+                              userOrg.user.id,
+                              `${userOrg.user.firstName} ${userOrg.user.lastName}`,
+                              userOrg.user.isActive
+                            )}
+                            className={userOrg.user.isActive === "true" ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
+                            data-testid={`user-toggle-status-${userOrg.user.id}`}
+                          >
+                            {userOrg.user.isActive === "true" ? (
+                              <XCircle className="h-4 w-4" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4" />
+                            )}
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
