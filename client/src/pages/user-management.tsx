@@ -430,25 +430,38 @@ export default function UserManagement() {
                       <FormField
                         control={inviteForm.control}
                         name="role"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Role</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="invite-role-select">
-                                  <SelectValue placeholder="Select role" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="athlete">Athlete</SelectItem>
-                                <SelectItem value="coach">Coach</SelectItem>
-                                <SelectItem value="org_admin">Org Admin</SelectItem>
-                                <SelectItem value="site_admin">Site Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const selectedOrgId = inviteForm.watch("organizationId");
+                          const isOrgUser = selectedOrgId && selectedOrgId.length > 0;
+                          
+                          return (
+                            <FormItem>
+                              <FormLabel>Role</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="invite-role-select">
+                                    <SelectValue placeholder="Select role" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="athlete">Athlete</SelectItem>
+                                  <SelectItem value="coach">Coach</SelectItem>
+                                  <SelectItem value="org_admin">Org Admin</SelectItem>
+                                  {/* Site Admin only available for users not tied to organizations */}
+                                  {!isOrgUser && (
+                                    <SelectItem value="site_admin">Site Admin</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                              {isOrgUser && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Note: Coaches and Org Admins can have both roles. Athletes cannot have coach/admin roles.
+                                </p>
+                              )}
+                            </FormItem>
+                          );
+                        }}
                       />
                       <FormField
                         control={inviteForm.control}
@@ -687,7 +700,7 @@ export default function UserManagement() {
                                 {userOrg.user.firstName} {userOrg.user.lastName}
                               </p>
                               <p className="text-sm text-gray-600" data-testid={`user-username-${userOrg.user.id}`}>
-                                @{userOrg.user.username} • <span className={userOrg.user.isActive === "true" ? "text-green-600" : "text-red-600"}>
+                                {userOrg.user.email} • <span className={userOrg.user.isActive === "true" ? "text-green-600" : "text-red-600"}>
                                   {userOrg.user.isActive === "true" ? "Active" : "Inactive"}
                                 </span>
                               </p>
@@ -695,14 +708,27 @@ export default function UserManagement() {
                             <div className="ml-4">
                               <select
                                 value={userOrg.user.role}
-                                onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
+                                onChange={(e) => {
+                                  const newRole = e.target.value;
+                                  const currentRole = userOrg.user.role;
+                                  
+                                  // Validate role transitions
+                                  if ((currentRole === 'athlete' && (newRole === 'coach' || newRole === 'org_admin')) ||
+                                      ((currentRole === 'coach' || currentRole === 'org_admin') && newRole === 'athlete')) {
+                                    if (!confirm('Athletes cannot be coaches/admins and vice versa. Are you sure you want to change this role?')) {
+                                      return;
+                                    }
+                                  }
+                                  
+                                  handleRoleChange(userOrg.user.id, newRole);
+                                }}
                                 className="text-sm border border-gray-300 rounded px-2 py-1"
                                 data-testid={`user-role-select-${userOrg.user.id}`}
                               >
                                 <option value="athlete">Athlete</option>
                                 <option value="coach">Coach</option>
                                 <option value="org_admin">Org Admin</option>
-                                <option value="site_admin">Site Admin</option>
+                                {/* Site Admin not available for organization users */}
                               </select>
                             </div>
                           </div>
