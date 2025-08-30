@@ -672,7 +672,7 @@ export default function UserManagement() {
                     {/* Active Users */}
                     {org.users?.map((userOrg) => (
                       <div 
-                        key={`${userOrg.user.id}-${org.id}`} 
+                        key={userOrg.id} 
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
                       >
                         <div className="flex-1">
