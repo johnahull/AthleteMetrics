@@ -225,7 +225,7 @@ export default function Sidebar() {
           
           {/* User Info & Logout */}
           <div className="text-sm text-gray-600 px-3 py-2">
-            <p className="font-medium">{user?.firstName} {user?.lastName}</p>
+            <p className="font-medium">{user?.username}</p>
             <p className="text-xs">{user?.role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
             {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
               <p className="text-xs text-gray-500 mt-1">
