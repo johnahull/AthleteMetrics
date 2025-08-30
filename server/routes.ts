@@ -470,7 +470,23 @@ export function registerRoutes(app: Express) {
   // Keep existing analytics routes
   app.get("/api/analytics/dashboard", requireAuth, async (req, res) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const currentUser = req.session.user;
+      
+      // Determine organization context based on user role
+      let organizationId: string | undefined;
+      
+      // Site admins see site-wide stats
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        currentUser?.username === "admin" ||
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      
+      if (!isSiteAdmin) {
+        // Org admins and coaches see their organization stats
+        const userOrgs = await storage.getUserOrganizations(currentUser!.id);
+        organizationId = userOrgs[0]?.organizationId; // Use first organization
+      }
+      
+      const stats = await storage.getDashboardStats(organizationId);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
