@@ -686,8 +686,8 @@ export default function UserManagement() {
                               <p className="font-medium text-gray-900" data-testid={`user-name-${userOrg.user.id}`}>
                                 {userOrg.user.firstName} {userOrg.user.lastName}
                               </p>
-                              <p className="text-sm text-gray-600" data-testid={`user-email-${userOrg.user.id}`}>
-                                {userOrg.user.email} • <span className={userOrg.user.isActive === "true" ? "text-green-600" : "text-red-600"}>
+                              <p className="text-sm text-gray-600" data-testid={`user-username-${userOrg.user.id}`}>
+                                @{userOrg.user.username} • <span className={userOrg.user.isActive === "true" ? "text-green-600" : "text-red-600"}>
                                   {userOrg.user.isActive === "true" ? "Active" : "Inactive"}
                                 </span>
                               </p>
