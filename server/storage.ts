@@ -628,6 +628,23 @@ export class DatabaseStorage implements IStorage {
       await this.setPlayerTeams(newPlayer.id, player.teamIds);
     }
     
+    // Update any existing user records with the same email addresses
+    if (player.emails && player.emails.length > 0) {
+      for (const email of player.emails) {
+        try {
+          await db.update(users)
+            .set({ 
+              firstName: player.firstName, 
+              lastName: player.lastName 
+            })
+            .where(eq(users.email, email));
+        } catch (error) {
+          // Log but don't fail if user update fails
+          console.log(`Could not update user record for email ${email}:`, error);
+        }
+      }
+    }
+    
     return newPlayer;
   }
 
@@ -635,12 +652,15 @@ export class DatabaseStorage implements IStorage {
     const updateData: any = { ...player };
     
     // Update full name if first or last name changed
+    let finalFirstName: string | undefined;
+    let finalLastName: string | undefined;
+    
     if (player.firstName || player.lastName) {
       const existing = await this.getPlayer(id);
       if (existing) {
-        const firstName = player.firstName || existing.firstName;
-        const lastName = player.lastName || existing.lastName;
-        updateData.fullName = `${firstName} ${lastName}`;
+        finalFirstName = player.firstName || existing.firstName;
+        finalLastName = player.lastName || existing.lastName;
+        updateData.fullName = `${finalFirstName} ${finalLastName}`;
       }
     }
     
@@ -654,6 +674,26 @@ export class DatabaseStorage implements IStorage {
     // Update teams if specified
     if (player.teamIds !== undefined) {
       await this.setPlayerTeams(id, player.teamIds);
+    }
+    
+    // Update any existing user records if name or emails changed
+    if ((player.firstName || player.lastName || player.emails) && finalFirstName && finalLastName) {
+      // Get current player emails (either updated or existing)
+      const currentEmails = player.emails || (await this.getPlayer(id))?.emails || [];
+      
+      for (const email of currentEmails) {
+        try {
+          await db.update(users)
+            .set({ 
+              firstName: finalFirstName, 
+              lastName: finalLastName 
+            })
+            .where(eq(users.email, email));
+        } catch (error) {
+          // Log but don't fail if user update fails
+          console.log(`Could not update user record for email ${email}:`, error);
+        }
+      }
     }
     
     return updated;
