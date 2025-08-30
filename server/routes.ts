@@ -120,6 +120,11 @@ export function registerRoutes(app: Express) {
       if (username && username !== "admin") {
         const user = await storage.authenticateUser(username, password);
         if (user) {
+          // Check if user is active
+          if (user.isActive === "false") {
+            return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
+          }
+          
           req.session.user = {
             id: user.id,
             username: user.username,
@@ -152,6 +157,11 @@ export function registerRoutes(app: Express) {
       if (username && username.includes('@')) {
         const user = await storage.authenticateUserByEmail(username, password);
         if (user) {
+          // Check if user is active
+          if (user.isActive === "false") {
+            return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
+          }
+          
           req.session.user = {
             id: user.id,
             username: user.username,
@@ -1174,6 +1184,39 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error("Error updating user role:", error);
       res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  // PUT /api/users/:id/status - Toggle user active/inactive status (site admin only)
+  app.put("/api/users/:id/status", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+      const currentUser = req.session.user;
+
+      // Only site admins can activate/deactivate users
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      
+      if (!isSiteAdmin) {
+        return res.status(403).json({ message: "Access denied. Only site administrators can activate/deactivate users." });
+      }
+
+      // Cannot deactivate self
+      if (currentUser?.id === id) {
+        return res.status(400).json({ message: "You cannot deactivate your own account." });
+      }
+
+      // Update user status
+      const user = await storage.updateUser(id, { isActive: isActive ? "true" : "false" });
+      
+      res.json({ 
+        message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
+        user 
+      });
+    } catch (error) {
+      console.error("Error updating user status:", error);
+      res.status(500).json({ message: "Failed to update user status" });
     }
   });
 
