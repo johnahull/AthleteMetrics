@@ -1220,6 +1220,27 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // GET /api/users/check-username - Check if username is available
+  app.get("/api/users/check-username", async (req, res) => {
+    try {
+      const { username } = req.query;
+      
+      if (!username || typeof username !== 'string') {
+        return res.status(400).json({ message: "Username is required" });
+      }
+      
+      const existingUser = await storage.getUserByUsername(username);
+      
+      res.json({ 
+        available: !existingUser,
+        username: username
+      });
+    } catch (error) {
+      console.error("Error checking username:", error);
+      res.status(500).json({ message: "Failed to check username availability" });
+    }
+  });
+
   app.delete("/api/users/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
