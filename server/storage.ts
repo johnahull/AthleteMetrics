@@ -506,39 +506,87 @@ export class DatabaseStorage implements IStorage {
     const invitation = await this.getInvitation(token);
     if (!invitation) throw new Error("Invalid or expired invitation");
 
-    // Create user
-    const user = await this.createUser({
-      ...userInfo,
-      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
-    });
+    // Check if user already exists
+    let user = await this.getUserByEmail(invitation.email);
+    
+    if (user) {
+      // User exists - just update their password and activate them
+      await db.update(users)
+        .set({ 
+          password: await bcrypt.hash(userInfo.password, 10),
+          firstName: userInfo.firstName,
+          lastName: userInfo.lastName
+        })
+        .where(eq(users.email, invitation.email));
+      
+      // Get updated user
+      user = await this.getUserByEmail(invitation.email);
+      if (!user) throw new Error("Failed to update existing user");
+    } else {
+      // Create new user
+      user = await this.createUser({
+        ...userInfo,
+        role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+      });
+    }
 
-    // Add user to organization
-    await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+    // Add user to organization (check if not already added)
+    try {
+      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+    } catch (error) {
+      // May already be in organization - that's okay
+      console.log("User may already be in organization:", error);
+    }
 
     // Add user to teams if specified
     if (invitation.teamIds && invitation.teamIds.length > 0) {
       for (const teamId of invitation.teamIds) {
-        await this.addUserToTeam(user.id, teamId);
+        try {
+          await this.addUserToTeam(user.id, teamId);
+        } catch (error) {
+          // May already be in team - that's okay
+          console.log("User may already be in team:", error);
+        }
       }
     }
 
-    // If user is an athlete, also create a player record
-    if (user.role === "athlete") {
-      const today = new Date();
-      const defaultBirthDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-      const player = await this.createPlayer({
-        firstName: user.firstName,
-        lastName: user.lastName,
-        birthday: defaultBirthDate.toISOString().split('T')[0], // Default birth date 18 years ago
-        school: "",
-        sports: [],
-        emails: [user.email]
-      });
+    // If user is an athlete, ensure player record exists and is linked to teams
+    if (invitation.role === "athlete") {
+      // Check if player already exists for this email
+      const existingPlayers = await db.select().from(players)
+        .where(sql`${invitation.email} = ANY(${players.emails})`);
       
-      // Add player to teams if specified
-      if (invitation.teamIds && invitation.teamIds.length > 0) {
-        for (const teamId of invitation.teamIds) {
-          await this.addPlayerToTeam(player.id, teamId);
+      if (existingPlayers.length > 0) {
+        // Player exists - just add to teams if specified
+        const player = existingPlayers[0];
+        if (invitation.teamIds && invitation.teamIds.length > 0) {
+          for (const teamId of invitation.teamIds) {
+            try {
+              await this.addPlayerToTeam(player.id, teamId);
+            } catch (error) {
+              // May already be in team - that's okay
+              console.log("Player may already be in team:", error);
+            }
+          }
+        }
+      } else {
+        // Create new player record
+        const today = new Date();
+        const defaultBirthDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+        const player = await this.createPlayer({
+          firstName: user.firstName,
+          lastName: user.lastName,
+          birthday: defaultBirthDate.toISOString().split('T')[0],
+          school: "",
+          sports: [],
+          emails: [user.email]
+        });
+        
+        // Add player to teams if specified
+        if (invitation.teamIds && invitation.teamIds.length > 0) {
+          for (const teamId of invitation.teamIds) {
+            await this.addPlayerToTeam(player.id, teamId);
+          }
         }
       }
     }

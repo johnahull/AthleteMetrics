@@ -12,6 +12,10 @@ interface InvitationData {
   email: string;
   role: string;
   organizationId: string;
+  playerData?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 export default function AcceptInvitation() {
@@ -57,6 +61,15 @@ export default function AcceptInvitation() {
       
       const data = await response.json();
       setInvitation(data);
+      
+      // Pre-populate form with existing player data if available
+      if (data.playerData) {
+        setFormData(prev => ({
+          ...prev,
+          firstName: data.playerData.firstName,
+          lastName: data.playerData.lastName
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invitation');
     } finally {

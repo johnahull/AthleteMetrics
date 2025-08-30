@@ -548,10 +548,24 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invitation expired" });
       }
       
+      // Get existing player data if this is an athlete invitation
+      let playerData = null;
+      if (invitation.role === "athlete") {
+        const players = await storage.getPlayers();
+        const player = players.find(p => p.emails.includes(invitation.email));
+        if (player) {
+          playerData = {
+            firstName: player.firstName,
+            lastName: player.lastName
+          };
+        }
+      }
+      
       res.json({
         email: invitation.email,
         role: invitation.role,
-        organizationId: invitation.organizationId
+        organizationId: invitation.organizationId,
+        playerData
       });
     } catch (error) {
       console.error("Error fetching invitation:", error);
