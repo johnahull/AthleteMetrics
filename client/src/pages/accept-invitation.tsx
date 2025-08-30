@@ -53,6 +53,14 @@ export default function AcceptInvitation() {
     fetchInvitationDetails(inviteToken);
   }, []);
 
+  // Force clear username on component mount
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      username: ''
+    }));
+  }, []);
+
   const fetchInvitationDetails = async (inviteToken: string) => {
     try {
       const response = await fetch(`/api/invitations/${inviteToken}`);
@@ -308,6 +316,9 @@ export default function AcceptInvitation() {
                   required
                   className={usernameError ? "border-red-500" : ""}
                   data-testid="input-username"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
                 />
                 {usernameCheckLoading && (
                   <div className="absolute right-3 top-3">
