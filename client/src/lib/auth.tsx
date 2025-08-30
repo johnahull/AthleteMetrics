@@ -17,6 +17,8 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  organizationContext: string | null;
+  setOrganizationContext: (orgId: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const [organizationContext, setOrganizationContext] = useState<string | null>(null);
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/me"],
@@ -65,6 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       isLoading: isLoading || loginMutation.isPending || logoutMutation.isPending,
+      organizationContext,
+      setOrganizationContext,
     }}>
       {children}
     </AuthContext.Provider>

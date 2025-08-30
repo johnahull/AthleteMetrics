@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
+import { useAuth } from "@/lib/auth";
 
 export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -15,13 +16,28 @@ export default function Teams() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { organizationContext } = useAuth();
 
   const { data: teams, isLoading } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["/api/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/teams?organizationId=${organizationContext}`
+        : `/api/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams"],
+    queryKey: ["/api/analytics/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/analytics/teams?organizationId=${organizationContext}`
+        : `/api/analytics/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   const deleteTeamMutation = useMutation({

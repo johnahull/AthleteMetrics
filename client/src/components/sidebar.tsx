@@ -98,15 +98,13 @@ const getNavigation = (userRole: string, userId?: string, isInOrganizationContex
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, organizationContext, setOrganizationContext } = useAuth();
   
   // Get user role - fallback to 'athlete' if not defined
   const userRole = user?.role || 'athlete';
   
   // Check if we're in an organization context (site admin viewing specific org)
-  const isInOrganizationContext = userRole === 'site_admin' && 
-    location.startsWith('/organizations/') && 
-    location !== '/organizations';
+  const isInOrganizationContext = userRole === 'site_admin' && organizationContext;
   
   // Get user's organizations
   const { data: userOrganizations } = useQuery({
@@ -139,6 +137,18 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="p-4 space-y-2 flex-1">
+        {/* Back to site button for site admins in organization context */}
+        {userRole === 'site_admin' && organizationContext && (
+          <button
+            onClick={() => setOrganizationContext(null)}
+            className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 border border-gray-200 mb-4"
+            data-testid="button-back-to-site"
+          >
+            <Building2 className="h-5 w-5" />
+            <span>← Back to Site</span>
+          </button>
+        )}
+        
         {navigation.map((item) => {
           const isActive = location === item.href;
           return (

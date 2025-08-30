@@ -10,11 +10,13 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import PlayerModal from "@/components/player-modal";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth";
 
 export default function Players() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [location, setLocation] = useLocation();
+  const { organizationContext } = useAuth();
   const [filters, setFilters] = useState({
     teamId: "",
     birthYearFrom: "",
@@ -39,7 +41,14 @@ export default function Players() {
   const queryClient = useQueryClient();
 
   const { data: teams } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["/api/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/teams?organizationId=${organizationContext}`
+        : `/api/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   // Get current user's organizations to fetch invitations
@@ -70,13 +79,14 @@ export default function Players() {
   });
 
   const { data: players, isLoading } = useQuery({
-    queryKey: ["/api/players", filters],
+    queryKey: ["/api/players", filters, organizationContext],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.teamId) params.append('teamId', filters.teamId);
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (filters.search) params.append('search', filters.search);
+      if (organizationContext) params.append('organizationId', organizationContext);
       
       const response = await fetch(`/api/players?${params}`);
       if (!response.ok) throw new Error('Failed to fetch players');
