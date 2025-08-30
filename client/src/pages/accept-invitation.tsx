@@ -27,6 +27,8 @@ export default function AcceptInvitation() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
+  const [usernameCheckLoading, setUsernameCheckLoading] = useState(false);
+  const [usernameError, setUsernameError] = useState<string>('');
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -64,11 +66,21 @@ export default function AcceptInvitation() {
       setInvitation(data);
       
       // Pre-populate form with existing player data if available
+      // Always ensure username starts blank
       if (data.playerData) {
         setFormData(prev => ({
           ...prev,
           firstName: data.playerData.firstName,
-          lastName: data.playerData.lastName
+          lastName: data.playerData.lastName,
+          username: '' // Explicitly ensure username is blank
+        }));
+      } else {
+        // Ensure all fields are blank if no player data
+        setFormData(prev => ({
+          ...prev,
+          firstName: '',
+          lastName: '',
+          username: '' // Explicitly ensure username is blank
         }));
       }
     } catch (err) {
@@ -93,6 +105,11 @@ export default function AcceptInvitation() {
     
     if (!/^[a-zA-Z0-9._-]+$/.test(formData.username)) {
       setError('Username can only contain letters, numbers, periods, hyphens, and underscores');
+      return;
+    }
+    
+    if (usernameError) {
+      setError(usernameError);
       return;
     }
     
@@ -144,8 +161,54 @@ export default function AcceptInvitation() {
     }
   };
 
+  // Check username availability with debouncing
+  const checkUsernameAvailability = async (username: string) => {
+    if (!username.trim() || username.length < 3) {
+      setUsernameError('');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
+      setUsernameError('Username can only contain letters, numbers, periods, hyphens, and underscores');
+      return;
+    }
+
+    setUsernameCheckLoading(true);
+    setUsernameError('');
+
+    try {
+      const response = await fetch(`/api/users/check-username?username=${encodeURIComponent(username)}`);
+      const data = await response.json();
+      
+      if (!data.available) {
+        setUsernameError('Username already taken. Please choose a different username.');
+      }
+    } catch (error) {
+      console.error('Error checking username:', error);
+    } finally {
+      setUsernameCheckLoading(false);
+    }
+  };
+
+  // Debounced username checker
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.username) {
+        checkUsernameAvailability(formData.username);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.username]);
+
   const handleInputChange = (field: keyof typeof formData) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [field]: e.target.value }));
+    const value = e.target.value;
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Clear username error when user starts typing
+    if (field === 'username') {
+      setUsernameError('');
+    }
   };
 
   if (loading) {
@@ -235,18 +298,30 @@ export default function AcceptInvitation() {
             
             <div>
               <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                value={formData.username}
-                onChange={handleInputChange('username')}
-                placeholder="Choose a unique username"
-                required
-                data-testid="input-username"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Username must be unique and can contain letters, numbers, periods, hyphens, and underscores
-              </p>
+              <div className="relative">
+                <Input
+                  id="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={handleInputChange('username')}
+                  placeholder="Choose a unique username"
+                  required
+                  className={usernameError ? "border-red-500" : ""}
+                  data-testid="input-username"
+                />
+                {usernameCheckLoading && (
+                  <div className="absolute right-3 top-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  </div>
+                )}
+              </div>
+              {usernameError ? (
+                <p className="text-xs text-red-600 mt-1">{usernameError}</p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  Username must be unique and can contain letters, numbers, periods, hyphens, and underscores
+                </p>
+              )}
             </div>
 
             <div>
