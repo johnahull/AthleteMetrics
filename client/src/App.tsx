@@ -20,12 +20,14 @@ import UserManagement from "./pages/user-management";
 import Profile from "./pages/profile";
 import UserProfile from "./pages/user-profile";
 import OrganizationProfile from "./pages/organization-profile";
+import AcceptInvitation from "./pages/accept-invitation";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/" component={Dashboard} />
       <Route path="/teams" component={Teams} />
       <Route path="/athletes" component={Players} />
