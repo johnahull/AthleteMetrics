@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,12 +30,18 @@ export default function AcceptInvitation() {
   const [usernameCheckLoading, setUsernameCheckLoading] = useState(false);
   const [usernameError, setUsernameError] = useState<string>('');
   
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    username: '',
-    password: '',
-    confirmPassword: ''
+  const usernameInputRef = useRef<HTMLInputElement>(null);
+  
+  const [formData, setFormData] = useState(() => {
+    const initialData = {
+      firstName: '',
+      lastName: '',
+      username: '',
+      password: '',
+      confirmPassword: ''
+    };
+    console.log('AcceptInvitation: Initial formData state:', initialData);
+    return initialData;
   });
 
   // Extract token from URL on mount
@@ -53,13 +59,40 @@ export default function AcceptInvitation() {
     fetchInvitationDetails(inviteToken);
   }, []);
 
-  // Force clear username on component mount
+  // Force clear username on component mount and after any updates
   useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      username: ''
-    }));
+    console.log('AcceptInvitation: Force clearing username on mount');
+    setFormData(prev => {
+      console.log('AcceptInvitation: Previous formData before clear:', prev);
+      const newFormData = {
+        ...prev,
+        username: ''
+      };
+      console.log('AcceptInvitation: New formData after clear:', newFormData);
+      return newFormData;
+    });
+    
+    // Also directly clear the input field via ref
+    if (usernameInputRef.current) {
+      console.log('AcceptInvitation: Clearing username input via ref');
+      usernameInputRef.current.value = '';
+    }
   }, []);
+
+  // Additional useEffect to continuously monitor and clear username
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (usernameInputRef.current && usernameInputRef.current.value !== formData.username) {
+        console.log('AcceptInvitation: Input value mismatch detected, correcting:', {
+          inputValue: usernameInputRef.current.value,
+          stateValue: formData.username
+        });
+        usernameInputRef.current.value = formData.username;
+      }
+    }, 100);
+
+    return () => clearInterval(intervalId);
+  }, [formData.username]);
 
   const fetchInvitationDetails = async (inviteToken: string) => {
     try {
@@ -75,21 +108,32 @@ export default function AcceptInvitation() {
       
       // Pre-populate form with existing player data if available
       // Always ensure username starts blank
+      console.log('AcceptInvitation: Invitation data received:', data);
       if (data.playerData) {
-        setFormData(prev => ({
-          ...prev,
-          firstName: data.playerData.firstName,
-          lastName: data.playerData.lastName,
-          username: '' // Explicitly ensure username is blank
-        }));
+        console.log('AcceptInvitation: Setting form data with player data');
+        setFormData(prev => {
+          const newFormData = {
+            ...prev,
+            firstName: data.playerData.firstName,
+            lastName: data.playerData.lastName,
+            username: '' // Explicitly ensure username is blank
+          };
+          console.log('AcceptInvitation: Form data after player data update:', newFormData);
+          return newFormData;
+        });
       } else {
+        console.log('AcceptInvitation: Setting form data without player data');
         // Ensure all fields are blank if no player data
-        setFormData(prev => ({
-          ...prev,
-          firstName: '',
-          lastName: '',
-          username: '' // Explicitly ensure username is blank
-        }));
+        setFormData(prev => {
+          const newFormData = {
+            ...prev,
+            firstName: '',
+            lastName: '',
+            username: '' // Explicitly ensure username is blank
+          };
+          console.log('AcceptInvitation: Form data after no player data update:', newFormData);
+          return newFormData;
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invitation');
@@ -308,6 +352,7 @@ export default function AcceptInvitation() {
               <Label htmlFor="username">Username</Label>
               <div className="relative">
                 <Input
+                  ref={usernameInputRef}
                   id="username"
                   type="text"
                   value={formData.username}
@@ -319,6 +364,7 @@ export default function AcceptInvitation() {
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
+                  key="username-input"
                 />
                 {usernameCheckLoading && (
                   <div className="absolute right-3 top-3">
