@@ -12,7 +12,8 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Building2 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 
 type Organization = {
   id: string;
@@ -30,6 +31,8 @@ export default function Organizations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
+  const [, setLocation] = useLocation();
+  const { user, setOrganizationContext } = useAuth();
 
   const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations"],
@@ -65,6 +68,21 @@ export default function Organizations() {
 
   const onCreateOrg = (data: z.infer<typeof organizationSchema>) => {
     createOrgMutation.mutate(data);
+  };
+
+  const onOrganizationClick = (orgId: string, orgName: string) => {
+    // Site admins can switch to organization context
+    if (user?.role === 'site_admin') {
+      setOrganizationContext(orgId);
+      setLocation('/');  // Go to dashboard in org context
+      toast({ 
+        title: `Switched to ${orgName}`,
+        description: "Now viewing organization-specific data. Use 'Back to Site' to return to site view.",
+      });
+    } else {
+      // Other users go directly to organization profile
+      setLocation(`/organizations/${orgId}`);
+    }
   };
 
   return (
@@ -158,11 +176,16 @@ export default function Organizations() {
                   className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
                   data-testid={`organization-${org.id}`}
                 >
-                  <Link href={`/organizations/${org.id}`}>
-                    <h3 className="font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer" data-testid={`organization-link-${org.id}`}>
-                      {org.name}
-                    </h3>
-                  </Link>
+                  <h3 
+                    className="font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer" 
+                    data-testid={`organization-link-${org.id}`}
+                    onClick={() => onOrganizationClick(org.id, org.name)}
+                  >
+                    {org.name}
+                  </h3>
+                  {user?.role === 'site_admin' && (
+                    <p className="text-xs text-blue-500 mt-1">Click to switch to organization view</p>
+                  )}
                   {org.description && (
                     <p className="text-sm text-gray-600 mt-1">{org.description}</p>
                   )}

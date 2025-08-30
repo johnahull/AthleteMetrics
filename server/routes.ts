@@ -471,17 +471,21 @@ export function registerRoutes(app: Express) {
   app.get("/api/analytics/dashboard", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
+      const requestedOrgId = req.query.organizationId as string;
       
       // Determine organization context based on user role
       let organizationId: string | undefined;
       
-      // Site admins see site-wide stats
+      // Site admins can see any organization or site-wide stats
       const isSiteAdmin = currentUser?.role === "site_admin" || 
                         currentUser?.username === "admin" ||
                         (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
       
-      if (!isSiteAdmin) {
-        // Org admins and coaches see their organization stats
+      if (isSiteAdmin) {
+        // Site admin can request specific org stats or site-wide stats
+        organizationId = requestedOrgId || undefined;
+      } else {
+        // Org admins and coaches see their organization stats only
         const userOrgs = await storage.getUserOrganizations(currentUser!.id);
         organizationId = userOrgs[0]?.organizationId; // Use first organization
       }

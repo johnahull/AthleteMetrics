@@ -5,15 +5,42 @@ import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { getMetricDisplayName, getMetricColor } from "@/lib/metrics";
+import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const { organizationContext } = useAuth();
+  
   const { data: dashboardStats, isLoading } = useQuery({
-    queryKey: ["/api/analytics/dashboard"],
+    queryKey: ["/api/analytics/dashboard", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/analytics/dashboard?organizationId=${organizationContext}`
+        : `/api/analytics/dashboard`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   const { data: recentMeasurements } = useQuery({
-    queryKey: ["/api/measurements"],
+    queryKey: ["/api/measurements", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/measurements?organizationId=${organizationContext}`
+        : `/api/measurements`;
+      const response = await fetch(url);
+      return response.json();
+    }
+  });
+  
+  // Get organization name for context indicator
+  const { data: currentOrganization } = useQuery({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    enabled: !!organizationContext,
+    queryFn: async () => {
+      const response = await fetch(`/api/organizations/${organizationContext}`);
+      return response.json();
+    }
   });
 
   const { data: teamStats } = useQuery({
@@ -47,8 +74,23 @@ export default function Dashboard() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
-        <p className="text-gray-600 mt-1">Track athlete performance and team analytics</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
+            <p className="text-gray-600 mt-1">
+              {organizationContext && currentOrganization 
+                ? `${currentOrganization.name} - Performance overview`
+                : "Track athlete performance and team analytics"
+              }
+            </p>
+          </div>
+          {organizationContext && currentOrganization && (
+            <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg">
+              <p className="text-sm font-medium text-blue-900">Organization View</p>
+              <p className="text-xs text-blue-700">{currentOrganization.name}</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
