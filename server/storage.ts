@@ -1049,12 +1049,33 @@ export class DatabaseStorage implements IStorage {
 
   async getDashboardStats(organizationId?: string): Promise<{
     totalPlayers: number;
+    activeAthletes: number;
     totalTeams: number;
     bestFly10Today?: { value: number; playerName: string };
     bestVerticalToday?: { value: number; playerName: string };
   }> {
     const players = await this.getPlayers({ organizationId });
     const teams = await this.getTeams(organizationId);
+    
+    // Count active athletes (players who have user accounts)
+    const allUsers = organizationId 
+      ? await this.getOrganizationUsers(organizationId)
+      : await this.getUsers();
+    
+    const activeAthleteEmails = allUsers
+      .filter(userOrg => {
+        const user = 'user' in userOrg ? userOrg.user : userOrg;
+        const role = 'role' in userOrg ? userOrg.role : user.role;
+        return role === 'athlete';
+      })
+      .map(userOrg => {
+        const user = 'user' in userOrg ? userOrg.user : userOrg;
+        return user.email;
+      });
+    
+    const activeAthletes = players.filter(player => 
+      player.emails && player.emails.some(email => activeAthleteEmails.includes(email))
+    ).length;
     
     const today = new Date().toISOString().split('T')[0];
     const todaysMeasurements = await this.getMeasurements({ 
@@ -1074,6 +1095,7 @@ export class DatabaseStorage implements IStorage {
     
     return {
       totalPlayers: players.length,
+      activeAthletes,
       totalTeams: teams.length,
       bestFly10Today: todaysFly10.length > 0 ? todaysFly10.reduce((best, current) => 
         current.value < best.value ? current : best

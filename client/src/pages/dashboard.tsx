@@ -36,7 +36,8 @@ export default function Dashboard() {
   }
 
   const stats = (dashboardStats as any) || {
-    totalAthletes: 0,
+    totalPlayers: 0,
+    activeAthletes: 0,
     totalTeams: 0,
     bestFly10Today: null,
     bestVerticalToday: null,
@@ -56,13 +57,12 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Athletes</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-athletes">
-                  {stats.totalAthletes}
+                <p className="text-sm font-medium text-gray-600">Active Athletes</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-active-athletes">
+                  {stats.activeAthletes}
                 </p>
-                <p className="text-sm text-green-600 mt-1">
-                  <ArrowUp className="inline h-3 w-3 mr-1" />
-                  Active athletes
+                <p className="text-sm text-gray-500 mt-1">
+                  {stats.totalPlayers} total players
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
