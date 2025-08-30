@@ -1107,6 +1107,7 @@ export function registerRoutes(app: Express) {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
+        username: user.username,
         email: user.email,
         role: user.role,
         organizations: organizations.filter(org => org.id && org.name)

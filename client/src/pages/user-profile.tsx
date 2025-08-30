@@ -10,6 +10,7 @@ interface UserProfile {
   id: string;
   firstName: string;
   lastName: string;
+  username: string;
   email: string;
   role: string;
   organizations: Array<{
@@ -81,6 +82,11 @@ export default function UserProfile() {
                 </h2>
               </div>
               
+              <div className="flex items-center gap-2 text-gray-600">
+                <User className="h-4 w-4" />
+                <span>@{userProfile.username}</span>
+              </div>
+
               <div className="flex items-center gap-2 text-gray-600">
                 <Mail className="h-4 w-4" />
                 <span>{userProfile.email}</span>
