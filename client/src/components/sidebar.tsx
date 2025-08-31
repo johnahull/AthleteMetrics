@@ -53,15 +53,7 @@ function OrganizationProfileLink({ user, location, userOrganizations }: { user: 
 }
 
 const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[]) => {
-  // Athletes get a restricted navigation menu
-  if (primaryRole === "athlete") {
-    return [
-      { name: "My Profile", href: `/athletes/${userId}`, icon: UsersRound },
-      { name: "Analytics", href: "/analytics", icon: BarChart3 },
-    ];
-  }
-
-  // Site admins get different navigation based on context
+  // Site admins get different navigation based on context (check this FIRST)
   if (isSiteAdmin) {
     // When viewing an organization, show org admin menu
     if (isInOrganizationContext) {
@@ -81,6 +73,14 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog }
+    ];
+  }
+
+  // Athletes get a restricted navigation menu
+  if (primaryRole === "athlete") {
+    return [
+      { name: "My Profile", href: `/athletes/${userId}`, icon: UsersRound },
+      { name: "Analytics", href: "/analytics", icon: BarChart3 },
     ];
   }
 
@@ -127,6 +127,16 @@ export default function Sidebar() {
   const isInOrganizationContext = isSiteAdmin && !!organizationContext;
   
   const navigation = getNavigation(isSiteAdmin, primaryRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
+  
+  // Debug logging
+  console.log('Sidebar Debug:', {
+    isSiteAdmin,
+    primaryRole, 
+    isInOrganizationContext,
+    organizationContext,
+    userIsSiteAdmin: user?.isSiteAdmin,
+    navigation: navigation.map(n => n.name)
+  });
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
