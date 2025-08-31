@@ -12,6 +12,13 @@ interface User {
   playerId?: string;
 }
 
+interface ImpersonationStatus {
+  isImpersonating: boolean;
+  originalUser?: User;
+  targetUser?: User;
+  startTime?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -19,6 +26,10 @@ interface AuthContextType {
   setOrganizationContext: (orgId: string | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
   logout: () => void;
+  impersonationStatus: ImpersonationStatus | null;
+  startImpersonation: (userId: string) => Promise<{ success: boolean; message?: string }>;
+  stopImpersonation: () => Promise<{ success: boolean; message?: string }>;
+  checkImpersonationStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,11 +38,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [organizationContext, setOrganizationContext] = useState<string | null>(null);
+  const [impersonationStatus, setImpersonationStatus] = useState<ImpersonationStatus | null>(null);
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (user && user.isSiteAdmin) {
+      checkImpersonationStatus();
+    }
+  }, [user]);
 
   const checkAuth = async () => {
     try {
@@ -49,6 +67,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const checkImpersonationStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/impersonation-status', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setImpersonationStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to check impersonation status:', error);
+    }
+  };
+
+  const startImpersonation = async (userId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await fetch(`/api/admin/impersonate/${userId}`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        setImpersonationStatus(data.impersonationStatus);
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Failed to start impersonation' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error occurred' };
+    }
+  };
+
+  const stopImpersonation = async (): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await fetch('/api/admin/stop-impersonation', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        setImpersonationStatus(data.impersonationStatus);
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Failed to stop impersonation' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error occurred' };
     }
   };
 
@@ -98,7 +172,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, organizationContext, setOrganizationContext }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      logout, 
+      isLoading, 
+      organizationContext, 
+      setOrganizationContext,
+      impersonationStatus,
+      startImpersonation,
+      stopImpersonation,
+      checkImpersonationStatus
+    }}>
       {children}
     </AuthContext.Provider>
   );
