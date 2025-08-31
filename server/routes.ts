@@ -589,11 +589,19 @@ export function registerRoutes(app: Express) {
       if (invitation.role === "athlete" && invitation.playerId) {
         const player = await storage.getPlayer(invitation.playerId);
         if (player) {
+          // Get team information for this player
+          const playerTeams = await storage.getPlayerTeams(invitation.playerId);
+          const teams = await storage.getTeams();
+          const playerTeamData = playerTeams.map(pt => 
+            teams.find(t => t.id === pt.teamId)
+          ).filter(Boolean);
+
           playerData = {
             id: player.id,
             firstName: player.firstName,
             lastName: player.lastName,
-            emails: player.emails
+            emails: player.emails,
+            teams: playerTeamData
           };
         }
       }

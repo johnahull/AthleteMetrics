@@ -18,6 +18,11 @@ interface InvitationData {
     firstName: string;
     lastName: string;
     emails: string[];
+    teams: Array<{
+      id: string;
+      name: string;
+      sport: string;
+    }>;
   };
 }
 
@@ -276,7 +281,17 @@ export default function AcceptInvitation() {
               <p className="text-blue-600 text-sm">
                 Player ID: #{invitation.playerData.id.slice(0, 8)}
               </p>
-              <p className="text-blue-600 text-sm">
+              {invitation.playerData.teams && invitation.playerData.teams.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-blue-700 text-sm font-medium mb-1">Teams:</p>
+                  {invitation.playerData.teams.map((team, index) => (
+                    <div key={team.id} className="text-blue-600 text-sm">
+                      • {team.name} ({team.sport})
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-blue-600 text-sm mt-2">
                 This account will be linked to this specific athlete
               </p>
             </div>
