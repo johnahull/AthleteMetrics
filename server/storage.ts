@@ -271,21 +271,34 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (organizationId) {
-      // Get single role for user in specific organization (should only be one due to unique constraint)
-      const [result] = await db.select({ role: userOrganizations.role })
+      // Get EXACTLY ONE role for user in specific organization
+      const result = await db.select({ role: userOrganizations.role })
         .from(userOrganizations)
         .where(and(
           eq(userOrganizations.userId, userId),
           eq(userOrganizations.organizationId, organizationId)
-        ));
-      return result ? [result.role] : [];
+        ))
+        .limit(1); // Enforce single role
+      
+      return result.length > 0 ? [result[0].role] : [];
     } else {
-      // Get all organization roles for the user (one per organization)
-      const orgRoles = await db.select({ role: userOrganizations.role })
+      // Get all organization roles for the user (one per organization maximum)
+      const orgRoles = await db.select({ 
+        role: userOrganizations.role,
+        organizationId: userOrganizations.organizationId 
+      })
         .from(userOrganizations)
         .where(eq(userOrganizations.userId, userId));
       
-      return orgRoles.map(r => r.role);
+      // Ensure only one role per organization by grouping and taking first
+      const uniqueRoles = new Map();
+      orgRoles.forEach(r => {
+        if (!uniqueRoles.has(r.organizationId)) {
+          uniqueRoles.set(r.organizationId, r.role);
+        }
+      });
+      
+      return Array.from(uniqueRoles.values());
     }
   }
 
@@ -534,17 +547,19 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
 
-    // Use upsert to ensure only one role per user per organization
+    // First remove any existing roles for this user in this organization
+    await db.delete(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+
+    // Then insert the new single role
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,
       organizationId,
       role
-    })
-    .onConflictDoUpdate({
-      target: [userOrganizations.userId, userOrganizations.organizationId],
-      set: { role }
-    })
-    .returning();
+    }).returning();
     
     return userOrg;
   }
@@ -566,12 +581,46 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserOrganizationRole(userId: string, organizationId: string, role: string): Promise<void> {
-    await db.update(userOrganizations)
-      .set({ role })
-      .where(and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, organizationId)
-      ));
+    // Validate that role is organization-specific only
+    if (!['org_admin', 'coach', 'athlete'].includes(role)) {
+      throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
+    }
+
+    // Use addUserToOrganization to ensure single role per organization
+    await this.addUserToOrganization(userId, organizationId, role);
+  }
+
+  // Validation function to ensure single role constraint
+  async validateUserRoleConstraint(userId: string): Promise<{ valid: boolean; violations: string[] }> {
+    const violations: string[] = [];
+    
+    // Get all user-organization relationships
+    const userOrgRelations = await db.select()
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, userId));
+    
+    // Group by organization and check for multiple roles
+    const orgRoleMap = new Map<string, string[]>();
+    
+    for (const relation of userOrgRelations) {
+      if (!orgRoleMap.has(relation.organizationId)) {
+        orgRoleMap.set(relation.organizationId, []);
+      }
+      orgRoleMap.get(relation.organizationId)!.push(relation.role);
+    }
+    
+    // Check for violations
+    for (const [orgId, roles] of orgRoleMap.entries()) {
+      if (roles.length > 1) {
+        const org = await this.getOrganization(orgId);
+        violations.push(`User has ${roles.length} roles in organization "${org?.name || orgId}": ${roles.join(', ')}`);
+      }
+    }
+    
+    return {
+      valid: violations.length === 0,
+      violations
+    };
   }
 
   async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
@@ -644,17 +693,8 @@ export class DatabaseStorage implements IStorage {
       user = await this.createUser(createUserData);
     }
 
-    // Add user to organization with the invitation role
-    try {
-      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
-    } catch (error) {
-      // If user already exists in organization, update their role to match invitation
-      try {
-        await this.updateUserOrganizationRole(user.id, invitation.organizationId, invitation.role);
-      } catch (updateError) {
-        console.log("Could not update user organization role:", updateError);
-      }
-    }
+    // Add user to organization with the invitation role (this will remove any existing roles first)
+    await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
 
     // Add user to teams if specified
     if (invitation.teamIds && invitation.teamIds.length > 0) {
