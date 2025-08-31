@@ -371,3 +371,6 @@ export const insertAthleteSchema = z.object({
   sports: z.array(z.string()).optional(),
   phoneNumbers: z.array(z.string()).optional(),
 });
+
+// Legacy compatibility - export insertPlayerSchema as alias for insertAthleteSchema
+export const insertPlayerSchema = insertAthleteSchema;
