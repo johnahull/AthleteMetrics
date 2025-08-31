@@ -15,6 +15,7 @@ declare module 'express-session' {
       firstName: string;
       lastName: string;
       role: string;
+      playerId?: string;
     };
     // Keep old admin for transition
     admin?: boolean;
@@ -122,7 +123,8 @@ export function registerRoutes(app: Express) {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
-          isSiteAdmin: user.isSiteAdmin === "true"
+          isSiteAdmin: user.isSiteAdmin === "true",
+          playerId: user.playerId
         };
         
         let redirectUrl = "/";
@@ -301,16 +303,8 @@ export function registerRoutes(app: Express) {
       const { id } = req.params;
       const currentUser = req.session.user;
       
-      // First try to get player by the provided ID
+      // Try to get player by the provided ID
       let player = await storage.getPlayer(id);
-      
-      // If not found and the current user is an athlete, check if the ID matches their user ID
-      // and they have a linked player account
-      if (!player && currentUser?.role === "athlete" && currentUser.id === id) {
-        if (currentUser.playerId) {
-          player = await storage.getPlayer(currentUser.playerId);
-        }
-      }
       
       if (!player) {
         return res.status(404).json({ message: "Player not found" });
