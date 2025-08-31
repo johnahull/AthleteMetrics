@@ -233,6 +233,32 @@ export default function Sidebar() {
           </Link>
         )}
 
+        {/* My Organization for org admins */}
+        {userData && !userData.isSiteAdmin && userOrganizations?.length > 0 && userOrganizations.some((org: any) => org.role === "org_admin") && (
+          (() => {
+            const orgAdminOrg = userOrganizations.find((org: any) => org.role === "org_admin");
+            const orgProfilePath = `/organizations/${orgAdminOrg?.organizationId}`;
+            const isActive = location === orgProfilePath;
+
+            return (
+              <Link href={orgProfilePath}>
+                <div
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+                    isActive
+                      ? "bg-primary text-white" 
+                      : "text-gray-700 hover:bg-gray-100"
+                  )}
+                  data-testid="nav-my-organization"
+                >
+                  <Building2 className="h-5 w-5" />
+                  <span>My Organization</span>
+                </div>
+              </Link>
+            );
+          })()
+        )}
+
         {/* User Info & Logout */}
         <div className="text-sm text-gray-600 px-3 py-2">
           <p className="font-medium">{userData?.username}</p>
