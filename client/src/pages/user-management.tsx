@@ -681,12 +681,12 @@ export default function UserManagement() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900">All Users</h3>
                   <span className="text-sm text-gray-500">
-                    {allUsers.length} total users
+                    {allUsers.filter(user => user.isSiteAdmin !== "true").length} non-admin users
                   </span>
                 </div>
                 
                 <div className="space-y-2">
-                  {allUsers.map((user) => {
+                  {allUsers.filter(user => user.isSiteAdmin !== "true").map((user) => {
                     // Find organization associations for this user
                     const userOrgs = organizations?.flatMap(org => 
                       org.users?.filter(userOrg => userOrg.user.id === user.id) || []
