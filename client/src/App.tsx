@@ -26,14 +26,12 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      <Route path="/test-route">
+      <Route path="/test-route" component={() => (
         <div style={{padding: '20px', fontSize: '24px', color: 'green'}}>
           🎯 TEST ROUTE WORKS! URL: {window.location.href}
         </div>
-      </Route>
-      <Route path="/accept-invitation">
-        <AcceptInvitation />
-      </Route>
+      )} />
+      <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
       <Route path="/" component={Dashboard} />
       <Route path="/teams" component={Teams} />
