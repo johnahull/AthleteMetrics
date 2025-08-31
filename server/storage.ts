@@ -681,26 +681,28 @@ export class DatabaseStorage implements IStorage {
       user = await this.getUserByEmail(invitation.email);
       if (!user) throw new Error("Failed to update existing user");
     } else {
-      // Create new user with optional player link
-      const createUserData: any = {
-        ...userInfo,
-        role: invitation.role
+      // Create new user (roles are managed through userOrganizations, not directly on users)
+      const createUserData = {
+        username: userInfo.username,
+        email: userInfo.email,
+        password: userInfo.password,
+        firstName: userInfo.firstName,
+        lastName: userInfo.lastName
       };
-
-      // If this invitation is for a player, link the user to the player
-      if (invitation.playerId) {
-        createUserData.playerId = invitation.playerId;
-      }
 
       user = await this.createUser(createUserData);
     }
 
-    // Add user to organization (check if not already added)
+    // Add user to organization with the invitation role
     try {
       await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
     } catch (error) {
-      // May already be in organization - that's okay
-      console.log("User may already be in organization:", error);
+      // If user already exists in organization, update their role to match invitation
+      try {
+        await this.updateUserOrganizationRole(user.id, invitation.organizationId, invitation.role);
+      } catch (updateError) {
+        console.log("Could not update user organization role:", updateError);
+      }
     }
 
     // Add user to teams if specified
