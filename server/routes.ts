@@ -208,24 +208,26 @@ export function registerRoutes(app: Express) {
           return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
         }
 
-        // Determine the user's primary role
-        let primaryRole = "athlete"; // Default role
+        // Determine user role - site admin or organization role
+        let userRole = "athlete"; // Default role
+        let redirectUrl = "/";
 
         // If user is site admin, use site_admin role
         if (user.isSiteAdmin === "true") {
-          primaryRole = "site_admin";
+          userRole = "site_admin";
+          redirectUrl = "/";
         } else {
-          // For non-site admins, check their organization roles to determine primary role
+          // For non-site admins, get their organization role (should be only one per organization)
           const userOrgs = await storage.getUserOrganizations(user.id);
           if (userOrgs && userOrgs.length > 0) {
-            // Find the highest priority role across all organizations
-            const roles = userOrgs.map(org => org.role);
-            if (roles.includes("org_admin")) {
-              primaryRole = "org_admin";
-            } else if (roles.includes("coach")) {
-              primaryRole = "coach";
-            } else if (roles.includes("athlete")) {
-              primaryRole = "athlete";
+            // Use the role from the first organization (users should only have one role per org)
+            userRole = userOrgs[0].role;
+            
+            // Set redirect based on role
+            if (userRole === "athlete") {
+              redirectUrl = `/athletes/${user.id}`;
+            } else {
+              redirectUrl = "/";
             }
           }
         }
@@ -236,19 +238,10 @@ export function registerRoutes(app: Express) {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          role: primaryRole,
+          role: userRole,
           isSiteAdmin: user.isSiteAdmin === "true",
-          playerId: primaryRole === "athlete" ? user.playerId : undefined // Only set playerId for athletes
+          playerId: userRole === "athlete" ? user.id : undefined // Use user ID as player ID for athletes
         };
-
-        let redirectUrl = "/";
-        if (primaryRole === "athlete") {
-          // For athletes, redirect to their user ID (they don't have separate player records anymore)
-          redirectUrl = `/athletes/${user.id}`;
-        } else {
-          // All other roles (org_admin, coach, site_admin) go to dashboard
-          redirectUrl = "/";
-        }
 
         return res.json({ 
           success: true, 
@@ -333,23 +326,17 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Cannot impersonate other site administrators" });
       }
 
-      // Determine the target user's primary role
-      let primaryRole = "athlete"; // Default role
+      // Determine the target user's role
+      let targetRole = "athlete"; // Default role
       
       if (targetUser.isSiteAdmin === "true") {
-        primaryRole = "site_admin";
+        targetRole = "site_admin";
       } else {
-        // For non-site admins, check their organization roles to determine primary role
+        // For non-site admins, get their organization role
         const userOrgs = await storage.getUserOrganizations(targetUser.id);
         if (userOrgs && userOrgs.length > 0) {
-          const roles = userOrgs.map(org => org.role);
-          if (roles.includes("org_admin")) {
-            primaryRole = "org_admin";
-          } else if (roles.includes("coach")) {
-            primaryRole = "coach";
-          } else if (roles.includes("athlete")) {
-            primaryRole = "athlete";
-          }
+          // Use the first organization role (users should only have one role per org)
+          targetRole = userOrgs[0].role;
         }
       }
 
@@ -360,9 +347,9 @@ export function registerRoutes(app: Express) {
         email: targetUser.email,
         firstName: targetUser.firstName,
         lastName: targetUser.lastName,
-        role: primaryRole,
+        role: targetRole,
         isSiteAdmin: targetUser.isSiteAdmin === "true",
-        playerId: primaryRole === "athlete" ? targetUser.playerId : undefined // Only set for athletes
+        playerId: targetRole === "athlete" ? targetUser.id : undefined // Use user ID as player ID for athletes
       };
       req.session.isImpersonating = true;
       req.session.impersonationStartTime = new Date();
@@ -1217,10 +1204,10 @@ export function registerRoutes(app: Express) {
         lastName
       });
 
-      // Calculate primary role for session
-      let primaryRole = invitation.role; // Use the role from the invitation
+      // Use the role from the invitation
+      let userRole = invitation.role;
       if (result.user.isSiteAdmin === "true") {
-        primaryRole = "site_admin";
+        userRole = "site_admin";
       }
 
       // Log the new user in
@@ -1230,14 +1217,14 @@ export function registerRoutes(app: Express) {
         email: result.user.email,
         firstName: result.user.firstName,
         lastName: result.user.lastName,
-        role: primaryRole,
+        role: userRole,
         isSiteAdmin: result.user.isSiteAdmin === "true"
       };
 
       // Determine redirect URL based on user role
       let redirectUrl = "/";
-      if (primaryRole === "athlete") {
-        // For athletes, redirect to their user ID (they don't have separate player records anymore)
+      if (userRole === "athlete") {
+        // For athletes, redirect to their user ID
         redirectUrl = `/athletes/${result.user.id}`;
       }
 
@@ -1541,19 +1528,13 @@ export function registerRoutes(app: Express) {
         })
       );
 
-      // Calculate primary role for profile
-      let primaryRole = "athlete";
+      // Determine user role
+      let userRole = "athlete";
       if (user.isSiteAdmin === "true") {
-        primaryRole = "site_admin";
+        userRole = "site_admin";
       } else if (userOrgs && userOrgs.length > 0) {
-        const roles = userOrgs.map(org => org.role);
-        if (roles.includes("org_admin")) {
-          primaryRole = "org_admin";
-        } else if (roles.includes("coach")) {
-          primaryRole = "coach";
-        } else if (roles.includes("athlete")) {
-          primaryRole = "athlete";
-        }
+        // Use the first organization role (users should only have one role per org)
+        userRole = userOrgs[0].role;
       }
 
       const userProfile = {
@@ -1562,7 +1543,7 @@ export function registerRoutes(app: Express) {
         lastName: user.lastName,
         username: user.username,
         email: user.email,
-        role: primaryRole,
+        role: userRole,
         organizations: organizations.filter(org => org.id && org.name)
       };
 
