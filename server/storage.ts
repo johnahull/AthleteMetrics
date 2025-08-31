@@ -661,17 +661,14 @@ export class DatabaseStorage implements IStorage {
       result.map(async (player) => {
         const playerTeams = await this.getPlayerTeams(player.id);
         
-        // Check if player has a login account by matching emails
+        // Check if player has a login account by direct playerId relationship
         let hasLogin = false;
-        if (player.emails && player.emails.length > 0) {
-          for (const email of player.emails) {
-            const user = await this.getUserByEmail(email);
-            if (user && (user.isActive === "true" || user.isActive === true)) {
-              hasLogin = true;
-              break;
-            }
-          }
-        }
+        const [userRecord] = await db.select().from(users)
+          .where(and(
+            eq(users.playerId, player.id),
+            sql`${users.isActive} = 'true' OR ${users.isActive} = true`
+          ));
+        hasLogin = !!userRecord;
         
         return {
           ...player,
