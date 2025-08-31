@@ -724,15 +724,6 @@ export function registerRoutes(app: Express) {
       const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, id) : [];
       const hasOrgAccess = userRoles.length > 0; // User has any role in this org
       
-      // Debug logging
-      console.log(`[DEBUG] Organization profile access check:`, {
-        userId: currentUser?.id,
-        organizationId: id,
-        userRoles,
-        hasOrgAccess,
-        isSiteAdmin
-      });
-      
       if (isSiteAdmin || hasOrgAccess) {
         // Site admins can access any organization, org members can access their org
         const orgProfile = await storage.getOrganizationProfile(id);
@@ -1217,6 +1208,14 @@ export function registerRoutes(app: Express) {
       }
       
       const updatedUser = await storage.updateUser(id, { role });
+      
+      // Also update role in all organizations the user belongs to
+      if (isOrgUser) {
+        for (const userOrg of userOrgs) {
+          await storage.updateUserOrganizationRole(id, userOrg.organizationId, role);
+        }
+      }
+      
       res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user role:", error);
