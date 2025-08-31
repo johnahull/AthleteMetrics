@@ -19,12 +19,12 @@ import {
 
 
 
-const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[], user?: any) => {
+const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[], user?: any, organizationContext?: string) => {
   // Site admins get different navigation based on context (check this FIRST)
   if (isSiteAdmin) {
     // When viewing an organization, show org admin menu
     if (isInOrganizationContext) {
-      return [
+      const baseOrgNavigation = [
         { name: "Dashboard", href: "/", icon: LayoutDashboard },
         { name: "Teams", href: "/teams", icon: Users },
         { name: "Athletes", href: "/athletes", icon: UsersRound },
@@ -33,6 +33,17 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
         { name: "Publish", href: "/publish", icon: FileCheck },
         { name: "Import/Export", href: "/import-export", icon: FileText },
       ];
+      
+      // Add "My Organization" link if we have organization context
+      if (organizationContext) {
+        baseOrgNavigation.push({ 
+          name: "My Organization", 
+          href: `/organizations/${organizationContext}`, 
+          icon: Building2 
+        });
+      }
+      
+      return baseOrgNavigation;
     }
     // Default site admin menu
     return [
@@ -100,7 +111,7 @@ export default function Sidebar() {
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData);
+  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext);
 
 
   return (
