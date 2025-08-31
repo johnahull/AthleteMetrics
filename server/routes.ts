@@ -247,6 +247,7 @@ export function registerRoutes(app: Express) {
         };
 
         // Add debugging info for role issues
+        const userOrgs = await storage.getUserOrganizations(user.id);
         console.log(`Login successful for user ${user.email} (${user.id}):`, {
           isSiteAdmin: user.isSiteAdmin,
           determinedRole: userRole,
