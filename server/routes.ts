@@ -41,10 +41,17 @@ const requireSiteAdmin = async (req: any, res: any, next: any) => {
   }
   
   if (req.session.user) {
-    // Check if user is site admin via the is_site_admin field
-    const user = await storage.getUser(req.session.user.id);
-    if (user && user.isSiteAdmin === "true") {
+    // Check for old admin session format
+    if (req.session.user.username === "admin" && req.session.user.isSiteAdmin) {
       return next();
+    }
+    
+    // Check if user is site admin via the is_site_admin field (for new user system)
+    if (req.session.user.id) {
+      const user = await storage.getUser(req.session.user.id);
+      if (user && user.isSiteAdmin === "true") {
+        return next();
+      }
     }
   }
   
