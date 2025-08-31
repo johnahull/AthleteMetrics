@@ -400,7 +400,7 @@ export default function UserManagement() {
   const copyExistingInviteLink = async (invitation: any) => {
     try {
       // Get the invitation details to build the link
-      const inviteLink = `${window.location.protocol}//${window.location.host}/register?token=${invitation.token}`;
+      const inviteLink = `${window.location.protocol}//${window.location.host}/accept-invitation?token=${invitation.token}`;
 
       await navigator.clipboard.writeText(inviteLink);
       toast({

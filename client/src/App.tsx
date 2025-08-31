@@ -27,6 +27,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/accept-invitation" component={AcceptInvitation} />
+      <Route path="/register" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
       <Route path="/athletes/:id" component={PlayerProfile} />
       <Route path="/athletes" component={Players} />
