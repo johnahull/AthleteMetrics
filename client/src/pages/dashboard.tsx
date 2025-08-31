@@ -241,7 +241,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {(recentMeasurements as any)?.slice?.(0, 10)?.map((measurement: any) => (
+                {Array.isArray(recentMeasurements) && recentMeasurements.slice(0, 10).map((measurement: any) => (
                   <tr key={measurement.id} className="border-b border-gray-100">
                     <td className="py-3">
                       <div className="flex items-center space-x-3">

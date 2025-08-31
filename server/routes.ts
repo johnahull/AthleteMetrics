@@ -69,7 +69,8 @@ const hasRole = async (userId: string, role: string, organizationId?: string): P
     return userRoles.includes(role);
   }
   
-  return user.role === role;
+  // No direct role on user object - roles are in userOrganizations
+  return false;
 };
 
 const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
@@ -1088,11 +1089,15 @@ export function registerRoutes(app: Express) {
       }
 
       // Create invitations for all player emails
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+      
       const invitations = await storage.createPlayerInvitations(playerId, {
         organizationId: organizationId || null,
         teamIds: teamIds || [],
         role,
-        invitedBy: invitedById
+        invitedBy: invitedById,
+        expiresAt
       });
 
       // Generate invitation links with player info
@@ -1293,6 +1298,24 @@ export function registerRoutes(app: Express) {
         }
       }
 
+      // Calculate primary role for session
+      let primaryRole = "athlete"; // Default role
+      if (result.user.isSiteAdmin === "true") {
+        primaryRole = "site_admin";
+      } else {
+        const userOrgs = await storage.getUserOrganizations(result.user.id);
+        if (userOrgs && userOrgs.length > 0) {
+          const roles = userOrgs.map(org => org.role);
+          if (roles.includes("org_admin")) {
+            primaryRole = "org_admin";
+          } else if (roles.includes("coach")) {
+            primaryRole = "coach";
+          } else if (roles.includes("athlete")) {
+            primaryRole = "athlete";
+          }
+        }
+      }
+
       // Log the new user in
       req.session.user = {
         id: result.user.id,
@@ -1300,22 +1323,22 @@ export function registerRoutes(app: Express) {
         email: result.user.email,
         firstName: result.user.firstName,
         lastName: result.user.lastName,
-        role: result.user.role,
-        playerId: result.user.playerId,
+        role: primaryRole,
+        playerId: result.user.playerId || undefined,
         isSiteAdmin: result.user.isSiteAdmin === "true" // Store as boolean
       };
 
       // Determine redirect URL based on user role
       let redirectUrl = "/";
-      console.log(`🔍 Login redirect for user ${result.user.username}, role: ${result.user.role}, playerId: ${result.user.playerId}`);
+      console.log(`🔍 Login redirect for user ${result.user.username}, role: ${primaryRole}, playerId: ${result.user.playerId}`);
 
-      if (result.user.role === "athlete" && result.user.playerId) {
+      if (primaryRole === "athlete" && result.user.playerId) {
         redirectUrl = `/athletes/${result.user.playerId}`;
         console.log(`👤 Athlete redirect: ${redirectUrl}`);
-      } else if (result.user.role === "org_admin" || result.user.role === "coach") {
+      } else if (primaryRole === "org_admin" || primaryRole === "coach") {
         // Org admins and coaches go to dashboard
         redirectUrl = "/";
-        console.log(`🏢 ${result.user.role} redirect: ${redirectUrl}`);
+        console.log(`🏢 ${primaryRole} redirect: ${redirectUrl}`);
       }
 
       console.log(`➡️ Final redirect URL: ${redirectUrl}`);
@@ -1520,10 +1543,7 @@ export function registerRoutes(app: Express) {
 
       if (!user) {
         // Create new user if they don't exist
-        user = await storage.createUser({
-          ...parsedUserData,
-          role: roles[0] // Keep primary role for backwards compatibility
-        });
+        user = await storage.createUser(parsedUserData);
       } else {
         // Update existing user's basic info if needed
         if (parsedUserData.firstName || parsedUserData.lastName) {
@@ -1564,7 +1584,7 @@ export function registerRoutes(app: Express) {
         email: user.email, 
         firstName: user.firstName, 
         lastName: user.lastName, 
-        role: user.role,
+        role: roles[0] || "athlete", // Use the primary role from request
         message: "User created successfully"
       });
     } catch (error) {
@@ -1766,13 +1786,28 @@ export function registerRoutes(app: Express) {
         })
       );
 
+      // Calculate primary role for profile
+      let primaryRole = "athlete";
+      if (user.isSiteAdmin === "true") {
+        primaryRole = "site_admin";
+      } else if (userOrgs && userOrgs.length > 0) {
+        const roles = userOrgs.map(org => org.role);
+        if (roles.includes("org_admin")) {
+          primaryRole = "org_admin";
+        } else if (roles.includes("coach")) {
+          primaryRole = "coach";
+        } else if (roles.includes("athlete")) {
+          primaryRole = "athlete";
+        }
+      }
+
       const userProfile = {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
         email: user.email,
-        role: user.role,
+        role: primaryRole,
         organizations: organizations.filter(org => org.id && org.name)
       };
 
