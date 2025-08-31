@@ -114,21 +114,22 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user: userData, logout } = useAuth();
+  const { user, logout } = useAuth();
 
   // Get user's primary role from their first organization (or 'athlete' fallback)
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
-    enabled: !!userData?.id && !userData?.isSiteAdmin,
+    enabled: !!user?.id,
   });
 
-  const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
-  const isSiteAdmin = userData?.isSiteAdmin || false;
+  // Determine user's primary role
+  let primaryRole = user?.role || "athlete";
+  const isSiteAdmin = user?.isSiteAdmin || user?.role === "site_admin";
 
   // Check if we're in an organization context (site admin viewing specific org)
-  const isInOrganizationContext = isSiteAdmin && !!organizationContext;
+  const isInOrganizationContext = location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[]);
+  const navigation = getNavigation(isSiteAdmin, primaryRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
 
 
   return (
@@ -154,7 +155,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="p-4 space-y-2 flex-1">
         {/* Back to site button for site admins in organization context */}
-        {isSiteAdmin && organizationContext && (
+        {isSiteAdmin && isInOrganizationContext && (
           <button
             onClick={() => setOrganizationContext(null)}
             className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 border border-gray-200 mb-4"
@@ -187,77 +188,102 @@ export default function Sidebar() {
       </nav>
 
       {/* User Section */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="space-y-2">
-          {/* Profile Link for admins and coaches - but not for legacy admin */}
-
-          {/* Site admin organization profile link when in organization context */}
-          {userData && userData.isSiteAdmin && isInOrganizationContext && (
-            (() => {
-              const orgIdMatch = location.match(/\/organizations\/([^\/]+)/);
-              if (orgIdMatch) {
-                const orgId = orgIdMatch[1];
-                const isActive = location === `/organizations/${orgId}`;
-                return (
-                  <Link href={`/organizations/${orgId}`}>
-                    <div
-                      className={cn(
-                        "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                        isActive
-                          ? "bg-primary text-white" 
-                          : "text-gray-700 hover:bg-gray-100"
-                      )}
-                      data-testid="nav-organization-profile"
-                    >
-                      <Building2 className="h-5 w-5" />
-                      <span>Organization Profile</span>
-                    </div>
-                  </Link>
-                );
-              }
-              return null;
-            })()
-          )}
-
-          {userData && (userData.isSiteAdmin || primaryRole === "org_admin" || primaryRole === "coach") && userData.id && (
-            <Link href="/profile">
-              <div
-                className={cn(
-                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                  location === "/profile"
-                    ? "bg-primary text-white" 
-                    : "text-gray-700 hover:bg-gray-100"
-                )}
-                data-testid="nav-profile"
-              >
-                <User className="h-5 w-5" />
-                <span>Profile</span>
+      <div className="p-4 border-t border-gray-200 mt-auto">
+        {user && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <User className="h-8 w-8 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {user.firstName} {user.lastName}
+                </p>
+                <p className="text-xs text-gray-500 capitalize">
+                  {primaryRole.replace('_', ' ')}
+                </p>
               </div>
-            </Link>
-          )}
-
-          {/* User Info & Logout */}
-          <div className="text-sm text-gray-600 px-3 py-2">
-            <p className="font-medium">{userData?.username}</p>
-            <p className="text-xs">{userData?.isSiteAdmin ? 'Site Admin' : primaryRole?.replace('_', ' ').replace(/\b\w/g, (l: any) => l.toUpperCase())}</p>
-            {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
-              <p className="text-xs text-gray-500 mt-1">
-                {userOrganizations.length === 1 
-                  ? userOrganizations[0]?.organization?.name 
-                  : `${userOrganizations[0]?.organization?.name} (+${userOrganizations.length - 1} more)`}
-              </p>
-            )}
+            </div>
+            <button
+              onClick={logout}
+              className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
           </div>
+        )}
+        {/* Org admin organization profile link */}
+          <OrganizationProfileLink 
+            user={user} 
+            location={location} 
+            userOrganizations={userOrganizations} 
+          />
 
-          <button
-            onClick={logout}
-            className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
-            data-testid="nav-logout"
-          >
-            <LogOut className="h-5 w-5" />
-            <span>Sign Out</span>
-          </button>
+        {/* Site admin organization profile link when in organization context */}
+        {user && user.isSiteAdmin && isInOrganizationContext && (
+          (() => {
+            const orgIdMatch = location.match(/\/organizations\/([^\/]+)/);
+            if (orgIdMatch) {
+              const orgId = orgIdMatch[1];
+              const isActive = location === `/organizations/${orgId}`;
+              return (
+                <Link href={`/organizations/${orgId}`}>
+                  <div
+                    className={cn(
+                      "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+                      isActive
+                        ? "bg-primary text-white" 
+                        : "text-gray-700 hover:bg-gray-100"
+                    )}
+                    data-testid="nav-organization-profile"
+                  >
+                    <Building2 className="h-5 w-5" />
+                    <span>Organization Profile</span>
+                  </div>
+                </Link>
+              );
+            }
+            return null;
+          })()
+        )}
+
+        {user && (user.isSiteAdmin || primaryRole === "org_admin" || primaryRole === "coach") && user.id && (
+          <Link href="/profile">
+            <div
+              className={cn(
+                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+                location === "/profile"
+                  ? "bg-primary text-white" 
+                  : "text-gray-700 hover:bg-gray-100"
+              )}
+              data-testid="nav-profile"
+            >
+              <User className="h-5 w-5" />
+              <span>Profile</span>
+            </div>
+          </Link>
+        )}
+
+        {/* User Info & Logout */}
+        <div className="text-sm text-gray-600 px-3 py-2">
+          <p className="font-medium">{user?.username}</p>
+          <p className="text-xs">{user?.isSiteAdmin ? 'Site Admin' : primaryRole?.replace('_', ' ').replace(/\b\w/g, (l: any) => l.toUpperCase())}</p>
+          {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              {userOrganizations.length === 1 
+                ? userOrganizations[0]?.organization?.name 
+                : `${userOrganizations[0]?.organization?.name} (+${userOrganizations.length - 1} more)`}
+            </p>
+          )}
         </div>
+
+        <button
+          onClick={logout}
+          className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+          data-testid="nav-logout"
+        >
+          <LogOut className="h-5 w-5" />
+          <span>Sign Out</span>
+        </button>
       </div>
 
     </aside>
