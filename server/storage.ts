@@ -746,6 +746,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Athletes (users with athlete role)
+  async getPlayers(filters?: {
+    teamId?: string;
+    organizationId?: string;
+    birthYearFrom?: number;
+    birthYearTo?: number;
+    search?: string;
+  }): Promise<User[]> {
+    return this.getAthletes(filters);
+  }
+
   async getAthletes(filters?: {
     teamId?: string;
     organizationId?: string;
@@ -808,6 +818,29 @@ export class DatabaseStorage implements IStorage {
     
     // Extract just the users from the joined result
     return result.map(row => row.users || row);
+  }
+
+  async getAthlete(id: string): Promise<User | undefined> {
+    return this.getUser(id);
+  }
+
+  async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
+    return this.createUser({
+      ...athlete,
+      username: athlete.username || `athlete_${Date.now()}`,
+      email: athlete.email || `temp_${Date.now()}@temp.local`,
+      firstName: athlete.firstName || "",
+      lastName: athlete.lastName || "",
+      password: "INVITATION_PENDING"
+    } as InsertUser);
+  }
+
+  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
+    return this.updateUser(id, athlete);
+  }
+
+  async deleteAthlete(id: string): Promise<void> {
+    return this.deleteUser(id);
   }
 
   async getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined> {
@@ -932,7 +965,7 @@ export class DatabaseStorage implements IStorage {
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
       // Delete all measurements for this user
-      await tx.delete(measurements).where(eq(measurements.playerId, id));
+      await tx.delete(measurements).where(eq(measurements.userId, id));
 
       // Delete all invitations for this user
       await tx.delete(invitations).where(eq(invitations.invitedBy, id));
@@ -997,7 +1030,7 @@ export class DatabaseStorage implements IStorage {
 
   // Measurements
   async getMeasurements(filters?: {
-    playerId?: string;
+    userId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -1013,12 +1046,12 @@ export class DatabaseStorage implements IStorage {
   }): Promise<any[]> {
     let query = db.select()
       .from(measurements)
-      .innerJoin(players, eq(measurements.playerId, players.id))
-      .innerJoin(users, eq(measurements.submittedBy, users.id));
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(users as any, eq(measurements.submittedBy, users.id));
 
     const conditions = [];
-    if (filters?.playerId) {
-      conditions.push(eq(measurements.playerId, filters.playerId));
+    if (filters?.userId) {
+      conditions.push(eq(measurements.userId, filters.userId));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));
@@ -1030,13 +1063,13 @@ export class DatabaseStorage implements IStorage {
       conditions.push(lte(measurements.date, filters.dateTo));
     }
     if (filters?.birthYearFrom) {
-      conditions.push(gte(players.birthYear, filters.birthYearFrom));
+      conditions.push(gte(users.birthYear, filters.birthYearFrom));
     }
     if (filters?.birthYearTo) {
-      conditions.push(lte(players.birthYear, filters.birthYearTo));
+      conditions.push(lte(users.birthYear, filters.birthYearTo));
     }
     if (filters?.search) {
-      conditions.push(sql`${players.fullName} ILIKE ${'%' + filters.search + '%'}`);
+      conditions.push(sql`${users.fullName} ILIKE ${'%' + filters.search + '%'}`);
     }
     if (filters?.ageFrom) {
       conditions.push(gte(measurements.age, filters.ageFrom));
@@ -1054,10 +1087,16 @@ export class DatabaseStorage implements IStorage {
 
     const result = await query.orderBy(desc(measurements.date), desc(measurements.createdAt));
 
-    // Get teams for each player and additional user info
+    // Get teams for each user and additional user info
     const measurementsWithDetails = await Promise.all(
-      result.map(async ({ measurements: measurement, players: player, users: submittedBy }) => {
-        const playerTeams = await this.getPlayerTeams(player.id);
+      result.map(async ({ measurements: measurement, users: user }) => {
+        const userTeams = await this.getUserTeams(user.id);
+
+        let submittedBy;
+        if (measurement.submittedBy) {
+          const [submitter] = await db.select().from(users).where(eq(users.id, measurement.submittedBy));
+          submittedBy = submitter;
+        }
 
         let verifiedBy;
         if (measurement.verifiedBy) {
@@ -1067,7 +1106,7 @@ export class DatabaseStorage implements IStorage {
 
         return {
           ...measurement,
-          player: { ...player, teams: playerTeams },
+          user: { ...user, teams: userTeams.map(ut => ut.team) },
           submittedBy,
           verifiedBy
         };
@@ -1079,20 +1118,20 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.teamIds && filters.teamIds.length > 0) {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.player.teams.some(team => filters.teamIds!.includes(team.id))
+        measurement.user.teams.some(team => filters.teamIds!.includes(team.id))
       );
     }
 
     if (filters?.organizationId) {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.player.teams.some(team => team.organization.id === filters.organizationId)
+        measurement.user.teams.some(team => team.organization.id === filters.organizationId)
       );
     }
 
     // Filter by sport if specified
     if (filters?.sport && filters.sport !== "all") {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.player.sports?.includes(filters.sport!)
+        measurement.user.sports?.includes(filters.sport!)
       );
     }
 
@@ -1106,16 +1145,16 @@ export class DatabaseStorage implements IStorage {
 
   async createMeasurement(measurement: InsertMeasurement): Promise<Measurement> {
     // Calculate age and units based on metric
-    const player = await this.getPlayer(measurement.playerId);
-    if (!player) throw new Error("Player not found");
+    const user = await this.getUser(measurement.userId);
+    if (!user) throw new Error("User not found");
 
     const measurementDate = new Date(measurement.date);
-    let age = measurementDate.getFullYear() - player.birthYear;
+    let age = measurementDate.getFullYear() - (user.birthYear || 0);
 
-    // Use birthday for more precise age calculation if available
-    if (player.birthday) {
-      const birthday = new Date(player.birthday);
-      const birthdayThisYear = new Date(measurementDate.getFullYear(), birthday.getMonth(), birthday.getDate());
+    // Use birthDate for more precise age calculation if available
+    if (user.birthDate) {
+      const birthDate = new Date(user.birthDate);
+      const birthdayThisYear = new Date(measurementDate.getFullYear(), birthDate.getMonth(), birthDate.getDate());
       if (measurementDate < birthdayThisYear) {
         age -= 1;
       }
@@ -1135,7 +1174,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const [newMeasurement] = await db.insert(measurements).values({
-      playerId: measurement.playerId,
+      userId: measurement.userId,
       submittedBy: measurement.submittedBy,
       date: measurement.date,
       metric: measurement.metric,
@@ -1153,7 +1192,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
     const updateData: any = {};
-    if (measurement.playerId) updateData.playerId = measurement.playerId;
+    if (measurement.userId) updateData.userId = measurement.userId;
     if (measurement.submittedBy) updateData.submittedBy = measurement.submittedBy;
     if (measurement.date) updateData.date = measurement.date;
     if (measurement.metric) updateData.metric = measurement.metric;
@@ -1181,12 +1220,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Analytics
-  async getPlayerStats(playerId: string): Promise<{
+  async getUserStats(userId: string): Promise<{
     bestFly10?: number;
     bestVertical?: number;
     measurementCount: number;
   }> {
-    const measurements = await this.getMeasurements({ playerId, includeUnverified: false });
+    return this.getPlayerStats(userId);
+  }
+
+  async getPlayerStats(userId: string): Promise<{
+    bestFly10?: number;
+    bestVertical?: number;
+    measurementCount: number;
+  }> {
+    const measurements = await this.getMeasurements({ userId, includeUnverified: false });
 
     const fly10Times = measurements
       .filter(m => m.metric === "FLY10_TIME")
@@ -1206,7 +1253,7 @@ export class DatabaseStorage implements IStorage {
     teamId: string;
     teamName: string;
     organizationName: string;
-    playerCount: number;
+    athleteCount: number;
     bestFly10?: number;
     bestVertical?: number;
     latestTest?: string;
@@ -1215,7 +1262,7 @@ export class DatabaseStorage implements IStorage {
 
     const teamStats = await Promise.all(
       teams.map(async (team) => {
-        const players = await this.getPlayers({ teamId: team.id });
+        const athletes = await this.getAthletes({ teamId: team.id });
         const measurements = await this.getMeasurements({ teamIds: [team.id], includeUnverified: false });
 
         const fly10Times = measurements
@@ -1231,7 +1278,7 @@ export class DatabaseStorage implements IStorage {
           teamId: team.id,
           teamName: team.name,
           organizationName: team.organization.name,
-          playerCount: players.length,
+          athleteCount: athletes.length,
           bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
           bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
           latestTest: latestMeasurement ? latestMeasurement.date : undefined
@@ -1243,37 +1290,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDashboardStats(organizationId?: string): Promise<{
-    totalPlayers: number;
-    activeAthletes: number;
+    totalAthletes: number;
     totalTeams: number;
-    bestFly10Today?: { value: number; playerName: string };
-    bestVerticalToday?: { value: number; playerName: string };
+    bestFly10Today?: { value: number; userName: string };
+    bestVerticalToday?: { value: number; userName: string };
   }> {
-    const players = await this.getPlayers({ organizationId });
+    const athletes = await this.getAthletes({ organizationId });
     const teams = await this.getTeams(organizationId);
 
     // Count active athletes (players who have user accounts)
     const allUsers = organizationId
       ? await this.getOrganizationUsers(organizationId)
       : await this.getUsers();
-
-    const activeAthleteEmails = allUsers
-      .filter(userOrg => {
-        // For organization users, check the organization role
-        if ('role' in userOrg && userOrg.role) {
-          return userOrg.role === 'athlete';
-        }
-        // For site-wide users, they're not athletes since athletes are organization-specific
-        return false;
-      })
-      .map(userOrg => {
-        const user = 'user' in userOrg ? userOrg.user : userOrg;
-        return user.email;
-      });
-
-    const activeAthletes = players.filter(player =>
-      player.emails && player.emails.some(email => activeAthleteEmails.includes(email))
-    ).length;
 
     const today = new Date().toISOString().split('T')[0];
     const todaysMeasurements = await this.getMeasurements({
@@ -1285,15 +1313,14 @@ export class DatabaseStorage implements IStorage {
 
     const todaysFly10 = todaysMeasurements
       .filter(m => m.metric === "FLY10_TIME")
-      .map(m => ({ value: parseFloat(m.value), playerName: m.player.fullName }));
+      .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
 
     const todaysVertical = todaysMeasurements
       .filter(m => m.metric === "VERTICAL_JUMP")
-      .map(m => ({ value: parseFloat(m.value), playerName: m.player.fullName }));
+      .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
 
     return {
-      totalPlayers: players.length,
-      activeAthletes,
+      totalAthletes: athletes.length,
       totalTeams: teams.length,
       bestFly10Today: todaysFly10.length > 0 ? todaysFly10.reduce((best, current) =>
         current.value < best.value ? current : best
