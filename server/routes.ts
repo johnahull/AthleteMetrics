@@ -156,7 +156,12 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/auth/me", (req, res) => {
     if (req.session.user) {
-      return res.json({ user: req.session.user });
+      return res.json({ 
+        user: {
+          ...req.session.user,
+          playerId: req.session.user.playerId // Ensure playerId is included
+        }
+      });
     }
     res.status(401).json({ message: "Not authenticated" });
   });

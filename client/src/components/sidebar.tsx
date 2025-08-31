@@ -52,7 +52,7 @@ function OrganizationProfileLink({ user, location, userOrganizations }: { user: 
   );
 }
 
-const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[]) => {
+const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[], user?: any) => {
   // Site admins get different navigation based on context (check this FIRST)
   if (isSiteAdmin) {
     // When viewing an organization, show org admin menu
@@ -78,8 +78,8 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 
   // Athletes get a restricted navigation menu
   if (primaryRole === "athlete") {
-    // Use userId for the profile link (userData is not available in this scope)
-    const profileId = userId;
+    // Use playerId if available, otherwise fallback to userId for the profile link
+    const profileId = user?.playerId || userId;
     return [
       { name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -134,7 +134,7 @@ export default function Sidebar() {
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[]);
+  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData);
 
 
   return (
