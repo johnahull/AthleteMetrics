@@ -48,6 +48,7 @@ export interface IStorage {
   // Invitations
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
+  updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }>;
 
   // Players (legacy athletes)
@@ -397,6 +398,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(invitations.createdAt));
     
     return result;
+  }
+
+  async updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation> {
+    const [updated] = await db.update(invitations).set(invitation).where(eq(invitations.id, id)).returning();
+    return updated;
   }
 
   async deleteInvitation(invitationId: string): Promise<void> {

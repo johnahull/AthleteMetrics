@@ -568,9 +568,8 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
-    console.log("🎯 HIT ATHLETES ROUTE!");
     try {
-      const user = (req as any).user;
+      const user = (req as any).session.user;
       const userOrgs = await storage.getUserOrganizations(user.id);
       
       if (userOrgs.length === 0) {
@@ -607,7 +606,6 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/invitations/:token", async (req, res) => {
-    console.log("⚠️ HIT TOKEN ROUTE with token:", req.params.token);
     try {
       const { token } = req.params;
       const invitation = await storage.getInvitation(token);
@@ -700,6 +698,22 @@ export function registerRoutes(app: Express) {
         firstName,
         lastName
       });
+      
+      // If this is an athlete invitation with playerId, cancel all other pending invitations for this player
+      if (invitation.role === "athlete" && invitation.playerId) {
+        console.log(`🚫 Auto-cancelling other invitations for player ${invitation.playerId}`);
+        const allInvitations = await storage.getInvitations();
+        const otherPlayerInvitations = allInvitations.filter(inv => 
+          inv.playerId === invitation.playerId && 
+          inv.id !== invitation.id && 
+          inv.isUsed === "false"
+        );
+        
+        for (const otherInv of otherPlayerInvitations) {
+          await storage.updateInvitation(otherInv.id, { isUsed: "true" });
+          console.log(`✅ Cancelled invitation ${otherInv.id} for ${otherInv.email}`);
+        }
+      }
       
       // Log the new user in
       req.session.user = {
