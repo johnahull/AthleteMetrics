@@ -256,15 +256,15 @@ export function registerRoutes(app: Express) {
           lastName: user.lastName,
           role: primaryRole,
           isSiteAdmin: user.isSiteAdmin === "true",
-          playerId: user.playerId
+          playerId: primaryRole === "athlete" ? user.playerId : undefined // Only set playerId for athletes
         };
 
         let redirectUrl = "/";
         if (primaryRole === "athlete" && user.playerId) {
           // For athletes, redirect to their player profile using playerId
           redirectUrl = `/athletes/${user.playerId}`;
-        } else if (primaryRole === "org_admin" || primaryRole === "coach") {
-          // Org admins and coaches go to dashboard (not organization profile)
+        } else {
+          // All other roles (org_admin, coach, site_admin) go to dashboard
           redirectUrl = "/";
         }
 
@@ -380,7 +380,7 @@ export function registerRoutes(app: Express) {
         lastName: targetUser.lastName,
         role: primaryRole,
         isSiteAdmin: targetUser.isSiteAdmin === "true",
-        playerId: targetUser.playerId || undefined
+        playerId: primaryRole === "athlete" ? targetUser.playerId : undefined // Only set for athletes
       };
       req.session.isImpersonating = true;
       req.session.impersonationStartTime = new Date();
@@ -1337,7 +1337,7 @@ export function registerRoutes(app: Express) {
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: primaryRole,
-        playerId: result.user.playerId || undefined,
+        playerId: primaryRole === "athlete" ? result.user.playerId : undefined, // Only set for athletes
         isSiteAdmin: result.user.isSiteAdmin === "true" // Store as boolean
       };
 
@@ -1346,8 +1346,8 @@ export function registerRoutes(app: Express) {
 
       if (primaryRole === "athlete" && result.user.playerId) {
         redirectUrl = `/athletes/${result.user.playerId}`;
-      } else if (primaryRole === "org_admin" || primaryRole === "coach") {
-        // Org admins and coaches go to dashboard
+      } else {
+        // All other roles go to dashboard
         redirectUrl = "/";
       }
 
