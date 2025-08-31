@@ -32,7 +32,7 @@ export default function Organizations() {
   const queryClient = useQueryClient();
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, setOrganizationContext } = useAuth();
 
   const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations"],
@@ -73,7 +73,8 @@ export default function Organizations() {
   const onOrganizationClick = (orgId: string, orgName: string) => {
     // Site admins can switch to organization context
     if (user?.isSiteAdmin) {
-      setLocation('/'); // Redirect to dashboard
+      setOrganizationContext(orgId);
+      setLocation('/'); // Redirect to dashboard in org context
       toast({ 
         title: `Switched to ${orgName}`,
         description: "Now viewing organization-specific data. Use 'Back to Site' to return to site view.",
