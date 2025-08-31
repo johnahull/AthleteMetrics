@@ -21,7 +21,7 @@ import {
 function OrganizationProfileLink({ user, location, userOrganizations }: { user: any, location: string, userOrganizations?: any[] }) {
   // Check if user has org_admin role in any organization
   const hasOrgAdminRole = userOrganizations?.some(org => org.role === "org_admin");
-  
+
   const { data: organizations } = useQuery({
     queryKey: ["/api/organizations-with-users"],
     enabled: !!user?.id && hasOrgAdminRole,
@@ -79,7 +79,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
   // Athletes get a restricted navigation menu
   if (primaryRole === "athlete") {
     // Use playerId if available, otherwise fallback to userId for the profile link
-    const profileId = (user as any)?.playerId || userId;
+    const profileId = (userData as any)?.playerId || userId;
     return [
       { name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -114,22 +114,22 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user, logout, organizationContext, setOrganizationContext } = useAuth();
-  
+  const { user: userData, logout, organizationContext, setOrganizationContext } = useAuth();
+
   // Get user's primary role from their first organization (or 'athlete' fallback)
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
-    enabled: !!user?.id && !user?.isSiteAdmin,
+    enabled: !!userData?.id && !userData?.isSiteAdmin,
   });
-  
+
   const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
-  const isSiteAdmin = user?.isSiteAdmin || false;
-  
+  const isSiteAdmin = userData?.isSiteAdmin || false;
+
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = isSiteAdmin && !!organizationContext;
-  
-  const navigation = getNavigation(isSiteAdmin, primaryRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
-  
+
+  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[]);
+
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
@@ -164,7 +164,7 @@ export default function Sidebar() {
             <span>← Back to Site</span>
           </button>
         )}
-        
+
         {navigation.map((item) => {
           const isActive = location === item.href;
           return (
@@ -190,9 +190,9 @@ export default function Sidebar() {
       <div className="p-4 border-t border-gray-200">
         <div className="space-y-2">
           {/* Profile Link for admins and coaches - but not for legacy admin */}
-          
+
           {/* Site admin organization profile link when in organization context */}
-          {user && user.isSiteAdmin && isInOrganizationContext && (
+          {userData && userData.isSiteAdmin && isInOrganizationContext && (
             (() => {
               const orgIdMatch = location.match(/\/organizations\/([^\/]+)/);
               if (orgIdMatch) {
@@ -218,8 +218,8 @@ export default function Sidebar() {
               return null;
             })()
           )}
-          
-          {user && (user.isSiteAdmin || primaryRole === "org_admin" || primaryRole === "coach") && user.id && (
+
+          {userData && (userData.isSiteAdmin || primaryRole === "org_admin" || primaryRole === "coach") && userData.id && (
             <Link href="/profile">
               <div
                 className={cn(
@@ -235,11 +235,11 @@ export default function Sidebar() {
               </div>
             </Link>
           )}
-          
+
           {/* User Info & Logout */}
           <div className="text-sm text-gray-600 px-3 py-2">
-            <p className="font-medium">{user?.username}</p>
-            <p className="text-xs">{user?.isSiteAdmin ? 'Site Admin' : primaryRole?.replace('_', ' ').replace(/\b\w/g, (l: any) => l.toUpperCase())}</p>
+            <p className="font-medium">{userData?.username}</p>
+            <p className="text-xs">{userData?.isSiteAdmin ? 'Site Admin' : primaryRole?.replace('_', ' ').replace(/\b\w/g, (l: any) => l.toUpperCase())}</p>
             {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
               <p className="text-xs text-gray-500 mt-1">
                 {userOrganizations.length === 1 
@@ -248,7 +248,7 @@ export default function Sidebar() {
               </p>
             )}
           </div>
-          
+
           <button
             onClick={logout}
             className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
