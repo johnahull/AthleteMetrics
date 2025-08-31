@@ -94,10 +94,10 @@ export default function UserManagement() {
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
-  
+
   const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
   const isSiteAdmin = user?.isSiteAdmin || false;
-  
+
   // Redirect athletes away from this management page
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
@@ -105,7 +105,7 @@ export default function UserManagement() {
       setLocation(`/athletes/${playerId}`);
     }
   }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
-  
+
   // Don't render management UI for athletes
   if (!isSiteAdmin && primaryRole === "athlete") {
     return null;
@@ -169,7 +169,7 @@ export default function UserManagement() {
     onSuccess: (data) => {
       // Refresh the organizations and users list
       queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
-      
+
       if (data.inviteLink) {
         navigator.clipboard.writeText(data.inviteLink);
         toast({ 
@@ -184,7 +184,7 @@ export default function UserManagement() {
       }
       setUserDialogOpen(false);
       inviteForm.reset();
-      
+
       // Reset form to first organization
       if (organizations && organizations.length > 0) {
         inviteForm.setValue("organizationId", organizations[0].id);
@@ -207,7 +207,7 @@ export default function UserManagement() {
     onSuccess: (data) => {
       // Refresh the site admins list
       queryClient.invalidateQueries({ queryKey: ["/api/site-admins"] });
-      
+
       toast({ 
         title: "Site admin created successfully!", 
         description: `${data.user.firstName} ${data.user.lastName} has been created as a site admin.`
@@ -302,7 +302,7 @@ export default function UserManagement() {
   const handleToggleUserStatus = (userId: string, userName: string, currentStatus: string) => {
     const isCurrentlyActive = currentStatus === "true";
     const action = isCurrentlyActive ? "deactivate" : "activate";
-    
+
     if (confirm(`Are you sure you want to ${action} ${userName}?`)) {
       toggleUserStatusMutation.mutate({ userId, isActive: !isCurrentlyActive });
     }
@@ -318,10 +318,10 @@ export default function UserManagement() {
         organizationId
       });
       const data = await res.json();
-      
+
       // Refresh the user list
       queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
-      
+
       if (data.inviteLink) {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({
@@ -374,7 +374,7 @@ export default function UserManagement() {
     try {
       // Get the invitation details to build the link
       const inviteLink = `${window.location.protocol}//${window.location.host}/register?token=${invitation.token}`;
-      
+
       await navigator.clipboard.writeText(inviteLink);
       toast({
         title: "Invitation link copied!",
@@ -472,7 +472,7 @@ export default function UserManagement() {
                         render={({ field }) => {
                           const selectedOrgId = inviteForm.watch("organizationId");
                           const isOrgUser = selectedOrgId && selectedOrgId.length > 0;
-                          
+
                           return (
                             <FormItem>
                               <FormLabel>Role</FormLabel>
@@ -664,7 +664,7 @@ export default function UserManagement() {
                     </Dialog>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   {/* Active Site Admins */}
                   {siteAdmins.map((admin) => (
@@ -687,7 +687,7 @@ export default function UserManagement() {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500 px-2 py-1 bg-gray-200 rounded">
                           Site Admin
@@ -719,7 +719,7 @@ export default function UserManagement() {
                       {org.users?.length || 0} users
                     </span>
                   </div>
-                  
+
                   <div className="space-y-2">
                     {/* Active Users */}
                     {org.users?.map((userOrg) => (
@@ -746,11 +746,11 @@ export default function UserManagement() {
                             </div>
                             <div className="ml-4">
                               <select
-                                value={userOrg.user.role}
+                                value={userOrg.role}
                                 onChange={(e) => {
                                   const newRole = e.target.value;
-                                  const currentRole = userOrg.user.role;
-                                  
+                                  const currentRole = userOrg.role;
+
                                   // Validate role transitions
                                   if ((currentRole === 'athlete' && (newRole === 'coach' || newRole === 'org_admin')) ||
                                       ((currentRole === 'coach' || currentRole === 'org_admin') && newRole === 'athlete')) {
@@ -758,7 +758,7 @@ export default function UserManagement() {
                                       return;
                                     }
                                   }
-                                  
+
                                   handleRoleChange(userOrg.user.id, newRole);
                                 }}
                                 className="text-sm border border-gray-300 rounded px-2 py-1"
@@ -772,7 +772,7 @@ export default function UserManagement() {
                             </div>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
@@ -810,7 +810,7 @@ export default function UserManagement() {
                     {org.invitations?.map((invitation) => {
                       const isExpired = new Date() > new Date(invitation.expiresAt);
                       const isUsed = invitation.isUsed === "true";
-                      
+
                       return (
                         <div 
                           key={invitation.id} 
@@ -842,7 +842,7 @@ export default function UserManagement() {
                               </div>
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             {!isUsed && !isExpired && (
                               <Button
