@@ -648,8 +648,10 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Mark invitation as used
-    await db.update(invitations).set({ isUsed: "true" }).where(eq(invitations.token, token));
+    // Delete the invitation after successful acceptance
+      await db
+        .delete(invitations)
+        .where(eq(invitations.token, token));
 
     return { user, playerId };
   }

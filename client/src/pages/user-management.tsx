@@ -761,7 +761,7 @@ export default function UserManagement() {
 
                                   handleRoleChange(userOrg.user.id, newRole);
                                 }}
-                                className="text-sm border border-gray-300 rounded px-2 py-1"
+                                className="text-sm border border-gray-300 rounded px-2 py-1 capitalize"
                                 data-testid={`user-role-select-${userOrg.user.id}`}
                               >
                                 <option value="athlete">Athlete</option>
@@ -806,8 +806,8 @@ export default function UserManagement() {
                       </div>
                     ))}
 
-                    {/* Pending Invitations */}
-                    {org.invitations?.map((invitation) => {
+                    {/* Pending Invitations - only show unused invitations */}
+                    {org.invitations?.filter(invitation => invitation.isUsed === "false").map((invitation) => {
                       const isExpired = new Date() > new Date(invitation.expiresAt);
                       const isUsed = invitation.isUsed === "true";
 

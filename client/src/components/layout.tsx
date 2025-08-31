@@ -10,11 +10,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  // Don't redirect to login for invitation pages
+  const isInvitationPage = location.startsWith('/accept-invitation');
+  const isLoginPage = location === '/login';
+
   useEffect(() => {
-    if (!isLoading && !user && location !== "/login") {
+    if (!isLoading && !user && !isInvitationPage && !isLoginPage) {
       setLocation("/login");
     }
-  }, [user, isLoading, location, setLocation]);
+  }, [user, isLoading, location, setLocation, isInvitationPage, isLoginPage]);
 
   if (isLoading) {
     return (
@@ -27,12 +31,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user && location !== "/login") {
-    return null;
-  }
-
-  if (location === "/login") {
-    return <>{children}</>;
+  // For invitation and login pages, render without sidebar
+  if (isInvitationPage || isLoginPage || !user) {
+    return <div className="min-h-screen bg-background">{children}</div>;
   }
 
   return (
