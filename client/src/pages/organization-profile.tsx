@@ -169,17 +169,18 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
     },
   });
 
-  // Only show for org admins and site admins
-  // Get user's organizations to check if they're an org admin
+  // Show for org admins, coaches, and site admins
+  // Get user's organizations to check their role
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
   
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "org_admin");
+  const isCoach = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "coach");
   const isSiteAdmin = user?.isSiteAdmin;
   
-  if (!isOrgAdmin && !isSiteAdmin) {
+  if (!isOrgAdmin && !isCoach && !isSiteAdmin) {
     return null;
   }
 
@@ -398,6 +399,8 @@ export default function OrganizationProfile() {
   });
   
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
+  const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
+  const hasOrgAccess = isOrgAdmin || isCoach;
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
@@ -783,9 +786,9 @@ export default function OrganizationProfile() {
                       
                       <div className="flex items-center gap-2">
                         <div className="flex gap-1">
-                          {coach.roles.map((role) => (
+                          {coach.roles.map((role, roleIndex) => (
                             <Badge 
-                              key={`${coach.user.id}-${role}`} 
+                              key={`${coach.user.id}-${role}-${roleIndex}`} 
                               variant={role === 'org_admin' ? 'default' : 'secondary'}
                             >
                               {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}

@@ -117,7 +117,7 @@ export function registerRoutes(app: Express) {
         }
 
         // Determine the user's primary role
-        let primaryRole = user.role;
+        let primaryRole = "athlete"; // Default role
         
         // If user is site admin, use site_admin role
         if (user.isSiteAdmin === "true") {
@@ -150,13 +150,13 @@ export function registerRoutes(app: Express) {
         };
 
         let redirectUrl = "/";
-        if (user.role === "athlete" && user.playerId) {
+        if (primaryRole === "athlete" && user.playerId) {
           // For athletes, redirect to their player profile using playerId
           redirectUrl = `/athletes/${user.playerId}`;
-        } else if (user.role === "org_admin" || user.role === "coach") {
+        } else if (primaryRole === "org_admin" || primaryRole === "coach") {
           // Org admins and coaches go to dashboard (not organization profile)
           redirectUrl = "/";
-          console.log(`🏢 ${user.role} redirect: ${redirectUrl}`);
+          console.log(`🏢 ${primaryRole} redirect: ${redirectUrl}`);
         }
 
         return res.json({ 
@@ -222,6 +222,35 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Get organizations accessible to current user based on their role
+  app.get("/api/my-organizations", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Site admins can see all organizations
+      const isSiteAdmin = currentUser.isSiteAdmin === "true" || 
+                        currentUser.username === "admin" ||
+                        await hasRole(currentUser.id, "site_admin");
+
+      if (isSiteAdmin) {
+        const organizations = await storage.getOrganizations();
+        res.json(organizations);
+      } else {
+        // Get organizations where user has any role
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const organizations = userOrgs.map(uo => uo.organization);
+        res.json(organizations);
+      }
+    } catch (error) {
+      console.error("Error fetching user organizations:", error);
+      res.status(500).json({ message: "Failed to fetch organizations" });
+    }
+  });
+
   app.post("/api/organizations", requireSiteAdmin, async (req, res) => {
     try {
       const organizationData = insertOrganizationSchema.parse(req.body);
@@ -248,7 +277,7 @@ export function registerRoutes(app: Express) {
         await storage.addUserToOrganization(user.id, req.body.organizationId, userData.role);
       }
 
-      res.status(201).json({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role });
+      res.status(201).json({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Validation error", errors: error.errors });
@@ -827,28 +856,31 @@ export function registerRoutes(app: Express) {
     try {
       const currentUser = req.session.user;
 
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       // Site admins can see all organizations
-      const isSiteAdmin = currentUser?.role === "site_admin" || 
-                        currentUser?.username === "admin" ||
-                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      const isSiteAdmin = currentUser.isSiteAdmin === "true" || 
+                        currentUser.username === "admin" ||
+                        await hasRole(currentUser.id, "site_admin");
 
       if (isSiteAdmin) {
         const orgsWithUsers = await storage.getOrganizationsWithUsers();
         res.json(orgsWithUsers);
-      } else if (currentUser?.id) {
-        // Check if user is org admin in any organization
-        const userRoles = await storage.getUserRoles(currentUser.id);
-        if (userRoles.includes("org_admin")) {
-          // Org admins can only see their own organizations
+      } else {
+        // Get user's roles across all organizations to check access
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasOrgAccess = userOrgs.some(uo => uo.role === "org_admin" || uo.role === "coach");
+        
+        if (hasOrgAccess) {
+          // Org admins and coaches can see their own organizations
           const orgsWithUsers = await storage.getOrganizationsWithUsersForUser(currentUser.id);
           res.json(orgsWithUsers);
         } else {
-          // Other roles have no access
+          // Athletes and other roles have no access
           res.json([]);
         }
-      } else {
-        // Other roles have no access
-        res.json([]);
       }
     } catch (error) {
       console.error("Error fetching organizations with users:", error);
@@ -861,17 +893,21 @@ export function registerRoutes(app: Express) {
       const { id } = req.params;
       const currentUser = req.session.user;
 
-      // Check if user has access to this organization
-      const isSiteAdmin = currentUser?.role === "site_admin" || 
-                        currentUser?.username === "admin" ||
-                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
 
-      // Check if user is org_admin in this organization (coaches cannot access)
-      const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, id) : [];
-      const hasOrgAccess = userRoles.includes("org_admin"); // Only org_admins can access
+      // Check if user has access to this organization
+      const isSiteAdmin = currentUser.isSiteAdmin === "true" || 
+                        currentUser.username === "admin" ||
+                        await hasRole(currentUser.id, "site_admin");
+
+      // Check if user has role in this organization (org_admin or coach)
+      const userRoles = await storage.getUserRoles(currentUser.id, id);
+      const hasOrgAccess = userRoles.includes("org_admin") || userRoles.includes("coach");
 
       if (isSiteAdmin || hasOrgAccess) {
-        // Site admins can access any organization, org admins can access their org
+        // Site admins can access any organization, org admins and coaches can access their org
         const orgProfile = await storage.getOrganizationProfile(id);
         if (!orgProfile) {
           return res.status(404).json({ message: "Organization not found" });

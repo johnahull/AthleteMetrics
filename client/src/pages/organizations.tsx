@@ -35,7 +35,7 @@ export default function Organizations() {
   const { user, setOrganizationContext } = useAuth();
 
   const { data: organizations } = useQuery<Organization[]>({
-    queryKey: ["/api/organizations"],
+    queryKey: ["/api/my-organizations"],
   });
 
   const orgForm = useForm({
@@ -52,7 +52,7 @@ export default function Organizations() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-organizations"] });
       toast({ title: "Organization created successfully!" });
       setOrgDialogOpen(false);
       orgForm.reset();
