@@ -210,21 +210,23 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
-    let whereCondition = eq(userOrganizations.userId, userId);
-
+  async getUserRole(userId: string, organizationId?: string): Promise<string | null> {
     if (organizationId) {
-      whereCondition = and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, organizationId)
-      ) as any;
+      // Get role from specific organization
+      const [result] = await db.select({ role: userOrganizations.role })
+        .from(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return result?.role || null;
+    } else {
+      // Get user's global role
+      const [user] = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, userId));
+      return user?.role || null;
     }
-
-    const result = await db.select({ role: userOrganizations.role })
-      .from(userOrganizations)
-      .where(whereCondition);
-
-    return result.map(r => r.role);
   }
 
   async getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]> {
@@ -471,6 +473,31 @@ export class DatabaseStorage implements IStorage {
     if (!['org_admin', 'coach', 'athlete'].includes(role)) {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
+
+    // Check if user already exists in this organization
+    const existing = await db.select()
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+
+    if (existing.length > 0) {
+      // Update existing role instead of creating duplicate
+      const [updated] = await db.update(userOrganizations)
+        .set({ role })
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ))
+        .returning();
+      return updated;
+    }
+
+    // Update user's global role to match organization role
+    await db.update(users)
+      .set({ role })
+      .where(eq(users.id, userId));
 
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,

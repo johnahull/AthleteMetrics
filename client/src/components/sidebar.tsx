@@ -114,14 +114,14 @@ export default function Sidebar() {
     }
   });
 
-  // Use session role as primary source, fallback to organization role, then 'athlete'
-  const primaryRole = userData?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
+  // Use the single role from user data
+  const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext || undefined);
+  const navigation = getNavigation(isSiteAdmin, userRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext || undefined);
 
 
   return (

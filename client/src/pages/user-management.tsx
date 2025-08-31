@@ -95,20 +95,20 @@ export default function UserManagement() {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
 
-  // Use session role as primary source, fallback to organization role, then 'athlete'
-  const primaryRole = user?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
+  // Use the single role from user data
+  const userRole = user?.role || 'athlete';
   const isSiteAdmin = user?.isSiteAdmin || false;
 
   // Redirect athletes away from this management page
   useEffect(() => {
-    if (!isSiteAdmin && primaryRole === "athlete") {
+    if (!isSiteAdmin && userRole === "athlete") {
       const playerId = user?.playerId || user?.id;
       setLocation(`/athletes/${playerId}`);
     }
-  }, [isSiteAdmin, primaryRole, user?.id, user?.playerId, setLocation]);
+  }, [isSiteAdmin, userRole, user?.id, user?.playerId, setLocation]);
 
   // Don't render management UI for athletes
-  if (!isSiteAdmin && primaryRole === "athlete") {
+  if (!isSiteAdmin && userRole === "athlete") {
     return null;
   }
 
