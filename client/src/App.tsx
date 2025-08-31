@@ -24,6 +24,9 @@ import AcceptInvitation from "./pages/accept-invitation";
 import NotFound from "@/pages/not-found";
 
 function Router() {
+  console.log("🎯 Router rendering, current URL:", window.location.href);
+  console.log("🎯 Pathname:", window.location.pathname);
+  
   return (
     <Switch>
       <Route path="/test-route" component={() => (
@@ -31,7 +34,17 @@ function Router() {
           🎯 TEST ROUTE WORKS! URL: {window.location.href}
         </div>
       )} />
-      <Route path="/accept-invitation" component={AcceptInvitation} />
+      <Route path="/accept-invitation" component={() => {
+        console.log("🎯 Accept invitation route matched!");
+        return (
+          <div style={{padding: '20px', fontSize: '18px'}}>
+            <h1>🎯 ACCEPT INVITATION ROUTE WORKING!</h1>
+            <p>URL: {window.location.href}</p>
+            <p>Search: {window.location.search}</p>
+            <AcceptInvitation />
+          </div>
+        );
+      }} />
       <Route path="/login" component={Login} />
       <Route path="/athletes/:id" component={PlayerProfile} />
       <Route path="/athletes" component={Players} />
