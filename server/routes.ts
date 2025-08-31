@@ -1646,11 +1646,18 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Cannot invite site administrators" });
       }
 
-      // Coaches can only invite athletes
+      // Coaches can only invite athletes (unless they're also org_admin)
       if (userRoles.includes("coach") && !userRoles.includes("org_admin") && !userIsSiteAdmin) {
         const nonAthleteRoles = roles.filter(role => role !== "athlete");
         if (nonAthleteRoles.length > 0) {
-          return res.status(403).json({ message: "Coaches can only invite athletes" });
+          return res.status(403).json({ message: "Insufficient permissions to invite this role" });
+        }
+      }
+      
+      // Org admins can invite coaches and athletes but not site admins
+      if (userRoles.includes("org_admin") && !userIsSiteAdmin) {
+        if (roles.includes("site_admin")) {
+          return res.status(403).json({ message: "Insufficient permissions to invite this role" });
         }
       }
 
