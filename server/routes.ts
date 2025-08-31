@@ -1266,8 +1266,34 @@ export function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        const orgsWithUsers = await storage.getOrganizationsWithUsers();
-        res.json(orgsWithUsers);
+        try {
+          const orgsWithUsers = await storage.getOrganizationsWithUsers();
+          res.json(orgsWithUsers);
+        } catch (storageError) {
+          console.error("Error in getOrganizationsWithUsers:", storageError);
+          // Return organizations without invitations if invitation query fails
+          const organizations = await storage.getOrganizations();
+          const orgsWithUsers = await Promise.all(
+            organizations.map(async (org) => {
+              try {
+                const users = await storage.getOrganizationUsers(org.id);
+                return {
+                  ...org,
+                  users,
+                  invitations: []
+                };
+              } catch (error) {
+                console.error(`Error getting users for org ${org.id}:`, error);
+                return {
+                  ...org,
+                  users: [],
+                  invitations: []
+                };
+              }
+            })
+          );
+          res.json(orgsWithUsers);
+        }
       } else {
         // Get user's roles across all organizations to check access
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
@@ -1275,8 +1301,13 @@ export function registerRoutes(app: Express) {
 
         if (hasOrgAccess) {
           // Org admins and coaches can see their own organizations
-          const orgsWithUsers = await storage.getOrganizationsWithUsersForUser(currentUser.id);
-          res.json(orgsWithUsers);
+          try {
+            const orgsWithUsers = await storage.getOrganizationsWithUsersForUser(currentUser.id);
+            res.json(orgsWithUsers);
+          } catch (storageError) {
+            console.error("Error in getOrganizationsWithUsersForUser:", storageError);
+            res.json([]);
+          }
         } else {
           // Athletes and other roles have no access
           res.json([]);

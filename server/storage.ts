@@ -387,13 +387,19 @@ export class DatabaseStorage implements IStorage {
     const players = await this.getAthletes({ organizationId });
 
     // Get pending invitations for this organization
-    const organizationInvitations = await db.select()
-      .from(invitations)
-      .where(and(
-        eq(invitations.organizationId, organizationId),
-        eq(invitations.isUsed, "false"),
-        gte(invitations.expiresAt, new Date())
-      ));
+    let organizationInvitations: Invitation[] = [];
+    try {
+      organizationInvitations = await db.select()
+        .from(invitations)
+        .where(and(
+          eq(invitations.organizationId, organizationId),
+          eq(invitations.isUsed, "false"),
+          gte(invitations.expiresAt, new Date())
+        ));
+    } catch (error) {
+      console.error("Error fetching organization invitations:", error);
+      organizationInvitations = [];
+    }
 
     return {
       ...organization,
@@ -408,13 +414,22 @@ export class DatabaseStorage implements IStorage {
 
     const orgsWithUsers = await Promise.all(
       organizations.map(async (org) => {
-        const users = await this.getOrganizationUsers(org.id);
-        const invitations = await this.getOrganizationInvitations(org.id);
-        return {
-          ...org,
-          users,
-          invitations
-        };
+        try {
+          const users = await this.getOrganizationUsers(org.id);
+          const invitations = await this.getOrganizationInvitations(org.id);
+          return {
+            ...org,
+            users,
+            invitations
+          };
+        } catch (error) {
+          console.error(`Error processing organization ${org.id}:`, error);
+          return {
+            ...org,
+            users: [],
+            invitations: []
+          };
+        }
       })
     );
 
@@ -454,12 +469,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrganizationInvitations(organizationId: string): Promise<Invitation[]> {
-    const result = await db.select()
-      .from(invitations)
-      .where(eq(invitations.organizationId, organizationId))
-      .orderBy(desc(invitations.createdAt));
+    try {
+      const result = await db.select()
+        .from(invitations)
+        .where(eq(invitations.organizationId, organizationId))
+        .orderBy(desc(invitations.createdAt));
 
-    return result;
+      return result;
+    } catch (error) {
+      console.error("Error in getOrganizationInvitations:", error);
+      return [];
+    }
   }
 
   async updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation> {
