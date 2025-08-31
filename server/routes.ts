@@ -724,16 +724,8 @@ export function registerRoutes(app: Express) {
       const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, id) : [];
       const hasOrgAccess = userRoles.length > 0; // User has any role in this org
       
-      
       if (isSiteAdmin || hasOrgAccess) {
         // Site admins can access any organization, org members can access their org
-        const orgProfile = await storage.getOrganizationProfile(id);
-        if (!orgProfile) {
-          return res.status(404).json({ message: "Organization not found" });
-        }
-        res.json(orgProfile);
-      } else if (currentUser?.id && await hasRole(currentUser.id, "org_admin", id)) {
-        // Check if user is org admin for this specific organization
         const orgProfile = await storage.getOrganizationProfile(id);
         if (!orgProfile) {
           return res.status(404).json({ message: "Organization not found" });
