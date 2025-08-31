@@ -19,52 +19,26 @@ import {
 
 
 
-const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[], user?: any, organizationContext?: string) => {
-  // Site admins get different navigation based on context (check this FIRST)
-  if (isSiteAdmin) {
-    // When viewing an organization, show org admin menu
-    if (isInOrganizationContext) {
-      const baseOrgNavigation = [
-        { name: "Dashboard", href: "/", icon: LayoutDashboard },
-        { name: "Teams", href: "/teams", icon: Users },
-        { name: "Athletes", href: "/athletes", icon: UsersRound },
-        { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-        { name: "Analytics", href: "/analytics", icon: BarChart3 },
-        { name: "Publish", href: "/publish", icon: FileCheck },
-        { name: "Import/Export", href: "/import-export", icon: FileText },
-      ];
-
-      // Add "My Organization" link if we have organization context
-      if (organizationContext) {
-        baseOrgNavigation.push({ 
-          name: "My Organization", 
-          href: `/organizations/${organizationContext}`, 
-          icon: Building2 
-        });
-      }
-
-      return baseOrgNavigation;
-    }
-    // Default site admin menu
-    return [
+// Navigation configurations for each role
+const NAVIGATION_CONFIGS = {
+  site_admin: {
+    default: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog }
-    ];
-  }
-
-  // Athletes get a restricted navigation menu
-  if (primaryRole === "athlete" && user?.playerId) {
-    // Only use playerId for actual athletes who have one
-    return [
-      { name: "My Profile", href: `/athletes/${user.playerId}`, icon: UsersRound },
+    ],
+    organization_context: [
+      { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Teams", href: "/teams", icon: Users },
+      { name: "Athletes", href: "/athletes", icon: UsersRound },
+      { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
-    ];
-  }
-
-  // All other roles (org_admin, coach) get the full navigation
-  const baseNavigation = [
+      { name: "Publish", href: "/publish", icon: FileCheck },
+      { name: "Import/Export", href: "/import-export", icon: FileText }
+    ]
+  },
+  org_admin: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
@@ -72,21 +46,56 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Publish", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
-  ];
+    { name: "My Organization", href: "/organizations", icon: Building2 }
+  ],
+  coach: [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Teams", href: "/teams", icon: Users },
+    { name: "Athletes", href: "/athletes", icon: UsersRound },
+    { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Publish", href: "/publish", icon: FileCheck },
+    { name: "Import/Export", href: "/import-export", icon: FileText }
+  ],
+  athlete: [
+    { name: "Analytics", href: "/analytics", icon: BarChart3 }
+  ]
+};
 
-  // Org admins get My Organization link
-  if (primaryRole === "org_admin") {
-    // Link to specific organization profile if available
-    const orgId = userOrganizations?.[0]?.organizationId;
-    const href = orgId ? `/organizations/${orgId}` : "/organizations";
-    return [
-      ...baseNavigation,
-      { name: "My Organization", href, icon: Building2 }
-    ];
+const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string) => {
+  // Site admin navigation
+  if (isSiteAdmin) {
+    const config = isInOrganizationContext 
+      ? NAVIGATION_CONFIGS.site_admin.organization_context 
+      : NAVIGATION_CONFIGS.site_admin.default;
+    
+    // Add organization context link if needed
+    if (isInOrganizationContext && organizationContext) {
+      return [
+        ...config,
+        { name: "My Organization", href: `/organizations/${organizationContext}`, icon: Building2 }
+      ];
+    }
+    return config;
   }
 
-  // Coaches get only the base navigation
-  return baseNavigation;
+  // Get base navigation for role
+  let navigation = [...(NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach)];
+  
+  // Special handling for athletes with player profiles
+  if (role === "athlete" && user?.playerId) {
+    navigation.unshift({ name: "My Profile", href: `/athletes/${user.playerId}`, icon: UsersRound });
+  }
+  
+  // Update org admin organization link with specific ID
+  if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
+    const orgIndex = navigation.findIndex(item => item.name === "My Organization");
+    if (orgIndex !== -1) {
+      navigation[orgIndex].href = `/organizations/${userOrganizations[0].organizationId}`;
+    }
+  }
+  
+  return navigation;
 };
 
 export default function Sidebar() {
@@ -121,7 +130,7 @@ export default function Sidebar() {
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, userRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext || undefined);
+  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationContext || undefined);
 
 
   return (
