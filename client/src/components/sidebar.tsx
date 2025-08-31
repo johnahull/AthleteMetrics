@@ -104,6 +104,16 @@ export default function Sidebar() {
     enabled: !!userData.id,
   });
 
+  // Get organization details when site admin is in organization context
+  const { data: currentOrgData } = useQuery({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    enabled: !!organizationContext && userData?.isSiteAdmin,
+    queryFn: async () => {
+      const response = await fetch(`/api/organizations/${organizationContext}`);
+      return response.json();
+    }
+  });
+
   // Use session role as primary source, fallback to organization role, then 'athlete'
   const primaryRole = userData?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
@@ -244,14 +254,18 @@ export default function Sidebar() {
           </Link>
         )}
 
-        {/* Organization info for org admins, coaches, and athletes */}
-        {!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && (primaryRole === "org_admin" || primaryRole === "coach" || primaryRole === "athlete") && (
+        {/* Organization info for org admins, coaches, athletes, and site admins in org context */}
+        {(((!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && (primaryRole === "org_admin" || primaryRole === "coach" || primaryRole === "athlete")) || 
+           (userData?.isSiteAdmin && isInOrganizationContext && organizationContext))) && (
           <div className="px-3 py-2 border-t border-gray-200 mt-2">
             <div className="flex items-center space-x-2">
               <Building2 className="h-4 w-4 text-gray-500" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-900 truncate">
-                  {userOrganizations[0]?.organization?.name}
+                  {userData?.isSiteAdmin && isInOrganizationContext 
+                    ? currentOrgData?.name || "Organization View"
+                    : userOrganizations?.[0]?.organization?.name
+                  }
                 </p>
               </div>
             </div>
