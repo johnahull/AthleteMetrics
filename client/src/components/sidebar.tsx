@@ -1,7 +1,17 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Building2 } from "lucide-react";
+import { 
+  BarChart3, 
+  Building2, 
+  LayoutDashboard, 
+  UserCog, 
+  Users, 
+  UsersRound, 
+  PlusCircle, 
+  FileCheck, 
+  FileText 
+} from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
 import { OrganizationDisplay } from "./organization-display";
