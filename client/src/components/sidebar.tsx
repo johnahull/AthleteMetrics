@@ -254,16 +254,20 @@ export default function Sidebar() {
           </Link>
         )}
 
-        {/* Organization info for org admins, coaches, athletes, and site admins in org context */}
-        {(((!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && (primaryRole === "org_admin" || primaryRole === "coach" || primaryRole === "athlete")) || 
-           (userData?.isSiteAdmin && isInOrganizationContext && organizationContext))) && (
+        {/* Organization info */}
+        {(
+          // Show for non-site admins who have organizations
+          (!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && userOrganizations[0]?.organizationName) ||
+          // Show for site admins in organization context
+          (userData?.isSiteAdmin && organizationContext && currentOrgData?.name)
+        ) && (
           <div className="px-3 py-2 border-t border-gray-200 mt-2">
             <div className="flex items-center space-x-2">
               <Building2 className="h-4 w-4 text-gray-500" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-900 truncate">
-                  {userData?.isSiteAdmin && isInOrganizationContext 
-                    ? currentOrgData?.name || "Organization View"
+                  {userData?.isSiteAdmin && organizationContext 
+                    ? currentOrgData?.name
                     : userOrganizations?.[0]?.organizationName
                   }
                 </p>
