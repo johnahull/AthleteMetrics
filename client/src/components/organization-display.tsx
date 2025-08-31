@@ -1,8 +1,8 @@
 import React from "react";
 import { Building2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";
+import { useLocation } from "wouter";
+import { useAuth } from "../lib/auth";
 
 interface OrganizationDisplayProps {
   organizationId?: string;
