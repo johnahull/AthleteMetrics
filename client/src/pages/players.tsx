@@ -504,6 +504,7 @@ export default function Players() {
                     <th className="px-6 py-3">Birth Year</th>
                     <th className="px-6 py-3">School</th>
                     <th className="px-6 py-3">Sport</th>
+                    <th className="px-6 py-3">Status</th>
                     <th className="px-6 py-3">Actions</th>
                   </tr>
                 </thead>
@@ -545,6 +546,17 @@ export default function Players() {
                             : player.sports[0]
                           : "N/A"
                         }
+                      </td>
+                      <td className="px-6 py-4">
+                        {(player as any).hasLogin ? (
+                          <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-gray-500">
+                            Inactive
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex space-x-2">
