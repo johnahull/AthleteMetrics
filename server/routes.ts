@@ -1013,14 +1013,28 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Unable to determine current user" });
       }
 
+      // Debug logging
+      console.log("🔍 Invitation Debug:", {
+        currentUserId: currentUser?.id,
+        invitedById,
+        organizationId,
+        role,
+        isSiteAdmin: isSiteAdmin(currentUser)
+      });
+
       // Validate organization access
       if (organizationId && !await canAccessOrganization(currentUser, organizationId)) {
+        console.log("❌ Failed organization access check");
         return res.status(403).json({ message: "Access denied to this organization" });
       }
 
       // Validate role invitation permissions
-      if (!await canInviteRole(invitedById, organizationId, role)) {
+      const canInvite = await canInviteRole(invitedById, organizationId, role);
+      console.log("🔍 canInviteRole result:", canInvite);
+      
+      if (!canInvite) {
         const userRoles = await storage.getUserRoles(invitedById, organizationId);
+        console.log("❌ Failed role invitation check. User roles:", userRoles);
         if (userRoles.includes("coach") && !userRoles.includes("org_admin")) {
           return res.status(403).json({ message: "Coaches can only invite athletes" });
         }
@@ -1029,6 +1043,7 @@ export function registerRoutes(app: Express) {
 
       // Athletes cannot invite anyone
       if (currentUser?.role === "athlete") {
+        console.log("❌ Athlete trying to invite");
         return res.status(403).json({ message: "Athletes cannot send invitations" });
       }
 
