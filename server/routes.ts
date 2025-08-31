@@ -568,6 +568,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
+    console.log("🎯 HIT ATHLETES ROUTE!");
     try {
       const user = (req as any).user;
       const userOrgs = await storage.getUserOrganizations(user.id);
@@ -606,6 +607,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/invitations/:token", async (req, res) => {
+    console.log("⚠️ HIT TOKEN ROUTE with token:", req.params.token);
     try {
       const { token } = req.params;
       const invitation = await storage.getInvitation(token);
