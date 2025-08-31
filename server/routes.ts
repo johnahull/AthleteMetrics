@@ -570,6 +570,12 @@ export function registerRoutes(app: Express) {
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
     try {
       const user = (req as any).session.user;
+      
+      if (!user || !user.id) {
+        console.log("🚫 No user in session for athlete invitations");
+        return res.json([]);
+      }
+      
       const userOrgs = await storage.getUserOrganizations(user.id);
       
       if (userOrgs.length === 0) {
