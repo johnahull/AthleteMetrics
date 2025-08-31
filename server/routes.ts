@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer } from "http";
 import session from "express-session";
 import { storage } from "./storage";
+import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -31,61 +32,8 @@ const requireAuth = (req: any, res: any, next: any) => {
   next();
 };
 
-// Permission validation helpers
-const hasRole = async (userId: string, role: string, organizationId?: string): Promise<boolean> => {
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-  return userRoles.includes(role);
-};
-
-const isSiteAdmin = async (user: any): Promise<boolean> => {
-  if (!user) return false;
-
-  // Check legacy admin session
-  if (user.admin) return true;
-
-  // Check current user session
-  if (user.isSiteAdmin) return true; // Use the boolean flag directly
-
-  // Check database for site admin status if not in session
-  if (user.id) {
-    const dbUser = await storage.getUser(user.id);
-    return dbUser?.isSiteAdmin === "true";
-  }
-
-  return false;
-};
-
-const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
-  if (await isSiteAdmin(user)) return true;
-
-  const userOrgs = await storage.getUserOrganizations(user.id);
-  return userOrgs.some(org => org.organizationId === organizationId);
-};
-
-const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
-  if (await isSiteAdmin({ id: userId })) return true;
-
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-  return userRoles.includes("org_admin");
-};
-
-const canInviteRole = async (userId: string, organizationId: string, targetRole: string): Promise<boolean> => {
-  if (await isSiteAdmin({ id: userId })) return true;
-
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-
-  // Coaches can only invite athletes
-  if (userRoles.includes("coach") && !userRoles.includes("org_admin")) {
-    return targetRole === "athlete";
-  }
-
-  // Org admins cannot invite site admins
-  if (userRoles.includes("org_admin")) {
-    return targetRole !== "site_admin";
-  }
-
-  return false;
-};
+// Initialize permission checker
+const permissionChecker = new PermissionChecker(storage);
 
 const requireSiteAdmin = async (req: any, res: any, next: any) => {
   const user = req.session.user || { admin: req.session.admin };

@@ -229,6 +229,34 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
+    if (organizationId) {
+      // Get all roles for user in specific organization
+      const results = await db.select({ role: userOrganizations.role })
+        .from(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return results.map(r => r.role);
+    } else {
+      // Get user's global role plus all organization roles
+      const [user] = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, userId));
+      
+      const orgRoles = await db.select({ role: userOrganizations.role })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.userId, userId));
+      
+      const roles = [];
+      if (user?.role) roles.push(user.role);
+      roles.push(...orgRoles.map(r => r.role));
+      
+      return [...new Set(roles)]; // Remove duplicates
+    }
+  }
+
   async getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]> {
     const result = await db.select()
       .from(userTeams)

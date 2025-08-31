@@ -14,11 +14,9 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
   isLoading: boolean;
-  organizationContext: string | null;
-  setOrganizationContext: (orgId: string | null) => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,7 +24,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [organizationContext, setOrganizationContext] = useState<string | null>(null);
   const [, setLocation] = useLocation();
 
   useEffect(() => {
@@ -94,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading, organizationContext, setOrganizationContext }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

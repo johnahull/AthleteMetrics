@@ -1,21 +1,10 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { 
-  LayoutDashboard, 
-  Users, 
-  UsersRound, 
-  PlusCircle, 
-  BarChart3, 
-  FileText,
-  FileCheck,
-  LogOut,
-  Settings,
-  Building2,
-  UserCog,
-  User
-} from "lucide-react";
+import { BarChart3, Building2 } from "lucide-react";
+import { NavigationMenu } from "./navigation-menu";
+import { UserProfileDisplay } from "./user-profile-display";
+import { OrganizationDisplay } from "./organization-display";
 
 
 
@@ -99,8 +88,8 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
 };
 
 export default function Sidebar() {
-  const [location, setLocation] = useLocation();
-  const { user: userData, logout, organizationContext, setOrganizationContext } = useAuth();
+  const [location] = useLocation();
+  const { user: userData, logout } = useAuth();
 
   // Don't render sidebar if no user data
   if (!userData) {
@@ -113,24 +102,15 @@ export default function Sidebar() {
     enabled: !!userData.id,
   });
 
-  // Get organization details when site admin is in organization context
-  const { data: currentOrgData } = useQuery({
-    queryKey: [`/api/organizations/${organizationContext}`],
-    enabled: !!organizationContext && userData?.isSiteAdmin,
-    queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organizationContext}`);
-      return response.json();
-    }
-  });
-
   // Use the single role from user data
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
-  // Check if we're in an organization context (site admin viewing specific org)
-  const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
+  // Extract organization ID from URL
+  const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];
+  const isInOrganizationContext = !!organizationId;
 
-  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationContext || undefined);
+  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId);
 
 
   return (
@@ -155,165 +135,20 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="p-4 space-y-2 flex-1">
-        {/* Back to site button for site admins in organization context */}
-        {isSiteAdmin && isInOrganizationContext && (
-          <button
-            onClick={() => {
-              setOrganizationContext(null);
-              setLocation('/organizations');
-            }}
-            className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 border border-gray-200 mb-4"
-            data-testid="button-back-to-site"
-          >
-            <Building2 className="h-5 w-5" />
-            <span>← Back to Site</span>
-          </button>
-        )}
+      <NavigationMenu navigation={navigation} currentLocation={location} />
 
-        {navigation.map((item) => {
-          const isActive = location === item.href;
-          return (
-            <Link key={item.name} href={item.href}>
-              <div
-                className={cn(
-                  "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                  isActive 
-                    ? "bg-primary text-white" 
-                    : "text-gray-700 hover:bg-gray-100"
-                )}
-                data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <item.icon className="h-5 w-5" />
-                <span>{item.name}</span>
-              </div>
-            </Link>
-          );
-        })}
-      </nav>
+      <UserProfileDisplay
+        user={userData}
+        userRole={userRole}
+        location={location}
+        onLogout={logout}
+      />
 
-      {/* User Section */}
-      <div className="p-4 border-t border-gray-200 mt-auto">
-        {userData && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <User className="h-8 w-8 text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  {userData.firstName} {userData.lastName}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {userRole.replace('_', ' ')}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={logout}
-              className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-              data-testid="button-logout"
-            >
-              <LogOut className="h-5 w-5" />
-            </button>
-          </div>
-        )}
-
-        {/* Site admin organization profile link when in organization context */}
-        {userData && userData.isSiteAdmin && isInOrganizationContext && (
-          (() => {
-            const orgIdMatch = location.match(/\/organizations\/([^\/]+)/);
-            if (orgIdMatch) {
-              const orgId = orgIdMatch[1];
-              const isActive = location === `/organizations/${orgId}`;
-              return (
-                <Link href={`/organizations/${orgId}`}>
-                  <div
-                    className={cn(
-                      "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                      isActive
-                        ? "bg-primary text-white" 
-                        : "text-gray-700 hover:bg-gray-100"
-                    )}
-                    data-testid="nav-organization-profile"
-                  >
-                    <Building2 className="h-5 w-5" />
-                    <span>Organization Profile</span>
-                  </div>
-                </Link>
-              );
-            }
-            return null;
-          })()
-        )}
-
-        {userData && (userData.isSiteAdmin || userRole === "org_admin" || userRole === "coach") && userData.id && (
-          <Link href="/profile">
-            <div
-              className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                location === "/profile"
-                  ? "bg-primary text-white" 
-                  : "text-gray-700 hover:bg-gray-100"
-              )}
-              data-testid="nav-profile"
-            >
-              <User className="h-5 w-5" />
-              <span>Profile</span>
-            </div>
-          </Link>
-        )}
-
-        {/* Organization info */}
-        {(() => {
-          // For site admins in organization context
-          if (userData?.isSiteAdmin && organizationContext) {
-            return (
-              <div className="px-3 py-2 border-t border-gray-200 mt-2">
-                <div className="flex items-center space-x-2">
-                  <Building2 className="h-4 w-4 text-gray-500" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-900 truncate">
-                      {currentOrgData?.name || "Loading organization..."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          // For regular users with organizations
-          if (!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
-            const org = userOrganizations[0];
-            const orgName = org?.organizationName || org?.organization?.name || org?.name;
-
-            if (orgName) {
-              return (
-                <div className="px-3 py-2 border-t border-gray-200 mt-2">
-                  <div className="flex items-center space-x-2">
-                    <Building2 className="h-4 w-4 text-gray-500" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-900 truncate">
-                        {orgName}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-          }
-
-          return null;
-        })()}
-
-        <button
-          onClick={logout}
-          className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
-          data-testid="nav-logout"
-        >
-          <LogOut className="h-5 w-5" />
-          <span>Sign Out</span>
-        </button>
-      </div>
+      <OrganizationDisplay
+        organizationId={organizationId}
+        userOrganizations={userOrganizations}
+        isSiteAdmin={isSiteAdmin}
+      />
 
     </aside>
   );
