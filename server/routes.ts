@@ -997,21 +997,30 @@ export function registerRoutes(app: Express) {
   // Invitation routes
   app.post("/api/invitations", requireAuth, async (req, res) => {
     try {
+      console.log("🚀 Starting invitation request");
       const { email, firstName, lastName, role, organizationId } = req.body;
+      console.log("📝 Request body:", { email, firstName, lastName, role, organizationId });
+      
       const currentUser = req.session.user;
+      console.log("👤 Current user:", currentUser ? { id: currentUser.id, isSiteAdmin: currentUser.isSiteAdmin } : "null");
 
       // Get current user info for invitedBy
       let invitedById = currentUser?.id;
 
       // If using old admin system, find the site admin user
       if (!invitedById && req.session.admin) {
+        console.log("🔄 Trying old admin system");
         const siteAdmin = await storage.getUserByUsername("admin");
         invitedById = siteAdmin?.id;
+        console.log("👨‍💼 Found site admin:", siteAdmin?.id);
       }
 
       if (!invitedById) {
+        console.log("❌ No invitedById found");
         return res.status(400).json({ message: "Unable to determine current user" });
       }
+      
+      console.log("✅ invitedById:", invitedById);
 
       // Debug logging
       console.log("🔍 Invitation Debug:", {
