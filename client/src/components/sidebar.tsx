@@ -195,7 +195,7 @@ export default function Sidebar() {
                   {userData.firstName} {userData.lastName}
                 </p>
                 <p className="text-xs text-gray-500 capitalize">
-                  {primaryRole.replace('_', ' ')}
+                  {userRole.replace('_', ' ')}
                 </p>
               </div>
             </div>
@@ -237,7 +237,7 @@ export default function Sidebar() {
           })()
         )}
 
-        {userData && (userData.isSiteAdmin || primaryRole === "org_admin" || primaryRole === "coach") && userData.id && (
+        {userData && (userData.isSiteAdmin || userRole === "org_admin" || userRole === "coach") && userData.id && (
           <Link href="/profile">
             <div
               className={cn(
