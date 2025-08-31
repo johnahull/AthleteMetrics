@@ -307,12 +307,44 @@ export function registerRoutes(app: Express) {
   // Keep existing player routes for now
   app.get("/api/players", requireAuth, async (req, res) => {
     try {
-      const { teamId, birthYearFrom, birthYearTo, search } = req.query;
+      const { teamId, birthYearFrom, birthYearTo, search, organizationId } = req.query;
+      const currentUser = req.session.user;
+
+      // Determine organization context for filtering
+      let orgContextForFiltering: string | undefined;
+
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        currentUser?.username === "admin" ||
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+
+      if (isSiteAdmin) {
+        // Site admins can request specific org or all players
+        orgContextForFiltering = organizationId as string;
+      } else if (currentUser?.id) {
+        // Non-site admins should only see players from their organization
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        if (userOrgs.length > 0) {
+          // Use the requested organizationId if it matches user's org, otherwise use user's primary org
+          const requestedOrgId = organizationId as string;
+          const hasAccessToRequestedOrg = userOrgs.some(org => org.organizationId === requestedOrgId);
+          
+          if (requestedOrgId && hasAccessToRequestedOrg) {
+            orgContextForFiltering = requestedOrgId;
+          } else {
+            orgContextForFiltering = userOrgs[0].organizationId;
+          }
+        } else {
+          // User has no organization access, return empty results
+          return res.json([]);
+        }
+      }
+
       const filters: any = {
         teamId: teamId as string,
         birthYearFrom: birthYearFrom ? parseInt(birthYearFrom as string) : undefined,
         birthYearTo: birthYearTo ? parseInt(birthYearTo as string) : undefined,
         search: search as string,
+        organizationId: orgContextForFiltering,
       };
 
       const players = await storage.getPlayers(filters);
