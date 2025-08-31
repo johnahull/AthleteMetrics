@@ -115,7 +115,7 @@ export default function Sidebar() {
   const userRole = user?.role || 'athlete';
   
   // Check if we're in an organization context (site admin viewing specific org)
-  const isInOrganizationContext = userRole === 'site_admin' && organizationContext;
+  const isInOrganizationContext = userRole === 'site_admin' && !!organizationContext;
   
   // Get user's organizations
   const { data: userOrganizations } = useQuery({
