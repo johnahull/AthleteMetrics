@@ -209,7 +209,7 @@ export function registerRoutes(app: Express) {
         }
 
         // Determine user role - site admin or organization role
-        let userRole = "athlete"; // Default role
+        let userRole: string;
         let redirectUrl = "/";
 
         // If user is site admin, use site_admin role
@@ -229,6 +229,9 @@ export function registerRoutes(app: Express) {
             } else {
               redirectUrl = "/";
             }
+          } else {
+            // If user has no organization roles and is not site admin, this is an error
+            return res.status(500).json({ message: "User has no valid role assignments" });
           }
         }
 
@@ -242,6 +245,15 @@ export function registerRoutes(app: Express) {
           isSiteAdmin: user.isSiteAdmin === "true",
           playerId: userRole === "athlete" ? user.id : undefined // Use user ID as player ID for athletes
         };
+
+        // Add debugging info for role issues
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        console.log(`Login successful for user ${user.email} (${user.id}):`, {
+          isSiteAdmin: user.isSiteAdmin,
+          determinedRole: userRole,
+          userOrgsCount: userOrgs ? userOrgs.length : 0,
+          userOrgsRoles: userOrgs ? userOrgs.map(uo => uo.role) : []
+        });
 
         return res.json({ 
           success: true, 
@@ -327,7 +339,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Determine the target user's role
-      let targetRole = "athlete"; // Default role
+      let targetRole: string;
 
       if (targetUser.isSiteAdmin === "true") {
         targetRole = "site_admin";
@@ -337,6 +349,8 @@ export function registerRoutes(app: Express) {
         if (userOrgs && userOrgs.length > 0) {
           // Use the first organization role (users should only have one role per org)
           targetRole = userOrgs[0].role;
+        } else {
+          return res.status(400).json({ message: "Target user has no valid role assignments" });
         }
       }
 
@@ -1252,8 +1266,34 @@ export function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        const orgsWithUsers = await storage.getOrganizationsWithUsers();
-        res.json(orgsWithUsers);
+        try {
+          const orgsWithUsers = await storage.getOrganizationsWithUsers();
+          res.json(orgsWithUsers);
+        } catch (storageError) {
+          console.error("Error in getOrganizationsWithUsers:", storageError);
+          // Return organizations without invitations if invitation query fails
+          const organizations = await storage.getOrganizations();
+          const orgsWithUsers = await Promise.all(
+            organizations.map(async (org) => {
+              try {
+                const users = await storage.getOrganizationUsers(org.id);
+                return {
+                  ...org,
+                  users,
+                  invitations: []
+                };
+              } catch (error) {
+                console.error(`Error getting users for org ${org.id}:`, error);
+                return {
+                  ...org,
+                  users: [],
+                  invitations: []
+                };
+              }
+            })
+          );
+          res.json(orgsWithUsers);
+        }
       } else {
         // Get user's roles across all organizations to check access
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
@@ -1261,8 +1301,13 @@ export function registerRoutes(app: Express) {
 
         if (hasOrgAccess) {
           // Org admins and coaches can see their own organizations
-          const orgsWithUsers = await storage.getOrganizationsWithUsersForUser(currentUser.id);
-          res.json(orgsWithUsers);
+          try {
+            const orgsWithUsers = await storage.getOrganizationsWithUsersForUser(currentUser.id);
+            res.json(orgsWithUsers);
+          } catch (storageError) {
+            console.error("Error in getOrganizationsWithUsersForUser:", storageError);
+            res.json([]);
+          }
         } else {
           // Athletes and other roles have no access
           res.json([]);
@@ -1435,21 +1480,8 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      // Add user to organization with the specified role
+      // Add user to organization with the specified role (removes any existing roles first)
       await storage.addUserToOrganization(user.id, organizationId, role);
-
-      // If user is an athlete, also create a player record
-      if (role === "athlete") {
-        await storage.createPlayer({
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          birthYear: new Date().getFullYear() - 18, // Default age
-          school: "",
-          sports: [],
-          emails: [userData.email],
-          phoneNumbers: []
-        });
-      }
 
       res.status(201).json({ 
         id: user.id, 
@@ -1683,19 +1715,19 @@ export function registerRoutes(app: Express) {
 
       // Update user role differently based on who is making the change
       if (userIsSiteAdmin) {
-        // Site admins can update global role and all organization roles
-        const updatedUser = await storage.updateUser(id, { role });
-
-        // Also update role in all organizations the user belongs to
+        // Site admins can update roles in all organizations the user belongs to
         if (isOrgUser) {
           for (const userOrg of userOrgs) {
-            await storage.updateUserOrganizationRole(id, userOrg.organizationId, role);
+            // Use addUserToOrganization to ensure single role per org
+            await storage.addUserToOrganization(id, userOrg.organizationId, role);
           }
         }
+        const updatedUser = await storage.getUser(id);
         res.json(updatedUser);
       } else {
         // Org admins can only update role in their specific organization
-        await storage.updateUserOrganizationRole(id, organizationId!, role);
+        // Use addUserToOrganization to ensure single role per org
+        await storage.addUserToOrganization(id, organizationId!, role);
 
         // Get updated user info to return
         const updatedUser = await storage.getUser(id);
@@ -1757,6 +1789,70 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error("Error checking username:", error);
       res.status(500).json({ message: "Failed to check username availability" });
+    }
+  });
+
+  // Verify single role constraint (Site Admin only)
+  app.get("/api/admin/verify-roles", requireSiteAdmin, async (req, res) => {
+    try {
+      const users = await storage.getUsers();
+      const violations: any[] = [];
+      const fixes: any[] = [];
+
+      for (const user of users) {
+        if (user.isSiteAdmin === "true") continue; // Skip site admins
+
+        const validation = await storage.validateUserRoleConstraint(user.id);
+        if (!validation.valid) {
+          violations.push({
+            userId: user.id,
+            userName: `${user.firstName} ${user.lastName}`,
+            email: user.email,
+            violations: validation.violations
+          });
+
+          // Auto-fix by keeping only the first role per organization
+          const userOrgRelations = await db.select()
+            .from(userOrganizations)
+            .where(eq(userOrganizations.userId, user.id));
+
+          const orgRoleMap = new Map<string, string>();
+          for (const relation of userOrgRelations) {
+            if (!orgRoleMap.has(relation.organizationId)) {
+              orgRoleMap.set(relation.organizationId, relation.role);
+            }
+          }
+
+          // Remove all roles and re-add single role per org
+          await db.delete(userOrganizations)
+            .where(eq(userOrganizations.userId, user.id));
+
+          for (const [orgId, role] of orgRoleMap.entries()) {
+            await db.insert(userOrganizations).values({
+              userId: user.id,
+              organizationId: orgId,
+              role
+            });
+            fixes.push({
+              userId: user.id,
+              organizationId: orgId,
+              keptRole: role
+            });
+          }
+        }
+      }
+
+      res.json({
+        totalUsersChecked: users.length,
+        violationsFound: violations.length,
+        violations,
+        fixesApplied: fixes.length,
+        fixes,
+        message: violations.length === 0 ? "All users have valid single roles per organization" : `Fixed ${fixes.length} role constraint violations`
+      });
+    } catch (error) {
+      console.error("Error verifying roles:", error);
+      res.status(500).json({ message: "Failed to verify role constraints" });
     }
   });
 
