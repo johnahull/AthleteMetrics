@@ -139,21 +139,33 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      const response = await fetch(`/api/organizations/${organizationId}/invitations`, {
+      const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: data.email,
-          roles: data.roles,
-          organizationId: organizationId,
-          teamIds: []
+          ...data,
+          organizationId
         }),
       });
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to send invitation");
+        let errorMessage = "Failed to send invitation";
+        try {
+          const error = await response.json();
+          errorMessage = error.message || errorMessage;
+        } catch (parseError) {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
-      return response.json();
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        return response.json();
+      } else {
+        throw new Error("Server returned non-JSON response");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
@@ -175,11 +187,11 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
-  
+
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "coach");
   const isSiteAdmin = user?.isSiteAdmin;
-  
+
   if (!isOrgAdmin && !isCoach && !isSiteAdmin) {
     return null;
   }
@@ -196,13 +208,13 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
         <DialogHeader>
           <DialogTitle>User Management</DialogTitle>
         </DialogHeader>
-        
+
         <Tabs defaultValue="create" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="create">Create User</TabsTrigger>
             <TabsTrigger value="invite">Send Invitation</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="create" className="space-y-4">
             <Form {...createUserForm}>
               <form onSubmit={createUserForm.handleSubmit((data) => createUserMutation.mutate(data))} className="space-y-4">
@@ -234,7 +246,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     )}
                   />
                 </div>
-                
+
                 <FormField
                   control={createUserForm.control}
                   name="email"
@@ -248,7 +260,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={createUserForm.control}
                   name="password"
@@ -262,7 +274,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={createUserForm.control}
                   name="roles"
@@ -301,7 +313,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     </FormItem>
                   )}
                 />
-                
+
                 <Button 
                   type="submit" 
                   className="w-full" 
@@ -313,7 +325,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
               </form>
             </Form>
           </TabsContent>
-          
+
           <TabsContent value="invite" className="space-y-4">
             <Form {...invitationForm}>
               <form onSubmit={invitationForm.handleSubmit((data) => invitationMutation.mutate(data))} className="space-y-4">
@@ -330,7 +342,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={invitationForm.control}
                   name="roles"
@@ -369,7 +381,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     </FormItem>
                   )}
                 />
-                
+
                 <Button 
                   type="submit" 
                   className="w-full" 
@@ -391,13 +403,13 @@ export default function OrganizationProfile() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { user } = useAuth();
-  
+
   // Get user's organizations to check if they're an org admin
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
-  
+
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
   const hasOrgAccess = isOrgAdmin || isCoach;
@@ -410,12 +422,12 @@ export default function OrganizationProfile() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, roles }),
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to send invitation");
       }
-      
+
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       toast({
         title: "Invitation sent",
@@ -436,12 +448,12 @@ export default function OrganizationProfile() {
       const response = await fetch(`/api/organizations/${id}/users/${userId}`, {
         method: "DELETE",
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to delete user");
       }
-      
+
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       toast({
         title: "User deleted",
@@ -462,12 +474,12 @@ export default function OrganizationProfile() {
       const response = await fetch(`/api/organizations/${id}/invitations/${invitationId}`, {
         method: "DELETE",
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || "Failed to delete invitation");
       }
-      
+
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       toast({
         title: "Invitation deleted",
@@ -544,13 +556,13 @@ export default function OrganizationProfile() {
     const expDate = new Date(expiresAt);
     const now = new Date();
     const isExpired = expDate < now;
-    
+
     if (isExpired) {
       return `Expired ${expDate.toLocaleDateString()}`;
     } else {
       const diffTime = expDate.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
+
       if (diffDays === 1) {
         return "Expires tomorrow";
       } else if (diffDays <= 7) {
@@ -619,7 +631,7 @@ export default function OrganizationProfile() {
             <p className="text-gray-600 mt-2">{organization.description}</p>
           )}
         </div>
-        
+
         <UserManagementModal organizationId={id!} />
       </div>
 
@@ -674,7 +686,7 @@ export default function OrganizationProfile() {
                                 </>
                               )}
                             </div>
-                            
+
                             {/* Action buttons for pending invitations */}
                             {(user?.isSiteAdmin || isOrgAdmin) && (
                               <div className="flex items-center gap-1 ml-2">
@@ -690,7 +702,7 @@ export default function OrganizationProfile() {
                                     <RefreshCw className="h-3 w-3" />
                                   </Button>
                                 )}
-                                
+
                                 {/* Copy invitation URL button (only for non-expired) */}
                                 {!isExpired && (
                                   <Button
@@ -703,7 +715,7 @@ export default function OrganizationProfile() {
                                     <Copy className="h-3 w-3" />
                                   </Button>
                                 )}
-                                
+
                                 {/* Delete pending invitation button */}
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -743,7 +755,7 @@ export default function OrganizationProfile() {
                   </div>
                 </div>
               )}
-              
+
               {organization.coaches.length === 0 ? (
                 <p className="text-gray-500 text-sm">No coaches assigned</p>
               ) : (
@@ -752,7 +764,7 @@ export default function OrganizationProfile() {
                   const pendingInvitation = organization.invitations?.find(
                     inv => inv.email === coach.user.email && inv.isUsed === "false"
                   );
-                  
+
                   return (
                     <div key={coach.user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex-1">
@@ -767,7 +779,7 @@ export default function OrganizationProfile() {
                           <Mail className="h-3 w-3" />
                           <span>{coach.user.email}</span>
                         </div>
-                        
+
                         {/* Invitation Status */}
                         <div className="flex items-center gap-2 mt-1">
                           {pendingInvitation ? (
@@ -783,7 +795,7 @@ export default function OrganizationProfile() {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
                         <div className="flex gap-1">
                           {coach.roles.map((role, roleIndex) => (
@@ -795,7 +807,7 @@ export default function OrganizationProfile() {
                             </Badge>
                           ))}
                         </div>
-                        
+
                         {/* Action Buttons - only for admin users */}
                         {(user?.isSiteAdmin || isOrgAdmin) && (
                           <div className="flex items-center gap-1">
@@ -810,7 +822,7 @@ export default function OrganizationProfile() {
                                 <Send className="h-3 w-3" />
                               </Button>
                             )}
-                            
+
                             {/* Delete User Button - hide for current user */}
                             {coach.user.id !== user?.id && (
                               <AlertDialog>
