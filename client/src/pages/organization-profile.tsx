@@ -144,6 +144,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          role: data.roles[0], // Take the first role from the array
           organizationId
         }),
       });
@@ -417,10 +418,14 @@ export default function OrganizationProfile() {
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
     try {
-      const response = await fetch(`/api/organizations/${id}/invitations`, {
+      const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, roles }),
+        body: JSON.stringify({ 
+          email, 
+          role: roles[0], // Take the first role from the array
+          organizationId: id 
+        }),
       });
 
       if (!response.ok) {
@@ -515,14 +520,15 @@ export default function OrganizationProfile() {
   // Function to resend invitation
   const resendInvitation = async (email: string, role: string) => {
     try {
-      const response = await fetch(`/api/organizations/${id}/invitations`, {
+      const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           email,
-          roles: [role],
+          role: role,
+          organizationId: id,
           teamIds: []
         }),
       });
