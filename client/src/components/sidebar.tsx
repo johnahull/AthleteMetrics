@@ -242,9 +242,6 @@ export default function Sidebar() {
                 <p className="text-xs font-medium text-gray-900 truncate">
                   {userOrganizations[0]?.organization?.name}
                 </p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {primaryRole.replace('_', ' ')}
-                </p>
               </div>
             </div>
           </div>
