@@ -95,25 +95,53 @@ const canManageUsers = async (userId: string, organizationId: string): Promise<b
 };
 
 const canInviteRole = async (inviterId: string, organizationId: string | null, targetRole: string): Promise<boolean> => {
-  if (!inviterId) return false;
+  if (!inviterId) {
+    console.log("❌ canInviteRole: No inviterId");
+    return false;
+  }
   
   const inviter = await storage.getUser(inviterId);
-  if (!inviter) return false;
+  if (!inviter) {
+    console.log("❌ canInviteRole: No inviter found for ID:", inviterId);
+    return false;
+  }
+  
+  console.log("🔍 canInviteRole debug:", {
+    inviterId,
+    inviterIsSiteAdmin: isSiteAdmin(inviter),
+    inviterDetails: { id: inviter.id, isSiteAdmin: inviter.isSiteAdmin },
+    organizationId,
+    targetRole
+  });
   
   // Site admins can invite anyone, regardless of organization
-  if (isSiteAdmin(inviter)) return true;
+  if (isSiteAdmin(inviter)) {
+    console.log("✅ canInviteRole: Site admin can invite");
+    return true;
+  }
   
   // For non-site admins, organization is required
-  if (!organizationId) return false;
+  if (!organizationId) {
+    console.log("❌ canInviteRole: No organization and not site admin");
+    return false;
+  }
   
   const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
+  console.log("🔍 canInviteRole: Inviter roles in org:", inviterRoles);
   
   // Org admins can invite anyone
-  if (inviterRoles.includes("org_admin")) return true;
+  if (inviterRoles.includes("org_admin")) {
+    console.log("✅ canInviteRole: Org admin can invite");
+    return true;
+  }
   
   // Coaches can only invite athletes
-  if (inviterRoles.includes("coach") && targetRole === "athlete") return true;
+  if (inviterRoles.includes("coach") && targetRole === "athlete") {
+    console.log("✅ canInviteRole: Coach can invite athlete");
+    return true;
+  }
   
+  console.log("❌ canInviteRole: No permission found");
   return false;
 };
 
