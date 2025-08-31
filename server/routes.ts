@@ -342,6 +342,17 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.delete("/api/players/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deletePlayer(id);
+      res.json({ message: "Player deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting player:", error);
+      res.status(500).json({ message: "Failed to delete player" });
+    }
+  });
+
   // Keep existing measurement routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
