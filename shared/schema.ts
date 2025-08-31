@@ -66,7 +66,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  role: text("role").notNull(), // "site_admin", "org_admin", "coach", "athlete"
+  isSiteAdmin: text("is_site_admin").default("false").notNull(), // Only for site admins
   isActive: text("is_active").default("true").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -211,7 +211,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]),
+  isSiteAdmin: z.string().default("false").optional(),
 });
 
 export const updateProfileSchema = z.object({
@@ -246,7 +246,7 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   isUsed: true,
 }).extend({
   email: z.string().email("Invalid email format"),
-  role: z.enum(["athlete", "coach", "org_admin", "site_admin"]),
+  role: z.enum(["athlete", "coach", "org_admin"]), // Removed site_admin from invitations
   teamIds: z.array(z.string()).optional(),
 });
 
@@ -351,8 +351,8 @@ export const TeamLevel = {
   COLLEGE: "College",
 } as const;
 
+// Organization-specific roles only
 export const UserRole = {
-  SITE_ADMIN: "site_admin",
   ORG_ADMIN: "org_admin",
   COACH: "coach",
   ATHLETE: "athlete",

@@ -72,7 +72,7 @@ export default function Organizations() {
 
   const onOrganizationClick = (orgId: string, orgName: string) => {
     // Site admins can switch to organization context
-    if (user?.role === 'site_admin') {
+    if (user?.isSiteAdmin) {
       setOrganizationContext(orgId);
       setLocation('/');  // Go to dashboard in org context
       toast({ 
@@ -183,7 +183,7 @@ export default function Organizations() {
                   >
                     {org.name}
                   </h3>
-                  {user?.role === 'site_admin' && (
+                  {user?.isSiteAdmin && (
                     <p className="text-xs text-blue-500 mt-1">Click to switch to organization view</p>
                   )}
                   {org.description && (

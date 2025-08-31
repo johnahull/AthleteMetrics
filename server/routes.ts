@@ -104,7 +104,7 @@ export function registerRoutes(app: Express) {
           return res.status(500).json({ message: "Session error" });
         }
         
-        req.session.user = { username: "admin", role: "site_admin" };
+        req.session.user = { username: "admin", isSiteAdmin: true };
         
         // Force session save
         req.session.save((err) => {
@@ -112,7 +112,7 @@ export function registerRoutes(app: Express) {
             console.error('Session save error:', err);
             return res.status(500).json({ message: "Session save failed" });
           }
-          return res.json({ success: true, user: { username: "admin", role: "site_admin" } });
+          return res.json({ success: true, user: { username: "admin", isSiteAdmin: true } });
         });
         return; // Prevent double response
       }
@@ -132,7 +132,7 @@ export function registerRoutes(app: Express) {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            role: user.role
+            isSiteAdmin: user.isSiteAdmin === "true"
           };
           
           let redirectUrl = "/";

@@ -164,7 +164,7 @@ export class DatabaseStorage implements IStorage {
 
   async getSiteAdminUsers(): Promise<User[]> {
     return await db.select().from(users)
-      .where(eq(users.role, "site_admin"))
+      .where(eq(users.isSiteAdmin, "true"))
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
@@ -461,6 +461,11 @@ export class DatabaseStorage implements IStorage {
 
   // User Management
   async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
+    // Validate that role is organization-specific only
+    if (!['org_admin', 'coach', 'athlete'].includes(role)) {
+      throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
+    }
+    
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,
       organizationId,
@@ -548,10 +553,9 @@ export class DatabaseStorage implements IStorage {
       user = await this.getUserByEmail(invitation.email);
       if (!user) throw new Error("Failed to update existing user");
     } else {
-      // Create new user
+      // Create new user (no role field needed - roles are organization-specific)
       user = await this.createUser({
-        ...userInfo,
-        role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+        ...userInfo
       });
     }
 
@@ -962,7 +966,13 @@ export class DatabaseStorage implements IStorage {
 
     // Get submitter info to determine if auto-verify
     const [submitter] = await db.select().from(users).where(eq(users.id, measurement.submittedBy));
-    const isCoach = submitter?.role === "coach" || submitter?.role === "org_admin" || submitter?.role === "site_admin";
+    
+    // Check if submitter is site admin or has coach/org_admin role in any organization
+    let isCoach = submitter?.isSiteAdmin === "true";
+    if (!isCoach && submitter) {
+      const submitterRoles = await this.getUserRoles(submitter.id);
+      isCoach = submitterRoles.includes("coach") || submitterRoles.includes("org_admin");
+    }
     
     const [newMeasurement] = await db.insert(measurements).values({
       playerId: measurement.playerId,
@@ -1089,9 +1099,12 @@ export class DatabaseStorage implements IStorage {
     
     const activeAthleteEmails = allUsers
       .filter(userOrg => {
-        const user = 'user' in userOrg ? userOrg.user : userOrg;
-        const role = 'role' in userOrg ? userOrg.role : user.role;
-        return role === 'athlete';
+        // For organization users, check the organization role
+        if ('role' in userOrg && userOrg.role) {
+          return userOrg.role === 'athlete';
+        }
+        // For site-wide users, they're not athletes since athletes are organization-specific
+        return false;
       })
       .map(userOrg => {
         const user = 'user' in userOrg ? userOrg.user : userOrg;

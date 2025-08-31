@@ -9,7 +9,7 @@ interface User {
   email?: string;
   firstName?: string;
   lastName?: string;
-  role?: string;
+  isSiteAdmin?: boolean;
 }
 
 interface AuthContextType {
