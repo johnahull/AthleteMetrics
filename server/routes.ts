@@ -41,6 +41,7 @@ const requireAuth = (req: any, res: any, next: any) => {
   if (!req.session.user && !req.session.admin) {
     return res.status(401).json({ message: "Not authenticated" });
   }
+  console.log("🔒 requireAuth passed for:", req.method, req.path);
   next();
 };
 
@@ -180,6 +181,12 @@ async function initializeDefaultUser() {
 
 export function registerRoutes(app: Express) {
   const server = createServer(app);
+
+  // Add request logging middleware for invitation routes
+  app.use('/api/*invit*', (req, res, next) => {
+    console.log("🌐 Invitation-related request:", req.method, req.path, req.params);
+    next();
+  });
 
   // Session setup
   app.use(session({
