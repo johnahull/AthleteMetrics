@@ -27,10 +27,6 @@ interface InvitationData {
 }
 
 export default function AcceptInvitation() {
-  console.log("🎯 AcceptInvitation component rendered", window.location.href);
-  console.log("🎯 URL search params:", window.location.search);
-  console.log("🎯 Component mounting...");
-  
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
