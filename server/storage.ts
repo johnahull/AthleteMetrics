@@ -761,16 +761,45 @@ export class DatabaseStorage implements IStorage {
     birthYearTo?: number;
     search?: string;
   }): Promise<User[]> {
-    let query = db
-      .select()
-      .from(users)
-      .leftJoin(userTeams, eq(users.id, userTeams.userId))
-      .leftJoin(teams, eq(userTeams.teamId, teams.id))
-      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
-      .where(eq(userOrganizations.role, 'athlete'))
-      .groupBy(users.id);
+    // For "none" team filter, use a simpler query
+    if (filters?.teamId === 'none') {
+      const conditions = [eq(userOrganizations.role, 'athlete')];
+      
+      if (filters?.organizationId) {
+        conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
+      }
+      
+      if (filters?.search) {
+        conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
+      }
 
-    // Apply filters
+      if (filters?.birthYearFrom && filters?.birthYearTo) {
+        conditions.push(
+          and(
+            gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom),
+            lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo)
+          )
+        );
+      } else if (filters?.birthYearFrom) {
+        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+      } else if (filters?.birthYearTo) {
+        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      }
+
+      const result = await db
+        .select()
+        .from(users)
+        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .where(and(
+          ...conditions,
+          sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams} WHERE ${userTeams.userId} IS NOT NULL)`
+        ))
+        .orderBy(asc(users.lastName), asc(users.firstName));
+        
+      return result.map(row => row.users);
+    }
+
+    // For regular queries, select only users and use distinct
     const conditions = [eq(userOrganizations.role, 'athlete')];
     
     if (filters?.birthYearFrom && filters?.birthYearTo) {
@@ -796,26 +825,28 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.teamId && filters.teamId !== 'none') {
       conditions.push(eq(userTeams.teamId, filters.teamId));
-    } else if (filters?.teamId === 'none') {
-      // Show athletes with no teams - need a different approach
-      query = db
-        .select()
-        .from(users)
-        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
-        .where(and(
-          eq(userOrganizations.role, 'athlete'),
-          sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams})`
-        ));
     }
 
-    if (conditions.length > 1) {
-      query = query.where(and(...conditions)) as any;
-    }
-
-    const result = await query.orderBy(asc(users.lastName), asc(users.firstName));
+    const result = await db
+      .selectDistinct({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        role: users.role,
+        birthDate: users.birthDate,
+        playerId: users.playerId,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt
+      })
+      .from(users)
+      .leftJoin(userTeams, eq(users.id, userTeams.userId))
+      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...conditions))
+      .orderBy(asc(users.lastName), asc(users.firstName));
     
-    // Extract just the users from the joined result
-    return result.map(row => row.users || row);
+    return result;
   }
 
   async getAthlete(id: string): Promise<User | undefined> {
