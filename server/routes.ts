@@ -111,7 +111,12 @@ export function registerRoutes(app: Express) {
           return res.status(500).json({ message: "Session error" });
         }
         
-        req.session.user = { username: "admin", isSiteAdmin: true };
+        req.session.user = { 
+          username: "admin", 
+          isSiteAdmin: true,
+          role: "site_admin",
+          id: "admin-legacy-id" 
+        };
         
         // Force session save
         req.session.save((err) => {
