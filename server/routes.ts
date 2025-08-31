@@ -98,142 +98,49 @@ export function registerRoutes(app: Express) {
   // Initialize default user
   initializeDefaultUser();
 
-  // Authentication routes - UNIFIED SYSTEM
+  // Authentication routes - USERNAME ONLY
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { username, password, email } = req.body;
+      const { username, password } = req.body;
       
-      // Handle old admin login (reset credentials to admin/admin)
-      if (username === "admin" && password === "admin") {
-        // Ensure session exists
-        if (!req.session) {
-          console.error('No session available during login!');
-          return res.status(500).json({ message: "Session error" });
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+      
+      // Username-based authentication
+      const user = await storage.authenticateUser(username, password);
+      if (user) {
+        // Check if user is active
+        if (user.isActive === "false") {
+          return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
         }
         
-        req.session.user = { 
-          username: "admin", 
-          isSiteAdmin: true,
-          role: "site_admin",
-          id: "admin-legacy-id" 
+        req.session.user = {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
+          isSiteAdmin: user.isSiteAdmin === "true"
         };
         
-        // Force session save
-        req.session.save((err) => {
-          if (err) {
-            console.error('Session save error:', err);
-            return res.status(500).json({ message: "Session save failed" });
+        let redirectUrl = "/";
+        if (user.role === "athlete") {
+          redirectUrl = `/athletes/${user.id}`;
+        } else if (user.role === "org_admin") {
+          // Get the org admin's organization to redirect to their org profile
+          const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
+          if (userOrgs.length > 0) {
+            redirectUrl = `/organizations/${userOrgs[0].id}`;
           }
-          return res.json({ success: true, user: { username: "admin", isSiteAdmin: true } });
+        }
+        
+        return res.json({ 
+          success: true, 
+          user: req.session.user,
+          redirectUrl
         });
-        return; // Prevent double response
-      }
-      
-      // Handle username-based login
-      if (username && username !== "admin") {
-        const user = await storage.authenticateUser(username, password);
-        if (user) {
-          // Check if user is active
-          if (user.isActive === "false") {
-            return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
-          }
-          
-          req.session.user = {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
-            isSiteAdmin: user.isSiteAdmin === "true"
-          };
-          
-          let redirectUrl = "/";
-          if (user.role === "athlete") {
-            redirectUrl = `/athletes/${user.id}`;
-          } else if (user.role === "org_admin") {
-            // Get the org admin's organization to redirect to their org profile
-            const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
-            if (userOrgs.length > 0) {
-              redirectUrl = `/organizations/${userOrgs[0].id}`;
-            }
-          }
-          
-          return res.json({ 
-            success: true, 
-            user: req.session.user,
-            redirectUrl
-          });
-        }
-      }
-      
-      // Also try email-based login with username field (for backwards compatibility)
-      if (username && username.includes('@')) {
-        const user = await storage.authenticateUserByEmail(username, password);
-        if (user) {
-          // Check if user is active
-          if (user.isActive === "false") {
-            return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
-          }
-          
-          req.session.user = {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role
-          };
-          
-          let redirectUrl = "/";
-          if (user.role === "athlete") {
-            redirectUrl = `/athletes/${user.id}`;
-          } else if (user.role === "org_admin") {
-            // Get the org admin's organization to redirect to their org profile
-            const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
-            if (userOrgs.length > 0) {
-              redirectUrl = `/organizations/${userOrgs[0].id}`;
-            }
-          }
-          
-          return res.json({ 
-            success: true, 
-            user: req.session.user,
-            redirectUrl
-          });
-        }
-      }
-      
-      // Try site admin login with username (convert to email format)
-      if (username && !username.includes('@')) {
-        const siteAdminEmail = username + "@admin.local";
-        const user = await storage.authenticateUser(siteAdminEmail, password);
-        if (user) {
-          req.session.user = {
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role
-          };
-          
-          let redirectUrl = "/";
-          if (user.role === "athlete") {
-            redirectUrl = `/athletes/${user.id}`;
-          } else if (user.role === "org_admin") {
-            // Get the org admin's organization to redirect to their org profile
-            const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
-            if (userOrgs.length > 0) {
-              redirectUrl = `/organizations/${userOrgs[0].id}`;
-            }
-          }
-          
-          return res.json({ 
-            success: true, 
-            user: req.session.user,
-            redirectUrl
-          });
-        }
       }
       
       res.status(401).json({ message: "Invalid credentials" });
