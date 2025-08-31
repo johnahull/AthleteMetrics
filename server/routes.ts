@@ -115,15 +115,26 @@ export function registerRoutes(app: Express) {
           return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
         }
         
+        console.log("User data from DB:", { 
+          isSiteAdmin: user.isSiteAdmin, 
+          role: user.role,
+          username: user.username 
+        });
+        
+        const sessionRole = user.isSiteAdmin === "true" ? "site_admin" : user.role;
+        console.log("Setting session role:", sessionRole);
+        
         req.session.user = {
           id: user.id,
           username: user.username,
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
+          role: sessionRole,
           isSiteAdmin: user.isSiteAdmin === "true"
         };
+        
+        console.log("Final session user:", req.session.user);
         
         let redirectUrl = "/";
         if (user.role === "athlete") {
