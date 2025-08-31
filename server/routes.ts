@@ -424,6 +424,38 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Get single organization (accessible by members and site admins)
+  app.get("/api/organizations/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Check if user has access to this organization
+      if (!userIsSiteAdmin) {
+        const hasAccess = await canAccessOrganization(currentUser, id);
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this organization" });
+        }
+      }
+
+      const organization = await storage.getOrganization(id);
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      res.json(organization);
+    } catch (error) {
+      console.error("Error fetching organization:", error);
+      res.status(500).json({ message: "Failed to fetch organization" });
+    }
+  });
+
   // Get organizations accessible to current user based on their role
   app.get("/api/my-organizations", requireAuth, async (req, res) => {
     try {

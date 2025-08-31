@@ -179,7 +179,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
-    const updateData: any = { ...user };
+    const updateData: any = {};
+    
+    // Only include defined fields in the update
+    Object.keys(user).forEach(key => {
+      const value = (user as any)[key];
+      if (value !== undefined) {
+        updateData[key] = value;
+      }
+    });
+    
     if (user.password) {
       updateData.password = await bcrypt.hash(user.password, 10);
     }
@@ -195,6 +204,18 @@ export class DatabaseStorage implements IStorage {
     // Delete related records first
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
     await db.delete(userTeams).where(eq(userTeams.userId, id));
+    
+    // Delete invitations sent by this user
+    await db.delete(invitations).where(eq(invitations.invitedBy, id));
+    
+    // Update measurements to remove references to this user
+    await db.update(measurements)
+      .set({ 
+        submittedBy: sql`NULL`,
+        verifiedBy: sql`NULL`
+      })
+      .where(sql`${measurements.submittedBy} = ${id} OR ${measurements.verifiedBy} = ${id}`);
+    
     await db.delete(users).where(eq(users.id, id));
   }
 
