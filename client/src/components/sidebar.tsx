@@ -33,7 +33,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
         { name: "Publish", href: "/publish", icon: FileCheck },
         { name: "Import/Export", href: "/import-export", icon: FileText },
       ];
-      
+
       // Add "My Organization" link if we have organization context
       if (organizationContext) {
         baseOrgNavigation.push({ 
@@ -42,7 +42,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
           icon: Building2 
         });
       }
-      
+
       return baseOrgNavigation;
     }
     // Default site admin menu
@@ -114,14 +114,14 @@ export default function Sidebar() {
     }
   });
 
-  // Use session role as primary source, fallback to organization role, then 'athlete'
-  const primaryRole = userData?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
+  // Use the single role from user data
+  const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext || undefined);
+  const navigation = getNavigation(isSiteAdmin, userRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext || undefined);
 
 
   return (
@@ -271,12 +271,12 @@ export default function Sidebar() {
               </div>
             );
           }
-          
+
           // For regular users with organizations
           if (!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
             const org = userOrganizations[0];
             const orgName = org?.organizationName || org?.organization?.name || org?.name;
-            
+
             if (orgName) {
               return (
                 <div className="px-3 py-2 border-t border-gray-200 mt-2">
@@ -292,7 +292,7 @@ export default function Sidebar() {
               );
             }
           }
-          
+
           return null;
         })()}
 
