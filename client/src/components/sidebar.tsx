@@ -114,7 +114,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user: userData, logout, organizationContext, setOrganizationContext } = useAuth();
+  const { user: userData, logout } = useAuth();
 
   // Get user's primary role from their first organization (or 'athlete' fallback)
   const { data: userOrganizations } = useQuery({

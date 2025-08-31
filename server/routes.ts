@@ -740,15 +740,28 @@ export function registerRoutes(app: Express) {
       
       // Determine redirect URL based on user role
       let redirectUrl = "/";
+      console.log(`🔍 Login redirect for user ${result.user.username}, role: ${result.user.role}, playerId: ${result.user.playerId}`);
+      
       if (result.user.role === "athlete" && result.user.playerId) {
         redirectUrl = `/athletes/${result.user.playerId}`;
+        console.log(`👤 Athlete redirect: ${redirectUrl}`);
       } else if (result.user.role === "org_admin") {
         // Get the org admin's organization to redirect to their org profile
         const userOrgs = await storage.getUserOrganizations(result.user.id);
         if (userOrgs.length > 0) {
           redirectUrl = `/organizations/${userOrgs[0].organizationId}`;
+          console.log(`🏢 Org admin redirect: ${redirectUrl}`);
+        }
+      } else if (result.user.role === "coach") {
+        // Get the coach's organization to redirect to dashboard or org profile
+        const userOrgs = await storage.getUserOrganizations(result.user.id);
+        if (userOrgs.length > 0) {
+          redirectUrl = `/organizations/${userOrgs[0].organizationId}`;
+          console.log(`🎯 Coach redirect: ${redirectUrl}`);
         }
       }
+      
+      console.log(`➡️ Final redirect URL: ${redirectUrl}`);
       
       res.json({ 
         success: true, 
