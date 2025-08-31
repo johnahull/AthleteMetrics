@@ -95,7 +95,8 @@ export default function UserManagement() {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
 
-  const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
+  // Use session role as primary source, fallback to organization role, then 'athlete'
+  const primaryRole = user?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
   const isSiteAdmin = user?.isSiteAdmin || false;
 
   // Redirect athletes away from this management page
