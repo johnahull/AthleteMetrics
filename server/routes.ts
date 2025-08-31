@@ -60,6 +60,7 @@ async function initializeDefaultUser() {
     const existingUser = await storage.getUserByEmail(adminEmail);
     if (!existingUser) {
       await storage.createUser({
+        username: "admin",
         email: adminEmail,
         password: adminPassword,
         firstName: "Site",
@@ -986,6 +987,7 @@ export function registerRoutes(app: Express) {
       if (!existingUser) {
         // Create a new user with invitation email
         const newUser = await storage.createUser({
+          username: `user_${Date.now()}`, // Temporary username until they set one
           email: parsedInvitationData.email,
           firstName: "", // Will be filled when they accept invitation
           lastName: "",
@@ -1146,6 +1148,7 @@ export function registerRoutes(app: Express) {
       const adminData = createSiteAdminSchema.parse(req.body);
       
       const newUser = await storage.createUser({
+        username: adminData.username,
         email: adminData.username + "@admin.local", // Use username as email with dummy domain
         firstName: adminData.firstName,
         lastName: adminData.lastName,
