@@ -124,7 +124,7 @@ export default function Sidebar() {
   });
 
   
-  const navigation = getNavigation(userRole, user?.id, isInOrganizationContext, userOrganizations);
+  const navigation = getNavigation(userRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
