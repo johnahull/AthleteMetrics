@@ -132,12 +132,9 @@ export function registerRoutes(app: Express) {
           // For athletes, redirect to their player profile using playerId
           redirectUrl = `/athletes/${user.playerId}`;
         } else if (user.role === "org_admin" || user.role === "coach") {
-          // Get the user's organization to redirect to their org profile
-          const userOrgs = await storage.getUserOrganizations(user.id);
-          if (userOrgs.length > 0) {
-            redirectUrl = `/organizations/${userOrgs[0].organizationId}`;
-            console.log(`🏢 ${user.role} redirect: ${redirectUrl}`);
-          }
+          // Org admins and coaches go to dashboard (not organization profile)
+          redirectUrl = "/";
+          console.log(`🏢 ${user.role} redirect: ${redirectUrl}`);
         }
 
         return res.json({ 
@@ -752,16 +749,9 @@ export function registerRoutes(app: Express) {
         redirectUrl = `/athletes/${result.user.playerId}`;
         console.log(`👤 Athlete redirect: ${redirectUrl}`);
       } else if (result.user.role === "org_admin" || result.user.role === "coach") {
-        // Get the user's organization to redirect to their org profile
-        const userOrgs = await storage.getUserOrganizations(result.user.id);
-        if (userOrgs.length > 0) {
-          redirectUrl = `/organizations/${userOrgs[0].organizationId}`;
-          console.log(`🏢 ${result.user.role} redirect: ${redirectUrl}`);
-        } else {
-          // Fallback to dashboard if no organization found
-          redirectUrl = "/dashboard";
-          console.log(`📊 Fallback dashboard redirect for ${result.user.role}`);
-        }
+        // Org admins and coaches go to dashboard
+        redirectUrl = "/";
+        console.log(`🏢 ${result.user.role} redirect: ${redirectUrl}`);
       }
 
       console.log(`➡️ Final redirect URL: ${redirectUrl}`);

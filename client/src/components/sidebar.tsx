@@ -17,40 +17,7 @@ import {
   User
 } from "lucide-react";
 
-// Component to handle organization profile link for org admins  
-function OrganizationProfileLink({ user, location, userOrganizations }: { user: any, location: string, userOrganizations?: any[] }) {
-  // Check if user has org_admin role in any organization
-  const hasOrgAdminRole = userOrganizations?.some(org => org.role === "org_admin");
 
-  const { data: organizations } = useQuery({
-    queryKey: ["/api/organizations-with-users"],
-    enabled: !!user?.id && hasOrgAdminRole,
-  });
-
-  if (!organizations || !Array.isArray(organizations) || organizations.length === 0) {
-    return null;
-  }
-
-  const orgId = organizations[0]?.id;
-  const isActive = location === `/organizations/${orgId}`;
-
-  return (
-    <Link href={`/organizations/${orgId}`}>
-      <div
-        className={cn(
-          "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-          isActive
-            ? "bg-primary text-white" 
-            : "text-gray-700 hover:bg-gray-100"
-        )}
-        data-testid="nav-organization-profile"
-      >
-        <Building2 className="h-5 w-5" />
-        <span>My Organization</span>
-      </div>
-    </Link>
-  );
-}
 
 const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[], user?: any) => {
   // Site admins get different navigation based on context (check this FIRST)
@@ -216,12 +183,6 @@ export default function Sidebar() {
             </button>
           </div>
         )}
-        {/* Org admin organization profile link */}
-          <OrganizationProfileLink 
-            user={userData} 
-            location={location} 
-            userOrganizations={userOrganizations} 
-          />
 
         {/* Site admin organization profile link when in organization context */}
         {userData && userData.isSiteAdmin && isInOrganizationContext && (
