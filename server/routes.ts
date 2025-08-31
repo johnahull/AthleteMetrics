@@ -95,55 +95,69 @@ const canManageUsers = async (userId: string, organizationId: string): Promise<b
   return userRoles.includes("org_admin");
 };
 
-const canInviteRole = async (inviterId: string, organizationId: string | null, targetRole: string): Promise<boolean> => {
+// Unified invitation permission checker
+const checkInvitationPermissions = async (inviterId: string, invitationType: 'general' | 'player' | 'organization', targetRole: string, organizationId?: string | null): Promise<{ allowed: boolean; reason?: string }> => {
   if (!inviterId) {
-    console.log("❌ canInviteRole: No inviterId");
-    return false;
+    return { allowed: false, reason: "No inviter ID provided" };
   }
   
   const inviter = await storage.getUser(inviterId);
   if (!inviter) {
-    console.log("❌ canInviteRole: No inviter found for ID:", inviterId);
-    return false;
+    return { allowed: false, reason: "Inviter not found" };
   }
   
-  console.log("🔍 canInviteRole debug:", {
-    inviterId,
-    inviterIsSiteAdmin: isSiteAdmin(inviter),
-    inviterDetails: { id: inviter.id, isSiteAdmin: inviter.isSiteAdmin },
-    organizationId,
-    targetRole
-  });
-  
-  // Site admins can invite anyone, regardless of organization
+  // Site admins can invite anyone to any role anywhere
   if (isSiteAdmin(inviter)) {
-    console.log("✅ canInviteRole: Site admin can invite");
-    return true;
+    return { allowed: true };
   }
   
-  // For non-site admins, organization is required
-  if (!organizationId) {
-    console.log("❌ canInviteRole: No organization and not site admin");
-    return false;
+  // For non-site admins, different rules apply based on invitation type
+  switch (invitationType) {
+    case 'general':
+      // General invitations require organization context for non-site admins
+      if (!organizationId) {
+        return { allowed: false, reason: "Organization context required for non-site admin invitations" };
+      }
+      break;
+    
+    case 'player':
+      // Player invitations can work without organization (independent players)
+      break;
+    
+    case 'organization':
+      // Organization invitations must have organization context
+      if (!organizationId) {
+        return { allowed: false, reason: "Organization ID required for organization invitations" };
+      }
+      break;
   }
   
-  const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
-  console.log("🔍 canInviteRole: Inviter roles in org:", inviterRoles);
-  
-  // Org admins can invite anyone
-  if (inviterRoles.includes("org_admin")) {
-    console.log("✅ canInviteRole: Org admin can invite");
-    return true;
+  // Check inviter's roles in the organization (if specified)
+  if (organizationId) {
+    const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
+    
+    // Organization admins can invite anyone within their organization
+    if (inviterRoles.includes("org_admin")) {
+      return { allowed: true };
+    }
+    
+    // Coaches can only invite athletes
+    if (inviterRoles.includes("coach")) {
+      if (targetRole === "athlete") {
+        return { allowed: true };
+      } else {
+        return { allowed: false, reason: "Coaches can only invite athletes" };
+      }
+    }
+    
+    // If user has roles but none with invitation permissions
+    if (inviterRoles.length > 0) {
+      return { allowed: false, reason: "Insufficient permissions to send invitations" };
+    }
   }
   
-  // Coaches can only invite athletes
-  if (inviterRoles.includes("coach") && targetRole === "athlete") {
-    console.log("✅ canInviteRole: Coach can invite athlete");
-    return true;
-  }
-  
-  console.log("❌ canInviteRole: No permission found");
-  return false;
+  // If no organization context and not site admin, deny
+  return { allowed: false, reason: "Insufficient permissions to send invitations" };
 };
 
 const requireSiteAdmin = async (req: any, res: any, next: any) => {
@@ -1030,19 +1044,20 @@ export function registerRoutes(app: Express) {
   });
 
   // Invitation routes
+  // Unified invitation endpoint - handles all invitation types
   app.post("/api/invitations", requireAuth, async (req, res) => {
     try {
-      console.log("🚀 /api/invitations route hit");
-      const { email, firstName, lastName, role, organizationId } = req.body;
-      console.log("📝 Request body:", { email, firstName, lastName, role, organizationId });
-      
-      const currentUser = req.session.user;
-      console.log("👤 Current user:", currentUser ? { id: currentUser.id, isSiteAdmin: currentUser.isSiteAdmin } : "null");
+      const { 
+        // Common fields
+        email, firstName, lastName, role, organizationId,
+        // Player invitation fields
+        playerId, teamIds,
+        // Invitation type
+        type = 'general'
+      } = req.body;
 
       // Get current user info for invitedBy
-      let invitedById = currentUser?.id;
-
-      // If using old admin system, find the site admin user
+      let invitedById = req.session.user?.id;
       if (!invitedById && req.session.admin) {
         const siteAdmin = await storage.getUserByUsername("admin");
         invitedById = siteAdmin?.id;
@@ -1052,43 +1067,78 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Unable to determine current user" });
       }
 
-      // Validate organization access
-      if (organizationId && !await canAccessOrganization(currentUser, organizationId)) {
-        return res.status(403).json({ message: "Access denied to this organization" });
+      // Check permissions using unified function
+      const permissionCheck = await checkInvitationPermissions(invitedById, type, role, organizationId);
+      if (!permissionCheck.allowed) {
+        return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
       }
 
-      // Validate role invitation permissions
-      if (!await canInviteRole(invitedById, organizationId, role)) {
-        const userRoles = await storage.getUserRoles(invitedById, organizationId);
-        if (userRoles.includes("coach") && !userRoles.includes("org_admin")) {
-          return res.status(403).json({ message: "Coaches can only invite athletes" });
-        }
-        return res.status(403).json({ message: "Insufficient permissions to invite this role" });
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Handle different invitation types
+      switch (type) {
+        case 'player':
+          // Player-specific invitation
+          if (!playerId) {
+            return res.status(400).json({ message: "Player ID required for player invitations" });
+          }
+
+          const player = await storage.getPlayer(playerId);
+          if (!player) {
+            return res.status(404).json({ message: "Player not found" });
+          }
+
+          const playerInvitations = await storage.createPlayerInvitations(playerId, {
+            organizationId: organizationId || null,
+            teamIds: teamIds || [],
+            role,
+            invitedBy: invitedById,
+            expiresAt
+          });
+
+          const inviteLinks = playerInvitations.map(invitation => ({
+            email: invitation.email,
+            token: invitation.token,
+            inviteLink: `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}&player=${playerId}`,
+            playerId: playerId
+          }));
+
+          return res.status(201).json({
+            type: 'player',
+            player: player,
+            invitations: inviteLinks,
+            message: `Created ${playerInvitations.length} invitations for player ${player.firstName} ${player.lastName}`
+          });
+
+        case 'general':
+        case 'organization':
+        default:
+          // General or organization invitation
+          if (!email) {
+            return res.status(400).json({ message: "Email required for general invitations" });
+          }
+
+          const invitation = await storage.createInvitation({
+            email,
+            firstName: firstName || null,
+            lastName: lastName || null,
+            organizationId: organizationId || null,
+            role,
+            invitedBy: invitedById,
+            expiresAt
+          });
+
+          const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
+
+          return res.status(201).json({
+            type: 'general',
+            id: invitation.id,
+            email: invitation.email,
+            token: invitation.token,
+            inviteLink,
+            message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
+          });
       }
-
-      // Athletes cannot invite anyone
-      if (currentUser?.role === "athlete") {
-        return res.status(403).json({ message: "Athletes cannot send invitations" });
-      }
-
-      const invitation = await storage.createInvitation({
-        email,
-        organizationId: organizationId || null,
-        role,
-        invitedBy: invitedById,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-      });
-
-      // Generate invitation link
-      const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
-
-      res.status(201).json({
-        id: invitation.id,
-        email: invitation.email,
-        token: invitation.token,
-        inviteLink,
-        message: `Invitation created for ${firstName} ${lastName} (${email})`
-      });
     } catch (error) {
       console.error("Error creating invitation:", error);
       res.status(500).json({ message: "Failed to create invitation" });
