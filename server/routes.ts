@@ -619,6 +619,44 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      
+      if (userOrgs.length === 0) {
+        return res.json([]);
+      }
+      
+      const allInvitations = await storage.getInvitations();
+      const athleteInvitations = allInvitations.filter(invitation => 
+        invitation.role === 'athlete' && 
+        invitation.isUsed === 'false' &&
+        userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
+      );
+      
+      // Enrich with player data
+      const enrichedInvitations = await Promise.all(
+        athleteInvitations.map(async (invitation) => {
+          if (invitation.playerId) {
+            const player = await storage.getPlayer(invitation.playerId);
+            return {
+              ...invitation,
+              firstName: player?.firstName,
+              lastName: player?.lastName
+            };
+          }
+          return invitation;
+        })
+      );
+      
+      res.json(enrichedInvitations);
+    } catch (error) {
+      console.error("Error fetching athlete invitations:", error);
+      res.status(500).json({ error: "Failed to fetch athlete invitations" });
+    }
+  });
+
   app.delete("/api/invitations/:id", requireAuth, async (req, res) => {
     try {
       await storage.deleteInvitation(req.params.id);
