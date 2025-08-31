@@ -13,10 +13,32 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 
 export default function Players() {
+  const { user, organizationContext } = useAuth();
+  const [location, setLocation] = useLocation();
+  
+  // Get user's primary role to check access
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
+  
+  const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
+  const isSiteAdmin = user?.isSiteAdmin || false;
+  
+  // Redirect athletes away from this management page
+  useEffect(() => {
+    if (!isSiteAdmin && primaryRole === "athlete") {
+      setLocation(`/athletes/${user?.id}`);
+    }
+  }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
+  
+  // Don't render management UI for athletes
+  if (!isSiteAdmin && primaryRole === "athlete") {
+    return null;
+  }
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
-  const [location, setLocation] = useLocation();
-  const { organizationContext } = useAuth();
   const [filters, setFilters] = useState({
     teamId: "",
     birthYearFrom: "",
