@@ -685,6 +685,86 @@ export default function UserManagement() {
                 </div>
               </div>
 
+              {/* Unassigned Users */}
+              {organizations && (
+                (() => {
+                  // Find users who aren't assigned to any organization
+                  const assignedUserIds = organizations.flatMap(org => 
+                    org.users?.map(userOrg => userOrg.user.id) || []
+                  );
+                  const unassignedUsers = allUsers.filter(user => 
+                    user.isSiteAdmin !== "true" && !assignedUserIds.includes(user.id)
+                  );
+
+                  if (unassignedUsers.length === 0) return null;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900">Unassigned Users</h3>
+                        <span className="text-sm text-gray-500">
+                          {unassignedUsers.length} users
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {unassignedUsers.map((user) => (
+                          <div 
+                            key={user.id} 
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                {user.isActive === "true" ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <XCircle className="h-4 w-4 text-red-600" />
+                                )}
+                                <div>
+                                  <p className="font-medium text-gray-900" data-testid={`user-name-${user.id}`}>
+                                    <Link href={`/users/${user.id}`} className="hover:text-primary">
+                                      {user.firstName} {user.lastName}
+                                    </Link>
+                                  </p>
+                                  <p className="text-sm text-gray-600" data-testid={`user-details-${user.id}`}>
+                                    @{user.username} • {user.email}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm px-2 py-1 rounded bg-gray-100 text-gray-800">
+                                Unassigned
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const isActive = user.isActive === "true";
+                                  handleToggleUserStatus(user.id, !isActive);
+                                }}
+                                data-testid={`user-toggle-${user.id}`}
+                              >
+                                {user.isActive === "true" ? "Deactivate" : "Activate"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}`)}
+                                data-testid={`user-delete-${user.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+
               {/* Users by Organization */}
               {organizations?.map((org: Organization) => (
                 <div key={org.id} className="space-y-3">
