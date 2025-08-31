@@ -66,6 +66,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
+  playerId: varchar("player_id").references(() => players.id), // Direct link to specific player
   isSiteAdmin: text("is_site_admin").default("false").notNull(), // Only for site admins
   isActive: text("is_active").default("true").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
