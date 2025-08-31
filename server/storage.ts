@@ -236,7 +236,8 @@ export class DatabaseStorage implements IStorage {
     const result: any = await db.select()
       .from(userOrganizations)
       .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
-      .where(eq(userOrganizations.userId, userId));
+      .where(eq(userOrganizations.userId, userId))
+      .orderBy(asc(organizations.name)); // Ensure consistent ordering
 
     return result.map(({ user_organizations, organizations }: any) => ({
       ...user_organizations,

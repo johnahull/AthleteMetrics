@@ -209,7 +209,7 @@ export function registerRoutes(app: Express) {
         }
 
         // Determine user role - site admin or organization role
-        let userRole = "athlete"; // Default role
+        let userRole: string;
         let redirectUrl = "/";
 
         // If user is site admin, use site_admin role
@@ -229,6 +229,9 @@ export function registerRoutes(app: Express) {
             } else {
               redirectUrl = "/";
             }
+          } else {
+            // If user has no organization roles and is not site admin, this is an error
+            return res.status(500).json({ message: "User has no valid role assignments" });
           }
         }
 
@@ -242,6 +245,14 @@ export function registerRoutes(app: Express) {
           isSiteAdmin: user.isSiteAdmin === "true",
           playerId: userRole === "athlete" ? user.id : undefined // Use user ID as player ID for athletes
         };
+
+        // Add debugging info for role issues
+        console.log(`Login successful for user ${user.email} (${user.id}):`, {
+          isSiteAdmin: user.isSiteAdmin,
+          determinedRole: userRole,
+          userOrgsCount: userOrgs ? userOrgs.length : 0,
+          userOrgsRoles: userOrgs ? userOrgs.map(uo => uo.role) : []
+        });
 
         return res.json({ 
           success: true, 
@@ -327,7 +338,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Determine the target user's role
-      let targetRole = "athlete"; // Default role
+      let targetRole: string;
 
       if (targetUser.isSiteAdmin === "true") {
         targetRole = "site_admin";
@@ -337,6 +348,8 @@ export function registerRoutes(app: Express) {
         if (userOrgs && userOrgs.length > 0) {
           // Use the first organization role (users should only have one role per org)
           targetRole = userOrgs[0].role;
+        } else {
+          return res.status(400).json({ message: "Target user has no valid role assignments" });
         }
       }
 
