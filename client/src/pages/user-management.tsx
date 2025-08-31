@@ -686,7 +686,7 @@ export default function UserManagement() {
                 </div>
                 
                 <div className="space-y-2">
-                  {allUsers.filter(user => user.isSiteAdmin !== "true").map((user) => {
+                  {organizations && allUsers.filter(user => user.isSiteAdmin !== "true").map((user) => {
                     // Find organization associations for this user
                     const userOrgs = organizations?.flatMap(org => 
                       org.users?.filter(userOrg => userOrg.user.id === user.id) || []
@@ -760,7 +760,11 @@ export default function UserManagement() {
                     );
                   })}
 
-                  {allUsers.length === 0 && (
+                  {!organizations && (
+                    <p className="text-gray-500 text-sm py-4">Loading user roles...</p>
+                  )}
+                  
+                  {organizations && allUsers.length === 0 && (
                     <p className="text-gray-500 text-sm py-4">No users found</p>
                   )}
                 </div>
