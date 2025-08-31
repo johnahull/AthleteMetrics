@@ -13,7 +13,8 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 
 type Organization = {
   id: string;
@@ -81,10 +82,33 @@ type SiteAdmin = {
 
 
 export default function UserManagement() {
+  const { user } = useAuth();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
+
+  // Get user's primary role to check access
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
+  
+  const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
+  const isSiteAdmin = user?.isSiteAdmin || false;
+  
+  // Redirect athletes away from this management page
+  useEffect(() => {
+    if (!isSiteAdmin && primaryRole === "athlete") {
+      setLocation(`/athletes/${user?.id}`);
+    }
+  }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
+  
+  // Don't render management UI for athletes
+  if (!isSiteAdmin && primaryRole === "athlete") {
+    return null;
+  }
 
   // Force cache invalidation on component mount
   useEffect(() => {

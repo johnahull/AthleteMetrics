@@ -125,7 +125,7 @@ export class DatabaseStorage implements IStorage {
   async authenticateUser(username: string, password: string): Promise<User | null> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
     if (!user) return null;
-    
+
     const isValid = await bcrypt.compare(password, user.password);
     return isValid ? user : null;
   }
@@ -133,7 +133,7 @@ export class DatabaseStorage implements IStorage {
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     if (!user) return null;
-    
+
     const isValid = await bcrypt.compare(password, user.password);
     return isValid ? user : null;
   }
@@ -183,7 +183,7 @@ export class DatabaseStorage implements IStorage {
     if (user.password) {
       updateData.password = await bcrypt.hash(user.password, 10);
     }
-    
+
     const [updatedUser] = await db.update(users)
       .set(updateData)
       .where(eq(users.id, id))
@@ -203,7 +203,7 @@ export class DatabaseStorage implements IStorage {
       .from(userOrganizations)
       .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
       .where(eq(userOrganizations.userId, userId));
-    
+
     return result.map(({ user_organizations, organizations }: any) => ({
       ...user_organizations,
       organization: organizations
@@ -212,18 +212,18 @@ export class DatabaseStorage implements IStorage {
 
   async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
     let whereCondition = eq(userOrganizations.userId, userId);
-    
+
     if (organizationId) {
       whereCondition = and(
         eq(userOrganizations.userId, userId),
         eq(userOrganizations.organizationId, organizationId)
       ) as any;
     }
-    
+
     const result = await db.select({ role: userOrganizations.role })
       .from(userOrganizations)
       .where(whereCondition);
-      
+
     return result.map(r => r.role);
   }
 
@@ -233,7 +233,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(userTeams.userId, userId));
-    
+
     return result.map(({ user_teams, teams: team, organizations }) => ({
       ...user_teams,
       team: { ...team, organization: organizations }
@@ -269,7 +269,7 @@ export class DatabaseStorage implements IStorage {
       .from(userOrganizations)
       .innerJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId));
-    
+
     return result.map(({ user_organizations, users: user }) => ({
       ...user_organizations,
       user
@@ -286,10 +286,10 @@ export class DatabaseStorage implements IStorage {
 
     // Get users with all their roles grouped
     const allUsers = await this.getOrganizationUsers(organizationId);
-    
+
     // Group users by userId and collect all their roles
     const userRoleMap = new Map<string, { user: User, roles: string[] }>();
-    
+
     for (const userOrg of allUsers) {
       const userId = userOrg.user.id;
       if (userRoleMap.has(userId)) {
@@ -301,15 +301,15 @@ export class DatabaseStorage implements IStorage {
         });
       }
     }
-    
+
     // Filter coaches (users with coach or org_admin roles, excluding pure athletes)
     const coaches = Array.from(userRoleMap.values()).filter(
       userWithRoles => userWithRoles.roles.some(role => role === 'coach' || role === 'org_admin')
     );
-    
+
     // Get players via organization filter
     const players = await this.getPlayers({ organizationId });
-    
+
     // Get pending invitations for this organization with user names
     const organizationInvitations = await db.select({
       id: invitations.id,
@@ -332,7 +332,7 @@ export class DatabaseStorage implements IStorage {
         eq(invitations.isUsed, "false"),
         gte(invitations.expiresAt, new Date())
       ));
-    
+
     return {
       ...organization,
       coaches,
@@ -343,7 +343,7 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[], invitations: Invitation[] })[]> {
     const organizations = await this.getOrganizations();
-    
+
     const orgsWithUsers = await Promise.all(
       organizations.map(async (org) => {
         const users = await this.getOrganizationUsers(org.id);
@@ -364,18 +364,18 @@ export class DatabaseStorage implements IStorage {
     const userOrgs = await db.select()
       .from(userOrganizations)
       .where(eq(userOrganizations.userId, userId));
-    
+
     const orgIds = userOrgs.map(uo => uo.organizationId);
-    
+
     if (orgIds.length === 0) {
       return [];
     }
-    
+
     // Get organizations data
     const orgsData = await db.select()
       .from(organizations)
       .where(inArray(organizations.id, orgIds));
-    
+
     const orgsWithUsers = await Promise.all(
       orgsData.map(async (org) => {
         const users = await this.getOrganizationUsers(org.id);
@@ -396,7 +396,7 @@ export class DatabaseStorage implements IStorage {
       .from(invitations)
       .where(eq(invitations.organizationId, organizationId))
       .orderBy(desc(invitations.createdAt));
-    
+
     return result;
   }
 
@@ -422,11 +422,11 @@ export class DatabaseStorage implements IStorage {
       .from(teams)
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .orderBy(asc(teams.name));
-    
+
     if (organizationId) {
       query = query.where(eq(teams.organizationId, organizationId)) as any;
     }
-    
+
     const result: any[] = await query;
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
@@ -439,9 +439,9 @@ export class DatabaseStorage implements IStorage {
       .from(teams)
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(teams.id, id));
-    
+
     if (result.length === 0) return undefined;
-    
+
     const { teams: team, organizations: org } = result[0];
     return { ...team, organization: org };
   }
@@ -471,7 +471,7 @@ export class DatabaseStorage implements IStorage {
     if (!['org_admin', 'coach', 'athlete'].includes(role)) {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
-    
+
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,
       organizationId,
@@ -518,7 +518,7 @@ export class DatabaseStorage implements IStorage {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
-    
+
     const [newInvitation] = await db.insert(invitations).values({
       ...invitation,
       token,
@@ -532,7 +532,7 @@ export class DatabaseStorage implements IStorage {
     // Get player's emails
     const player = await this.getPlayer(playerId);
     if (!player) throw new Error("Player not found");
-    
+
     if (!player.emails || player.emails.length === 0) {
       throw new Error("Player has no email addresses");
     }
@@ -543,7 +543,7 @@ export class DatabaseStorage implements IStorage {
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
-      
+
       const [newInvitation] = await db.insert(invitations).values({
         ...invitation,
         email,
@@ -551,10 +551,10 @@ export class DatabaseStorage implements IStorage {
         token,
         expiresAt
       }).returning();
-      
+
       invitationResults.push(newInvitation);
     }
-    
+
     return invitationResults;
   }
 
@@ -573,38 +573,43 @@ export class DatabaseStorage implements IStorage {
     if (!invitation) throw new Error("Invalid or expired invitation");
 
     // Check if user already exists
-    let user = await this.getUserByEmail(invitation.email);
-    
-    if (user) {
-      // User exists - update their info and link to player if this is a player invitation
-      const updateData: any = {
-        password: await bcrypt.hash(userInfo.password, 10),
-        username: userInfo.username,
-        firstName: userInfo.firstName,
-        lastName: userInfo.lastName
-      };
-      
-      // If this invitation is for a player, link the user to the player
-      if (invitation.playerId) {
-        updateData.playerId = invitation.playerId;
+      let user = await this.getUserByEmail(invitation.email);
+
+      if (user) {
+        // User exists - update their info and link to player if this is a player invitation
+        const updateData: any = {
+          password: await bcrypt.hash(userInfo.password, 10),
+          username: userInfo.username,
+          firstName: userInfo.firstName,
+          lastName: userInfo.lastName
+        };
+
+        // If this invitation is for a player, link the user to the player
+        if (invitation.playerId) {
+          updateData.playerId = invitation.playerId;
+        }
+
+        await db.update(users)
+          .set(updateData)
+          .where(eq(users.email, invitation.email));
+
+        // Get updated user
+        user = await this.getUserByEmail(invitation.email);
+        if (!user) throw new Error("Failed to update existing user");
+      } else {
+        // Create new user with optional player link
+        const createUserData: any = {
+          ...userInfo,
+          role: invitation.role
+        };
+
+        // If this invitation is for a player, link the user to the player
+        if (invitation.playerId) {
+          createUserData.playerId = invitation.playerId;
+        }
+
+        user = await this.createUser(createUserData);
       }
-      
-      await db.update(users)
-        .set(updateData)
-        .where(eq(users.email, invitation.email));
-      
-      // Get updated user
-      user = await this.getUserByEmail(invitation.email);
-      if (!user) throw new Error("Failed to update existing user");
-    } else {
-      // Create new user with optional player link
-      const createUserData = {
-        ...userInfo,
-        playerId: invitation.playerId || undefined
-      };
-      
-      user = await this.createUser(createUserData);
-    }
 
     // Add user to organization (check if not already added)
     try {
@@ -628,7 +633,7 @@ export class DatabaseStorage implements IStorage {
 
     // Handle player linkage and team assignments
     let playerId: string | undefined = invitation.playerId || undefined;
-    
+
     if (invitation.role === "athlete" && invitation.playerId) {
       // Add player to teams if specified
       if (invitation.teamIds && invitation.teamIds.length > 0) {
@@ -675,12 +680,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await query.orderBy(asc(players.lastName), asc(players.firstName));
-    
+
     // Get teams and login status for each player
     const playersWithTeams = await Promise.all(
       result.map(async (player) => {
         const playerTeams = await this.getPlayerTeams(player.id);
-        
+
         // Check if player has a login account by direct playerId relationship
         let hasLogin = false;
         const [userRecord] = await db.select().from(users)
@@ -689,7 +694,7 @@ export class DatabaseStorage implements IStorage {
             eq(users.isActive, "true")
           ));
         hasLogin = !!userRecord;
-        
+
         return {
           ...player,
           teams: playerTeams,
@@ -724,21 +729,21 @@ export class DatabaseStorage implements IStorage {
 
   async createPlayer(player: InsertPlayer): Promise<Player> {
     const fullName = `${player.firstName} ${player.lastName}`;
-    
+
     // Calculate birth year from birthday
     const birthYear = new Date(player.birthday).getFullYear();
-    
+
     const [newPlayer] = await db.insert(players).values({
       ...player,
       fullName,
       birthYear
     }).returning();
-    
+
     // Add to teams if specified
     if (player.teamIds && player.teamIds.length > 0) {
       await this.setPlayerTeams(newPlayer.id, player.teamIds);
     }
-    
+
     // Update any existing user records with the same email addresses
     if (player.emails && player.emails.length > 0) {
       for (const email of player.emails) {
@@ -755,17 +760,17 @@ export class DatabaseStorage implements IStorage {
         }
       }
     }
-    
+
     return newPlayer;
   }
 
   async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
     const updateData: any = { ...player };
-    
+
     // Update full name if first or last name changed
     let finalFirstName: string | undefined;
     let finalLastName: string | undefined;
-    
+
     if (player.firstName || player.lastName) {
       const existing = await this.getPlayer(id);
       if (existing) {
@@ -774,24 +779,24 @@ export class DatabaseStorage implements IStorage {
         updateData.fullName = `${finalFirstName} ${finalLastName}`;
       }
     }
-    
+
     // Calculate birth year if birthday changed
     if (player.birthday) {
       updateData.birthYear = new Date(player.birthday).getFullYear();
     }
-    
+
     const [updated] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();
-    
+
     // Update teams if specified
     if (player.teamIds !== undefined) {
       await this.setPlayerTeams(id, player.teamIds);
     }
-    
+
     // Update any existing user records if name or emails changed
     if ((player.firstName || player.lastName || player.emails) && finalFirstName && finalLastName) {
       // Get current player emails (either updated or existing)
       const currentEmails = player.emails || (await this.getPlayer(id))?.emails || [];
-      
+
       for (const email of currentEmails) {
         try {
           await db.update(users)
@@ -806,7 +811,7 @@ export class DatabaseStorage implements IStorage {
         }
       }
     }
-    
+
     return updated;
   }
 
@@ -815,10 +820,10 @@ export class DatabaseStorage implements IStorage {
     await db.transaction(async (tx) => {
       // First, delete all player-team relationships
       await tx.delete(playerTeams).where(eq(playerTeams.playerId, id));
-      
+
       // Then, delete all measurements for this player
       await tx.delete(measurements).where(eq(measurements.playerId, id));
-      
+
       // Finally, delete the player record
       await tx.delete(players).where(eq(players.id, id));
     });
@@ -867,7 +872,7 @@ export class DatabaseStorage implements IStorage {
   async setPlayerTeams(playerId: string, teamIds: string[]): Promise<void> {
     // Remove existing teams
     await db.delete(playerTeams).where(eq(playerTeams.playerId, playerId));
-    
+
     // Add new teams
     if (teamIds.length > 0) {
       await db.insert(playerTeams).values(
@@ -896,7 +901,7 @@ export class DatabaseStorage implements IStorage {
       .from(measurements)
       .innerJoin(players, eq(measurements.playerId, players.id))
       .innerJoin(users, eq(measurements.submittedBy, users.id));
-    
+
     const conditions = [];
     if (filters?.playerId) {
       conditions.push(eq(measurements.playerId, filters.playerId));
@@ -934,18 +939,18 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await query.orderBy(desc(measurements.date), desc(measurements.createdAt));
-    
+
     // Get teams for each player and additional user info
     const measurementsWithDetails = await Promise.all(
       result.map(async ({ measurements: measurement, players: player, users: submittedBy }) => {
         const playerTeams = await this.getPlayerTeams(player.id);
-        
+
         let verifiedBy;
         if (measurement.verifiedBy) {
           const [verifier] = await db.select().from(users).where(eq(users.id, measurement.verifiedBy));
           verifiedBy = verifier;
         }
-        
+
         return {
           ...measurement,
           player: { ...player, teams: playerTeams },
@@ -957,7 +962,7 @@ export class DatabaseStorage implements IStorage {
 
     // Apply team/organization filters
     let filteredMeasurements = measurementsWithDetails;
-    
+
     if (filters?.teamIds && filters.teamIds.length > 0) {
       filteredMeasurements = filteredMeasurements.filter(measurement => 
         measurement.player.teams.some(team => filters.teamIds!.includes(team.id))
@@ -992,7 +997,7 @@ export class DatabaseStorage implements IStorage {
 
     const measurementDate = new Date(measurement.date);
     let age = measurementDate.getFullYear() - player.birthYear;
-    
+
     // Use birthday for more precise age calculation if available
     if (player.birthday) {
       const birthday = new Date(player.birthday);
@@ -1007,14 +1012,14 @@ export class DatabaseStorage implements IStorage {
 
     // Get submitter info to determine if auto-verify
     const [submitter] = await db.select().from(users).where(eq(users.id, measurement.submittedBy));
-    
+
     // Check if submitter is site admin or has coach/org_admin role in any organization
     let isCoach = submitter?.isSiteAdmin === "true";
     if (!isCoach && submitter) {
       const submitterRoles = await this.getUserRoles(submitter.id);
       isCoach = submitterRoles.includes("coach") || submitterRoles.includes("org_admin");
     }
-    
+
     const [newMeasurement] = await db.insert(measurements).values({
       playerId: measurement.playerId,
       submittedBy: measurement.submittedBy,
@@ -1028,7 +1033,7 @@ export class DatabaseStorage implements IStorage {
       isVerified: isCoach ? "true" : "false",
       verifiedBy: isCoach ? measurement.submittedBy : undefined
     }).returning();
-    
+
     return newMeasurement;
   }
 
@@ -1041,7 +1046,7 @@ export class DatabaseStorage implements IStorage {
     if (measurement.value !== undefined) updateData.value = measurement.value.toString();
     if (measurement.notes !== undefined) updateData.notes = measurement.notes;
     if (measurement.flyInDistance !== undefined) updateData.flyInDistance = measurement.flyInDistance?.toString();
-    
+
     const [updated] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();
     return updated;
   }
@@ -1068,7 +1073,7 @@ export class DatabaseStorage implements IStorage {
     measurementCount: number;
   }> {
     const measurements = await this.getMeasurements({ playerId, includeUnverified: false });
-    
+
     const fly10Times = measurements
       .filter(m => m.metric === "FLY10_TIME")
       .map(m => parseFloat(m.value));
@@ -1093,21 +1098,21 @@ export class DatabaseStorage implements IStorage {
     latestTest?: string;
   }>> {
     const teams = await this.getTeams(organizationId);
-    
+
     const teamStats = await Promise.all(
       teams.map(async (team) => {
         const players = await this.getPlayers({ teamId: team.id });
         const measurements = await this.getMeasurements({ teamIds: [team.id], includeUnverified: false });
-        
+
         const fly10Times = measurements
           .filter(m => m.metric === "FLY10_TIME")
           .map(m => parseFloat(m.value));
         const verticalJumps = measurements
           .filter(m => m.metric === "VERTICAL_JUMP")
           .map(m => parseFloat(m.value));
-        
+
         const latestMeasurement = measurements[0]; // Already ordered by date desc
-        
+
         return {
           teamId: team.id,
           teamName: team.name,
@@ -1132,12 +1137,12 @@ export class DatabaseStorage implements IStorage {
   }> {
     const players = await this.getPlayers({ organizationId });
     const teams = await this.getTeams(organizationId);
-    
+
     // Count active athletes (players who have user accounts)
     const allUsers = organizationId 
       ? await this.getOrganizationUsers(organizationId)
       : await this.getUsers();
-    
+
     const activeAthleteEmails = allUsers
       .filter(userOrg => {
         // For organization users, check the organization role
@@ -1151,11 +1156,11 @@ export class DatabaseStorage implements IStorage {
         const user = 'user' in userOrg ? userOrg.user : userOrg;
         return user.email;
       });
-    
+
     const activeAthletes = players.filter(player => 
       player.emails && player.emails.some(email => activeAthleteEmails.includes(email))
     ).length;
-    
+
     const today = new Date().toISOString().split('T')[0];
     const todaysMeasurements = await this.getMeasurements({ 
       dateFrom: today, 
@@ -1163,15 +1168,15 @@ export class DatabaseStorage implements IStorage {
       organizationId,
       includeUnverified: false
     });
-    
+
     const todaysFly10 = todaysMeasurements
       .filter(m => m.metric === "FLY10_TIME")
       .map(m => ({ value: parseFloat(m.value), playerName: m.player.fullName }));
-    
+
     const todaysVertical = todaysMeasurements
       .filter(m => m.metric === "VERTICAL_JUMP")
       .map(m => ({ value: parseFloat(m.value), playerName: m.player.fullName }));
-    
+
     return {
       totalPlayers: players.length,
       activeAthletes,

@@ -15,6 +15,7 @@ declare module 'express-session' {
       firstName: string;
       lastName: string;
       role: string;
+      playerId?: string;
     };
     // Keep old admin for transition
     admin?: boolean;
@@ -122,12 +123,14 @@ export function registerRoutes(app: Express) {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
-          isSiteAdmin: user.isSiteAdmin === "true"
+          isSiteAdmin: user.isSiteAdmin === "true",
+          playerId: user.playerId
         };
         
         let redirectUrl = "/";
-        if (user.role === "athlete") {
-          redirectUrl = `/athletes/${user.id}`;
+        if (user.role === "athlete" && user.playerId) {
+          // For athletes, redirect to their player profile using playerId
+          redirectUrl = `/athletes/${user.playerId}`;
         } else if (user.role === "org_admin") {
           // Get the org admin's organization to redirect to their org profile
           const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
@@ -298,7 +301,10 @@ export function registerRoutes(app: Express) {
   app.get("/api/players/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const player = await storage.getPlayer(id);
+      const currentUser = req.session.user;
+      
+      // Try to get player by the provided ID
+      let player = await storage.getPlayer(id);
       
       if (!player) {
         return res.status(404).json({ message: "Player not found" });
@@ -735,6 +741,8 @@ export function registerRoutes(app: Express) {
       let redirectUrl = "/";
       if (result.user.role === "athlete" && result.playerId) {
         redirectUrl = `/athletes/${result.playerId}`;
+      } else if (result.user.role === "athlete" && result.user.playerId) {
+        redirectUrl = `/athletes/${result.user.playerId}`;
       }
       
       res.json({ 
