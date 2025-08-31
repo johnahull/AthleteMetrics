@@ -547,11 +547,12 @@ export function registerRoutes(app: Express) {
         invitedBy: invitedById
       });
       
-      // Generate invitation links
+      // Generate invitation links with player info
       const inviteLinks = invitations.map(invitation => ({
         email: invitation.email,
         token: invitation.token,
-        inviteLink: `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`
+        inviteLink: `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}&player=${playerId}`,
+        playerId: playerId
       }));
       
       res.status(201).json({
@@ -583,15 +584,16 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invitation expired" });
       }
       
-      // Get existing player data if this is an athlete invitation
+      // Get existing player data if this is an athlete invitation with playerId
       let playerData = null;
-      if (invitation.role === "athlete") {
-        const players = await storage.getPlayers();
-        const player = players.find(p => p.emails.includes(invitation.email));
+      if (invitation.role === "athlete" && invitation.playerId) {
+        const player = await storage.getPlayer(invitation.playerId);
         if (player) {
           playerData = {
+            id: player.id,
             firstName: player.firstName,
-            lastName: player.lastName
+            lastName: player.lastName,
+            emails: player.emails
           };
         }
       }
@@ -600,6 +602,7 @@ export function registerRoutes(app: Express) {
         email: invitation.email,
         role: invitation.role,
         organizationId: invitation.organizationId,
+        playerId: invitation.playerId,
         playerData
       });
     } catch (error) {
