@@ -121,7 +121,7 @@ export default function Sidebar() {
   // Check if we're in an organization context (site admin viewing specific org)
   const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
 
-  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext);
+  const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData, organizationContext || undefined);
 
 
   return (
