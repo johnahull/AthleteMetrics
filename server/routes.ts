@@ -1113,13 +1113,29 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Unable to determine current user" });
       }
 
-      // Check current user's roles for restrictions
-      const currentUserRoles = await storage.getUserRoles(invitedById, organizationId);
+      // Check if user is site admin
+      const currentUser = await storage.getUser(invitedById);
+      if (!currentUser) {
+        return res.status(404).json({ message: "Current user not found" });
+      }
 
-      // Coaches can only invite athletes
-      if (currentUserRoles.includes("coach") && !currentUserRoles.includes("org_admin") && !await hasRole(invitedById, "site_admin")) {
-        if (role !== "athlete") {
-          return res.status(403).json({ message: "Coaches can only invite athletes" });
+      // Site admins can invite anyone to any role
+      if (isSiteAdmin(currentUser)) {
+        // Site admin can proceed with any invitation
+      } else {
+        // Check current user's roles for restrictions
+        const currentUserRoles = await storage.getUserRoles(invitedById, organizationId);
+
+        // Coaches can only invite athletes
+        if (currentUserRoles.includes("coach") && !currentUserRoles.includes("org_admin")) {
+          if (role !== "athlete") {
+            return res.status(403).json({ message: "Coaches can only invite athletes" });
+          }
+        }
+        
+        // Non-site-admin users need some form of permission
+        if (!currentUserRoles.includes("org_admin") && !currentUserRoles.includes("coach")) {
+          return res.status(403).json({ message: "Insufficient permissions to invite users" });
         }
       }
 
