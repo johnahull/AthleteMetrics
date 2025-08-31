@@ -522,7 +522,7 @@ export default function UserManagement() {
                               <FormMessage />
                               {isOrgUser && (
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Note: Each user can only have one role. Athletes cannot be coaches/admins.
+                                  Note: Each user has exactly one role per organization.
                                 </p>
                               )}
                             </FormItem>

@@ -54,42 +54,42 @@ const isSiteAdmin = (user: any): boolean => {
 
 const hasRole = async (userId: string, role: string, organizationId?: string): Promise<boolean> => {
   if (!userId) return false;
-  
+
   const user = await storage.getUser(userId);
   if (!user) return false;
-  
+
   // Check site admin
   if (role === "site_admin" && user.isSiteAdmin === "true") {
     return true;
   }
-  
+
   // Check organization roles
   if (organizationId) {
     const userRoles = await storage.getUserRoles(userId, organizationId);
     return userRoles.includes(role);
   }
-  
+
   // No direct role on user object - roles are in userOrganizations
   return false;
 };
 
 const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
   if (!user?.id || !organizationId) return false;
-  
+
   if (isSiteAdmin(user)) return true;
-  
+
   const userOrgs = await storage.getUserOrganizations(user.id);
   return userOrgs.some(org => org.organizationId === organizationId);
 };
 
 const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
   if (!userId || !organizationId) return false;
-  
+
   const user = await storage.getUser(userId);
   if (!user) return false;
-  
+
   if (isSiteAdmin(user)) return true;
-  
+
   const userRoles = await storage.getUserRoles(userId, organizationId);
   return userRoles.includes("org_admin");
 };
@@ -99,30 +99,30 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
   if (!inviterId) {
     return { allowed: false, reason: "No inviter ID provided" };
   }
-  
+
   const inviter = await storage.getUser(inviterId);
   if (!inviter) {
     return { allowed: false, reason: "Inviter not found" };
   }
-  
+
   // Site admins can invite anyone to any role anywhere
   if (isSiteAdmin(inviter)) {
     return { allowed: true };
   }
-  
+
   // For non-site admins, organization context is required
   if (!organizationId) {
     return { allowed: false, reason: "Organization context required for non-site admin invitations" };
   }
-  
+
   // Check inviter's roles in the organization
   const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
-  
+
   // Organization admins can invite anyone within their organization
   if (inviterRoles.includes("org_admin")) {
     return { allowed: true };
   }
-  
+
   // Coaches can only invite athletes
   if (inviterRoles.includes("coach")) {
     if (targetRole === "athlete") {
@@ -131,12 +131,12 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
       return { allowed: false, reason: "Coaches can only invite athletes" };
     }
   }
-  
+
   // If user has roles but none with invitation permissions
   if (inviterRoles.length > 0) {
     return { allowed: false, reason: "Insufficient permissions to send invitations" };
   }
-  
+
   // If no organization context and not site admin, deny
   return { allowed: false, reason: "Insufficient permissions to send invitations" };
 };
@@ -222,7 +222,7 @@ export function registerRoutes(app: Express) {
           if (userOrgs && userOrgs.length > 0) {
             // Use the role from the first organization (users should only have one role per org)
             userRole = userOrgs[0].role;
-            
+
             // Set redirect based on role
             if (userRole === "athlete") {
               redirectUrl = `/athletes/${user.id}`;
@@ -328,7 +328,7 @@ export function registerRoutes(app: Express) {
 
       // Determine the target user's role
       let targetRole = "athlete"; // Default role
-      
+
       if (targetUser.isSiteAdmin === "true") {
         targetRole = "site_admin";
       } else {
@@ -1398,28 +1398,22 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      const { roles, ...userData } = req.body;
+      const { role, ...userData } = req.body;
       const parsedUserData = insertUserSchema.omit({ role: true }).parse(userData);
 
-      // Validate roles array
-      if (!roles || !Array.isArray(roles) || roles.length === 0) {
-        return res.status(400).json({ message: "At least one role must be specified" });
+      // Validate single role
+      if (!role || typeof role !== 'string') {
+        return res.status(400).json({ message: "A single role must be specified" });
       }
 
-      // Validate role values and constraints
+      // Validate role value
       const validRoles = ["org_admin", "coach", "athlete"];
-      const invalidRoles = roles.filter((role: string) => !validRoles.includes(role));
-      if (invalidRoles.length > 0) {
-        return res.status(400).json({ message: `Invalid roles: ${invalidRoles.join(", ")}` });
-      }
-
-      // Athletes cannot have other roles
-      if (roles.includes("athlete") && roles.length > 1) {
-        return res.status(400).json({ message: "Athletes cannot have additional roles" });
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ message: `Invalid role: ${role}. Must be one of: ${validRoles.join(", ")}` });
       }
 
       // Org admins cannot create site admins
-      if (!userIsSiteAdmin && roles.includes("site_admin")) {
+      if (!userIsSiteAdmin && role === "site_admin") {
         return res.status(403).json({ message: "Cannot create site administrators" });
       }
 
@@ -1441,18 +1435,11 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      // Add user to organization with all specified roles (only if not already in org)
-      const existingUserOrgs = await storage.getUserOrganizations(user.id);
-      const isAlreadyInOrg = existingUserOrgs.some(org => org.organizationId === organizationId);
-
-      if (!isAlreadyInOrg) {
-        for (const role of roles) {
-          await storage.addUserToOrganization(user.id, organizationId, role);
-        }
-      }
+      // Add user to organization with the specified role
+      await storage.addUserToOrganization(user.id, organizationId, role);
 
       // If user is an athlete, also create a player record
-      if (roles.includes("athlete")) {
+      if (role === "athlete") {
         await storage.createPlayer({
           firstName: userData.firstName,
           lastName: userData.lastName,
@@ -1469,7 +1456,7 @@ export function registerRoutes(app: Express) {
         email: user.email, 
         firstName: user.firstName, 
         lastName: user.lastName, 
-        role: roles[0] || "athlete", // Use the primary role from request
+        role: role,
         message: "User created successfully"
       });
     } catch (error) {

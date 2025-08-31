@@ -84,7 +84,10 @@ export const userOrganizations = pgTable("user_organizations", {
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   role: text("role").notNull(), // "org_admin", "coach", "athlete"
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Ensure one role per user per organization
+  uniqueUserOrg: sql`UNIQUE(${table.userId}, ${table.organizationId})`
+}));
 
 export const invitations = pgTable("invitations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
