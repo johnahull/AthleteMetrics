@@ -242,9 +242,9 @@ export function registerRoutes(app: Express) {
         };
 
         let redirectUrl = "/";
-        if (primaryRole === "athlete" && user.playerId) {
-          // For athletes, redirect to their player profile using playerId
-          redirectUrl = `/athletes/${user.playerId}`;
+        if (primaryRole === "athlete") {
+          // For athletes, redirect to their user ID (they don't have separate player records anymore)
+          redirectUrl = `/athletes/${user.id}`;
         } else {
           // All other roles (org_admin, coach, site_admin) go to dashboard
           redirectUrl = "/";

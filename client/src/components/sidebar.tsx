@@ -117,6 +117,12 @@ export default function Sidebar() {
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
+  console.log("🔍 Sidebar Debug:", {
+    userRole,
+    isSiteAdmin,
+    userData: userData
+  });
+
   // Extract organization ID from URL - check both organization profile and context switching
   const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];
   const isInOrganizationContext = !!organizationId;

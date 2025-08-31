@@ -25,10 +25,9 @@ export default function Dashboard() {
   // Redirect athletes away from organization dashboard
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
-      const playerId = user?.playerId || user?.id;
-      setLocation(`/athletes/${playerId}`);
+      setLocation(`/athletes/${user?.id}`);
     }
-  }, [isSiteAdmin, primaryRole, user?.id, user?.playerId, setLocation]);
+  }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
 
   // Don't render dashboard for athletes
   if (!isSiteAdmin && primaryRole === "athlete") {
