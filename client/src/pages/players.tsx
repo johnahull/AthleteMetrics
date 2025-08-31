@@ -138,8 +138,10 @@ export default function Players() {
   // Send player invitation mutation (sends to all emails)
   const sendPlayerInvitationMutation = useMutation({
     mutationFn: async ({ playerId, organizationId }: { playerId: string; organizationId: string }) => {
-      const response = await apiRequest("POST", `/api/players/${playerId}/invitations`, {
-        role: "athlete",
+      const response = await apiRequest("POST", "/api/invitations", {
+        type: "player",
+        playerId,
+        role: "athlete", 
         organizationId,
         teamIds: []
       });
@@ -150,7 +152,7 @@ export default function Players() {
       queryClient.invalidateQueries({ queryKey: ["/api/players"] });
       toast({
         title: "Success",
-        description: `${data.invitations?.length || 1} invitations sent to ${data.playerName}`,
+        description: `${data.invitations?.length || 1} invitations sent to ${data.player?.firstName} ${data.player?.lastName}`,
       });
     },
     onError: () => {
