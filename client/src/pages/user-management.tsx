@@ -813,7 +813,7 @@ export default function UserManagement() {
                                 onClick={() => copyExistingInviteLink(invitation)}
                                 data-testid={`invitation-copy-link-${invitation.id}`}
                               >
-                                <Link className="h-4 w-4" />
+                                <LinkIcon className="h-4 w-4" />
                               </Button>
                             )}
                             <Button
