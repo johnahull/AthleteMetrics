@@ -1121,7 +1121,8 @@ export function registerRoutes(app: Express) {
   app.put("/api/users/:id/role", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { role } = req.body;
+      const { role, organizationId } = req.body;
+      const currentUser = req.session.user;
       
       // Get the user to check current role and organization membership
       const user = await storage.getUser(id);
@@ -1132,6 +1133,46 @@ export function registerRoutes(app: Express) {
       // Check if user belongs to any organization
       const userOrgs = await storage.getUserOrganizations(id);
       const isOrgUser = userOrgs && userOrgs.length > 0;
+      
+      // Authorization checks
+      const isSiteAdmin = currentUser?.role === "site_admin" || 
+                        (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
+      
+      if (!isSiteAdmin) {
+        // For non-site admins, check org admin permissions
+        if (!organizationId) {
+          return res.status(400).json({ message: "Organization ID required for role changes" });
+        }
+        
+        const currentUserRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
+        const isOrgAdmin = currentUserRoles.includes("org_admin");
+        
+        if (!isOrgAdmin) {
+          return res.status(403).json({ message: "Access denied. Only organization admins can change user roles." });
+        }
+        
+        // Check if target user is in the same organization
+        const targetUserRoles = await storage.getUserRoles(id, organizationId);
+        if (targetUserRoles.length === 0) {
+          return res.status(403).json({ message: "User not found in this organization" });
+        }
+        
+        // Prevent org admins from demoting themselves to coach
+        if (currentUser?.id === id && targetUserRoles.includes("org_admin") && role === "coach") {
+          return res.status(403).json({ message: "Organization admins cannot demote themselves to coach" });
+        }
+        
+        // Org admins can only change roles of coaches and other org admins (not athletes or site admins)
+        const canChangeRole = targetUserRoles.some(userRole => ["org_admin", "coach"].includes(userRole));
+        if (!canChangeRole) {
+          return res.status(403).json({ message: "You can only change roles of coaches and organization admins" });
+        }
+        
+        // Org admins cannot promote users to site admin
+        if (role === "site_admin") {
+          return res.status(403).json({ message: "Cannot promote users to site administrator" });
+        }
+      }
 
       // Role validation rules
       if (isOrgUser && role === "site_admin") {
@@ -1156,16 +1197,26 @@ export function registerRoutes(app: Express) {
         });
       }
       
-      const updatedUser = await storage.updateUser(id, { role });
-      
-      // Also update role in all organizations the user belongs to
-      if (isOrgUser) {
-        for (const userOrg of userOrgs) {
-          await storage.updateUserOrganizationRole(id, userOrg.organizationId, role);
+      // Update user role differently based on who is making the change
+      if (isSiteAdmin) {
+        // Site admins can update global role and all organization roles
+        const updatedUser = await storage.updateUser(id, { role });
+        
+        // Also update role in all organizations the user belongs to
+        if (isOrgUser) {
+          for (const userOrg of userOrgs) {
+            await storage.updateUserOrganizationRole(id, userOrg.organizationId, role);
+          }
         }
+        res.json(updatedUser);
+      } else {
+        // Org admins can only update role in their specific organization
+        await storage.updateUserOrganizationRole(id, organizationId!, role);
+        
+        // Get updated user info to return
+        const updatedUser = await storage.getUser(id);
+        res.json(updatedUser);
       }
-      
-      res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user role:", error);
       res.status(500).json({ message: "Failed to update user role" });
