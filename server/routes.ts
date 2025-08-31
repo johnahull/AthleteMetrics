@@ -21,6 +21,18 @@ declare module 'express-session' {
     };
     // Keep old admin for transition
     admin?: boolean;
+    // Impersonation fields
+    originalUser?: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      playerId?: string;
+      isSiteAdmin?: boolean;
+    };
+    isImpersonating?: boolean;
+    impersonationStartTime?: Date;
   }
 }
 
@@ -262,6 +274,143 @@ export function registerRoutes(app: Express) {
       }
       res.json({ message: "Logged out successfully" });
     });
+  });
+
+  // Admin Impersonation routes (Site Admin only)
+  app.post("/api/admin/impersonate/:userId", requireSiteAdmin, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Check if already impersonating
+      if (req.session.isImpersonating) {
+        return res.status(400).json({ message: "Already impersonating a user" });
+      }
+
+      // Get the target user
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Don't allow impersonating yourself
+      if (targetUser.id === currentUser.id) {
+        return res.status(400).json({ message: "Cannot impersonate yourself" });
+      }
+
+      // Don't allow impersonating other site admins
+      if (targetUser.isSiteAdmin === "true") {
+        return res.status(400).json({ message: "Cannot impersonate other site administrators" });
+      }
+
+      // Determine the target user's primary role
+      let primaryRole = "athlete"; // Default role
+      
+      if (targetUser.isSiteAdmin === "true") {
+        primaryRole = "site_admin";
+      } else {
+        // For non-site admins, check their organization roles to determine primary role
+        const userOrgs = await storage.getUserOrganizations(targetUser.id);
+        if (userOrgs && userOrgs.length > 0) {
+          const roles = userOrgs.map(org => org.role);
+          if (roles.includes("org_admin")) {
+            primaryRole = "org_admin";
+          } else if (roles.includes("coach")) {
+            primaryRole = "coach";
+          } else if (roles.includes("athlete")) {
+            primaryRole = "athlete";
+          }
+        }
+      }
+
+      // Store original user and set up impersonation
+      req.session.originalUser = currentUser;
+      req.session.user = {
+        id: targetUser.id,
+        email: targetUser.email,
+        firstName: targetUser.firstName,
+        lastName: targetUser.lastName,
+        role: primaryRole,
+        isSiteAdmin: targetUser.isSiteAdmin === "true",
+        playerId: targetUser.playerId || undefined
+      };
+      req.session.isImpersonating = true;
+      req.session.impersonationStartTime = new Date();
+
+      // Log the impersonation event
+      console.log(`🎭 Site admin ${currentUser.email} started impersonating user ${targetUser.email}`);
+
+      res.json({ 
+        success: true, 
+        message: `Now impersonating ${targetUser.firstName} ${targetUser.lastName}`,
+        user: req.session.user,
+        impersonationStatus: {
+          isImpersonating: true,
+          originalUser: currentUser,
+          targetUser: req.session.user,
+          startTime: req.session.impersonationStartTime
+        }
+      });
+    } catch (error) {
+      console.error("Impersonation error:", error);
+      res.status(500).json({ message: "Failed to start impersonation" });
+    }
+  });
+
+  app.post("/api/admin/stop-impersonation", requireAuth, async (req, res) => {
+    try {
+      if (!req.session.isImpersonating || !req.session.originalUser) {
+        return res.status(400).json({ message: "Not currently impersonating" });
+      }
+
+      const originalUser = req.session.originalUser;
+      const impersonatedUser = req.session.user;
+
+      // Restore original user
+      req.session.user = originalUser;
+      req.session.originalUser = undefined;
+      req.session.isImpersonating = false;
+      req.session.impersonationStartTime = undefined;
+
+      // Log the end of impersonation
+      console.log(`🎭 Site admin ${originalUser?.email} stopped impersonating user ${impersonatedUser?.email}`);
+
+      res.json({ 
+        success: true, 
+        message: "Stopped impersonation", 
+        user: req.session.user,
+        impersonationStatus: {
+          isImpersonating: false
+        }
+      });
+    } catch (error) {
+      console.error("Stop impersonation error:", error);
+      res.status(500).json({ message: "Failed to stop impersonation" });
+    }
+  });
+
+  app.get("/api/admin/impersonation-status", requireAuth, (req, res) => {
+    try {
+      if (req.session.isImpersonating && req.session.originalUser) {
+        res.json({
+          isImpersonating: true,
+          originalUser: req.session.originalUser,
+          targetUser: req.session.user,
+          startTime: req.session.impersonationStartTime
+        });
+      } else {
+        res.json({
+          isImpersonating: false
+        });
+      }
+    } catch (error) {
+      console.error("Impersonation status error:", error);
+      res.status(500).json({ message: "Failed to get impersonation status" });
+    }
   });
 
   // Organization routes (Site Admin only)

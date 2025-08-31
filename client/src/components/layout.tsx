@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut } from "lucide-react";
 import Sidebar from "./sidebar";
+import ImpersonationBanner from "./impersonation-banner";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -40,6 +41,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex bg-gray-50">
       {isSidebarOpen && <Sidebar />}
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Impersonation Banner */}
+        <ImpersonationBanner />
         {/* Toggle Button Bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm sticky top-0 z-10">
           <Button

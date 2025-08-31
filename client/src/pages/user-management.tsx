@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock } from "lucide-react";
+import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 
@@ -82,7 +82,7 @@ type SiteAdmin = {
 
 
 export default function UserManagement() {
-  const { user } = useAuth();
+  const { user, startImpersonation, impersonationStatus } = useAuth();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -306,6 +306,32 @@ export default function UserManagement() {
 
     if (confirm(`Are you sure you want to ${action} ${userName}?`)) {
       toggleUserStatusMutation.mutate({ userId, isActive: !isCurrentlyActive });
+    }
+  };
+
+  const handleImpersonate = async (userId: string, userName: string) => {
+    if (confirm(`Are you sure you want to impersonate ${userName}? You will be able to see and do everything as this user.`)) {
+      try {
+        const result = await startImpersonation(userId);
+        if (result.success) {
+          toast({
+            title: "Impersonation Started",
+            description: result.message || `Now impersonating ${userName}`,
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: result.message || "Failed to start impersonation",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -693,6 +719,19 @@ export default function UserManagement() {
                         <span className="text-sm text-gray-500 px-2 py-1 bg-gray-200 rounded">
                           Site Admin
                         </span>
+                        {/* Don't show impersonate button for current user or other site admins */}
+                        {user?.id !== admin.id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleImpersonate(admin.id, `${admin.firstName} ${admin.lastName}`)}
+                            disabled={impersonationStatus?.isImpersonating}
+                            title={impersonationStatus?.isImpersonating ? "Already impersonating a user" : "Impersonate this user"}
+                            data-testid={`site-admin-impersonate-${admin.id}`}
+                          >
+                            <UserCheck className="h-4 w-4 text-blue-600" />
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -775,6 +814,19 @@ export default function UserManagement() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {/* Only show impersonate button for site admins and don't show for current user */}
+                          {isSiteAdmin && user?.id !== userOrg.user.id && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleImpersonate(userOrg.user.id, `${userOrg.user.firstName} ${userOrg.user.lastName}`)}
+                              disabled={impersonationStatus?.isImpersonating}
+                              title={impersonationStatus?.isImpersonating ? "Already impersonating a user" : "Impersonate this user"}
+                              data-testid={`user-impersonate-${userOrg.user.id}`}
+                            >
+                              <UserCheck className="h-4 w-4 text-blue-600" />
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
