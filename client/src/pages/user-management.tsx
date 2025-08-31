@@ -86,8 +86,17 @@ export default function UserManagement() {
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
 
+  // Force cache invalidation on component mount
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+  }, [queryClient]);
+
   const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations-with-users"],
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const { data: siteAdmins = [] } = useQuery<SiteAdmin[]>({
