@@ -50,7 +50,7 @@ const permissionChecker = new PermissionChecker(storage);
 
 // Helper functions
 const isSiteAdmin = (user: any): boolean => {
-  return user?.isSiteAdmin === true || user?.role === "site_admin" || user?.admin === true;
+  return user?.isSiteAdmin === true || user?.isSiteAdmin === 'true' || user?.role === "site_admin" || user?.admin === true;
 };
 
 const hasRole = async (userId: string, role: string, organizationId?: string): Promise<boolean> => {
