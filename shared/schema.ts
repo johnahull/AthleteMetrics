@@ -64,7 +64,7 @@ export const userTeams = pgTable("user_teams", {
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id), // Changed from playerId to userId
+  playerId: varchar("player_id").notNull().references(() => users.id), // Keep as playerId for backward compatibility
   submittedBy: varchar("submitted_by").notNull().references(() => users.id),
   verifiedBy: varchar("verified_by").references(() => users.id),
   isVerified: text("is_verified").default("false").notNull(),
@@ -355,14 +355,28 @@ export const OrganizationRole = {
   ATHLETE: "athlete",
 } as const;
 
-// Legacy types for backward compatibility (will be removed after migration)
-export type Player = User; // Players are now Users
-export type InsertPlayer = InsertUser; // Player creation is now User creation
-export type PlayerTeam = UserTeam; // Player teams are now User teams
-export type InsertPlayerTeam = InsertUserTeam;
+// Legacy types for backward compatibility during migration
+export type Player = User & {
+  fullName: string;
+  teams: Team[];
+};
+export type InsertPlayer = Omit<InsertUser, 'username' | 'password'> & {
+  teamIds?: string[];
+};
 
-// Legacy table references for migration (these will be removed)
-export const players = users; // Alias for backward compatibility during migration
-export const playerTeams = userTeams; // Alias for backward compatibility during migration
-export const insertPlayerSchema = insertUserSchema; // Alias for backward compatibility during migration
-export const insertPlayerTeamSchema = insertUserTeamSchema; // Alias for backward compatibility during migration
+// Legacy table and schema aliases for backward compatibility
+export const players = users;
+export const playerTeams = userTeams;
+export const insertPlayerSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  birthDate: z.string().optional(),
+  graduationYear: z.number().int().min(2000).max(2040).optional(),
+  teamIds: z.array(z.string()).optional(),
+  school: z.string().optional(),
+  sports: z.array(z.string()).optional(),
+  emails: z.array(z.string().email()).optional(),
+  phoneNumbers: z.array(z.string()).optional(),
+  birthday: z.string().optional(), // Legacy field name
+});
+export const insertPlayerTeamSchema = insertUserTeamSchema;
