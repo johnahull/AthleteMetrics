@@ -734,13 +734,14 @@ export function registerRoutes(app: Express) {
         email: result.user.email,
         firstName: result.user.firstName,
         lastName: result.user.lastName,
-        role: result.user.role
+        role: result.user.role,
+        playerId: result.user.playerId
       };
       
       // Determine redirect URL - use playerId for athletes
       let redirectUrl = "/";
-      if (result.user.role === "athlete" && result.playerId) {
-        redirectUrl = `/athletes/${result.playerId}`;
+      if (result.user.role === "athlete" && result.user.playerId) {
+        redirectUrl = `/athletes/${result.user.playerId}`;
       } else if (result.user.role === "athlete" && result.user.playerId) {
         redirectUrl = `/athletes/${result.user.playerId}`;
       }

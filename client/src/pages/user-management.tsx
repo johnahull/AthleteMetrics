@@ -101,7 +101,8 @@ export default function UserManagement() {
   // Redirect athletes away from this management page
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
-      setLocation(`/athletes/${user?.id}`);
+      const playerId = (user as any)?.playerId || user?.id;
+      setLocation(`/athletes/${playerId}`);
     }
   }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
   

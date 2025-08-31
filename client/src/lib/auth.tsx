@@ -10,6 +10,7 @@ interface User {
   firstName?: string;
   lastName?: string;
   isSiteAdmin?: boolean;
+  playerId?: string;
 }
 
 interface AuthContextType {

@@ -24,7 +24,8 @@ export default function Dashboard() {
   // Redirect athletes away from organization dashboard
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
-      setLocation(`/athletes/${user?.id}`);
+      const playerId = (user as any)?.playerId || user?.id;
+      setLocation(`/athletes/${playerId}`);
     }
   }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
   

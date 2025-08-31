@@ -78,8 +78,10 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 
   // Athletes get a restricted navigation menu
   if (primaryRole === "athlete") {
+    // Use playerId if available, otherwise fallback to userId for the profile link
+    const profileId = (user as any)?.playerId || userId;
     return [
-      { name: "My Profile", href: `/athletes/${userId}`, icon: UsersRound },
+      { name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
     ];
   }
