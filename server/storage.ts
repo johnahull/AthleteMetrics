@@ -271,16 +271,16 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (organizationId) {
-      // Get all roles for user in specific organization
-      const results = await db.select({ role: userOrganizations.role })
+      // Get single role for user in specific organization (should only be one due to unique constraint)
+      const [result] = await db.select({ role: userOrganizations.role })
         .from(userOrganizations)
         .where(and(
           eq(userOrganizations.userId, userId),
           eq(userOrganizations.organizationId, organizationId)
         ));
-      return results.map(r => r.role);
+      return result ? [result.role] : [];
     } else {
-      // Get all organization roles for the user
+      // Get all organization roles for the user (one per organization)
       const orgRoles = await db.select({ role: userOrganizations.role })
         .from(userOrganizations)
         .where(eq(userOrganizations.userId, userId));
@@ -534,19 +534,18 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
 
-    // Remove any existing roles for this user in this organization first
-    await db.delete(userOrganizations)
-      .where(and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, organizationId)
-      ));
-
-    // Insert the new single role
+    // Use upsert to ensure only one role per user per organization
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,
       organizationId,
       role
-    }).returning();
+    })
+    .onConflictDoUpdate({
+      target: [userOrganizations.userId, userOrganizations.organizationId],
+      set: { role }
+    })
+    .returning();
+    
     return userOrg;
   }
 
