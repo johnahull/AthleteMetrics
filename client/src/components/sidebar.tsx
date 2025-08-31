@@ -79,8 +79,8 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 };
 
 export default function Sidebar() {
-  const [location] = useLocation();
-  const { user: userData, logout } = useAuth();
+  const [location, setLocation] = useLocation();
+  const { user: userData, logout, organizationContext, setOrganizationContext } = useAuth();
 
   // Don't render sidebar if no user data
   if (!userData) {
@@ -98,7 +98,7 @@ export default function Sidebar() {
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
   // Check if we're in an organization context (site admin viewing specific org)
-  const isInOrganizationContext = location.includes('/organizations/');
+  const isInOrganizationContext = !!organizationContext || location.includes('/organizations/');
 
   const navigation = getNavigation(isSiteAdmin, primaryRole, userData?.id, isInOrganizationContext, userOrganizations as any[], userData);
 
@@ -118,7 +118,9 @@ export default function Sidebar() {
                 BETA
               </span>
             </div>
-            <p className="text-sm text-gray-500">Analytics Platform</p>
+            <p className="text-sm text-gray-500">
+              {isInOrganizationContext && isSiteAdmin ? "Organization View" : "Analytics Platform"}
+            </p>
           </div>
         </div>
       </div>
@@ -128,7 +130,10 @@ export default function Sidebar() {
         {/* Back to site button for site admins in organization context */}
         {isSiteAdmin && isInOrganizationContext && (
           <button
-            onClick={() => setOrganizationContext(null)}
+            onClick={() => {
+              setOrganizationContext(null);
+              setLocation('/organizations');
+            }}
             className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 border border-gray-200 mb-4"
             data-testid="button-back-to-site"
           >
