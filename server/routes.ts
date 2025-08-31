@@ -100,8 +100,10 @@ const canInviteRole = async (inviterId: string, organizationId: string | null, t
   const inviter = await storage.getUser(inviterId);
   if (!inviter) return false;
   
+  // Site admins can invite anyone, regardless of organization
   if (isSiteAdmin(inviter)) return true;
   
+  // For non-site admins, organization is required
   if (!organizationId) return false;
   
   const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
