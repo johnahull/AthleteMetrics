@@ -780,6 +780,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePlayer(id: string): Promise<void> {
+    // First, delete all player-team relationships
+    await db.delete(playerTeams).where(eq(playerTeams.playerId, id));
+    
+    // Then, delete all measurements for this player
+    await db.delete(measurements).where(eq(measurements.playerId, id));
+    
+    // Finally, delete the player record
     await db.delete(players).where(eq(players.id, id));
   }
 
