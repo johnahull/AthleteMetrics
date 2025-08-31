@@ -666,7 +666,7 @@ export class DatabaseStorage implements IStorage {
         if (player.emails && player.emails.length > 0) {
           for (const email of player.emails) {
             const user = await this.getUserByEmail(email);
-            if (user && user.isActive === "true") {
+            if (user && (user.isActive === "true" || user.isActive === true)) {
               hasLogin = true;
               break;
             }
