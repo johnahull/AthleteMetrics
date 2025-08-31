@@ -1025,8 +1025,12 @@ export function registerRoutes(app: Express) {
   // Invitation routes
   app.post("/api/invitations", requireAuth, async (req, res) => {
     try {
+      console.log("🚀 /api/invitations route hit");
       const { email, firstName, lastName, role, organizationId } = req.body;
+      console.log("📝 Request body:", { email, firstName, lastName, role, organizationId });
+      
       const currentUser = req.session.user;
+      console.log("👤 Current user:", currentUser ? { id: currentUser.id, isSiteAdmin: currentUser.isSiteAdmin } : "null");
 
       // Get current user info for invitedBy
       let invitedById = currentUser?.id;
