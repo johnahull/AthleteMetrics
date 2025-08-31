@@ -40,12 +40,12 @@ const requireSiteAdmin = async (req: any, res: any, next: any) => {
     return next();
   }
   
-  if (req.session.user && req.session.user.role === "site_admin") {
-    return next();
-  }
-  
-  if (req.session.user && await hasRole(req.session.user.id, "site_admin")) {
-    return next();
+  if (req.session.user) {
+    // Check if user is site admin via the is_site_admin field
+    const user = await storage.getUser(req.session.user.id);
+    if (user && user.isSiteAdmin === "true") {
+      return next();
+    }
   }
   
   return res.status(403).json({ message: "Site admin access required" });

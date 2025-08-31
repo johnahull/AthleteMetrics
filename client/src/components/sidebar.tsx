@@ -128,15 +128,6 @@ export default function Sidebar() {
   
   const navigation = getNavigation(isSiteAdmin, primaryRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
   
-  // Debug logging
-  console.log('Sidebar Debug:', {
-    isSiteAdmin,
-    primaryRole, 
-    isInOrganizationContext,
-    organizationContext,
-    userIsSiteAdmin: user?.isSiteAdmin,
-    navigation: navigation.map(n => n.name)
-  });
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
