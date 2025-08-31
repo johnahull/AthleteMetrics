@@ -1,7 +1,7 @@
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations,
-  type Organization, type Team, type Player, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
-  type InsertOrganization, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
+  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
+  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -50,29 +50,22 @@ export interface IStorage {
   updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }>;
 
-  // Players (legacy athletes)
-  getPlayers(filters?: {
+  // Athletes (users with athlete role)
+  getAthletes(filters?: {
     teamId?: string;
     organizationId?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
-  }): Promise<(Player & { teams: (Team & { organization: Organization })[] })[]>;
-  getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined>;
-  createPlayer(player: InsertPlayer): Promise<Player>;
-  updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player>;
-  deletePlayer(id: string): Promise<void>;
-  getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined>;
-
-  // Player Teams (using UserTeam)
-  getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]>;
-  addPlayerToTeam(playerId: string, teamId: string): Promise<UserTeam>;
-  removePlayerFromTeam(playerId: string, teamId: string): Promise<void>;
-  setPlayerTeams(playerId: string, teamIds: string[]): Promise<void>;
+  }): Promise<User[]>;
+  getAthlete(id: string): Promise<User | undefined>;
+  createAthlete(athlete: Partial<InsertUser>): Promise<User>;
+  updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
+  deleteAthlete(id: string): Promise<void>;
 
   // Measurements
   getMeasurements(filters?: {
-    playerId?: string;
+    userId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -86,7 +79,7 @@ export interface IStorage {
     sport?: string;
     includeUnverified?: boolean;
   }): Promise<(Measurement & {
-    player: Player & { teams: (Team & { organization: Organization })[] };
+    user: User;
     submittedBy: User;
     verifiedBy?: User;
   })[]>;
@@ -97,7 +90,7 @@ export interface IStorage {
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
 
   // Analytics
-  getPlayerStats(playerId: string): Promise<{
+  getUserStats(userId: string): Promise<{
     bestFly10?: number;
     bestVertical?: number;
     measurementCount: number;
@@ -106,16 +99,16 @@ export interface IStorage {
     teamId: string;
     teamName: string;
     organizationName: string;
-    playerCount: number;
+    athleteCount: number;
     bestFly10?: number;
     bestVertical?: number;
     latestTest?: string;
   }>>;
   getDashboardStats(organizationId?: string): Promise<{
-    totalPlayers: number;
+    totalAthletes: number;
     totalTeams: number;
-    bestFly10Today?: { value: number; playerName: string };
-    bestVerticalToday?: { value: number; playerName: string };
+    bestFly10Today?: { value: number; userName: string };
+    bestVerticalToday?: { value: number; userName: string };
   }>;
 }
 
@@ -151,9 +144,16 @@ export class DatabaseStorage implements IStorage {
     // For invited users, password might be empty - use a placeholder
     const password = user.password || "INVITATION_PENDING";
     const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Calculate fullName and birthYear from provided data
+    const fullName = `${user.firstName} ${user.lastName}`;
+    const birthYear = user.birthDate ? new Date(user.birthDate).getFullYear() : undefined;
+    
     const [newUser] = await db.insert(users).values({
       ...user,
-      password: hashedPassword
+      password: hashedPassword,
+      fullName,
+      birthYear
     }).returning();
     return newUser;
   }
@@ -190,6 +190,20 @@ export class DatabaseStorage implements IStorage {
     
     if (user.password) {
       updateData.password = await bcrypt.hash(user.password, 10);
+    }
+
+    // Update computed fields if relevant data changed
+    if (user.firstName || user.lastName) {
+      const currentUser = await this.getUser(id);
+      if (currentUser) {
+        const firstName = user.firstName || currentUser.firstName;
+        const lastName = user.lastName || currentUser.lastName;
+        updateData.fullName = `${firstName} ${lastName}`;
+      }
+    }
+
+    if (user.birthDate) {
+      updateData.birthYear = new Date(user.birthDate).getFullYear();
     }
 
     const [updatedUser] = await db.update(users)
@@ -731,114 +745,69 @@ export class DatabaseStorage implements IStorage {
     return { user, playerId };
   }
 
-  // Players (legacy athletes) - now just users with athlete role
-  async getPlayers(filters?: {
+  // Athletes (users with athlete role)
+  async getAthletes(filters?: {
     teamId?: string;
     organizationId?: string;
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
-  }): Promise<(Player & { teams: (Team & { organization: Organization })[], hasLogin: boolean })[]> {
+  }): Promise<User[]> {
     let query = db
-      .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        fullName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`.as('fullName'),
-        birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`.as('birthYear'),
-        birthDate: users.birthDate,
-        graduationYear: users.graduationYear,
-        school: users.school,
-        sports: users.sports,
-        emails: sql<string[]>`ARRAY[${users.email}]`.as('emails'),
-        phoneNumbers: users.phoneNumbers,
-        height: users.height,
-        weight: users.weight,
-        role: users.role,
-        isActive: users.isActive,
-        isSiteAdmin: users.isSiteAdmin,
-        createdAt: users.createdAt,
-        hasLogin: sql<boolean>`true`.as('hasLogin') // All users have login capability
-      })
+      .select()
       .from(users)
       .leftJoin(userTeams, eq(users.id, userTeams.userId))
       .leftJoin(teams, eq(userTeams.teamId, teams.id))
       .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(eq(userOrganizations.role, 'athlete'))
-      .groupBy(users.id, users.username, users.email, users.firstName, users.lastName, users.birthDate, users.graduationYear, users.school, users.sports, users.phoneNumbers, users.height, users.weight, users.role, users.isActive, users.isSiteAdmin, users.createdAt);
+      .groupBy(users.id);
 
     // Apply filters
-    if (filters?.birthYearFrom) {
-      query = query.where(gte(players.birthYear, filters.birthYearFrom)) as any;
+    const conditions = [eq(userOrganizations.role, 'athlete')];
+    
+    if (filters?.birthYearFrom && filters?.birthYearTo) {
+      conditions.push(
+        and(
+          gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom),
+          lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo)
+        )
+      );
+    } else if (filters?.birthYearFrom) {
+      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+    } else if (filters?.birthYearTo) {
+      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
     }
-    if (filters?.birthYearTo) {
-      query = query.where(lte(players.birthYear, filters.birthYearTo)) as any;
-    }
+    
     if (filters?.search) {
-      query = query.where(sql`${players.fullName} ILIKE ${'%' + filters.search + '%'}`) as any;
+      conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
     }
 
-    // Apply organization filter first if specified
-    if (filters.organizationId) {
-      // Only include players who have teams in the specified organization
-      // or players who have user accounts in that organization
-      query = query.having(sql`
-        COUNT(CASE WHEN ${teams.organizationId} = ${filters.organizationId} THEN 1 END) > 0
-        OR COUNT(CASE WHEN ${users.id} IN (
-          SELECT ${userOrganizations.userId} FROM ${userOrganizations} WHERE ${userOrganizations.organizationId} = ${filters.organizationId}
-        ) THEN 1 END) > 0
-      `);
-    }
-
-    if (filters.teamId) {
-      if (filters.teamId === 'none') {
-        // Show players with no teams
-        query = query.having(sql`COUNT(${teams.id}) = 0`);
-      } else {
-        query = query.having(sql`COUNT(CASE WHEN ${teams.id} = ${filters.teamId} THEN 1 END) > 0`);
-      }
-    }
-
-    const result = await query.orderBy(asc(players.lastName), asc(players.firstName));
-
-    // Get teams and login status for each player
-    const playersWithTeams = await Promise.all(
-      result.map(async (player) => {
-        const playerTeams = await this.getPlayerTeams(player.id);
-
-        // Check if player has a login account by direct playerId relationship
-        let hasLogin = false;
-        const [userRecord] = await db.select().from(users)
-          .where(and(
-            eq(users.playerId, player.id),
-            eq(users.isActive, "true")
-          ));
-        hasLogin = !!userRecord;
-
-        return {
-          ...player,
-          teams: playerTeams,
-          hasLogin
-        };
-      })
-    );
-
-    // Apply team/organization filters
-    let filteredPlayers = playersWithTeams;
-    if (filters?.teamId) {
-      filteredPlayers = filteredPlayers.filter(player =>
-        player.teams.some(team => team.id === filters.teamId)
-      );
-    }
     if (filters?.organizationId) {
-      filteredPlayers = filteredPlayers.filter(player =>
-        player.teams.some(team => team.organization.id === filters.organizationId)
-      );
+      conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
 
-    return filteredPlayers;
+    if (filters?.teamId && filters.teamId !== 'none') {
+      conditions.push(eq(userTeams.teamId, filters.teamId));
+    } else if (filters?.teamId === 'none') {
+      // Show athletes with no teams - need a different approach
+      query = db
+        .select()
+        .from(users)
+        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .where(and(
+          eq(userOrganizations.role, 'athlete'),
+          sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams})`
+        ));
+    }
+
+    if (conditions.length > 1) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    const result = await query.orderBy(asc(users.lastName), asc(users.firstName));
+    
+    // Extract just the users from the joined result
+    return result.map(row => row.users || row);
   }
 
   async getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined> {
