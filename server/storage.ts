@@ -1,8 +1,7 @@
 import {
-  organizations, teams, players, measurements, users, userOrganizations, userTeams, invitations, playerTeams,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations,
   type Organization, type Team, type Player, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
-  type InsertOrganization, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation,
-  type PlayerTeam, type InsertPlayerTeam
+  type InsertOrganization, type InsertTeam, type InsertPlayer, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
@@ -65,9 +64,9 @@ export interface IStorage {
   deletePlayer(id: string): Promise<void>;
   getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined>;
 
-  // Player Teams
+  // Player Teams (using UserTeam)
   getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]>;
-  addPlayerToTeam(playerId: string, teamId: string): Promise<PlayerTeam>;
+  addPlayerToTeam(playerId: string, teamId: string): Promise<UserTeam>;
   removePlayerFromTeam(playerId: string, teamId: string): Promise<void>;
   setPlayerTeams(playerId: string, teamIds: string[]): Promise<void>;
 
@@ -732,7 +731,7 @@ export class DatabaseStorage implements IStorage {
     return { user, playerId };
   }
 
-  // Players (legacy athletes)
+  // Players (legacy athletes) - now just users with athlete role
   async getPlayers(filters?: {
     teamId?: string;
     organizationId?: string;
@@ -742,38 +741,33 @@ export class DatabaseStorage implements IStorage {
   }): Promise<(Player & { teams: (Team & { organization: Organization })[], hasLogin: boolean })[]> {
     let query = db
       .select({
-        id: players.id,
-        firstName: players.firstName,
-        lastName: players.lastName,
-        fullName: sql<string>`${players.firstName} || ' ' || ${players.lastName}`.as('fullName'),
-        birthYear: players.birthYear,
-        school: players.school,
-        sports: players.sports,
-        emails: players.emails,
-        phoneNumbers: players.phoneNumbers,
-        teams: sql<any[]>`
-          CASE
-            WHEN COUNT(${teams.id}) = 0 THEN '[]'::json
-            ELSE json_agg(
-              json_build_object(
-                'id', ${teams.id},
-                'name', ${teams.name}
-              )
-            )
-          END
-        `.as('teams'),
-        hasLogin: sql<boolean>`
-          CASE
-            WHEN COUNT(${users.id}) > 0 THEN true
-            ELSE false
-          END
-        `.as('hasLogin')
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        fullName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`.as('fullName'),
+        birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`.as('birthYear'),
+        birthDate: users.birthDate,
+        graduationYear: users.graduationYear,
+        school: users.school,
+        sports: users.sports,
+        emails: sql<string[]>`ARRAY[${users.email}]`.as('emails'),
+        phoneNumbers: users.phoneNumbers,
+        height: users.height,
+        weight: users.weight,
+        role: users.role,
+        isActive: users.isActive,
+        isSiteAdmin: users.isSiteAdmin,
+        createdAt: users.createdAt,
+        hasLogin: sql<boolean>`true`.as('hasLogin') // All users have login capability
       })
-      .from(players)
-      .leftJoin(playerTeams, eq(players.id, playerTeams.playerId))
-      .leftJoin(teams, eq(playerTeams.teamId, teams.id))
-      .leftJoin(users, sql`${users.email} = ANY(${players.emails})`)
-      .groupBy(players.id, players.firstName, players.lastName, players.birthYear, players.school, players.sports, players.emails, players.phoneNumbers);
+      .from(users)
+      .leftJoin(userTeams, eq(users.id, userTeams.userId))
+      .leftJoin(teams, eq(userTeams.teamId, teams.id))
+      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(eq(userOrganizations.role, 'athlete'))
+      .groupBy(users.id, users.username, users.email, users.firstName, users.lastName, users.birthDate, users.graduationYear, users.school, users.sports, users.phoneNumbers, users.height, users.weight, users.role, users.isActive, users.isSiteAdmin, users.createdAt);
 
     // Apply filters
     if (filters?.birthYearFrom) {
@@ -848,48 +842,64 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined> {
-    const [player] = await db.select().from(players).where(eq(players.id, id));
-    if (!player) return undefined;
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    if (!user) return undefined;
 
-    const playerTeams = await this.getPlayerTeams(player.id);
-    return { ...player, teams: playerTeams };
+    const userTeams = await this.getUserTeams(user.id);
+    
+    // Transform user to player format for backward compatibility
+    const player = {
+      ...user,
+      fullName: `${user.firstName} ${user.lastName}`,
+      birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
+      emails: [user.email],
+      teams: userTeams.map(ut => ut.team)
+    };
+
+    return player;
   }
 
   async createPlayer(player: InsertPlayer): Promise<Player> {
-    const fullName = `${player.firstName} ${player.lastName}`;
+    // Generate a temporary username for the athlete
+    const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    
+    // Use primary email or generate one
+    const email = (player.emails && player.emails.length > 0) ? player.emails[0] : `${username}@temp.local`;
 
-    // Calculate birth year from birthday
-    const birthYear = new Date(player.birthday).getFullYear();
-
-    const [newPlayer] = await db.insert(players).values({
-      ...player,
-      fullName,
-      birthYear
+    const [newUser] = await db.insert(users).values({
+      username,
+      email,
+      firstName: player.firstName,
+      lastName: player.lastName,
+      birthDate: player.birthday || player.birthDate,
+      graduationYear: player.graduationYear,
+      school: player.school,
+      sports: player.sports,
+      phoneNumbers: player.phoneNumbers,
+      height: player.height,
+      weight: player.weight,
+      role: "athlete",
+      password: "INVITATION_PENDING", // Will be set when they accept invitation
+      isActive: "true"
     }).returning();
 
     // Add to teams if specified
     if (player.teamIds && player.teamIds.length > 0) {
-      await this.setPlayerTeams(newPlayer.id, player.teamIds);
-    }
-
-    // Update any existing user records with the same email addresses
-    if (player.emails && player.emails.length > 0) {
-      for (const email of player.emails) {
-        try {
-          await db.update(users)
-            .set({
-              firstName: player.firstName,
-              lastName: player.lastName
-            })
-            .where(eq(users.email, email));
-        } catch (error) {
-          // Log but don't fail if user update fails
-          console.log(`Could not update user record for email ${email}:`, error);
-        }
+      for (const teamId of player.teamIds) {
+        await this.addUserToTeam(newUser.id, teamId);
       }
     }
 
-    return newPlayer;
+    // Transform to player format for return
+    const playerResult = {
+      ...newUser,
+      fullName: `${newUser.firstName} ${newUser.lastName}`,
+      birthYear: newUser.birthDate ? new Date(newUser.birthDate).getFullYear() : 0,
+      emails: [newUser.email],
+      teams: []
+    };
+
+    return playerResult;
   }
 
   async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
@@ -944,41 +954,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePlayer(id: string): Promise<void> {
-    // First, unlink any user accounts that reference this player (outside transaction for now)
-    await db.update(users)
-      .set({ playerId: null })
-      .where(eq(users.playerId, id));
-
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx) => {
-      // Delete all player-team relationships
-      await tx.delete(playerTeams).where(eq(playerTeams.playerId, id));
+      // Delete all user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
-      // Delete all measurements for this player
+      // Delete all user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete all measurements for this user
       await tx.delete(measurements).where(eq(measurements.playerId, id));
 
-      // Finally, delete the player record
-      await tx.delete(players).where(eq(players.id, id));
+      // Delete all invitations for this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+
+      // Finally, delete the user record
+      await tx.delete(users).where(eq(users.id, id));
     });
   }
 
   async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined> {
-    const [player] = await db.select().from(players)
+    const [user] = await db.select().from(users)
       .where(and(
-        eq(players.firstName, firstName),
-        eq(players.lastName, lastName),
-        eq(players.birthYear, birthYear)
+        eq(users.firstName, firstName),
+        eq(users.lastName, lastName),
+        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`
       ));
-    return player || undefined;
+    
+    if (!user) return undefined;
+    
+    return {
+      ...user,
+      fullName: `${user.firstName} ${user.lastName}`,
+      birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
+      emails: [user.email],
+      teams: []
+    };
   }
 
-  // Player Teams
+  // Player Teams (now using userTeams)
   async getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]> {
     const result = await db.select()
-      .from(playerTeams)
-      .innerJoin(teams, eq(playerTeams.teamId, teams.id))
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(playerTeams.playerId, playerId));
+      .where(eq(userTeams.userId, playerId));
 
     return result.map(({ teams: team, organizations }) => ({
       ...team,
@@ -986,30 +1006,22 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async addPlayerToTeam(playerId: string, teamId: string): Promise<PlayerTeam> {
-    const [playerTeam] = await db.insert(playerTeams).values({
-      playerId,
-      teamId
-    }).returning();
-    return playerTeam;
+  async addPlayerToTeam(playerId: string, teamId: string): Promise<UserTeam> {
+    return await this.addUserToTeam(playerId, teamId);
   }
 
   async removePlayerFromTeam(playerId: string, teamId: string): Promise<void> {
-    await db.delete(playerTeams)
-      .where(and(
-        eq(playerTeams.playerId, playerId),
-        eq(playerTeams.teamId, teamId)
-      ));
+    return await this.removeUserFromTeam(playerId, teamId);
   }
 
   async setPlayerTeams(playerId: string, teamIds: string[]): Promise<void> {
     // Remove existing teams
-    await db.delete(playerTeams).where(eq(playerTeams.playerId, playerId));
+    await db.delete(userTeams).where(eq(userTeams.userId, playerId));
 
     // Add new teams
     if (teamIds.length > 0) {
-      await db.insert(playerTeams).values(
-        teamIds.map(teamId => ({ playerId, teamId }))
+      await db.insert(userTeams).values(
+        teamIds.map(teamId => ({ userId: playerId, teamId }))
       );
     }
   }
