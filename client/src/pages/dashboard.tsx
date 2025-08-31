@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
@@ -8,8 +9,29 @@ import { getMetricDisplayName, getMetricColor } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
+  const { user, organizationContext } = useAuth();
   const [, setLocation] = useLocation();
-  const { organizationContext } = useAuth();
+  
+  // Get user's primary role to check access
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
+  
+  const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
+  const isSiteAdmin = user?.isSiteAdmin || false;
+  
+  // Redirect athletes away from organization dashboard
+  useEffect(() => {
+    if (!isSiteAdmin && primaryRole === "athlete") {
+      setLocation(`/athletes/${user?.id}`);
+    }
+  }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
+  
+  // Don't render dashboard for athletes
+  if (!isSiteAdmin && primaryRole === "athlete") {
+    return null;
+  }
   
   const { data: dashboardStats, isLoading } = useQuery({
     queryKey: ["/api/analytics/dashboard", organizationContext],
