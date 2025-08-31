@@ -1201,7 +1201,7 @@ export function registerRoutes(app: Express) {
       if ((currentRole === 'athlete' && (role === 'coach' || role === 'org_admin')) ||
           ((currentRole === 'coach' || currentRole === 'org_admin') && role === 'athlete')) {
         return res.status(400).json({ 
-          message: "Athletes cannot have coach/admin roles and vice versa" 
+          message: "Athletes cannot be coaches or admins, and coaches/admins cannot be athletes" 
         });
       }
 

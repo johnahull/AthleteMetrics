@@ -456,7 +456,7 @@ export default function UserManagement() {
                               <FormMessage />
                               {isOrgUser && (
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Note: Coaches and Org Admins can have both roles. Athletes cannot have coach/admin roles.
+                                  Note: Each user can only have one role. Athletes cannot be coaches/admins.
                                 </p>
                               )}
                             </FormItem>
@@ -715,7 +715,7 @@ export default function UserManagement() {
                                   // Validate role transitions
                                   if ((currentRole === 'athlete' && (newRole === 'coach' || newRole === 'org_admin')) ||
                                       ((currentRole === 'coach' || currentRole === 'org_admin') && newRole === 'athlete')) {
-                                    if (!confirm('Athletes cannot be coaches/admins and vice versa. Are you sure you want to change this role?')) {
+                                    if (!confirm('Athletes cannot be coaches or admins, and coaches/admins cannot be athletes. Are you sure you want to change this role?')) {
                                       return;
                                     }
                                   }
