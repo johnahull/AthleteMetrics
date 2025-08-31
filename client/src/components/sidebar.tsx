@@ -117,11 +117,22 @@ export default function Sidebar() {
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
-  // Extract organization ID from URL
+  // Extract organization ID from URL - check both organization profile and context switching
   const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];
   const isInOrganizationContext = !!organizationId;
 
   const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId);
+
+  // Get current organization data if in context
+  const { data: currentOrganization } = useQuery({
+    queryKey: [`/api/organizations/${organizationId}`],
+    enabled: !!organizationId,
+    queryFn: async () => {
+      const response = await fetch(`/api/organizations/${organizationId}`);
+      if (!response.ok) return null;
+      return response.json();
+    }
+  });
 
 
   return (
