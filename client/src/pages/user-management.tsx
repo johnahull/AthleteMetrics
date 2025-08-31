@@ -115,7 +115,6 @@ export default function UserManagement() {
   // Force cache invalidation on component mount
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/users"] });
   }, [queryClient]);
 
   const { data: organizations } = useQuery<Organization[]>({
@@ -127,10 +126,6 @@ export default function UserManagement() {
 
   const { data: siteAdmins = [] } = useQuery<SiteAdmin[]>({
     queryKey: ["/api/site-admins"],
-  });
-
-  const { data: allUsers = [] } = useQuery<any[]>({
-    queryKey: ["/api/users"],
   });
 
 
