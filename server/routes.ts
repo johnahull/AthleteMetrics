@@ -997,53 +997,30 @@ export function registerRoutes(app: Express) {
   // Invitation routes
   app.post("/api/invitations", requireAuth, async (req, res) => {
     try {
-      console.log("🚀 Starting invitation request");
       const { email, firstName, lastName, role, organizationId } = req.body;
-      console.log("📝 Request body:", { email, firstName, lastName, role, organizationId });
-      
       const currentUser = req.session.user;
-      console.log("👤 Current user:", currentUser ? { id: currentUser.id, isSiteAdmin: currentUser.isSiteAdmin } : "null");
 
       // Get current user info for invitedBy
       let invitedById = currentUser?.id;
 
       // If using old admin system, find the site admin user
       if (!invitedById && req.session.admin) {
-        console.log("🔄 Trying old admin system");
         const siteAdmin = await storage.getUserByUsername("admin");
         invitedById = siteAdmin?.id;
-        console.log("👨‍💼 Found site admin:", siteAdmin?.id);
       }
 
       if (!invitedById) {
-        console.log("❌ No invitedById found");
         return res.status(400).json({ message: "Unable to determine current user" });
       }
-      
-      console.log("✅ invitedById:", invitedById);
-
-      // Debug logging
-      console.log("🔍 Invitation Debug:", {
-        currentUserId: currentUser?.id,
-        invitedById,
-        organizationId,
-        role,
-        isSiteAdmin: isSiteAdmin(currentUser)
-      });
 
       // Validate organization access
       if (organizationId && !await canAccessOrganization(currentUser, organizationId)) {
-        console.log("❌ Failed organization access check");
         return res.status(403).json({ message: "Access denied to this organization" });
       }
 
       // Validate role invitation permissions
-      const canInvite = await canInviteRole(invitedById, organizationId, role);
-      console.log("🔍 canInviteRole result:", canInvite);
-      
-      if (!canInvite) {
+      if (!await canInviteRole(invitedById, organizationId, role)) {
         const userRoles = await storage.getUserRoles(invitedById, organizationId);
-        console.log("❌ Failed role invitation check. User roles:", userRoles);
         if (userRoles.includes("coach") && !userRoles.includes("org_admin")) {
           return res.status(403).json({ message: "Coaches can only invite athletes" });
         }
@@ -1052,7 +1029,6 @@ export function registerRoutes(app: Express) {
 
       // Athletes cannot invite anyone
       if (currentUser?.role === "athlete") {
-        console.log("❌ Athlete trying to invite");
         return res.status(403).json({ message: "Athletes cannot send invitations" });
       }
 
@@ -1631,12 +1607,14 @@ export function registerRoutes(app: Express) {
       // Check if user has access to manage this organization
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Check if user belongs to this organization (as org_admin or coach)
-      const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
-      const hasOrgAccess = userRoles.length > 0; // User has any role in this org
+      if (!userIsSiteAdmin) {
+        // Check if user belongs to this organization (as org_admin or coach)
+        const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
+        const hasOrgAccess = userRoles.length > 0; // User has any role in this org
 
-      if (!userIsSiteAdmin && !hasOrgAccess) {
-        return res.status(403).json({ message: "Access denied" });
+        if (!hasOrgAccess) {
+          return res.status(403).json({ message: "Access denied" });
+        }
       }
 
       const { roles, ...invitationData } = req.body;
