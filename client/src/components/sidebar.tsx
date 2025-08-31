@@ -127,8 +127,8 @@ export default function Sidebar() {
     enabled: !!userData.id,
   });
 
-  // Determine user's primary role
-  let primaryRole = userData?.role || "athlete";
+  // Use session role as primary source, fallback to organization role, then 'athlete'
+  const primaryRole = userData?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 
   // Check if we're in an organization context (site admin viewing specific org)
