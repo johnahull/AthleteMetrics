@@ -233,44 +233,19 @@ export default function Sidebar() {
           </Link>
         )}
 
-        {/* My Organization for org admins */}
-        {userData && !userData.isSiteAdmin && userOrganizations?.length > 0 && userOrganizations.some((org: any) => org.role === "org_admin") && (
-          (() => {
-            const orgAdminOrg = userOrganizations.find((org: any) => org.role === "org_admin");
-            const orgProfilePath = `/organizations/${orgAdminOrg?.organizationId}`;
-            const isActive = location === orgProfilePath;
-
-            return (
-              <Link href={orgProfilePath}>
-                <div
-                  className={cn(
-                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                    isActive
-                      ? "bg-primary text-white" 
-                      : "text-gray-700 hover:bg-gray-100"
-                  )}
-                  data-testid="nav-my-organization"
-                >
-                  <Building2 className="h-5 w-5" />
-                  <span>My Organization</span>
-                </div>
-              </Link>
-            );
-          })()
+        {/* Organization info for org admins, coaches, and athletes */}
+        {!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && (primaryRole === "org_admin" || primaryRole === "coach" || primaryRole === "athlete") && (
+          <div className="px-3 py-2 border-t border-gray-200 mt-2">
+            <div className="flex items-center space-x-2">
+              <Building2 className="h-4 w-4 text-gray-500" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-900 truncate">
+                  {userOrganizations[0]?.organization?.name}
+                </p>
+              </div>
+            </div>
+          </div>
         )}
-
-        {/* User Info & Logout */}
-        <div className="text-sm text-gray-600 px-3 py-2">
-          <p className="font-medium">{userData?.username}</p>
-          <p className="text-xs">{userData?.isSiteAdmin ? 'Site Admin' : primaryRole?.replace('_', ' ').replace(/\b\w/g, (l: any) => l.toUpperCase())}</p>
-          {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
-            <p className="text-xs text-gray-500 mt-1">
-              {userOrganizations.length === 1 
-                ? userOrganizations[0]?.organization?.name 
-                : `${userOrganizations[0]?.organization?.name} (+${userOrganizations.length - 1} more)`}
-            </p>
-          )}
-        </div>
 
         <button
           onClick={logout}
