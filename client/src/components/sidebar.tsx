@@ -120,7 +120,7 @@ export default function Sidebar() {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
   
-  const primaryRole = userOrganizations?.[0]?.role || 'athlete';
+  const primaryRole = Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete';
   const isSiteAdmin = user?.isSiteAdmin || false;
   
   // Check if we're in an organization context (site admin viewing specific org)
@@ -189,7 +189,7 @@ export default function Sidebar() {
           {/* Profile Link for admins and coaches - but not for legacy admin */}
           
           {/* Site admin organization profile link when in organization context */}
-          {user && user.role === "site_admin" && isInOrganizationContext && (
+          {user && user.isSiteAdmin && isInOrganizationContext && (
             (() => {
               const orgIdMatch = location.match(/\/organizations\/([^\/]+)/);
               if (orgIdMatch) {
@@ -216,7 +216,7 @@ export default function Sidebar() {
             })()
           )}
           
-          {user && (user.role === "site_admin" || user.role === "org_admin" || user.role === "coach") && user.id && (
+          {user && (user.isSiteAdmin || primaryRole === "org_admin" || primaryRole === "coach") && user.id && (
             <Link href="/profile">
               <div
                 className={cn(
@@ -236,7 +236,7 @@ export default function Sidebar() {
           {/* User Info & Logout */}
           <div className="text-sm text-gray-600 px-3 py-2">
             <p className="font-medium">{user?.username}</p>
-            <p className="text-xs">{user?.role?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+            <p className="text-xs">{user?.isSiteAdmin ? 'Site Admin' : primaryRole?.replace('_', ' ').replace(/\b\w/g, (l: any) => l.toUpperCase())}</p>
             {Array.isArray(userOrganizations) && userOrganizations.length > 0 && (
               <p className="text-xs text-gray-500 mt-1">
                 {userOrganizations.length === 1 
