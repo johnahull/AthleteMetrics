@@ -470,7 +470,20 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationInvitations(organizationId: string): Promise<Invitation[]> {
     try {
-      const result = await db.select()
+      const result = await db.select({
+        id: invitations.id,
+        email: invitations.email,
+        firstName: invitations.firstName,
+        lastName: invitations.lastName,
+        organizationId: invitations.organizationId,
+        teamIds: invitations.teamIds,
+        role: invitations.role,
+        token: invitations.token,
+        invitedBy: invitations.invitedBy,
+        isUsed: invitations.isUsed,
+        createdAt: invitations.createdAt,
+        expiresAt: invitations.expiresAt
+      })
         .from(invitations)
         .where(eq(invitations.organizationId, organizationId))
         .orderBy(desc(invitations.createdAt));
