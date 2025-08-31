@@ -680,7 +680,7 @@ export class DatabaseStorage implements IStorage {
         const [userRecord] = await db.select().from(users)
           .where(and(
             eq(users.playerId, player.id),
-            sql`${users.isActive} = 'true' OR ${users.isActive} = true`
+            eq(users.isActive, "true")
           ));
         hasLogin = !!userRecord;
         
