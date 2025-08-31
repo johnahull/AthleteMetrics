@@ -12,7 +12,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Don't redirect to login for invitation pages
-  const isInvitationPage = location.startsWith('/accept-invitation');
+  const isInvitationPage = location.startsWith('/accept-invitation') || location.startsWith('/register');
   const isLoginPage = location === '/login';
 
   useEffect(() => {
