@@ -116,13 +116,35 @@ export function registerRoutes(app: Express) {
           return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
         }
 
+        // Determine the user's primary role
+        let primaryRole = user.role;
+        
+        // If user is site admin, use site_admin role
+        if (user.isSiteAdmin === "true") {
+          primaryRole = "site_admin";
+        } else {
+          // For non-site admins, check their organization roles to determine primary role
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          if (userOrgs && userOrgs.length > 0) {
+            // Find the highest priority role across all organizations
+            const roles = userOrgs.map(org => org.role);
+            if (roles.includes("org_admin")) {
+              primaryRole = "org_admin";
+            } else if (roles.includes("coach")) {
+              primaryRole = "coach";
+            } else if (roles.includes("athlete")) {
+              primaryRole = "athlete";
+            }
+          }
+        }
+
         req.session.user = {
           id: user.id,
           username: user.username,
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
+          role: primaryRole,
           isSiteAdmin: user.isSiteAdmin === "true",
           playerId: user.playerId
         };
