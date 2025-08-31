@@ -255,15 +255,21 @@ export class DatabaseStorage implements IStorage {
         ));
       return result?.role || null;
     } else {
-      // Get user's global role
-      const [user] = await db.select({ role: users.role })
+      // Check if user is site admin
+      const [user] = await db.select({ isSiteAdmin: users.isSiteAdmin })
         .from(users)
         .where(eq(users.id, userId));
-      return user?.role || null;
+      return user?.isSiteAdmin === "true" ? "site_admin" : null;
     }
   }
 
   async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
+    // Check if user is site admin first
+    const user = await this.getUser(userId);
+    if (user?.isSiteAdmin === "true") {
+      return ["site_admin"];
+    }
+
     if (organizationId) {
       // Get all roles for user in specific organization
       const results = await db.select({ role: userOrganizations.role })
@@ -274,20 +280,12 @@ export class DatabaseStorage implements IStorage {
         ));
       return results.map(r => r.role);
     } else {
-      // Get user's global role plus all organization roles
-      const [user] = await db.select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, userId));
-      
+      // Get all organization roles for the user
       const orgRoles = await db.select({ role: userOrganizations.role })
         .from(userOrganizations)
         .where(eq(userOrganizations.userId, userId));
       
-      const roles = [];
-      if (user?.role) roles.push(user.role);
-      roles.push(...orgRoles.map(r => r.role));
-      
-      return [...new Set(roles)]; // Remove duplicates
+      return orgRoles.map(r => r.role);
     }
   }
 
@@ -342,7 +340,7 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationProfile(organizationId: string): Promise<Organization & {
     coaches: Array<{ user: User, roles: string[] }>,
-    players: (Player & { teams: (Team & { organization: Organization })[] })[],
+    players: (User & { teams: (Team & { organization: Organization })[] })[],
     invitations: Invitation[]
   } | null> {
     const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
@@ -371,8 +369,8 @@ export class DatabaseStorage implements IStorage {
       userWithRoles => userWithRoles.roles.some(role => role === 'coach' || role === 'org_admin')
     );
 
-    // Get players via organization filter
-    const players = await this.getPlayers({ organizationId });
+    // Get athletes via organization filter
+    const players = await this.getAthletes({ organizationId });
 
     // Get pending invitations for this organization with user names
     const organizationInvitations = await db.select({
@@ -843,7 +841,7 @@ export class DatabaseStorage implements IStorage {
     return this.deleteUser(id);
   }
 
-  async getPlayer(id: string): Promise<(Player & { teams: (Team & { organization: Organization })[] }) | undefined> {
+  async getPlayer(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (!user) return undefined;
 
@@ -861,7 +859,7 @@ export class DatabaseStorage implements IStorage {
     return player;
   }
 
-  async createPlayer(player: InsertPlayer): Promise<Player> {
+  async createPlayer(player: Partial<InsertUser>): Promise<User> {
     // Generate a temporary username for the athlete
     const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
@@ -880,7 +878,7 @@ export class DatabaseStorage implements IStorage {
       phoneNumbers: player.phoneNumbers,
       height: player.height,
       weight: player.weight,
-      role: "athlete",
+      // role: "athlete", // Role field doesn't exist on users table
       password: "INVITATION_PENDING", // Will be set when they accept invitation
       isActive: "true"
     }).returning();
@@ -904,7 +902,7 @@ export class DatabaseStorage implements IStorage {
     return playerResult;
   }
 
-  async updatePlayer(id: string, player: Partial<InsertPlayer>): Promise<Player> {
+  async updatePlayer(id: string, player: Partial<InsertUser>): Promise<User> {
     const updateData: any = { ...player };
 
     // Update full name if first or last name changed
@@ -925,7 +923,7 @@ export class DatabaseStorage implements IStorage {
       updateData.birthYear = new Date(player.birthday).getFullYear();
     }
 
-    const [updated] = await db.update(players).set(updateData).where(eq(players.id, id)).returning();
+    const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
 
     // Update teams if specified
     if (player.teamIds !== undefined) {
@@ -975,7 +973,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined> {
+  async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<User | undefined> {
     const [user] = await db.select().from(users)
       .where(and(
         eq(users.firstName, firstName),
@@ -1046,8 +1044,7 @@ export class DatabaseStorage implements IStorage {
   }): Promise<any[]> {
     let query = db.select()
       .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id))
-      .leftJoin(users as any, eq(measurements.submittedBy, users.id));
+      .innerJoin(users, eq(measurements.userId, users.id));
 
     const conditions = [];
     if (filters?.userId) {
