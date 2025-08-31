@@ -238,7 +238,7 @@ export default function Profile() {
           <CardContent>
             <div className="space-y-4">
               <div className="text-sm text-gray-600">
-                <p><strong>Role:</strong> {user.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+                <p><strong>Role:</strong> {user.role ? user.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not assigned'}</p>
                 <p><strong>Account Status:</strong> Active</p>
               </div>
 
