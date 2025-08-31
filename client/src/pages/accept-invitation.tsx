@@ -276,15 +276,15 @@ export default function AcceptInvitation() {
                 <h3 className="font-semibold text-blue-900">Creating Account For</h3>
               </div>
               <p className="text-blue-800 font-medium">
-                {invitation.playerData.firstName} {invitation.playerData.lastName}
+                {invitation.playerData?.firstName} {invitation.playerData?.lastName}
               </p>
               <p className="text-blue-600 text-sm">
-                Player ID: #{invitation.playerData.id.slice(0, 8)}
+                Player ID: #{invitation.playerData?.id?.slice(0, 8)}
               </p>
-              {invitation.playerData.teams && invitation.playerData.teams.length > 0 && (
+              {invitation.playerData?.teams && invitation.playerData.teams.length > 0 && (
                 <div className="mt-3">
                   <p className="text-blue-700 text-sm font-medium mb-1">Teams:</p>
-                  {invitation.playerData.teams.map((team, index) => (
+                  {invitation.playerData.teams?.map((team, index) => (
                     <div key={team.id} className="text-blue-600 text-sm">
                       • {team.name} ({team.sport})
                     </div>
