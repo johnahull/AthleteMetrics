@@ -944,13 +944,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePlayer(id: string): Promise<void> {
+    // First, unlink any user accounts that reference this player (outside transaction for now)
+    await db.update(users)
+      .set({ playerId: null })
+      .where(eq(users.playerId, id));
+
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx) => {
-      // First, unlink any user accounts that reference this player
-      await tx.update(users)
-        .set({ playerId: null })
-        .where(eq(users.playerId, id));
-
       // Delete all player-team relationships
       await tx.delete(playerTeams).where(eq(playerTeams.playerId, id));
 
