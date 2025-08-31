@@ -131,11 +131,12 @@ export function registerRoutes(app: Express) {
         if (user.role === "athlete" && user.playerId) {
           // For athletes, redirect to their player profile using playerId
           redirectUrl = `/athletes/${user.playerId}`;
-        } else if (user.role === "org_admin") {
-          // Get the org admin's organization to redirect to their org profile
-          const userOrgs = await storage.getOrganizationsWithUsersForUser(user.id);
+        } else if (user.role === "org_admin" || user.role === "coach") {
+          // Get the user's organization to redirect to their org profile
+          const userOrgs = await storage.getUserOrganizations(user.id);
           if (userOrgs.length > 0) {
-            redirectUrl = `/organizations/${userOrgs[0].id}`;
+            redirectUrl = `/organizations/${userOrgs[0].organizationId}`;
+            console.log(`🏢 ${user.role} redirect: ${redirectUrl}`);
           }
         }
 
@@ -362,7 +363,7 @@ export function registerRoutes(app: Express) {
   // Keep existing measurement routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
-      const { playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport } = req.query;
+      const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport } = req.query;
       const filters: any = {
         playerId: playerId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
