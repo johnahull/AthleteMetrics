@@ -521,6 +521,37 @@ export class DatabaseStorage implements IStorage {
     return newInvitation;
   }
 
+  // Create invitations for a player (sends to all their emails)
+  async createPlayerInvitations(playerId: string, invitation: Omit<InsertInvitation, 'email' | 'playerId'>): Promise<Invitation[]> {
+    // Get player's emails
+    const player = await this.getPlayer(playerId);
+    if (!player) throw new Error("Player not found");
+    
+    if (!player.emails || player.emails.length === 0) {
+      throw new Error("Player has no email addresses");
+    }
+
+    // Create one invitation for each email
+    const invitationResults: Invitation[] = [];
+    for (const email of player.emails) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
+      
+      const [newInvitation] = await db.insert(invitations).values({
+        ...invitation,
+        email,
+        playerId,
+        token,
+        expiresAt
+      }).returning();
+      
+      invitationResults.push(newInvitation);
+    }
+    
+    return invitationResults;
+  }
+
   async getInvitation(token: string): Promise<Invitation | undefined> {
     const [invitation] = await db.select().from(invitations)
       .where(and(
@@ -539,24 +570,34 @@ export class DatabaseStorage implements IStorage {
     let user = await this.getUserByEmail(invitation.email);
     
     if (user) {
-      // User exists - just update their password and activate them
+      // User exists - update their info and link to player if this is a player invitation
+      const updateData: any = {
+        password: await bcrypt.hash(userInfo.password, 10),
+        username: userInfo.username,
+        firstName: userInfo.firstName,
+        lastName: userInfo.lastName
+      };
+      
+      // If this invitation is for a player, link the user to the player
+      if (invitation.playerId) {
+        updateData.playerId = invitation.playerId;
+      }
+      
       await db.update(users)
-        .set({ 
-          password: await bcrypt.hash(userInfo.password, 10),
-          username: userInfo.username,
-          firstName: userInfo.firstName,
-          lastName: userInfo.lastName
-        })
+        .set(updateData)
         .where(eq(users.email, invitation.email));
       
       // Get updated user
       user = await this.getUserByEmail(invitation.email);
       if (!user) throw new Error("Failed to update existing user");
     } else {
-      // Create new user (no role field needed - roles are organization-specific)
-      user = await this.createUser({
-        ...userInfo
-      });
+      // Create new user with optional player link
+      const createUserData = {
+        ...userInfo,
+        playerId: invitation.playerId || undefined
+      };
+      
+      user = await this.createUser(createUserData);
     }
 
     // Add user to organization (check if not already added)
@@ -579,45 +620,18 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // If user is an athlete, ensure player record exists and is linked to teams
-    let playerId: string | undefined;
-    if (invitation.role === "athlete") {
-      // Check if player already exists for this email
-      const existingPlayers = await db.select().from(players)
-        .where(sql`${invitation.email} = ANY(${players.emails})`);
-      
-      if (existingPlayers.length > 0) {
-        // Player exists - just add to teams if specified
-        const player = existingPlayers[0];
-        playerId = player.id;
-        if (invitation.teamIds && invitation.teamIds.length > 0) {
-          for (const teamId of invitation.teamIds) {
-            try {
-              await this.addPlayerToTeam(player.id, teamId);
-            } catch (error) {
-              // May already be in team - that's okay
-              console.log("Player may already be in team:", error);
-            }
-          }
-        }
-      } else {
-        // Create new player record
-        const today = new Date();
-        const defaultBirthDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-        const player = await this.createPlayer({
-          firstName: user.firstName,
-          lastName: user.lastName,
-          birthday: defaultBirthDate.toISOString().split('T')[0],
-          school: "",
-          sports: [],
-          emails: [user.email]
-        });
-        playerId = player.id;
-        
-        // Add player to teams if specified
-        if (invitation.teamIds && invitation.teamIds.length > 0) {
-          for (const teamId of invitation.teamIds) {
-            await this.addPlayerToTeam(player.id, teamId);
+    // Handle player linkage and team assignments
+    let playerId: string | undefined = invitation.playerId || undefined;
+    
+    if (invitation.role === "athlete" && invitation.playerId) {
+      // Add player to teams if specified
+      if (invitation.teamIds && invitation.teamIds.length > 0) {
+        for (const teamId of invitation.teamIds) {
+          try {
+            await this.addPlayerToTeam(invitation.playerId, teamId);
+          } catch (error) {
+            // May already be in team - that's okay
+            console.log("Player may already be in team:", error);
           }
         }
       }
