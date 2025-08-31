@@ -74,7 +74,7 @@ export default function Organizations() {
     // Site admins can switch to organization context
     if (user?.isSiteAdmin) {
       setOrganizationContext(orgId);
-      setLocation('/');  // Go to dashboard in org context
+      setLocation('/'); // Redirect to dashboard in org context
       toast({ 
         title: `Switched to ${orgName}`,
         description: "Now viewing organization-specific data. Use 'Back to Site' to return to site view.",
