@@ -120,28 +120,28 @@ export default function Players() {
     }
   };
 
-  // Send invitation mutation
-  const sendInvitationMutation = useMutation({
-    mutationFn: async ({ email, organizationId }: { email: string; organizationId: string }) => {
-      const response = await apiRequest("POST", `/api/organizations/${organizationId}/invitations`, {
-        email,
-        roles: ["athlete"],
-        teamIds: [],
-        organizationId
+  // Send player invitation mutation (sends to all emails)
+  const sendPlayerInvitationMutation = useMutation({
+    mutationFn: async ({ playerId, organizationId }: { playerId: string; organizationId: string }) => {
+      const response = await apiRequest("POST", `/api/players/${playerId}/invitations`, {
+        role: "athlete",
+        organizationId,
+        teamIds: []
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
       toast({
         title: "Success",
-        description: "Invitation sent successfully",
+        description: `${data.invitations?.length || 1} invitations sent to ${data.playerName}`,
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to send invitation",
+        description: "Failed to send player invitations",
         variant: "destructive",
       });
     },
@@ -188,7 +188,7 @@ export default function Players() {
     }
   };
 
-  const handleSendInvitation = (email: string) => {
+  const handleSendPlayerInvitation = (playerId: string) => {
     if (!userOrgs || userOrgs.length === 0) {
       toast({
         title: "Error",
@@ -208,7 +208,7 @@ export default function Players() {
       return;
     }
     
-    sendInvitationMutation.mutate({ email, organizationId: orgId });
+    sendPlayerInvitationMutation.mutate({ playerId, organizationId: orgId });
   };
 
   const handleDeleteInvitation = (invitationId: string) => {
@@ -576,15 +576,15 @@ export default function Players() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          {/* Send Invitation Button - only show if player has email and no pending invitation */}
+                          {/* Send Player Invitation Button - sends to all emails */}
                           {(player as any).emails && (player as any).emails.length > 0 && !athleteInvitations?.some((inv: any) => (player as any).emails.includes(inv.email)) && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleSendInvitation((player as any).emails[0])}
+                              onClick={() => handleSendPlayerInvitation(player.id)}
                               className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              disabled={sendInvitationMutation.isPending}
-                              title="Send invitation to access the system"
+                              disabled={sendPlayerInvitationMutation.isPending}
+                              title={`Send invitations to all emails (${(player as any).emails.length} addresses)`}
                               data-testid={`button-invite-player-${player.id}`}
                             >
                               <Mail className="h-4 w-4" />

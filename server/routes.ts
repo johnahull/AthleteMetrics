@@ -505,6 +505,67 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // New endpoint for player invitations (sends to all emails)
+  app.post("/api/players/:playerId/invitations", requireAuth, async (req, res) => {
+    try {
+      const { playerId } = req.params;
+      const { role, organizationId, teamIds } = req.body;
+      
+      // Get current user info for invitedBy
+      let invitedById = req.session.user?.id;
+      
+      if (!invitedById && req.session.admin) {
+        const siteAdmin = await storage.getUserByUsername("admin");
+        invitedById = siteAdmin?.id;
+      }
+      
+      if (!invitedById) {
+        return res.status(400).json({ message: "Unable to determine current user" });
+      }
+      
+      // Check current user's roles for restrictions
+      const currentUserRoles = await storage.getUserRoles(invitedById, organizationId);
+      
+      // Coaches can only invite athletes
+      if (currentUserRoles.includes("coach") && !currentUserRoles.includes("org_admin") && !await hasRole(invitedById, "site_admin")) {
+        if (role !== "athlete") {
+          return res.status(403).json({ message: "Coaches can only invite athletes" });
+        }
+      }
+      
+      // Get player info
+      const player = await storage.getPlayer(playerId);
+      if (!player) {
+        return res.status(404).json({ message: "Player not found" });
+      }
+      
+      // Create invitations for all player emails
+      const invitations = await storage.createPlayerInvitations(playerId, {
+        organizationId: organizationId || null,
+        teamIds: teamIds || [],
+        role,
+        invitedBy: invitedById
+      });
+      
+      // Generate invitation links
+      const inviteLinks = invitations.map(invitation => ({
+        email: invitation.email,
+        token: invitation.token,
+        inviteLink: `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`
+      }));
+      
+      res.status(201).json({
+        message: `${invitations.length} invitations created for ${player.firstName} ${player.lastName}`,
+        invitations: inviteLinks,
+        playerName: `${player.firstName} ${player.lastName}`,
+        emails: player.emails
+      });
+    } catch (error) {
+      console.error("Error creating player invitations:", error);
+      res.status(500).json({ message: "Failed to create player invitations" });
+    }
+  });
+
   app.get("/api/invitations/:token", async (req, res) => {
     try {
       const { token } = req.params;

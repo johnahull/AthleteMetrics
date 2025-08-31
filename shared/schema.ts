@@ -90,6 +90,7 @@ export const userTeams = pgTable("user_teams", {
 export const invitations = pgTable("invitations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull(),
+  playerId: varchar("player_id").references(() => players.id), // Link to specific player for athlete invitations
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
