@@ -15,6 +15,8 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  organizationContext: string | null;
+  setOrganizationContext: (orgId: string | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
   logout: () => void;
 }
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [organizationContext, setOrganizationContext] = useState<string | null>(null);
   const [, setLocation] = useLocation();
 
   useEffect(() => {
@@ -49,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; redirectUrl?: string; message?: string }> => {
     setIsLoading(true);
     try {
       const response = await fetch('/api/auth/login', {
@@ -62,7 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        throw new Error('Login failed');
+        const error = await response.json();
+        return { success: false, message: error.message || 'Login failed' };
       }
 
       const data = await response.json();
@@ -70,6 +74,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Redirect to the specified URL or default to dashboard
       setLocation(data.redirectUrl || '/');
+      return { success: true, redirectUrl: data.redirectUrl || '/' };
+    } catch (error) {
+      return { success: false, message: 'Network error occurred' };
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, organizationContext, setOrganizationContext }}>
       {children}
     </AuthContext.Provider>
   );

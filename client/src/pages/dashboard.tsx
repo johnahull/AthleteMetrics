@@ -204,7 +204,7 @@ export default function Dashboard() {
               <h3 className="text-lg font-semibold text-gray-900">Team Distribution</h3>
             </div>
             <div className="space-y-4">
-              {(teamStats as any)?.slice(0, 5).map((team: any, index: number) => (
+              {Array.isArray(teamStats) && teamStats.slice(0, 5).map((team: any, index: number) => (
                 <div key={team.teamId} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className={`w-3 h-3 rounded-full ${
@@ -241,7 +241,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {(recentMeasurements as any)?.slice(0, 10).map((measurement: any) => (
+                {Array.isArray(recentMeasurements) && recentMeasurements.slice(0, 10).map((measurement: any) => (
                   <tr key={measurement.id} className="border-b border-gray-100">
                     <td className="py-3">
                       <div className="flex items-center space-x-3">
@@ -279,7 +279,7 @@ export default function Dashboard() {
                     </td>
                     <td className="py-3 text-gray-600">{measurement.date}</td>
                   </tr>
-                )) : null}
+                ))}
               </tbody>
             </table>
           </div>
