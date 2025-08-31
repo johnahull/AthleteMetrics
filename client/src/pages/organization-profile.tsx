@@ -176,7 +176,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
   
-  const isOrgAdmin = userOrganizations?.some(org => org.organizationId === organizationId && org.role === "org_admin");
+  const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "org_admin");
   const isSiteAdmin = user?.isSiteAdmin;
   
   if (!isOrgAdmin && !isSiteAdmin) {
@@ -397,7 +397,7 @@ export default function OrganizationProfile() {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
   
-  const isOrgAdmin = userOrganizations?.some((org: any) => org.organizationId === id && org.role === "org_admin");
+  const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
@@ -751,7 +751,7 @@ export default function OrganizationProfile() {
                   );
                   
                   return (
-                    <div key={`${coach.user.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={coach.user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex-1">
                         <Link 
                           href={`/users/${coach.user.id}`}
@@ -785,7 +785,7 @@ export default function OrganizationProfile() {
                         <div className="flex gap-1">
                           {coach.roles.map((role) => (
                             <Badge 
-                              key={role} 
+                              key={`${coach.user.id}-${role}`} 
                               variant={role === 'org_admin' ? 'default' : 'secondary'}
                             >
                               {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}

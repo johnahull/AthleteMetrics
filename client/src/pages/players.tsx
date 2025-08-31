@@ -94,7 +94,14 @@ export default function Players() {
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (filters.search) params.append('search', filters.search);
-      if (organizationContext) params.append('organizationId', organizationContext);
+      
+      // Always include organization context for proper filtering
+      if (organizationContext) {
+        params.append('organizationId', organizationContext);
+      } else if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+        // For non-site-admins without explicit org context, use their primary organization
+        params.append('organizationId', userOrganizations[0].organizationId);
+      }
       
       const response = await fetch(`/api/players?${params}`);
       if (!response.ok) throw new Error('Failed to fetch players');
