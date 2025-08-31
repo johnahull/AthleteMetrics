@@ -12,9 +12,12 @@ interface InvitationData {
   email: string;
   role: string;
   organizationId: string;
+  playerId?: string;
   playerData?: {
+    id: string;
     firstName: string;
     lastName: string;
+    emails: string[];
   };
 }
 
@@ -259,6 +262,25 @@ export default function AcceptInvitation() {
               <span className="text-sm font-medium capitalize">{invitation?.role}</span>
             </div>
           </div>
+
+          {/* Show which specific athlete they're signing up for */}
+          {invitation?.playerData && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <UserCheck className="h-5 w-5 text-blue-600" />
+                <h3 className="font-semibold text-blue-900">Creating Account For</h3>
+              </div>
+              <p className="text-blue-800 font-medium">
+                {invitation.playerData.firstName} {invitation.playerData.lastName}
+              </p>
+              <p className="text-blue-600 text-sm">
+                Player ID: #{invitation.playerData.id.slice(0, 8)}
+              </p>
+              <p className="text-blue-600 text-sm">
+                This account will be linked to this specific athlete
+              </p>
+            </div>
+          )}
 
           {/* Account Setup Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
