@@ -299,7 +299,18 @@ export function registerRoutes(app: Express) {
   app.get("/api/players/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const player = await storage.getPlayer(id);
+      const currentUser = req.session.user;
+      
+      // First try to get player by the provided ID
+      let player = await storage.getPlayer(id);
+      
+      // If not found and the current user is an athlete, check if the ID matches their user ID
+      // and they have a linked player account
+      if (!player && currentUser?.role === "athlete" && currentUser.id === id) {
+        if (currentUser.playerId) {
+          player = await storage.getPlayer(currentUser.playerId);
+        }
+      }
       
       if (!player) {
         return res.status(404).json({ message: "Player not found" });
