@@ -233,7 +233,22 @@ export default function Sidebar() {
           </Link>
         )}
 
-        
+        {/* Organization info for org admins, coaches, and athletes */}
+        {!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && (primaryRole === "org_admin" || primaryRole === "coach" || primaryRole === "athlete") && (
+          <div className="px-3 py-2 border-t border-gray-200 mt-2">
+            <div className="flex items-center space-x-2">
+              <Building2 className="h-4 w-4 text-gray-500" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-900 truncate">
+                  {userOrganizations[0]?.organization?.name}
+                </p>
+                <p className="text-xs text-gray-500 capitalize">
+                  {primaryRole.replace('_', ' ')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={logout}
