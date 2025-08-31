@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer } from "http";
 import session from "express-session";
 import { storage } from "./storage";
+import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -31,61 +32,8 @@ const requireAuth = (req: any, res: any, next: any) => {
   next();
 };
 
-// Permission validation helpers
-const hasRole = async (userId: string, role: string, organizationId?: string): Promise<boolean> => {
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-  return userRoles.includes(role);
-};
-
-const isSiteAdmin = async (user: any): Promise<boolean> => {
-  if (!user) return false;
-
-  // Check legacy admin session
-  if (user.admin) return true;
-
-  // Check current user session
-  if (user.isSiteAdmin) return true; // Use the boolean flag directly
-
-  // Check database for site admin status if not in session
-  if (user.id) {
-    const dbUser = await storage.getUser(user.id);
-    return dbUser?.isSiteAdmin === "true";
-  }
-
-  return false;
-};
-
-const canAccessOrganization = async (userId: string, organizationId: string): Promise<boolean> => {
-  if (await isSiteAdmin({ id: userId })) return true;
-
-  const userOrgs = await storage.getUserOrganizations(userId);
-  return userOrgs.some(org => org.organizationId === organizationId);
-};
-
-const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
-  if (await isSiteAdmin({ id: userId })) return true;
-
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-  return userRoles.includes("org_admin");
-};
-
-const canInviteRole = async (userId: string, organizationId: string, targetRole: string): Promise<boolean> => {
-  if (await isSiteAdmin({ id: userId })) return true;
-
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-
-  // Coaches can only invite athletes
-  if (userRoles.includes("coach") && !userRoles.includes("org_admin")) {
-    return targetRole === "athlete";
-  }
-
-  // Org admins cannot invite site admins
-  if (userRoles.includes("org_admin")) {
-    return targetRole !== "site_admin";
-  }
-
-  return false;
-};
+// Initialize permission checker
+const permissionChecker = new PermissionChecker(storage);
 
 const requireSiteAdmin = async (req: any, res: any, next: any) => {
   const user = req.session.user || { admin: req.session.admin };
@@ -269,9 +217,7 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
-
-      if (userIsSiteAdmin) {
+      if (isSiteAdmin(currentUser)) {
         const organizations = await storage.getOrganizations();
         res.json(organizations);
       } else {
@@ -350,7 +296,7 @@ export function registerRoutes(app: Express) {
       // Get user's organization for non-site-admins
       let organizationId = req.body.organizationId;
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!organizationId && !userIsSiteAdmin) {
         // For org admins and coaches, get their primary organization
@@ -367,7 +313,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Validate user has access to the organization
-      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser.id, organizationId)) {
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, organizationId)) {
         return res.status(403).json({ message: "Access denied to this organization" });
       }
 
@@ -397,7 +343,7 @@ export function registerRoutes(app: Express) {
       // Determine organization context for filtering
       let orgContextForFiltering: string | undefined;
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
         // Site admins can request specific org or all players
@@ -413,7 +359,7 @@ export function registerRoutes(app: Express) {
 
         // Validate user has access to requested organization
         if (requestedOrgId) {
-          if (!await canAccessOrganization(currentUser.id, requestedOrgId)) {
+          if (!await canAccessOrganization(currentUser, requestedOrgId)) {
             return res.status(403).json({ message: "Access denied to this organization" });
           }
           orgContextForFiltering = requestedOrgId;
@@ -463,7 +409,7 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Player not found" });
       }
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       // Athletes can only view their own player data
       if (currentUser.role === "athlete") {
@@ -562,7 +508,7 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       // Athletes can only view their own measurements
       if (currentUser.role === "athlete") {
@@ -595,7 +541,7 @@ export function registerRoutes(app: Express) {
 
         const requestedOrgId = organizationId as string;
         if (requestedOrgId) {
-          if (!await canAccessOrganization(currentUser.id, requestedOrgId)) {
+          if (!await canAccessOrganization(currentUser, requestedOrgId)) {
             return res.status(403).json({ message: "Access denied to this organization" });
           }
           orgContextForFiltering = requestedOrgId;
@@ -656,7 +602,7 @@ export function registerRoutes(app: Express) {
       });
 
       // Validate user can access the player being measured
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin) {
         const player = await storage.getPlayer(measurementData.playerId);
         if (!player) {
@@ -704,7 +650,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Only org admins can verify measurements
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
         // Check if user is org admin in any organization
@@ -768,7 +714,7 @@ export function registerRoutes(app: Express) {
       // Determine organization context based on user role
       let organizationId: string | undefined;
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
         // Site admin can request specific org stats or site-wide stats
@@ -817,7 +763,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Validate organization access
-      if (organizationId && !await canAccessOrganization(invitedById, organizationId)) {
+      if (organizationId && !await canAccessOrganization(currentUser, organizationId)) {
         return res.status(403).json({ message: "Access denied to this organization" });
       }
 
@@ -1027,7 +973,7 @@ export function registerRoutes(app: Express) {
       }
 
       const currentUser = req.session.user;
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       // Check if current user has permission to delete the invitation
       if (!userIsSiteAdmin && currentUser?.id !== invitation.invitedBy) {
@@ -1147,7 +1093,7 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
         const orgsWithUsers = await storage.getOrganizationsWithUsers();
@@ -1182,7 +1128,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Check if user has access to this organization
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       // Athletes have no access to organization profiles
       if (currentUser.role === "athlete") {
@@ -1217,7 +1163,7 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
 
       // Check if user has admin access to this organization
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
@@ -1229,7 +1175,7 @@ export function registerRoutes(app: Express) {
 
       // Prevent users from deleting themselves
       if (currentUser.id === userId) {
-        const isSiteAdminUser = await isSiteAdmin(currentUser);
+        const isSiteAdminUser = isSiteAdmin(currentUser);
         const userRolesToCheck = await storage.getUserRoles(userId, organizationId);
         const isOrgAdminUser = userRolesToCheck.includes("org_admin");
 
@@ -1288,10 +1234,10 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
 
       // Check if user has access to manage this organization
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
-        if (!await hasRole(currentUser.id, "org_admin", organizationId)) {
+        if (!await canManageUsers(currentUser.id, organizationId)) {
           return res.status(403).json({ message: "Access denied" });
         }
       }
@@ -1389,7 +1335,7 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
 
       // Check if user has access to manage this organization
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       // Check if user belongs to this organization (as org_admin or coach)
       const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
@@ -1495,7 +1441,7 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
 
       // Check if user has admin access to this organization
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
@@ -1534,7 +1480,7 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
 
       // Check if user has access (site admin, org admin, or viewing own profile)
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin && currentUser?.id !== userId) {
         // Check if current user is an org admin in any shared organization
@@ -1666,7 +1612,7 @@ export function registerRoutes(app: Express) {
       const isOrgUser = userOrgs && userOrgs.length > 0;
 
       // Authorization checks
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
         // For non-site admins, check org admin permissions
@@ -1763,7 +1709,7 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
 
       // Only site admins can activate/deactivate users
-      const userIsSiteAdmin = await isSiteAdmin(currentUser);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
         return res.status(403).json({ message: "Access denied. Only site administrators can activate/deactivate users." });
