@@ -636,7 +636,7 @@ export class DatabaseStorage implements IStorage {
     birthYearFrom?: number; 
     birthYearTo?: number; 
     search?: string 
-  }): Promise<(Player & { teams: (Team & { organization: Organization })[] })[]> {
+  }): Promise<(Player & { teams: (Team & { organization: Organization })[], hasLogin: boolean })[]> {
     let query = db.select().from(players);
     const conditions = [];
 
@@ -656,13 +656,27 @@ export class DatabaseStorage implements IStorage {
 
     const result = await query.orderBy(asc(players.lastName), asc(players.firstName));
     
-    // Get teams for each player with organization info
+    // Get teams and login status for each player
     const playersWithTeams = await Promise.all(
       result.map(async (player) => {
         const playerTeams = await this.getPlayerTeams(player.id);
+        
+        // Check if player has a login account by matching emails
+        let hasLogin = false;
+        if (player.emails && player.emails.length > 0) {
+          for (const email of player.emails) {
+            const user = await this.getUserByEmail(email);
+            if (user && user.isActive === "true") {
+              hasLogin = true;
+              break;
+            }
+          }
+        }
+        
         return {
           ...player,
-          teams: playerTeams
+          teams: playerTeams,
+          hasLogin
         };
       })
     );
