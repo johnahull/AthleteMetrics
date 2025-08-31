@@ -459,6 +459,16 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Unable to determine current user" });
       }
       
+      // Check current user's roles for restrictions
+      const currentUserRoles = await storage.getUserRoles(invitedById, organizationId);
+      
+      // Coaches can only invite athletes
+      if (currentUserRoles.includes("coach") && !currentUserRoles.includes("org_admin") && !await hasRole(invitedById, "site_admin")) {
+        if (role !== "athlete") {
+          return res.status(403).json({ message: "Coaches can only invite athletes" });
+        }
+      }
+      
       const invitation = await storage.createInvitation({
         email,
         organizationId: organizationId || null,
@@ -640,12 +650,12 @@ export function registerRoutes(app: Express) {
                         currentUser?.username === "admin" ||
                         (currentUser?.id && await hasRole(currentUser.id, "site_admin"));
       
-      // Check if user belongs to this organization (as org_admin or coach)
+      // Check if user is org_admin in this organization (coaches cannot access)
       const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, id) : [];
-      const hasOrgAccess = userRoles.length > 0; // User has any role in this org
+      const hasOrgAccess = userRoles.includes("org_admin"); // Only org_admins can access
       
       if (isSiteAdmin || hasOrgAccess) {
-        // Site admins can access any organization, org members can access their org
+        // Site admins can access any organization, org admins can access their org
         const orgProfile = await storage.getOrganizationProfile(id);
         if (!orgProfile) {
           return res.status(404).json({ message: "Organization not found" });
@@ -891,6 +901,14 @@ export function registerRoutes(app: Express) {
       // Org admins cannot invite site admins
       if (userRoles.includes("org_admin") && !await hasRole(currentUser?.id || "", "site_admin") && roles.includes("site_admin")) {
         return res.status(403).json({ message: "Cannot invite site administrators" });
+      }
+      
+      // Coaches can only invite athletes
+      if (userRoles.includes("coach") && !userRoles.includes("org_admin") && !await hasRole(currentUser?.id || "", "site_admin")) {
+        const nonAthleteRoles = roles.filter(role => role !== "athlete");
+        if (nonAthleteRoles.length > 0) {
+          return res.status(403).json({ message: "Coaches can only invite athletes" });
+        }
       }
       
       // Check if user already exists, if not create them
