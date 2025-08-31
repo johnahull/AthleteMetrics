@@ -92,7 +92,15 @@ const getNavigation = (userRole: string, userId?: string, isInOrganizationContex
     { name: "Import/Export", href: "/import-export", icon: FileText },
   ];
 
-  // Org admins don't get User Management access (they manage users through their organization profile)
+  // Org admins get User Management access
+  if (userRole === "org_admin") {
+    return [
+      ...baseNavigation,
+      { name: "User Management", href: "/user-management", icon: UserCog }
+    ];
+  }
+
+  // Coaches get only the base navigation
   return baseNavigation;
 };
 
