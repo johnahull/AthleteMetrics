@@ -144,6 +144,7 @@ export function registerRoutes(app: Express) {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
+            role: user.isSiteAdmin === "true" ? "site_admin" : user.role,
             isSiteAdmin: user.isSiteAdmin === "true"
           };
           
