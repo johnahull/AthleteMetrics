@@ -31,7 +31,6 @@ function Router() {
           🎯 TEST ROUTE WORKS! URL: {window.location.href}
         </div>
       )} />
-      <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
       <Route path="/" component={Dashboard} />
       <Route path="/teams" component={Teams} />
@@ -47,6 +46,7 @@ function Router() {
       <Route path="/users/:id" component={UserProfile} />
       <Route path="/user-management" component={UserManagement} />
       <Route path="/profile" component={Profile} />
+      <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route component={NotFound} />
     </Switch>
   );
