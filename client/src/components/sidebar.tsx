@@ -79,7 +79,8 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   }
 
   // Get base navigation for role
-  let navigation = [...(NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach)];
+  const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
+  let navigation = Array.isArray(baseConfig) ? [...baseConfig] : [...baseConfig.default];
   
   // Special handling for athletes with player profiles
   if (role === "athlete" && user?.playerId) {
@@ -156,7 +157,7 @@ export default function Sidebar() {
 
       <OrganizationDisplay
         organizationId={organizationId}
-        userOrganizations={userOrganizations}
+        userOrganizations={userOrganizations as any[]}
         isSiteAdmin={isSiteAdmin}
       />
 
