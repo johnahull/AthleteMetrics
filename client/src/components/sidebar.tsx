@@ -80,7 +80,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user: userData, logout } = useAuth();
+  const { user: userData, logout, setOrganizationContext } = useAuth();
 
   // Don't render sidebar if no user data
   if (!userData) {
