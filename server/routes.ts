@@ -41,7 +41,6 @@ const requireAuth = (req: any, res: any, next: any) => {
   if (!req.session.user && !req.session.admin) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  console.log("🔒 requireAuth passed for:", req.method, req.path);
   next();
 };
 
@@ -196,11 +195,6 @@ async function initializeDefaultUser() {
 export function registerRoutes(app: Express) {
   const server = createServer(app);
 
-  // Add request logging middleware for invitation routes
-  app.use('/api/*invit*', (req, res, next) => {
-    console.log("🌐 Invitation-related request:", req.method, req.path, req.params);
-    next();
-  });
 
   // Session setup
   app.use(session({
@@ -1145,87 +1139,6 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // New endpoint for player invitations (sends to all emails)
-  app.post("/api/players/:playerId/invitations", requireAuth, async (req, res) => {
-    try {
-      const { playerId } = req.params;
-      const { role, organizationId, teamIds } = req.body;
-
-      // Get current user info for invitedBy
-      let invitedById = req.session.user?.id;
-
-      if (!invitedById && req.session.admin) {
-        const siteAdmin = await storage.getUserByUsername("admin");
-        invitedById = siteAdmin?.id;
-      }
-
-      if (!invitedById) {
-        return res.status(400).json({ message: "Unable to determine current user" });
-      }
-
-      // Check if user is site admin
-      const currentUser = await storage.getUser(invitedById);
-      if (!currentUser) {
-        return res.status(404).json({ message: "Current user not found" });
-      }
-
-      // Site admins can invite anyone to any role
-      if (isSiteAdmin(currentUser)) {
-        // Site admin can proceed with any invitation
-      } else {
-        // Check current user's roles for restrictions
-        const currentUserRoles = await storage.getUserRoles(invitedById, organizationId);
-
-        // Coaches can only invite athletes
-        if (currentUserRoles.includes("coach") && !currentUserRoles.includes("org_admin")) {
-          if (role !== "athlete") {
-            return res.status(403).json({ message: "Coaches can only invite athletes" });
-          }
-        }
-        
-        // Non-site-admin users need some form of permission
-        if (!currentUserRoles.includes("org_admin") && !currentUserRoles.includes("coach")) {
-          return res.status(403).json({ message: "Insufficient permissions to invite users" });
-        }
-      }
-
-      // Get player info
-      const player = await storage.getPlayer(playerId);
-      if (!player) {
-        return res.status(404).json({ message: "Player not found" });
-      }
-
-      // Create invitations for all player emails
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
-      
-      const invitations = await storage.createPlayerInvitations(playerId, {
-        organizationId: organizationId || null,
-        teamIds: teamIds || [],
-        role,
-        invitedBy: invitedById,
-        expiresAt
-      });
-
-      // Generate invitation links with player info
-      const inviteLinks = invitations.map(invitation => ({
-        email: invitation.email,
-        token: invitation.token,
-        inviteLink: `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}&player=${playerId}`,
-        playerId: playerId
-      }));
-
-      res.status(201).json({
-        message: `${invitations.length} invitations created for ${player.firstName} ${player.lastName}`,
-        invitations: inviteLinks,
-        playerName: `${player.firstName} ${player.lastName}`,
-        emails: player.emails
-      });
-    } catch (error) {
-      console.error("Error creating player invitations:", error);
-      res.status(500).json({ message: "Failed to create player invitations" });
-    }
-  });
 
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
     try {
@@ -1704,158 +1617,6 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/organizations/:id/invitations", requireAuth, async (req, res) => {
-    try {
-      const { id: organizationId } = req.params;
-      const currentUser = req.session.user;
-
-      // Check if user has access to manage this organization
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      if (!userIsSiteAdmin) {
-        // Check if user belongs to this organization (as org_admin or coach)
-        const userRoles = currentUser?.id ? await storage.getUserRoles(currentUser.id, organizationId) : [];
-        const hasOrgAccess = userRoles.length > 0; // User has any role in this org
-
-        if (!hasOrgAccess) {
-          return res.status(403).json({ message: "Access denied" });
-        }
-      }
-
-      const { roles, ...invitationData } = req.body;
-
-      // Add server-generated fields
-      const invitationWithDefaults = {
-        ...invitationData,
-        invitedBy: currentUser.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days from now
-      };
-
-      const parsedInvitationData = insertInvitationSchema.omit({ role: true }).parse(invitationWithDefaults);
-
-      // Validate roles array
-      if (!roles || !Array.isArray(roles) || roles.length === 0) {
-        return res.status(400).json({ message: "At least one role must be specified" });
-      }
-
-      // Validate role values and constraints
-      const validRoles = ["org_admin", "coach", "athlete"];
-      const invalidRoles = roles.filter((role: string) => !validRoles.includes(role));
-      if (invalidRoles.length > 0) {
-        return res.status(400).json({ message: `Invalid roles: ${invalidRoles.join(", ")}` });
-      }
-
-      // Athletes cannot have other roles
-      if (roles.includes("athlete") && roles.length > 1) {
-        return res.status(400).json({ message: "Athletes cannot have additional roles" });
-      }
-
-      // Org admins cannot invite site admins
-      if (!userIsSiteAdmin && roles.includes("site_admin")) {
-        return res.status(403).json({ message: "Cannot invite site administrators" });
-      }
-
-      // Coaches can only invite athletes (unless they're also org_admin)
-      if (userRoles.includes("coach") && !userRoles.includes("org_admin") && !userIsSiteAdmin) {
-        const nonAthleteRoles = roles.filter(role => role !== "athlete");
-        if (nonAthleteRoles.length > 0) {
-          return res.status(403).json({ message: "Insufficient permissions to invite this role" });
-        }
-      }
-      
-      // Org admins can invite coaches and athletes but not site admins
-      if (userRoles.includes("org_admin") && !userIsSiteAdmin) {
-        if (roles.includes("site_admin")) {
-          return res.status(403).json({ message: "Insufficient permissions to invite this role" });
-        }
-      }
-
-      // Check if user already exists, if not create them
-      let existingUser = await storage.getUserByEmail(parsedInvitationData.email);
-
-      if (!existingUser) {
-        // Create a new user with invitation email
-        const newUser = await storage.createUser({
-          username: `user_${Date.now()}`, // Temporary username until they set one
-          email: parsedInvitationData.email,
-          firstName: "", // Will be filled when they accept invitation
-          lastName: "",
-          role: "athlete", // Default role, will be overridden by organization roles
-          password: "INVITATION_PENDING" // Placeholder password until they set one
-        });
-        existingUser = newUser;
-      }
-
-      // Check if user is already in the organization and add them with the specified roles
-      const existingUserOrgs = await storage.getUserOrganizations(existingUser.id);
-      const isAlreadyInOrg = existingUserOrgs.some(org => org.organizationId === organizationId);
-
-      if (!isAlreadyInOrg) {
-        // Add user to organization with the specified roles
-        for (const role of roles) {
-          await storage.addUserToOrganization(existingUser.id, organizationId, role);
-        }
-      }
-
-      const invitation = await storage.createInvitation({
-        ...parsedInvitationData,
-        role: roles[0], // Keep primary role for backwards compatibility
-        organizationId
-      });
-
-      res.status(201).json({ 
-        invitation,
-        message: "Invitation created successfully"
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        console.error("Invitation validation error:", error.errors);
-        res.status(400).json({ message: "Validation error", errors: error.errors });
-      } else {
-        console.error("Error creating invitation:", error);
-        res.status(500).json({ message: "Failed to create invitation" });
-      }
-    }
-  });
-
-  // DELETE /api/organizations/:id/invitations/:invitationId - Delete pending invitation
-  app.delete("/api/organizations/:id/invitations/:invitationId", requireAuth, async (req, res) => {
-    try {
-      const { id: organizationId, invitationId } = req.params;
-      const currentUser = req.session.user;
-
-      // Check if user has admin access to this organization
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      if (!userIsSiteAdmin) {
-        const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
-        const hasOrgAccess = userRoles.length > 0; // User has any role in this org
-        if (!hasOrgAccess) {
-          return res.status(403).json({ message: "Access denied. Only organization members can delete invitations." });
-        }
-      }
-
-      // Get the invitation to find the email
-      const invitation = await storage.getInvitationById(invitationId);
-      if (!invitation) {
-        return res.status(404).json({ message: "Invitation not found" });
-      }
-
-      // Find the user by email and remove them from organization if they exist
-      const invitedUser = await storage.getUserByEmail(invitation.email);
-      if (invitedUser) {
-        await storage.removeUserFromOrganization(invitedUser.id, organizationId);
-      }
-
-      // Delete the invitation
-      await storage.deleteInvitation(invitationId);
-
-      res.json({ message: "Invitation deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting invitation:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
 
   // GET /api/users/:id/profile - Get user profile information
   app.get("/api/users/:id/profile", requireAuth, async (req, res) => {

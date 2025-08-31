@@ -26,27 +26,22 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      <Route path="/test-route" component={() => (
-        <div style={{padding: '20px', fontSize: '24px', color: 'green'}}>
-          🎯 TEST ROUTE WORKS! URL: {window.location.href}
-        </div>
-      )} />
       <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
-      <Route path="/" component={Dashboard} />
-      <Route path="/teams" component={Teams} />
-      <Route path="/athletes" component={Players} />
       <Route path="/athletes/:id" component={PlayerProfile} />
+      <Route path="/athletes" component={Players} />
+      <Route path="/organizations/:id" component={OrganizationProfile} />
+      <Route path="/organizations" component={Organizations} />
+      <Route path="/users/:id" component={UserProfile} />
+      <Route path="/user-management" component={UserManagement} />
       <Route path="/data-entry" component={DataEntry} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/publish" component={Publish} />
       <Route path="/import-export" component={ImportExport} />
       <Route path="/admin" component={AdminPage} />
-      <Route path="/organizations" component={Organizations} />
-      <Route path="/organizations/:id" component={OrganizationProfile} />
-      <Route path="/users/:id" component={UserProfile} />
-      <Route path="/user-management" component={UserManagement} />
+      <Route path="/teams" component={Teams} />
       <Route path="/profile" component={Profile} />
+      <Route path="/" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>
   );
