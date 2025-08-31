@@ -170,7 +170,16 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
   });
 
   // Only show for org admins and site admins
-  if (user?.role !== "org_admin" && user?.role !== "site_admin") {
+  // Get user's organizations to check if they're an org admin
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
+  
+  const isOrgAdmin = userOrganizations?.some(org => org.organizationId === organizationId && org.role === "org_admin");
+  const isSiteAdmin = user?.isSiteAdmin;
+  
+  if (!isOrgAdmin && !isSiteAdmin) {
     return null;
   }
 
@@ -381,6 +390,14 @@ export default function OrganizationProfile() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  // Get user's organizations to check if they're an org admin
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
+  
+  const isOrgAdmin = userOrganizations?.some((org: any) => org.organizationId === id && org.role === "org_admin");
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
@@ -571,7 +588,7 @@ export default function OrganizationProfile() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Exit button for site admins */}
-      {user?.role === "site_admin" && (
+      {user?.isSiteAdmin && (
         <div className="mb-2">
           <Link href="/organizations">
             <Button variant="outline" size="sm" data-testid="exit-organization-button">
@@ -656,7 +673,7 @@ export default function OrganizationProfile() {
                             </div>
                             
                             {/* Action buttons for pending invitations */}
-                            {(user?.role === "site_admin" || user?.role === "org_admin") && (
+                            {(user?.isSiteAdmin || isOrgAdmin) && (
                               <div className="flex items-center gap-1 ml-2">
                                 {/* Resend invitation button for expired invitations */}
                                 {isExpired && (
@@ -777,7 +794,7 @@ export default function OrganizationProfile() {
                         </div>
                         
                         {/* Action Buttons - only for admin users */}
-                        {(user?.role === "site_admin" || user?.role === "org_admin") && (
+                        {(user?.isSiteAdmin || isOrgAdmin) && (
                           <div className="flex items-center gap-1">
                             {/* Send Invitation Button - only if no pending invitation */}
                             {!pendingInvitation && (

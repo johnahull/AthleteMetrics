@@ -17,11 +17,14 @@ import {
   User
 } from "lucide-react";
 
-// Component to handle organization profile link for org admins
-function OrganizationProfileLink({ user, location }: { user: any, location: string }) {
+// Component to handle organization profile link for org admins  
+function OrganizationProfileLink({ user, location, userOrganizations }: { user: any, location: string, userOrganizations?: any[] }) {
+  // Check if user has org_admin role in any organization
+  const hasOrgAdminRole = userOrganizations?.some(org => org.role === "org_admin");
+  
   const { data: organizations } = useQuery({
     queryKey: ["/api/organizations-with-users"],
-    enabled: !!user?.id && user?.role === "org_admin",
+    enabled: !!user?.id && hasOrgAdminRole,
   });
 
   if (!organizations || !Array.isArray(organizations) || organizations.length === 0) {
@@ -49,9 +52,9 @@ function OrganizationProfileLink({ user, location }: { user: any, location: stri
   );
 }
 
-const getNavigation = (userRole: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[]) => {
+const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: string, isInOrganizationContext?: boolean, userOrganizations?: any[]) => {
   // Athletes get a restricted navigation menu
-  if (userRole === "athlete") {
+  if (primaryRole === "athlete") {
     return [
       { name: "My Profile", href: `/athletes/${userId}`, icon: UsersRound },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -59,7 +62,7 @@ const getNavigation = (userRole: string, userId?: string, isInOrganizationContex
   }
 
   // Site admins get different navigation based on context
-  if (userRole === "site_admin") {
+  if (isSiteAdmin) {
     // When viewing an organization, show org admin menu
     if (isInOrganizationContext) {
       return [
@@ -93,9 +96,9 @@ const getNavigation = (userRole: string, userId?: string, isInOrganizationContex
   ];
 
   // Org admins get My Organization link
-  if (userRole === "org_admin") {
+  if (primaryRole === "org_admin") {
     // Link to specific organization profile if available
-    const orgId = userOrganizations?.[0]?.id;
+    const orgId = userOrganizations?.[0]?.organizationId;
     const href = orgId ? `/organizations/${orgId}` : "/organizations";
     return [
       ...baseNavigation,
@@ -111,20 +114,19 @@ export default function Sidebar() {
   const [location] = useLocation();
   const { user, logout, organizationContext, setOrganizationContext } = useAuth();
   
-  // Get user role - fallback to 'athlete' if not defined
-  const userRole = user?.role || 'athlete';
-  
-  // Check if we're in an organization context (site admin viewing specific org)
-  const isInOrganizationContext = userRole === 'site_admin' && !!organizationContext;
-  
-  // Get user's organizations
+  // Get user's primary role from their first organization (or 'athlete' fallback)
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
-    enabled: !!user?.id,
+    enabled: !!user?.id && !user?.isSiteAdmin,
   });
-
   
-  const navigation = getNavigation(userRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
+  const primaryRole = userOrganizations?.[0]?.role || 'athlete';
+  const isSiteAdmin = user?.isSiteAdmin || false;
+  
+  // Check if we're in an organization context (site admin viewing specific org)
+  const isInOrganizationContext = isSiteAdmin && !!organizationContext;
+  
+  const navigation = getNavigation(isSiteAdmin, primaryRole, user?.id, isInOrganizationContext, userOrganizations as any[]);
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
@@ -149,7 +151,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="p-4 space-y-2 flex-1">
         {/* Back to site button for site admins in organization context */}
-        {userRole === 'site_admin' && organizationContext && (
+        {isSiteAdmin && organizationContext && (
           <button
             onClick={() => setOrganizationContext(null)}
             className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100 border border-gray-200 mb-4"
