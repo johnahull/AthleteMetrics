@@ -144,11 +144,11 @@ export class DatabaseStorage implements IStorage {
     // For invited users, password might be empty - use a placeholder
     const password = user.password || "INVITATION_PENDING";
     const hashedPassword = await bcrypt.hash(password, 10);
-    
+
     // Calculate fullName and birthYear from provided data
     const fullName = `${user.firstName} ${user.lastName}`;
     const birthYear = user.birthDate ? new Date(user.birthDate).getFullYear() : undefined;
-    
+
     const [newUser] = await db.insert(users).values({
       ...user,
       password: hashedPassword,
@@ -179,7 +179,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
     const updateData: any = {};
-    
+
     // Only include defined fields in the update
     Object.keys(user).forEach(key => {
       const value = (user as any)[key];
@@ -187,7 +187,7 @@ export class DatabaseStorage implements IStorage {
         updateData[key] = value;
       }
     });
-    
+
     if (user.password) {
       updateData.password = await bcrypt.hash(user.password, 10);
     }
@@ -217,18 +217,18 @@ export class DatabaseStorage implements IStorage {
     // Delete related records first
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
     await db.delete(userTeams).where(eq(userTeams.userId, id));
-    
+
     // Delete invitations sent by this user
     await db.delete(invitations).where(eq(invitations.invitedBy, id));
-    
+
     // Update measurements to remove references to this user
     await db.update(measurements)
-      .set({ 
+      .set({
         submittedBy: sql`NULL`,
         verifiedBy: sql`NULL`
       })
       .where(sql`${measurements.submittedBy} = ${id} OR ${measurements.verifiedBy} = ${id}`);
-    
+
     await db.delete(users).where(eq(users.id, id));
   }
 
@@ -280,17 +280,17 @@ export class DatabaseStorage implements IStorage {
           eq(userOrganizations.organizationId, organizationId)
         ))
         .limit(1); // Enforce single role
-      
+
       return result.length > 0 ? [result[0].role] : [];
     } else {
       // Get all organization roles for the user (one per organization maximum)
-      const orgRoles = await db.select({ 
+      const orgRoles = await db.select({
         role: userOrganizations.role,
-        organizationId: userOrganizations.organizationId 
+        organizationId: userOrganizations.organizationId
       })
         .from(userOrganizations)
         .where(eq(userOrganizations.userId, userId));
-      
+
       // Ensure only one role per organization by grouping and taking first
       const uniqueRoles = new Map();
       orgRoles.forEach(r => {
@@ -298,7 +298,7 @@ export class DatabaseStorage implements IStorage {
           uniqueRoles.set(r.organizationId, r.role);
         }
       });
-      
+
       return Array.from(uniqueRoles.values());
     }
   }
@@ -567,7 +567,7 @@ export class DatabaseStorage implements IStorage {
       organizationId,
       role
     }).returning();
-    
+
     return userOrg;
   }
 
@@ -600,22 +600,22 @@ export class DatabaseStorage implements IStorage {
   // Validation function to ensure single role constraint
   async validateUserRoleConstraint(userId: string): Promise<{ valid: boolean; violations: string[] }> {
     const violations: string[] = [];
-    
+
     // Get all user-organization relationships
     const userOrgRelations = await db.select()
       .from(userOrganizations)
       .where(eq(userOrganizations.userId, userId));
-    
+
     // Group by organization and check for multiple roles
     const orgRoleMap = new Map<string, string[]>();
-    
+
     for (const relation of userOrgRelations) {
       if (!orgRoleMap.has(relation.organizationId)) {
         orgRoleMap.set(relation.organizationId, []);
       }
       orgRoleMap.get(relation.organizationId)!.push(relation.role);
     }
-    
+
     // Check for violations
     for (const [orgId, roles] of orgRoleMap.entries()) {
       if (roles.length > 1) {
@@ -623,7 +623,7 @@ export class DatabaseStorage implements IStorage {
         violations.push(`User has ${roles.length} roles in organization "${org?.name || orgId}": ${roles.join(', ')}`);
       }
     }
-    
+
     return {
       valid: violations.length === 0,
       violations
@@ -652,7 +652,7 @@ export class DatabaseStorage implements IStorage {
     return newInvitation;
   }
 
-  
+
 
   async getInvitation(token: string): Promise<Invitation | undefined> {
     const [invitation] = await db.select().from(invitations)
@@ -744,11 +744,11 @@ export class DatabaseStorage implements IStorage {
     // For "none" team filter, use a simpler query
     if (filters?.teamId === 'none') {
       const conditions = [eq(userOrganizations.role, 'athlete')];
-      
+
       if (filters?.organizationId) {
         conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
       }
-      
+
       if (filters?.search) {
         conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
       }
@@ -775,13 +775,13 @@ export class DatabaseStorage implements IStorage {
           sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams} WHERE ${userTeams.userId} IS NOT NULL)`
         ))
         .orderBy(asc(users.lastName), asc(users.firstName));
-        
+
       return result.map(row => row.users);
     }
 
     // For regular queries, select only users and use distinct
     const conditions = [eq(userOrganizations.role, 'athlete')];
-    
+
     if (filters?.birthYearFrom && filters?.birthYearTo) {
       conditions.push(
         and(
@@ -794,7 +794,7 @@ export class DatabaseStorage implements IStorage {
     } else if (filters?.birthYearTo) {
       conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
     }
-    
+
     if (filters?.search) {
       conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
     }
@@ -832,7 +832,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .orderBy(asc(users.lastName), asc(users.firstName));
-    
+
     return result;
   }
 
@@ -864,7 +864,7 @@ export class DatabaseStorage implements IStorage {
     if (!user) return undefined;
 
     const userTeams = await this.getUserTeams(user.id);
-    
+
     // Transform user to player format for backward compatibility
     const player = {
       ...user,
@@ -880,7 +880,7 @@ export class DatabaseStorage implements IStorage {
   async createPlayer(player: Partial<InsertUser>): Promise<User> {
     // Generate a temporary username for the athlete
     const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    
+
     // Use primary email or generate one
     const email = (player.emails && player.emails.length > 0) ? player.emails[0] : `${username}@temp.local`;
 
@@ -998,9 +998,9 @@ export class DatabaseStorage implements IStorage {
         eq(users.lastName, lastName),
         sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`
       ));
-    
+
     if (!user) return undefined;
-    
+
     return {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
