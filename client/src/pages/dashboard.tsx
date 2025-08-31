@@ -11,17 +11,17 @@ import { useAuth } from "@/lib/auth";
 export default function Dashboard() {
   const { user, organizationContext } = useAuth();
   const [, setLocation] = useLocation();
-  
+
   // Get user's primary role to check access
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
-  
+
   // Use session role as primary source, fallback to organization role, then 'athlete'
   const primaryRole = user?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
   const isSiteAdmin = user?.isSiteAdmin || false;
-  
+
   // Redirect athletes away from organization dashboard
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
@@ -29,16 +29,16 @@ export default function Dashboard() {
       setLocation(`/athletes/${playerId}`);
     }
   }, [isSiteAdmin, primaryRole, user?.id, user?.playerId, setLocation]);
-  
+
   // Don't render dashboard for athletes
   if (!isSiteAdmin && primaryRole === "athlete") {
     return null;
   }
-  
+
   const { data: dashboardStats, isLoading } = useQuery({
     queryKey: ["/api/analytics/dashboard", organizationContext],
     queryFn: async () => {
-      const url = organizationContext 
+      const url = organizationContext
         ? `/api/analytics/dashboard?organizationId=${organizationContext}`
         : `/api/analytics/dashboard`;
       const response = await fetch(url);
@@ -49,14 +49,14 @@ export default function Dashboard() {
   const { data: recentMeasurements } = useQuery({
     queryKey: ["/api/measurements", organizationContext],
     queryFn: async () => {
-      const url = organizationContext 
+      const url = organizationContext
         ? `/api/measurements?organizationId=${organizationContext}`
         : `/api/measurements`;
       const response = await fetch(url);
       return response.json();
     }
   });
-  
+
   // Get organization name for context indicator
   const { data: currentOrganization } = useQuery({
     queryKey: [`/api/organizations/${organizationContext}`],
@@ -102,7 +102,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
             <p className="text-gray-600 mt-1">
-              {organizationContext && currentOrganization 
+              {organizationContext && currentOrganization
                 ? `${currentOrganization.name} - Performance overview`
                 : "Track athlete performance and team analytics"
               }
@@ -197,7 +197,7 @@ export default function Dashboard() {
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <PerformanceChart />
-        
+
         <Card className="bg-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-6">
@@ -208,7 +208,7 @@ export default function Dashboard() {
                 <div key={team.teamId} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className={`w-3 h-3 rounded-full ${
-                      index === 0 ? 'bg-blue-500' : 
+                      index === 0 ? 'bg-blue-500' :
                       index === 1 ? 'bg-green-500' :
                       index === 2 ? 'bg-yellow-500' :
                       index === 3 ? 'bg-purple-500' : 'bg-gray-500'
@@ -250,7 +250,7 @@ export default function Dashboard() {
                             {measurement.player.firstName.charAt(0)}{measurement.player.lastName.charAt(0)}
                           </span>
                         </div>
-                        <button 
+                        <button
                           onClick={() => setLocation(`/athletes/${measurement.player.id}`)}
                           className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                         >
@@ -259,8 +259,8 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="py-3 text-gray-600">
-                      {measurement.player.teams && measurement.player.teams.length > 0 
-                        ? measurement.player.teams.length > 1 
+                      {measurement.player.teams && measurement.player.teams.length > 0
+                        ? measurement.player.teams.length > 1
                           ? `${measurement.player.teams[0].name} (+${measurement.player.teams.length - 1})`
                           : measurement.player.teams[0].name
                         : "Independent"
@@ -272,14 +272,14 @@ export default function Dashboard() {
                       </span>
                     </td>
                     <td className="py-3 font-mono">
-                      {measurement.metric === "FLY10_TIME" ? 
-                        formatFly10TimeWithSpeed(parseFloat(measurement.value)) : 
+                      {measurement.metric === "FLY10_TIME" ?
+                        formatFly10TimeWithSpeed(parseFloat(measurement.value)) :
                         `${measurement.value}${measurement.units}`
                       }
                     </td>
                     <td className="py-3 text-gray-600">{measurement.date}</td>
                   </tr>
-                ))}
+                )) : null}
               </tbody>
             </table>
           </div>
