@@ -611,36 +611,7 @@ export class DatabaseStorage implements IStorage {
     return newInvitation;
   }
 
-  // Create invitations for a player (sends to all their emails)
-  async createPlayerInvitations(playerId: string, invitation: Omit<InsertInvitation, 'email' | 'playerId'>): Promise<Invitation[]> {
-    // Get player's emails
-    const player = await this.getPlayer(playerId);
-    if (!player) throw new Error("Player not found");
-
-    if (!player.emails || player.emails.length === 0) {
-      throw new Error("Player has no email addresses");
-    }
-
-    // Create one invitation for each email
-    const invitationResults: Invitation[] = [];
-    for (const email of player.emails) {
-      const token = crypto.randomBytes(32).toString('hex');
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
-
-      const [newInvitation] = await db.insert(invitations).values({
-        ...invitation,
-        email,
-        playerId,
-        token,
-        expiresAt
-      }).returning();
-
-      invitationResults.push(newInvitation);
-    }
-
-    return invitationResults;
-  }
+  
 
   async getInvitation(token: string): Promise<Invitation | undefined> {
     const [invitation] = await db.select().from(invitations)
@@ -652,7 +623,7 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
-  async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }> {
+  async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
     const invitation = await this.getInvitation(token);
     if (!invitation) throw new Error("Invalid or expired invitation");
 
@@ -660,18 +631,13 @@ export class DatabaseStorage implements IStorage {
     let user = await this.getUserByEmail(invitation.email);
 
     if (user) {
-      // User exists - update their info and link to player if this is a player invitation
+      // User exists - update their info
       const updateData: any = {
         password: await bcrypt.hash(userInfo.password, 10),
         username: userInfo.username,
         firstName: userInfo.firstName,
         lastName: userInfo.lastName
       };
-
-      // If this invitation is for a player, link the user to the player
-      if (invitation.playerId) {
-        updateData.playerId = invitation.playerId;
-      }
 
       await db.update(users)
         .set(updateData)
@@ -681,7 +647,7 @@ export class DatabaseStorage implements IStorage {
       user = await this.getUserByEmail(invitation.email);
       if (!user) throw new Error("Failed to update existing user");
     } else {
-      // Create new user (roles are managed through userOrganizations, not directly on users)
+      // Create new user
       const createUserData = {
         username: userInfo.username,
         email: userInfo.email,
@@ -717,29 +683,12 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Handle player linkage and team assignments
-    let playerId: string | undefined = invitation.playerId || undefined;
-
-    if (invitation.role === "athlete" && invitation.playerId) {
-      // Add player to teams if specified
-      if (invitation.teamIds && invitation.teamIds.length > 0) {
-        for (const teamId of invitation.teamIds) {
-          try {
-            await this.addPlayerToTeam(invitation.playerId, teamId);
-          } catch (error) {
-            // May already be in team - that's okay
-            console.log("Player may already be in team:", error);
-          }
-        }
-      }
-    }
-
-    // Delete the invitation after successful acceptance
-    await db
-      .delete(invitations)
+    // Mark the invitation as used
+    await db.update(invitations)
+      .set({ isUsed: "true" })
       .where(eq(invitations.token, token));
 
-    return { user, playerId };
+    return { user };
   }
 
   // Athletes (users with athlete role)

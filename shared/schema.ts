@@ -89,7 +89,8 @@ export const userOrganizations = pgTable("user_organizations", {
 export const invitations = pgTable("invitations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull(),
-  userId: varchar("user_id").references(() => users.id), // Link to specific user for athlete invitations
+  firstName: text("first_name"), // Optional pre-filled name
+  lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
@@ -164,10 +165,6 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
   invitedBy: one(users, {
     fields: [invitations.invitedBy],
-    references: [users.id],
-  }),
-  user: one(users, {
-    fields: [invitations.userId],
     references: [users.id],
   }),
 }));

@@ -95,7 +95,7 @@ const canManageUsers = async (userId: string, organizationId: string): Promise<b
 };
 
 // Unified invitation permission checker
-const checkInvitationPermissions = async (inviterId: string, invitationType: 'general' | 'player' | 'organization', targetRole: string, organizationId?: string | null): Promise<{ allowed: boolean; reason?: string }> => {
+const checkInvitationPermissions = async (inviterId: string, invitationType: 'general', targetRole: string, organizationId?: string | null): Promise<{ allowed: boolean; reason?: string }> => {
   if (!inviterId) {
     return { allowed: false, reason: "No inviter ID provided" };
   }
@@ -110,49 +110,31 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
     return { allowed: true };
   }
   
-  // For non-site admins, different rules apply based on invitation type
-  switch (invitationType) {
-    case 'general':
-      // General invitations require organization context for non-site admins
-      if (!organizationId) {
-        return { allowed: false, reason: "Organization context required for non-site admin invitations" };
-      }
-      break;
-    
-    case 'player':
-      // Player invitations can work without organization (independent players)
-      break;
-    
-    case 'organization':
-      // Organization invitations must have organization context
-      if (!organizationId) {
-        return { allowed: false, reason: "Organization ID required for organization invitations" };
-      }
-      break;
+  // For non-site admins, organization context is required
+  if (!organizationId) {
+    return { allowed: false, reason: "Organization context required for non-site admin invitations" };
   }
   
-  // Check inviter's roles in the organization (if specified)
-  if (organizationId) {
-    const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
-    
-    // Organization admins can invite anyone within their organization
-    if (inviterRoles.includes("org_admin")) {
+  // Check inviter's roles in the organization
+  const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
+  
+  // Organization admins can invite anyone within their organization
+  if (inviterRoles.includes("org_admin")) {
+    return { allowed: true };
+  }
+  
+  // Coaches can only invite athletes
+  if (inviterRoles.includes("coach")) {
+    if (targetRole === "athlete") {
       return { allowed: true };
+    } else {
+      return { allowed: false, reason: "Coaches can only invite athletes" };
     }
-    
-    // Coaches can only invite athletes
-    if (inviterRoles.includes("coach")) {
-      if (targetRole === "athlete") {
-        return { allowed: true };
-      } else {
-        return { allowed: false, reason: "Coaches can only invite athletes" };
-      }
-    }
-    
-    // If user has roles but none with invitation permissions
-    if (inviterRoles.length > 0) {
-      return { allowed: false, reason: "Insufficient permissions to send invitations" };
-    }
+  }
+  
+  // If user has roles but none with invitation permissions
+  if (inviterRoles.length > 0) {
+    return { allowed: false, reason: "Insufficient permissions to send invitations" };
   }
   
   // If no organization context and not site admin, deny
@@ -1037,14 +1019,7 @@ export function registerRoutes(app: Express) {
   // Unified invitation endpoint - handles all invitation types
   app.post("/api/invitations", requireAuth, async (req, res) => {
     try {
-      const { 
-        // Common fields
-        email, firstName, lastName, role, organizationId,
-        // Player invitation fields
-        playerId, teamIds,
-        // Invitation type
-        type = 'general'
-      } = req.body;
+      const { email, firstName, lastName, role, organizationId, teamIds } = req.body;
 
       // Get current user info for invitedBy
       let invitedById = req.session.user?.id;
@@ -1057,78 +1032,44 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Unable to determine current user" });
       }
 
+      // Validate required fields
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      if (!role) {
+        return res.status(400).json({ message: "Role is required" });
+      }
+
+      if (!organizationId) {
+        return res.status(400).json({ message: "Organization is required" });
+      }
+
       // Check permissions using unified function
-      const permissionCheck = await checkInvitationPermissions(invitedById, type, role, organizationId);
+      const permissionCheck = await checkInvitationPermissions(invitedById, 'general', role, organizationId);
       if (!permissionCheck.allowed) {
         return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
       }
 
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-      // Handle different invitation types
-      switch (type) {
-        case 'player':
-          // Player-specific invitation
-          if (!playerId) {
-            return res.status(400).json({ message: "Player ID required for player invitations" });
-          }
-
-          const player = await storage.getPlayer(playerId);
-          if (!player) {
-            return res.status(404).json({ message: "Player not found" });
-          }
-
-          const playerInvitations = await storage.createPlayerInvitations(playerId, {
-            organizationId: organizationId || null,
-            teamIds: teamIds || [],
-            role,
-            invitedBy: invitedById,
-            expiresAt
-          });
-
-          const inviteLinks = playerInvitations.map(invitation => ({
-            email: invitation.email,
-            token: invitation.token,
-            inviteLink: `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}&player=${playerId}`,
-            playerId: playerId
-          }));
-
-          return res.status(201).json({
-            type: 'player',
-            player: player,
-            invitations: inviteLinks,
-            message: `Created ${playerInvitations.length} invitations for player ${player.firstName} ${player.lastName}`
-          });
-
-        case 'general':
-        case 'organization':
-        default:
-          // General or organization invitation
-          if (!email) {
-            return res.status(400).json({ message: "Email required for general invitations" });
-          }
-
-          const invitation = await storage.createInvitation({
-            email,
-            firstName: firstName || null,
-            lastName: lastName || null,
-            organizationId: organizationId || null,
-            role,
-            invitedBy: invitedById,
-            expiresAt
-          });
+      const invitation = await storage.createInvitation({
+        email,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        organizationId,
+        teamIds: teamIds || [],
+        role,
+        invitedBy: invitedById
+      });
 
           const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
 
           return res.status(201).json({
-            type: 'general',
             id: invitation.id,
             email: invitation.email,
             token: invitation.token,
             inviteLink,
             message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
           });
-      }
     } catch (error) {
       console.error("Error creating invitation:", error);
       res.status(500).json({ message: "Failed to create invitation" });
@@ -1196,34 +1137,13 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invitation expired" });
       }
 
-      // Get existing player data if this is an athlete invitation with playerId
-      let playerData = null;
-      if (invitation.role === "athlete" && invitation.playerId) {
-        const player = await storage.getPlayer(invitation.playerId);
-        if (player) {
-          // Get team information for this player
-          const playerTeams = await storage.getPlayerTeams(invitation.playerId);
-          const teams = await storage.getTeams();
-          const playerTeamData = playerTeams.map(pt => 
-            teams.find(t => t.id === pt.teamId)
-          ).filter(Boolean);
-
-          playerData = {
-            id: player.id,
-            firstName: player.firstName,
-            lastName: player.lastName,
-            emails: player.emails,
-            teams: playerTeamData
-          };
-        }
-      }
-
       res.json({
         email: invitation.email,
+        firstName: invitation.firstName,
+        lastName: invitation.lastName,
         role: invitation.role,
         organizationId: invitation.organizationId,
-        playerId: invitation.playerId,
-        playerData
+        teamIds: invitation.teamIds
       });
     } catch (error) {
       console.error("Error fetching invitation:", error);
@@ -1297,36 +1217,10 @@ export function registerRoutes(app: Express) {
         lastName
       });
 
-      // If this is an athlete invitation with playerId, cancel all other pending invitations for this player
-      if (invitation.role === "athlete" && invitation.playerId) {
-        const allInvitations = await storage.getInvitations();
-        const otherPlayerInvitations = allInvitations.filter(inv => 
-          inv.playerId === invitation.playerId && 
-          inv.id !== invitation.id && 
-          inv.isUsed === "false"
-        );
-
-        for (const otherInv of otherPlayerInvitations) {
-          await storage.updateInvitation(otherInv.id, { isUsed: "true" });
-        }
-      }
-
       // Calculate primary role for session
-      let primaryRole = "athlete"; // Default role
+      let primaryRole = invitation.role; // Use the role from the invitation
       if (result.user.isSiteAdmin === "true") {
         primaryRole = "site_admin";
-      } else {
-        const userOrgs = await storage.getUserOrganizations(result.user.id);
-        if (userOrgs && userOrgs.length > 0) {
-          const roles = userOrgs.map(org => org.role);
-          if (roles.includes("org_admin")) {
-            primaryRole = "org_admin";
-          } else if (roles.includes("coach")) {
-            primaryRole = "coach";
-          } else if (roles.includes("athlete")) {
-            primaryRole = "athlete";
-          }
-        }
       }
 
       // Log the new user in
@@ -1337,20 +1231,15 @@ export function registerRoutes(app: Express) {
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: primaryRole,
-        playerId: primaryRole === "athlete" ? result.user.playerId : undefined, // Only set for athletes
-        isSiteAdmin: result.user.isSiteAdmin === "true" // Store as boolean
+        isSiteAdmin: result.user.isSiteAdmin === "true"
       };
 
       // Determine redirect URL based on user role
       let redirectUrl = "/";
-
-      if (primaryRole === "athlete" && result.user.playerId) {
-        redirectUrl = `/athletes/${result.user.playerId}`;
-      } else {
-        // All other roles go to dashboard
-        redirectUrl = "/";
+      if (primaryRole === "athlete") {
+        // For athletes, redirect to their user ID (they don't have separate player records anymore)
+        redirectUrl = `/athletes/${result.user.id}`;
       }
-
 
       res.json({ 
         success: true, 
