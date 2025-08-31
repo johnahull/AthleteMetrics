@@ -33,7 +33,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
         { name: "Publish", href: "/publish", icon: FileCheck },
         { name: "Import/Export", href: "/import-export", icon: FileText },
       ];
-      
+
       // Add "My Organization" link if we have organization context
       if (organizationContext) {
         baseOrgNavigation.push({ 
@@ -42,7 +42,7 @@ const getNavigation = (isSiteAdmin: boolean, primaryRole?: string, userId?: stri
           icon: Building2 
         });
       }
-      
+
       return baseOrgNavigation;
     }
     // Default site admin menu
@@ -271,12 +271,12 @@ export default function Sidebar() {
               </div>
             );
           }
-          
+
           // For regular users with organizations
           if (!userData?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
             const org = userOrganizations[0];
             const orgName = org?.organizationName || org?.organization?.name || org?.name;
-            
+
             if (orgName) {
               return (
                 <div className="px-3 py-2 border-t border-gray-200 mt-2">
@@ -292,7 +292,7 @@ export default function Sidebar() {
               );
             }
           }
-          
+
           return null;
         })()}
 
