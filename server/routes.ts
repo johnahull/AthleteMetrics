@@ -35,10 +35,77 @@ const requireAuth = (req: any, res: any, next: any) => {
 // Initialize permission checker
 const permissionChecker = new PermissionChecker(storage);
 
+// Helper functions
+const isSiteAdmin = (user: any): boolean => {
+  return user?.isSiteAdmin === true || user?.role === "site_admin" || user?.admin === true;
+};
+
+const hasRole = async (userId: string, role: string, organizationId?: string): Promise<boolean> => {
+  if (!userId) return false;
+  
+  const user = await storage.getUser(userId);
+  if (!user) return false;
+  
+  // Check site admin
+  if (role === "site_admin" && user.isSiteAdmin === "true") {
+    return true;
+  }
+  
+  // Check organization roles
+  if (organizationId) {
+    const userRoles = await storage.getUserRoles(userId, organizationId);
+    return userRoles.includes(role);
+  }
+  
+  return user.role === role;
+};
+
+const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
+  if (!user?.id || !organizationId) return false;
+  
+  if (isSiteAdmin(user)) return true;
+  
+  const userOrgs = await storage.getUserOrganizations(user.id);
+  return userOrgs.some(org => org.organizationId === organizationId);
+};
+
+const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
+  if (!userId || !organizationId) return false;
+  
+  const user = await storage.getUser(userId);
+  if (!user) return false;
+  
+  if (isSiteAdmin(user)) return true;
+  
+  const userRoles = await storage.getUserRoles(userId, organizationId);
+  return userRoles.includes("org_admin");
+};
+
+const canInviteRole = async (inviterId: string, organizationId: string | null, targetRole: string): Promise<boolean> => {
+  if (!inviterId) return false;
+  
+  const inviter = await storage.getUser(inviterId);
+  if (!inviter) return false;
+  
+  if (isSiteAdmin(inviter)) return true;
+  
+  if (!organizationId) return false;
+  
+  const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
+  
+  // Org admins can invite anyone
+  if (inviterRoles.includes("org_admin")) return true;
+  
+  // Coaches can only invite athletes
+  if (inviterRoles.includes("coach") && targetRole === "athlete") return true;
+  
+  return false;
+};
+
 const requireSiteAdmin = async (req: any, res: any, next: any) => {
   const user = req.session.user || { admin: req.session.admin };
 
-  if (await isSiteAdmin(user)) {
+  if (isSiteAdmin(user)) {
     return next();
   }
 
