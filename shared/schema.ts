@@ -64,7 +64,7 @@ export const userTeams = pgTable("user_teams", {
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  playerId: varchar("player_id").notNull().references(() => users.id), // Keep as playerId for backward compatibility
+  userId: varchar("user_id").notNull().references(() => users.id), // Changed from playerId to userId
   submittedBy: varchar("submitted_by").notNull().references(() => users.id),
   verifiedBy: varchar("verified_by").references(() => users.id),
   isVerified: text("is_verified").default("false").notNull(),
@@ -355,28 +355,19 @@ export const OrganizationRole = {
   ATHLETE: "athlete",
 } as const;
 
-// Legacy types for backward compatibility during migration
-export type Player = User & {
-  fullName: string;
-  teams: Team[];
-};
-export type InsertPlayer = Omit<InsertUser, 'username' | 'password'> & {
-  teamIds?: string[];
-};
+// Legacy compatibility - athletes are now just users with athlete role
+export type Player = User;
+export type InsertPlayer = Partial<InsertUser>;
 
-// Legacy table and schema aliases for backward compatibility
-export const players = users;
-export const playerTeams = userTeams;
-export const insertPlayerSchema = z.object({
+// Legacy schema for athlete creation
+export const insertAthleteSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email format"),
   birthDate: z.string().optional(),
   graduationYear: z.number().int().min(2000).max(2040).optional(),
   teamIds: z.array(z.string()).optional(),
   school: z.string().optional(),
   sports: z.array(z.string()).optional(),
-  emails: z.array(z.string().email()).optional(),
   phoneNumbers: z.array(z.string()).optional(),
-  birthday: z.string().optional(), // Legacy field name
 });
-export const insertPlayerTeamSchema = insertUserTeamSchema;
