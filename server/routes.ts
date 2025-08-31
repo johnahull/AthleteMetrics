@@ -185,7 +185,6 @@ async function initializeDefaultUser() {
         lastName: "Administrator",
         role: "site_admin"
       });
-      console.log(`Default site admin created: ${adminEmail}`);
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
@@ -267,7 +266,6 @@ export function registerRoutes(app: Express) {
         } else if (primaryRole === "org_admin" || primaryRole === "coach") {
           // Org admins and coaches go to dashboard (not organization profile)
           redirectUrl = "/";
-          console.log(`🏢 ${primaryRole} redirect: ${redirectUrl}`);
         }
 
         return res.json({ 
@@ -388,7 +386,6 @@ export function registerRoutes(app: Express) {
       req.session.impersonationStartTime = new Date();
 
       // Log the impersonation event
-      console.log(`🎭 Site admin ${currentUser.email} started impersonating user ${targetUser.email}`);
 
       res.json({ 
         success: true, 
@@ -423,7 +420,6 @@ export function registerRoutes(app: Express) {
       req.session.impersonationStartTime = undefined;
 
       // Log the end of impersonation
-      console.log(`🎭 Site admin ${originalUser?.email} stopped impersonating user ${impersonatedUser?.email}`);
 
       res.json({ 
         success: true, 
@@ -1145,7 +1141,6 @@ export function registerRoutes(app: Express) {
       const user = (req as any).session.user;
 
       if (!user || !user.id) {
-        console.log("🚫 No user in session for athlete invitations");
         return res.json([]);
       }
 
@@ -1304,7 +1299,6 @@ export function registerRoutes(app: Express) {
 
       // If this is an athlete invitation with playerId, cancel all other pending invitations for this player
       if (invitation.role === "athlete" && invitation.playerId) {
-        console.log(`🚫 Auto-cancelling other invitations for player ${invitation.playerId}`);
         const allInvitations = await storage.getInvitations();
         const otherPlayerInvitations = allInvitations.filter(inv => 
           inv.playerId === invitation.playerId && 
@@ -1314,7 +1308,6 @@ export function registerRoutes(app: Express) {
 
         for (const otherInv of otherPlayerInvitations) {
           await storage.updateInvitation(otherInv.id, { isUsed: "true" });
-          console.log(`✅ Cancelled invitation ${otherInv.id} for ${otherInv.email}`);
         }
       }
 
@@ -1350,18 +1343,14 @@ export function registerRoutes(app: Express) {
 
       // Determine redirect URL based on user role
       let redirectUrl = "/";
-      console.log(`🔍 Login redirect for user ${result.user.username}, role: ${primaryRole}, playerId: ${result.user.playerId}`);
 
       if (primaryRole === "athlete" && result.user.playerId) {
         redirectUrl = `/athletes/${result.user.playerId}`;
-        console.log(`👤 Athlete redirect: ${redirectUrl}`);
       } else if (primaryRole === "org_admin" || primaryRole === "coach") {
         // Org admins and coaches go to dashboard
         redirectUrl = "/";
-        console.log(`🏢 ${primaryRole} redirect: ${redirectUrl}`);
       }
 
-      console.log(`➡️ Final redirect URL: ${redirectUrl}`);
 
       res.json({ 
         success: true, 
