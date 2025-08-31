@@ -780,14 +780,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePlayer(id: string): Promise<void> {
-    // First, delete all player-team relationships
-    await db.delete(playerTeams).where(eq(playerTeams.playerId, id));
-    
-    // Then, delete all measurements for this player
-    await db.delete(measurements).where(eq(measurements.playerId, id));
-    
-    // Finally, delete the player record
-    await db.delete(players).where(eq(players.id, id));
+    // Use a transaction to ensure all deletions happen atomically
+    await db.transaction(async (tx) => {
+      // First, delete all player-team relationships
+      await tx.delete(playerTeams).where(eq(playerTeams.playerId, id));
+      
+      // Then, delete all measurements for this player
+      await tx.delete(measurements).where(eq(measurements.playerId, id));
+      
+      // Finally, delete the player record
+      await tx.delete(players).where(eq(players.id, id));
+    });
   }
 
   async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<Player | undefined> {
