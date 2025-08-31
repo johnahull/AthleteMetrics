@@ -264,7 +264,7 @@ export default function Sidebar() {
                 <p className="text-xs font-medium text-gray-900 truncate">
                   {userData?.isSiteAdmin && isInOrganizationContext 
                     ? currentOrgData?.name || "Organization View"
-                    : userOrganizations?.[0]?.organization?.name
+                    : userOrganizations?.[0]?.organizationName
                   }
                 </p>
               </div>
