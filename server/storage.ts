@@ -554,10 +554,7 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
 
-    // Update user's global role to match organization role
-    await db.update(users)
-      .set({ role })
-      .where(eq(users.id, userId));
+    // Note: User roles are managed through userOrganizations, not directly on users table
 
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,
