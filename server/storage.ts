@@ -814,11 +814,18 @@ export class DatabaseStorage implements IStorage {
         email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
-        role: users.role,
+        fullName: users.fullName,
         birthDate: users.birthDate,
-        playerId: users.playerId,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt
+        birthYear: users.birthYear,
+        graduationYear: users.graduationYear,
+        school: users.school,
+        phoneNumbers: users.phoneNumbers,
+        sports: users.sports,
+        height: users.height,
+        weight: users.weight,
+        isSiteAdmin: users.isSiteAdmin,
+        isActive: users.isActive,
+        createdAt: users.createdAt
       })
       .from(users)
       .leftJoin(userTeams, eq(users.id, userTeams.userId))
