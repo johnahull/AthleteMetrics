@@ -94,6 +94,10 @@ export default function UserManagement() {
     queryKey: ["/api/site-admins"],
   });
 
+  const { data: allUsers = [] } = useQuery<any[]>({
+    queryKey: ["/api/users"],
+  });
+
 
   const inviteForm = useForm({
     resolver: zodResolver(inviteSchema),
@@ -668,6 +672,96 @@ export default function UserManagement() {
 
                   {siteAdmins.length === 0 && (
                     <p className="text-gray-500 text-sm py-4">No site administrators</p>
+                  )}
+                </div>
+              </div>
+
+              {/* All Users */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">All Users</h3>
+                  <span className="text-sm text-gray-500">
+                    {allUsers.length} total users
+                  </span>
+                </div>
+                
+                <div className="space-y-2">
+                  {allUsers.map((user) => {
+                    // Find organization associations for this user
+                    const userOrgs = organizations?.flatMap(org => 
+                      org.users?.filter(userOrg => userOrg.user.id === user.id) || []
+                    ) || [];
+                    
+                    return (
+                      <div 
+                        key={user.id} 
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            {user.isActive === "true" ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-red-600" />
+                            )}
+                            <div>
+                              <p className="font-medium text-gray-900" data-testid={`user-name-${user.id}`}>
+                                <Link href={`/users/${user.id}`} className="hover:text-primary">
+                                  {user.firstName} {user.lastName}
+                                </Link>
+                              </p>
+                              <p className="text-sm text-gray-600" data-testid={`user-details-${user.id}`}>
+                                @{user.username} • {user.email}
+                              </p>
+                              {userOrgs.length > 0 && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Organizations: {userOrgs.map(uo => uo.role).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm px-2 py-1 rounded ${
+                            user.isSiteAdmin === "true" 
+                              ? "bg-purple-100 text-purple-800" 
+                              : userOrgs.length > 0 
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-gray-100 text-gray-800"
+                          }`}>
+                            {user.isSiteAdmin === "true" 
+                              ? "Site Admin" 
+                              : userOrgs.length > 0 
+                                ? `${userOrgs[0].role}` 
+                                : "Unassigned"}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const isActive = user.isActive === "true";
+                              handleToggleUserStatus(user.id, !isActive);
+                            }}
+                            data-testid={`user-toggle-${user.id}`}
+                          >
+                            {user.isActive === "true" ? "Deactivate" : "Activate"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}`)}
+                            data-testid={`user-delete-${user.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {allUsers.length === 0 && (
+                    <p className="text-gray-500 text-sm py-4">No users found</p>
                   )}
                 </div>
               </div>

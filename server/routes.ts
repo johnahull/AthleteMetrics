@@ -1142,6 +1142,17 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Get all users (site admin only)
+  app.get("/api/users", requireSiteAdmin, async (req, res) => {
+    try {
+      const users = await storage.getUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error getting users:", error);
+      res.status(500).json({ message: "Failed to get users" });
+    }
+  });
+
   app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {
       const adminData = createSiteAdminSchema.parse(req.body);
