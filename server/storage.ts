@@ -534,28 +534,14 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
 
-    // Check if user already exists in this organization
-    const existing = await db.select()
-      .from(userOrganizations)
+    // Remove any existing roles for this user in this organization first
+    await db.delete(userOrganizations)
       .where(and(
         eq(userOrganizations.userId, userId),
         eq(userOrganizations.organizationId, organizationId)
       ));
 
-    if (existing.length > 0) {
-      // Update existing role instead of creating duplicate
-      const [updated] = await db.update(userOrganizations)
-        .set({ role })
-        .where(and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
-        ))
-        .returning();
-      return updated;
-    }
-
-    // Note: User roles are managed through userOrganizations, not directly on users table
-
+    // Insert the new single role
     const [userOrg] = await db.insert(userOrganizations).values({
       userId,
       organizationId,

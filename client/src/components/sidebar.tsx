@@ -107,13 +107,13 @@ export default function Sidebar() {
     return null;
   }
 
-  // Get user's primary role from their first organization (or 'athlete' fallback)
+  // Get user's organizations for context
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
-    enabled: !!userData.id,
+    enabled: !!userData.id && !userData.isSiteAdmin,
   });
 
-  // Use the single role from user data
+  // Use the role from user session data
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
 

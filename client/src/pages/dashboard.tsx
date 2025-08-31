@@ -12,26 +12,19 @@ export default function Dashboard() {
   const { user, organizationContext } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Get user's primary role to check access
-  const { data: userOrganizations } = useQuery({
-    queryKey: ["/api/auth/me/organizations"],
-    enabled: !!user?.id && !user?.isSiteAdmin,
-  });
-
-  // Use session role as primary source, fallback to organization role, then 'athlete'
-  const primaryRole = user?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
+  // Use role from user session data
+  const userRole = user?.role || 'athlete';
   const isSiteAdmin = user?.isSiteAdmin || false;
 
   // Redirect athletes away from organization dashboard
   useEffect(() => {
-    if (!isSiteAdmin && primaryRole === "athlete") {
-      const playerId = user?.playerId || user?.id;
-      setLocation(`/athletes/${playerId}`);
+    if (!isSiteAdmin && userRole === "athlete") {
+      setLocation(`/athletes/${user?.id}`);
     }
-  }, [isSiteAdmin, primaryRole, user?.id, user?.playerId, setLocation]);
+  }, [isSiteAdmin, userRole, user?.id, setLocation]);
 
   // Don't render dashboard for athletes
-  if (!isSiteAdmin && primaryRole === "athlete") {
+  if (!isSiteAdmin && userRole === "athlete") {
     return null;
   }
 
