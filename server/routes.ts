@@ -1080,12 +1080,12 @@ export function registerRoutes(app: Express) {
 
       if (!userIsSiteAdmin) {
         // Check if measurement's player is in user's organization
-        const player = await storage.getPlayer(measurement.playerId);
+        const player = await storage.getPlayer(measurement.userId);
         if (!player) {
           return res.status(404).json({ message: "Player not found" });
         }
 
-        const playerTeams = await storage.getPlayerTeams(measurement.playerId);
+        const playerTeams = await storage.getPlayerTeams(measurement.userId);
         const teams = await storage.getTeams();
         const playerOrganizations = playerTeams
           .map(pt => teams.find(t => t.id === pt.teamId))
