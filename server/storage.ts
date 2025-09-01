@@ -902,6 +902,7 @@ export class DatabaseStorage implements IStorage {
     const [newUser] = await db.insert(users).values({
       username,
       email,
+      emails: player.emails || [email], // Ensure emails array is always provided
       firstName: player.firstName,
       lastName: player.lastName,
       birthDate: player.birthday || player.birthDate,
@@ -911,6 +912,8 @@ export class DatabaseStorage implements IStorage {
       phoneNumbers: player.phoneNumbers,
       height: player.height,
       weight: player.weight,
+      fullName: `${player.firstName} ${player.lastName}`,
+      birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : undefined,
       // role: "athlete", // Role field doesn't exist on users table
       password: "INVITATION_PENDING", // Will be set when they accept invitation
       isActive: "true"
