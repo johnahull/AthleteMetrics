@@ -761,12 +761,16 @@ export class DatabaseStorage implements IStorage {
     birthYearTo?: number;
     search?: string;
   }): Promise<User[]> {
-    // For "none" team filter, use a simpler query
+    // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
       const conditions = [eq(userOrganizations.role, 'athlete')];
 
+      // Organization filter is required for "none" team filter to work properly
       if (filters?.organizationId) {
         conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
+      } else {
+        // If no organization specified, return empty array since we need org context
+        return [];
       }
 
       if (filters?.search) {
@@ -789,7 +793,7 @@ export class DatabaseStorage implements IStorage {
       const result = await db
         .select()
         .from(users)
-        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .where(and(
           ...conditions,
           sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams} WHERE ${userTeams.userId} IS NOT NULL)`
@@ -923,13 +927,15 @@ export class DatabaseStorage implements IStorage {
       isActive: "true"
     }).returning();
 
-    // Add to teams if specified and determine organization from first team
-    let organizationId: string | undefined;
+    // Determine organization for athlete association
+    let organizationId: string | undefined = player.organizationId;
+
+    // Add to teams if specified and determine organization from first team if not already set
     if (player.teamIds && player.teamIds.length > 0) {
       for (const teamId of player.teamIds) {
         await this.addUserToTeam(newUser.id, teamId);
         
-        // Get the organization from the first team to associate the athlete
+        // Get the organization from the first team if not already specified
         if (!organizationId) {
           const team = await this.getTeam(teamId);
           if (team) {
@@ -939,14 +945,11 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // If organizationId is provided directly in player data, use that
-    if (player.organizationId) {
-      organizationId = player.organizationId;
-    }
-
-    // Associate athlete with organization if we have one
+    // Associate athlete with organization (required for proper listing)
     if (organizationId) {
       await this.addUserToOrganization(newUser.id, organizationId, "athlete");
+    } else {
+      console.warn(`Created athlete ${newUser.id} without organization association`);
     }
 
     // Transform to player format for return

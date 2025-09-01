@@ -708,7 +708,7 @@ export default function UserManagement() {
                               </Link>
                             </p>
                             <p className="text-gray-600 text-sm" data-testid={`site-admin-${admin.emails?.[0]?.replace('@admin.local', '') || admin.id}`}>
-                              {admin.emails?.[0]?.replace('@admin.local', '') || 'N/A'} • {admin.role}
+                              {(admin.emails?.[0] || 'N/A').replace('@admin.local', '')} • Site Admin
                             </p>
                           </div>
                         </div>
