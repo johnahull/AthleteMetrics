@@ -1022,16 +1022,21 @@ export function registerRoutes(app: Express) {
 
         // Check if player is in user's organization
         const playerTeams = await storage.getPlayerTeams(measurementData.userId);
-        const teams = await storage.getTeams();
-        const playerOrganizations = playerTeams
-          .map(pt => teams.find(t => t.id === pt.teamId))
-          .filter(Boolean)
-          .map(team => team!.organizationId);
+        const playerOrganizations = playerTeams.map(team => team.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(submittedById);
+        const userOrganizationIds = userOrgs.map(userOrg => userOrg.organizationId);
+        
         const hasAccess = playerOrganizations.some(orgId => 
-          userOrgs.some(userOrg => userOrg.organizationId === orgId)
+          userOrganizationIds.includes(orgId)
         );
+
+        console.log('Measurement access validation:', {
+          playerId: measurementData.userId,
+          playerOrganizations,
+          userOrganizationIds,
+          hasAccess
+        });
 
         if (!hasAccess) {
           return res.status(403).json({ message: "Cannot create measurements for players outside your organization" });
