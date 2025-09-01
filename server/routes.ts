@@ -767,7 +767,14 @@ export function registerRoutes(app: Express) {
         organizationId: orgContextForFiltering,
       };
 
-      const players = await storage.getPlayers(filters);
+      const athletes = await storage.getAthletes(filters);
+      
+      // Transform athletes to match the expected player format
+      const players = athletes.map(athlete => ({
+        ...athlete,
+        teams: athlete.teams || []
+      }));
+      
       res.json(players);
     } catch (error) {
       console.error("Error fetching players:", error);

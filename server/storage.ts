@@ -801,7 +801,7 @@ export class DatabaseStorage implements IStorage {
       return result.map(row => row.users);
     }
 
-    // For regular queries, select only users and use distinct
+    // For regular queries, get athletes with their team information
     const conditions = [eq(userOrganizations.role, 'athlete')];
 
     if (filters?.birthYearFrom && filters?.birthYearTo) {
@@ -856,7 +856,18 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(asc(users.lastName), asc(users.firstName));
 
-    return result;
+    // Get team information for each athlete
+    const athletesWithTeams = await Promise.all(
+      result.map(async (athlete) => {
+        const athleteTeams = await this.getUserTeams(athlete.id);
+        return {
+          ...athlete,
+          teams: athleteTeams.map(ut => ut.team)
+        };
+      })
+    );
+
+    return athletesWithTeams;
   }
 
   async getAthlete(id: string): Promise<User | undefined> {
