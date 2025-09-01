@@ -236,7 +236,8 @@ export function registerRoutes(app: Express) {
 
         req.session.user = {
           id: user.id,
-          email: user.emails[0], // Use first email for backward compatibility in session
+          username: user.username,
+          email: user.emails?.[0] || `${user.username}@temp.local`, // Use first email for backward compatibility in session
           firstName: user.firstName,
           lastName: user.lastName,
           role: userRole,
@@ -246,7 +247,7 @@ export function registerRoutes(app: Express) {
         };
 
         // Add debugging info for role issues
-        console.log(`Login successful for user ${user.emails[0]} (${user.id}):`, {
+        console.log(`Login successful for user ${user.emails?.[0] || `${user.username}@temp.local` } (${user.id}):`, {
           isSiteAdmin: user.isSiteAdmin,
           determinedRole: userRole,
           userOrgsCount: userOrgs ? userOrgs.length : 0,
@@ -360,7 +361,8 @@ export function registerRoutes(app: Express) {
       };
       req.session.user = {
         id: targetUser.id,
-        email: targetUser.emails[0], // Use first email for backward compatibility in session
+        username: targetUser.username,
+        email: targetUser.emails?.[0] || `${targetUser.username}@temp.local`, // Use first email for backward compatibility in session
         firstName: targetUser.firstName,
         lastName: targetUser.lastName,
         role: targetRole,
@@ -547,7 +549,7 @@ export function registerRoutes(app: Express) {
   // Team routes with basic organization support
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
-      const { organizationId } = req.query;
+      const {organizationId} = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1330,7 +1332,7 @@ export function registerRoutes(app: Express) {
       req.session.user = {
         id: result.user.id,
         username: result.user.username,
-        email: result.user.emails[0],
+        email: result.user.emails?.[0] || `${result.user.username}@temp.local`,
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: userRole,
@@ -1716,10 +1718,10 @@ export function registerRoutes(app: Express) {
       res.json({
         user: {
           id: newUser.id,
-          email: newUser.emails[0],
+          email: newUser.emails?.[0] || `${newUser.username}@admin.local`,
           firstName: newUser.firstName,
           lastName: newUser.lastName,
-          role: "site_admin",
+          role: newUser.role,
         },
         message: "Site admin created successfully"
       });
@@ -1992,14 +1994,14 @@ export function registerRoutes(app: Express) {
       // Update session with new data
       req.session.user = {
         ...req.session.user,
-        email: updatedUser.emails[0],
+        email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
       };
 
       res.json({
         id: updatedUser.id,
-        email: updatedUser.emails[0],
+        email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
       });
