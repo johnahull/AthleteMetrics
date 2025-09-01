@@ -74,8 +74,33 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
     }
   }
   
-  if (!row.teamName || !row.teamName.trim()) {
-    errors.push('Team name is required');
+  // Team name is now optional since athletes can be independent
+  
+  // Validate emails format if provided
+  if (row.emails && row.emails.trim()) {
+    const emails = row.emails.split(',').map((e: string) => e.trim());
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = emails.filter((email: string) => !emailRegex.test(email));
+    if (invalidEmails.length > 0) {
+      errors.push(`Invalid email format: ${invalidEmails.join(', ')}`);
+    }
+  }
+  
+  // Validate birth date format if provided
+  if (row.birthDate && row.birthDate.trim()) {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(row.birthDate)) {
+      errors.push('Birth date must be in YYYY-MM-DD format');
+    }
+  }
+  
+  // Validate height and weight if provided
+  if (row.height && (isNaN(parseInt(row.height)) || parseInt(row.height) < 36 || parseInt(row.height) > 84)) {
+    errors.push('Height must be between 36-84 inches');
+  }
+  
+  if (row.weight && (isNaN(parseInt(row.weight)) || parseInt(row.weight) < 50 || parseInt(row.weight) > 400)) {
+    errors.push('Weight must be between 50-400 pounds');
   }
   
   return {
