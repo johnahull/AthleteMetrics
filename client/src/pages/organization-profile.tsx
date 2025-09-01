@@ -426,14 +426,14 @@ export default function OrganizationProfile() {
     queryKey: [`/api/organizations/${id}/profile`],
     enabled: !!id && userHasAccessToOrg,
     staleTime: 0, // Always fetch fresh data
-    cacheTime: 0, // Don't cache at all
+    gcTime: 0, // Don't cache at all (renamed from cacheTime in v5)
     refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
 
   // Auto-redirect non-site admins to their primary organization if they try to access a different one
   useEffect(() => {
-    if (!user?.isSiteAdmin && userOrganizations && userOrganizations.length > 0 && id) {
+    if (!user?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && id) {
       const userBelongsToRequestedOrg = userOrganizations.some((org: any) => org.organizationId === id);
 
       if (!userBelongsToRequestedOrg) {
