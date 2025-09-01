@@ -236,7 +236,6 @@ export function registerRoutes(app: Express) {
 
         req.session.user = {
           id: user.id,
-          username: user.username,
           email: user.emails[0], // Use first email for backward compatibility in session
           firstName: user.firstName,
           lastName: user.lastName,
@@ -1707,20 +1706,20 @@ export function registerRoutes(app: Express) {
 
       const newUser = await storage.createUser({
         username: adminData.username,
-        email: adminData.username + "@admin.local", // Use username as email with dummy domain
+        emails: [adminData.username + "@admin.local"], // Use username as email with dummy domain
         firstName: adminData.firstName,
         lastName: adminData.lastName,
         password: adminData.password,
-        role: "site_admin",
+        isSiteAdmin: "true"
       });
 
       res.json({
         user: {
           id: newUser.id,
-          email: newUser.email,
+          email: newUser.emails[0],
           firstName: newUser.firstName,
           lastName: newUser.lastName,
-          role: newUser.role,
+          role: "site_admin",
         },
         message: "Site admin created successfully"
       });
@@ -1913,7 +1912,7 @@ export function registerRoutes(app: Express) {
           violations.push({
             userId: user.id,
             userName: `${user.firstName} ${user.lastName}`,
-            email: user.email,
+            email: user.emails[0],
             violations: validation.violations
           });
 
@@ -1933,7 +1932,7 @@ export function registerRoutes(app: Express) {
           await db.delete(userOrganizations)
             .where(eq(userOrganizations.userId, user.id));
 
-          for (const [orgId, role] of orgRoleMap.entries()) {
+          for (const [orgId, role] of Array.from(orgRoleMap.entries())) {
             await db.insert(userOrganizations).values({
               userId: user.id,
               organizationId: orgId,
@@ -1993,17 +1992,16 @@ export function registerRoutes(app: Express) {
       // Update session with new data
       req.session.user = {
         ...req.session.user,
-        email: updatedUser.email,
+        email: updatedUser.emails[0],
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
       };
 
       res.json({
         id: updatedUser.id,
-        email: updatedUser.email,
+        email: updatedUser.emails[0],
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
-        role: updatedUser.role,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
