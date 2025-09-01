@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -402,8 +402,10 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
 export default function OrganizationProfile() {
   const { id } = useParams<{ id: string }>();
-  const { toast } = useToast();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+
 
   // Get user's organizations to check if they're an org admin
   const { data: userOrganizations } = useQuery({
@@ -422,7 +424,7 @@ export default function OrganizationProfile() {
   useEffect(() => {
     if (!user?.isSiteAdmin && userOrganizations && userOrganizations.length > 0 && id) {
       const userBelongsToRequestedOrg = userOrganizations.some((org: any) => org.organizationId === id);
-      
+
       if (!userBelongsToRequestedOrg) {
         // Redirect to user's primary organization
         const primaryOrg = userOrganizations[0];
@@ -432,6 +434,14 @@ export default function OrganizationProfile() {
       }
     }
   }, [user, userOrganizations, id, setLocation]);
+
+  // Invalidate organization queries when the ID changes to ensure fresh data
+  useEffect(() => {
+    if (id) {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
+    }
+  }, [id]);
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
@@ -494,7 +504,7 @@ export default function OrganizationProfile() {
   // Function to delete a pending invitation
   const deletePendingUser = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/organizations/${id}/invitations/${invitationId}`, {
+      const response = await fetch(`/api/invitations/${invitationId}`, {
         method: "DELETE",
       });
 
@@ -599,6 +609,11 @@ export default function OrganizationProfile() {
 
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
     queryKey: [`/api/organizations/${id}/profile`],
+    enabled: !!id && userHasAccessToOrg,
+    staleTime: 0, // Always fetch fresh data
+    cacheTime: 0, // Don't cache at all
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   if (isLoading) {
@@ -654,7 +669,7 @@ export default function OrganizationProfile() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
+            <h1 className="text-3xl font-bold text-gray-900" data-testid="organization-title">{organization.name}</h1>
           </div>
           {organization.location && (
             <div className="flex items-center gap-2 text-gray-600">

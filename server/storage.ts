@@ -48,7 +48,7 @@ export interface IStorage {
   createInvitation(invitation: InsertInvitation): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
   updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
-  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User; playerId?: string }>;
+  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
