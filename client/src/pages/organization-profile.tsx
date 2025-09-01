@@ -144,6 +144,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          role: data.roles[0], // Take the first role from the array
           organizationId
         }),
       });
@@ -414,13 +415,20 @@ export default function OrganizationProfile() {
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
   const hasOrgAccess = isOrgAdmin || isCoach;
 
+  // Check if user has access to this specific organization
+  const userHasAccessToOrg = user?.isSiteAdmin || hasOrgAccess;
+
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
     try {
-      const response = await fetch(`/api/organizations/${id}/invitations`, {
+      const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, roles }),
+        body: JSON.stringify({ 
+          email, 
+          role: roles[0], // Take the first role from the array
+          organizationId: id 
+        }),
       });
 
       if (!response.ok) {
@@ -515,14 +523,15 @@ export default function OrganizationProfile() {
   // Function to resend invitation
   const resendInvitation = async (email: string, role: string) => {
     try {
-      const response = await fetch(`/api/organizations/${id}/invitations`, {
+      const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           email,
-          roles: [role],
+          role: role,
+          organizationId: id,
           teamIds: []
         }),
       });
@@ -595,6 +604,17 @@ export default function OrganizationProfile() {
       <div className="container mx-auto p-6">
         <div className="text-center py-12">
           <p className="text-red-600">Failed to load organization profile</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check access control - non-site admins can only view their own organizations
+  if (!userHasAccessToOrg) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-12">
+          <p className="text-red-600">Access denied. You can only view organizations you belong to.</p>
         </div>
       </div>
     );
