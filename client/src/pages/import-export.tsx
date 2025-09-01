@@ -129,10 +129,10 @@ export default function ImportExport() {
     }
   };
 
-  const playersTemplate = `firstName,lastName,birthYear,teamName,school
-Mia,Chen,2009,Lonestar 09G Navy,Westlake HS
-Elise,Ramos,2008,Thunder Elite,Anderson HS
-Jordan,Williams,2009,Lightning 08G,Lake Travis HS`;
+  const playersTemplate = `firstName,lastName,birthDate,birthYear,graduationYear,emails,phoneNumbers,sports,height,weight,school,teamName
+Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","512-555-0123,512-555-4567","Soccer,Track & Field",66,125,Westlake HS,Lonestar 09G Navy
+Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
+Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
   const measurementsTemplate = `firstName,lastName,birthYear,date,metric,value,units,flyInDistance,notes
 Mia,Chen,2009,2025-01-20,FLY10_TIME,1.26,s,20,Electronic gates
@@ -204,13 +204,13 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                     variant="ghost"
                     onClick={() => copyToClipboard(
                       importType === "players" ? playersTemplate : measurementsTemplate,
-                      importType
+                      importType === "players" ? "athletes" : importType
                     )}
                     className="text-primary hover:text-blue-700 text-sm"
                     data-testid="button-download-template"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download {importType} template
+                    Download {importType === "players" ? "athletes" : importType} template
                   </Button>
                 </div>
               </div>
