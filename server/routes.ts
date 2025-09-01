@@ -1332,25 +1332,27 @@ export function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       // Athletes have no access to organization profiles
-      if (currentUser.role === "athlete") {
+      if (currentUser.role === "athlete" && !userIsSiteAdmin) {
         return res.status(403).json({ message: "Athletes cannot access organization profiles" });
       }
 
-      // Check if user has role in this organization (org_admin or coach)
-      const userRoles = await storage.getUserRoles(currentUser.id, id);
-      const hasOrgAccess = userRoles.includes("org_admin") || userRoles.includes("coach");
+      // For non-site admins, check if user belongs to this specific organization
+      if (!userIsSiteAdmin) {
+        const userRoles = await storage.getUserRoles(currentUser.id, id);
+        const hasOrgAccess = userRoles.includes("org_admin") || userRoles.includes("coach");
 
-      if (userIsSiteAdmin || hasOrgAccess) {
-        // Site admins can access any organization, org admins and coaches can access their org
-        const orgProfile = await storage.getOrganizationProfile(id);
-        if (!orgProfile) {
-          return res.status(404).json({ message: "Organization not found" });
+        if (!hasOrgAccess) {
+          return res.status(403).json({ message: "Access denied. You can only view organizations you belong to." });
         }
-        res.json(orgProfile);
-      } else {
-        // Other roles have no access
-        res.status(403).json({ message: "Access denied" });
       }
+
+      // Get organization profile
+      const orgProfile = await storage.getOrganizationProfile(id);
+      if (!orgProfile) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      res.json(orgProfile);
     } catch (error) {
       console.error("Error fetching organization profile:", error);
       res.status(500).json({ message: "Failed to fetch organization profile" });

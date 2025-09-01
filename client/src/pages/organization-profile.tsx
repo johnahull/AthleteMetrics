@@ -415,6 +415,9 @@ export default function OrganizationProfile() {
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
   const hasOrgAccess = isOrgAdmin || isCoach;
 
+  // Check if user has access to this specific organization
+  const userHasAccessToOrg = user?.isSiteAdmin || hasOrgAccess;
+
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
     try {
@@ -601,6 +604,17 @@ export default function OrganizationProfile() {
       <div className="container mx-auto p-6">
         <div className="text-center py-12">
           <p className="text-red-600">Failed to load organization profile</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check access control - non-site admins can only view their own organizations
+  if (!userHasAccessToOrg) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-12">
+          <p className="text-red-600">Access denied. You can only view organizations you belong to.</p>
         </div>
       </div>
     );
