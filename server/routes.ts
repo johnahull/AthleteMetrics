@@ -769,11 +769,19 @@ export function registerRoutes(app: Express) {
 
       const athletes = await storage.getAthletes(filters);
       
-      // Transform athletes to match the expected player format
+      // Transform athletes to match the expected player format and ensure teams are included
       const players = athletes.map(athlete => ({
         ...athlete,
-        teams: athlete.teams || []
+        teams: athlete.teams || [],
+        hasLogin: athlete.password !== "INVITATION_PENDING"
       }));
+      
+      console.log(`Returning ${players.length} athletes with teams:`, players.map(p => ({ 
+        id: p.id, 
+        name: `${p.firstName} ${p.lastName}`, 
+        teamCount: p.teams.length,
+        teamNames: p.teams.map(t => t.name)
+      })));
       
       res.json(players);
     } catch (error) {

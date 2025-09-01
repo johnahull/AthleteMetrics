@@ -316,10 +316,16 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(userTeams.userId, userId));
 
-    return result.map(({ user_teams, teams: team, organizations }) => ({
+    const mappedResult = result.map(({ user_teams, teams: team, organizations }) => ({
       ...user_teams,
       team: { ...team, organization: organizations }
     }));
+
+    if (result.length > 0) {
+      console.log(`User ${userId} has ${result.length} team(s):`, mappedResult.map(r => r.team.name));
+    }
+
+    return mappedResult;
   }
 
   // Organizations
@@ -798,7 +804,19 @@ export class DatabaseStorage implements IStorage {
         ))
         .orderBy(asc(users.lastName), asc(users.firstName));
 
-      return result.map(row => row.users);
+      // Get team information for each athlete (should be empty for "none" filter)
+      const athletesWithTeams = await Promise.all(
+        result.map(async (row) => {
+          const athlete = row.users;
+          const athleteTeams = await this.getUserTeams(athlete.id);
+          return {
+            ...athlete,
+            teams: athleteTeams.map(ut => ut.team)
+          };
+        })
+      );
+
+      return athletesWithTeams;
     }
 
     // For regular queries, get athletes with their team information
@@ -825,11 +843,8 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
 
-    if (filters?.teamId && filters.teamId !== 'none') {
-      conditions.push(eq(userTeams.teamId, filters.teamId));
-    }
-
-    const result = await db
+    // Base query to get all athletes in the organization
+    let athleteQuery = db
       .selectDistinct({
         id: users.id,
         username: users.username,
@@ -851,10 +866,11 @@ export class DatabaseStorage implements IStorage {
         createdAt: users.createdAt
       })
       .from(users)
-      .leftJoin(userTeams, eq(users.id, userTeams.userId))
-      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .orderBy(asc(users.lastName), asc(users.firstName));
+
+    const result = await athleteQuery;
 
     // Get team information for each athlete
     const athletesWithTeams = await Promise.all(
@@ -866,6 +882,13 @@ export class DatabaseStorage implements IStorage {
         };
       })
     );
+
+    // Apply team filter after getting teams
+    if (filters?.teamId && filters.teamId !== 'none') {
+      return athletesWithTeams.filter(athlete => 
+        athlete.teams.some(team => team.id === filters.teamId)
+      );
+    }
 
     return athletesWithTeams;
   }
