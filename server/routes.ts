@@ -3,10 +3,12 @@ import { createServer } from "http";
 import session from "express-session";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
-import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
+import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 // Session configuration
 declare module 'express-session' {
