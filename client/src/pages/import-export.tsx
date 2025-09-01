@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -157,58 +158,13 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">Import & Export Data</h1>
 
-        {/* CSV Format Examples */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Athletes CSV Format */}
-          <Card className="bg-white">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Athletes CSV Format</h3>
-              <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                <code className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
-                  {playersTemplate}
-                </code>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => copyToClipboard(playersTemplate, "athletes")}
-                className="w-full"
-                data-testid="button-copy-athletes-template"
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Athletes Template
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Measurements CSV Format */}
-          <Card className="bg-white">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurements CSV Format</h3>
-              <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                <code className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
-                  {measurementsTemplate}
-                </code>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => copyToClipboard(measurementsTemplate, "measurements")}
-                className="w-full"
-                data-testid="button-copy-measurements-template"
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Measurements Template
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Import Section */}
         <Card className="bg-white mb-8">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Import Data</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Athletes Import */}
+              {/* File Upload */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Athletes" : "Measurements"}</h4>
                 
@@ -366,17 +322,17 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
           </CardContent>
         </Card>
 
-        {/* CSV Templates */}
+        {/* CSV Templates & Examples */}
         <Card className="bg-white mb-8">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">CSV Templates & Examples</h3>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Players Template */}
+              {/* Athletes CSV Format */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Athletes CSV Format</h4>
                 <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm">
-                  <div className="text-gray-600 mb-2"># players.csv</div>
+                  <div className="text-gray-600 mb-2"># athletes.csv</div>
                   <pre className="whitespace-pre-wrap">{playersTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
@@ -384,7 +340,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => copyToClipboard(playersTemplate, "Players")}
+                    onClick={() => copyToClipboard(playersTemplate, "Athletes")}
                     data-testid="button-copy-players-template"
                   >
                     <Copy className="h-4 w-4 mr-1" />
@@ -393,7 +349,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 </div>
               </div>
 
-              {/* Measurements Template */}
+              {/* Measurements CSV Format */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Measurements CSV Format</h4>
                 <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm">
