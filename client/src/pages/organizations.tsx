@@ -80,8 +80,17 @@ export default function Organizations() {
         description: "Now viewing organization-specific data. Use 'Back to Site' to return to site view.",
       });
     } else {
-      // Other users go directly to organization profile
-      setLocation(`/organizations/${orgId}`);
+      // Check if user belongs to this organization before allowing access
+      const userBelongsToOrg = organizations?.some(org => org.id === orgId);
+      if (userBelongsToOrg) {
+        setLocation(`/organizations/${orgId}`);
+      } else {
+        toast({ 
+          title: "Access Denied",
+          description: "You can only access organizations you belong to.",
+          variant: "destructive"
+        });
+      }
     }
   };
 

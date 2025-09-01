@@ -427,11 +427,11 @@ export default function OrganizationProfile() {
         // Redirect to user's primary organization
         const primaryOrg = userOrganizations[0];
         console.log(`Redirecting user from org ${id} to their primary org ${primaryOrg.organizationId}`);
-        window.location.href = `/organizations/${primaryOrg.organizationId}`;
+        setLocation(`/organizations/${primaryOrg.organizationId}`);
         return;
       }
     }
-  }, [user, userOrganizations, id]);
+  }, [user, userOrganizations, id, setLocation]);
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
