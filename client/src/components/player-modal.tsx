@@ -30,20 +30,16 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthday: "",
+      email: "",
+      birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
       school: "",
       sports: [],
-      emails: [],
       phoneNumbers: [],
     },
   });
 
-  const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
-    control: form.control,
-    name: "emails"
-  }) as any;
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
@@ -60,24 +56,24 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: player.firstName,
         lastName: player.lastName,
-        birthday: player.birthday || "",
+        email: player.email,
+        birthDate: player.birthDate || "",
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sports: player.sports || [],
-        emails: player.emails || [],
         phoneNumbers: player.phoneNumbers || [],
       });
     } else {
       form.reset({
         firstName: "",
         lastName: "",
-        birthday: "",
+        email: "",
+        birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
         sports: [],
-        emails: [],
         phoneNumbers: [],
       });
     }
@@ -200,10 +196,32 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               />
             </div>
 
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Email Address <span className="text-red-500">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      type="email"
+                      placeholder="Enter email address"
+                      disabled={isPending}
+                      data-testid="input-player-email"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="birthday"
+                name="birthDate"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
@@ -214,7 +232,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         {...field} 
                         type="date"
                         disabled={isPending}
-                        data-testid="input-player-birthday"
+                        data-testid="input-player-birthdate"
                         value={field.value || ""}
                         placeholder="YYYY-MM-DD"
                         max={new Date().toISOString().split('T')[0]} // Prevent future dates
@@ -343,7 +361,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 Sports
               </FormLabel>
               <div className="space-y-2">
-                {sportsFields.map((field, index) => (
+                {sportsFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
@@ -405,58 +423,6 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
 
-            {/* Email Addresses */}
-            <FormItem>
-              <FormLabel className="flex items-center">
-                <Mail className="h-4 w-4 mr-2" />
-                Email Addresses
-              </FormLabel>
-              <div className="space-y-2">
-                {emailFields.map((field, index) => (
-                  <div key={field.id} className="flex space-x-2">
-                    <FormField
-                      control={form.control}
-                      name={`emails.${index}`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormControl>
-                            <Input 
-                              {...field}
-                              type="email"
-                              placeholder="Enter email address"
-                              disabled={isPending}
-                              data-testid={`input-email-${index}`}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeEmail(index)}
-                      disabled={isPending}
-                      data-testid={`button-remove-email-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => appendEmail("")}
-                  disabled={isPending}
-                  data-testid="button-add-email"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Email
-                </Button>
-              </div>
-            </FormItem>
 
             {/* Phone Numbers */}
             <FormItem>
@@ -465,7 +431,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 Phone Numbers
               </FormLabel>
               <div className="space-y-2">
-                {phoneFields.map((field, index) => (
+                {phoneFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
