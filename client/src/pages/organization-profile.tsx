@@ -846,8 +846,8 @@ export default function OrganizationProfile() {
                         {/* Action Buttons - only for admin users */}
                         {(user?.isSiteAdmin || isOrgAdmin) && (
                           <div className="flex items-center gap-1">
-                            {/* Send Invitation Button - only if no pending invitation */}
-                            {!pendingInvitation && (
+                            {/* Send Invitation Button - only show if user is not active (no invitation needed for active users) */}
+                            {!pendingInvitation && coach.user.isActive !== "true" && (
                               <Button
                                 size="sm"
                                 variant="outline"
