@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -402,8 +402,10 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
 export default function OrganizationProfile() {
   const { id } = useParams<{ id: string }>();
-  const { toast } = useToast();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+
 
   // Get user's organizations to check if they're an org admin
   const { data: userOrganizations } = useQuery({
@@ -422,7 +424,7 @@ export default function OrganizationProfile() {
   useEffect(() => {
     if (!user?.isSiteAdmin && userOrganizations && userOrganizations.length > 0 && id) {
       const userBelongsToRequestedOrg = userOrganizations.some((org: any) => org.organizationId === id);
-      
+
       if (!userBelongsToRequestedOrg) {
         // Redirect to user's primary organization
         const primaryOrg = userOrganizations[0];
