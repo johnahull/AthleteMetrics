@@ -327,7 +327,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">CSV Templates & Examples</h3>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-8">
               {/* Athletes CSV Format */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Athletes CSV Format</h4>
@@ -336,7 +336,10 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <pre className="whitespace-pre-wrap">{playersTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: firstName, lastName, birthYear, teamName</span>
+                  <span className="text-xs text-gray-500">
+                    <span className="font-medium">Required:</span> firstName, lastName, birthYear (1990-2020) • 
+                    <span className="font-medium">Optional:</span> teamName, birthDate (YYYY-MM-DD), graduationYear, emails, phoneNumbers, sports, height (36-84 in), weight (50-400 lbs), school
+                  </span>
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -357,7 +360,10 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <pre className="whitespace-pre-wrap">{measurementsTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: firstName, lastName, birthYear, date, metric, value • Optional: flyInDistance (for fly 10 times)</span>
+                  <span className="text-xs text-gray-500">
+                    <span className="font-medium">Required:</span> firstName, lastName, birthYear (1990-2020), date (YYYY-MM-DD), age (10-25), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
+                    <span className="font-medium">Optional:</span> units (s/in), flyInDistance, notes
+                  </span>
                   <Button 
                     variant="ghost" 
                     size="sm"
