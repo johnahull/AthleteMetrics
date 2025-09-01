@@ -421,6 +421,16 @@ export default function OrganizationProfile() {
   // Check if user has access to this specific organization
   const userHasAccessToOrg = user?.isSiteAdmin || hasOrgAccess;
 
+  // Fetch organization data - needs to be declared before useEffect hooks that use it
+  const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
+    queryKey: [`/api/organizations/${id}/profile`],
+    enabled: !!id && userHasAccessToOrg,
+    staleTime: 0, // Always fetch fresh data
+    cacheTime: 0, // Don't cache at all
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+  });
+
   // Auto-redirect non-site admins to their primary organization if they try to access a different one
   useEffect(() => {
     if (!user?.isSiteAdmin && userOrganizations && userOrganizations.length > 0 && id) {
@@ -639,15 +649,6 @@ export default function OrganizationProfile() {
       }
     }
   };
-
-  const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
-    queryKey: [`/api/organizations/${id}/profile`],
-    enabled: !!id && userHasAccessToOrg,
-    staleTime: 0, // Always fetch fresh data
-    cacheTime: 0, // Don't cache at all
-    refetchOnMount: true,
-    refetchOnWindowFocus: false,
-  });
 
   if (isLoading) {
     return (
