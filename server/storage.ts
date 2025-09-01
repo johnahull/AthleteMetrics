@@ -123,7 +123,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -131,7 +131,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
     return user || undefined;
   }
 

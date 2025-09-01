@@ -158,10 +158,11 @@ async function initializeDefaultUser() {
       await storage.createUser({
         username: "admin",
         email: adminEmail,
+        emails: [adminEmail],
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
-        role: "site_admin"
+        isSiteAdmin: "true"
       });
     }
   } catch (error) {
