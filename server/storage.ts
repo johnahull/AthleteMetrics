@@ -410,7 +410,7 @@ export class DatabaseStorage implements IStorage {
     return {
       ...organization,
       coaches,
-      players,
+      players: players as any,
       invitations: organizationInvitations
     };
   }
@@ -636,7 +636,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Check for violations
-    for (const [orgId, roles] of orgRoleMap.entries()) {
+    for (const [orgId, roles] of Array.from(orgRoleMap.entries())) {
       if (roles.length > 1) {
         const org = await this.getOrganization(orgId);
         violations.push(`User has ${roles.length} roles in organization "${org?.name || orgId}": ${roles.join(', ')}`);
@@ -714,8 +714,7 @@ export class DatabaseStorage implements IStorage {
         emails: [invitation.email],
         password: userInfo.password,
         firstName: userInfo.firstName,
-        lastName: userInfo.lastName,
-        role: invitation.role
+        lastName: userInfo.lastName
       };
 
       user = await this.createUser(createUserData);
@@ -910,7 +909,7 @@ export class DatabaseStorage implements IStorage {
       emails, // Ensure emails array is always provided
       firstName: player.firstName,
       lastName: player.lastName,
-      birthDate: player.birthday || player.birthDate,
+      birthDate: player.birthDate,
       graduationYear: player.graduationYear,
       school: player.school,
       sports: player.sports,
@@ -959,9 +958,9 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Calculate birth year if birthday changed
-    if (player.birthday) {
-      updateData.birthYear = new Date(player.birthday).getFullYear();
+    // Calculate birth year if birthDate changed
+    if (player.birthDate) {
+      updateData.birthYear = new Date(player.birthDate).getFullYear();
     }
 
     const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
@@ -1024,9 +1023,8 @@ export class DatabaseStorage implements IStorage {
     return {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
-      birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
-      teams: []
-    };
+      birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0
+    } as any;
   }
 
   // Player Teams (now using userTeams)
@@ -1087,7 +1085,9 @@ export class DatabaseStorage implements IStorage {
     const conditions = [];
     if (filters?.userId || filters?.playerId) {
       const targetUserId = filters.userId || filters.playerId;
-      conditions.push(eq(measurements.userId, targetUserId));
+      if (targetUserId) {
+        conditions.push(eq(measurements.userId, targetUserId));
+      }
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));
