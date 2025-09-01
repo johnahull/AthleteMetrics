@@ -464,18 +464,39 @@ export default function OrganizationProfile() {
     };
   }, [organization?.name]);
 
-  // Debug: Log organization data
+  // Debug: Log organization data and compare with sidebar data
   useEffect(() => {
     if (organization) {
-      console.log('Organization data loaded:', {
+      console.log('=== ORGANIZATION DATA COMPARISON ===');
+      console.log('Page title data (from /api/organizations/${id}/profile):', {
         id: organization.id,
         name: organization.name,
         description: organization.description,
         coaches: organization.coaches.length,
         players: organization.players.length
       });
+
+      if (userOrganizations) {
+        const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
+        if (matchingUserOrg) {
+          console.log('Sidebar data (from /api/auth/me/organizations):', {
+            organizationId: matchingUserOrg.organizationId,
+            name: matchingUserOrg.organization.name,
+            role: matchingUserOrg.role
+          });
+
+          if (matchingUserOrg.organization.name !== organization.name) {
+            console.log('❌ DATA MISMATCH DETECTED:');
+            console.log('  - Profile endpoint says:', organization.name);
+            console.log('  - User orgs endpoint says:', matchingUserOrg.organization.name);
+            console.log('  - This suggests the organization name in the database is actually:', organization.name);
+          } else {
+            console.log('✅ Data is consistent between endpoints');
+          }
+        }
+      }
     }
-  }, [organization]);
+  }, [organization, userOrganizations]);
 
   // Force refresh organization data when component mounts
   useEffect(() => {
