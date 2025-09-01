@@ -61,7 +61,14 @@ export default function Dashboard() {
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams"],
+    queryKey: ["/api/analytics/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext
+        ? `/api/analytics/teams?organizationId=${organizationContext}`
+        : `/api/analytics/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   if (isLoading) {
@@ -208,9 +215,12 @@ export default function Dashboard() {
                     }`}></div>
                     <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
                   </div>
-                  <span className="text-sm text-gray-600">{team.playerCount} players</span>
+                  <span className="text-sm text-gray-600">{team.athleteCount} athletes</span>
                 </div>
               ))}
+              {(!teamStats || teamStats.length === 0) && (
+                <p className="text-sm text-gray-500 text-center py-4">No teams found</p>
+              )}
             </div>
           </CardContent>
         </Card>
