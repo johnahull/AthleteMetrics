@@ -1000,10 +1000,11 @@ export function registerRoutes(app: Express) {
 
       // Parse the measurement data and ensure submittedBy is set
       const { submittedBy, ...requestData } = req.body;
-      const measurementData = insertMeasurementSchema.parse({
-        ...requestData,
+      const parsedData = insertMeasurementSchema.parse(requestData);
+      const measurementData = {
+        ...parsedData,
         submittedBy: currentUser.id  // Always use current user's ID
-      });
+      };
 
       // Validate user can access the player being measured
       const userIsSiteAdmin = isSiteAdmin(currentUser);
