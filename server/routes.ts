@@ -768,21 +768,21 @@ export function registerRoutes(app: Express) {
       };
 
       const athletes = await storage.getAthletes(filters);
-      
+
       // Transform athletes to match the expected player format and ensure teams are included
       const players = athletes.map(athlete => ({
         ...athlete,
         teams: athlete.teams || [],
         hasLogin: athlete.password !== "INVITATION_PENDING"
       }));
-      
+
       console.log(`Returning ${players.length} athletes with teams:`, players.map(p => ({ 
         id: p.id, 
         name: `${p.firstName} ${p.lastName}`, 
         teamCount: p.teams.length,
         teamNames: p.teams.map(t => t.name)
       })));
-      
+
       res.json(players);
     } catch (error) {
       console.error("Error fetching players:", error);
@@ -815,7 +815,7 @@ export function registerRoutes(app: Express) {
         // Coaches and org admins can only view players from their organization
         // Check if user has access to the same organization as the player
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        
+
         if (userOrgs.length === 0) {
           return res.status(403).json({ message: "Access denied - no organization access" });
         }
@@ -860,9 +860,9 @@ export function registerRoutes(app: Express) {
       }
 
       const playerData = insertPlayerSchema.parse(req.body);
-      
+
       console.log('Received player data in API:', playerData);
-      
+
       // Add organization context for non-site admins
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin && currentUser?.primaryOrganizationId) {
@@ -870,9 +870,9 @@ export function registerRoutes(app: Express) {
       }
 
       const player = await storage.createPlayer(playerData);
-      
+
       console.log('Created player:', { id: player.id, teamIds: playerData.teamIds });
-      
+
       res.status(201).json(player);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1122,17 +1122,36 @@ export function registerRoutes(app: Express) {
       const currentUser = req.session.user;
       const requestedOrgId = req.query.organizationId as string;
 
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       // Determine organization context based on user role
       let organizationId: string | undefined;
 
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        // Site admin can request specific org stats or site-wide stats
-        organizationId = requestedOrgId || undefined;
+        // Site admin can request specific org stats
+        organizationId = requestedOrgId;
+        // For site admins, if no organization specified, require it to prevent accidental data exposure
+        if (!organizationId) {
+          return res.status(400).json({ message: "Organization ID required for dashboard statistics" });
+        }
       } else {
         // Org admins and coaches see their organization stats only
         organizationId = currentUser.primaryOrganizationId;
+        if (!organizationId) {
+          return res.status(400).json({ message: "User not associated with any organization" });
+        }
+
+        // Validate user has access to requested organization if different from primary
+        if (requestedOrgId && requestedOrgId !== organizationId) {
+          if (!await canAccessOrganization(currentUser, requestedOrgId)) {
+            return res.status(403).json({ message: "Access denied to requested organization" });
+          }
+          organizationId = requestedOrgId;
+        }
       }
 
       const stats = await storage.getDashboardStats(organizationId);
@@ -1145,7 +1164,41 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/analytics/teams", requireAuth, async (req, res) => {
     try {
-      const teamStats = await storage.getTeamStats();
+      const currentUser = req.session.user;
+      const requestedOrgId = req.query.organizationId as string;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Determine organization context based on user role
+      let organizationId: string | undefined;
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      if (userIsSiteAdmin) {
+        // Site admin can request specific org stats, but require organization context to prevent data leakage
+        organizationId = requestedOrgId;
+        if (!organizationId) {
+          return res.status(400).json({ message: "Organization ID required for team statistics" });
+        }
+      } else {
+        // Non-site admins see their organization stats only
+        organizationId = currentUser.primaryOrganizationId;
+        if (!organizationId) {
+          return res.json([]); // No organization context, return empty stats
+        }
+
+        // Validate user has access to requested organization if different from primary
+        if (requestedOrgId && requestedOrgId !== organizationId) {
+          if (!await canAccessOrganization(currentUser, requestedOrgId)) {
+            return res.status(403).json({ message: "Access denied to requested organization" });
+          }
+          organizationId = requestedOrgId;
+        }
+      }
+
+      const teamStats = await storage.getTeamStats(organizationId);
       res.json(teamStats);
     } catch (error) {
       console.error("Error fetching team stats:", error);

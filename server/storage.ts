@@ -615,7 +615,7 @@ export class DatabaseStorage implements IStorage {
         userId,
         teamId
       }).returning();
-      
+
       console.log(`Successfully added user ${userId} to team ${teamId}`);
       return userTeam;
     } catch (error) {
@@ -971,7 +971,7 @@ export class DatabaseStorage implements IStorage {
         } catch (error) {
           console.error(`Failed to add athlete ${newUser.id} to team ${teamId}:`, error);
         }
-        
+
         // Get the organization from the first team if not already specified
         if (!organizationId) {
           const team = await this.getTeam(teamId);
@@ -1353,12 +1353,22 @@ export class DatabaseStorage implements IStorage {
     bestVertical?: number;
     latestTest?: string;
   }>> {
+    // Always require organization context for team stats to prevent cross-org data leakage
+    if (!organizationId) {
+      return [];
+    }
+
     const teams = await this.getTeams(organizationId);
 
     const teamStats = await Promise.all(
       teams.map(async (team) => {
-        const athletes = await this.getAthletes({ teamId: team.id });
-        const measurements = await this.getMeasurements({ teamIds: [team.id], includeUnverified: false });
+        // Ensure athletes are filtered by organization as well
+        const athletes = await this.getAthletes({ teamId: team.id, organizationId: team.organizationId });
+        const measurements = await this.getMeasurements({ 
+          teamIds: [team.id], 
+          organizationId: team.organizationId,
+          includeUnverified: false 
+        });
 
         const fly10Times = measurements
           .filter(m => m.metric === "FLY10_TIME")
