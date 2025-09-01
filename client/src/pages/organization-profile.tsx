@@ -49,6 +49,7 @@ type OrganizationProfile = {
       firstName: string;
       lastName: string;
       email: string;
+      isActive?: string;
     };
     roles: string[];
   }>;
@@ -438,6 +439,38 @@ export default function OrganizationProfile() {
   // Invalidate organization queries when the ID changes to ensure fresh data
   useEffect(() => {
     if (id) {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
+    }
+  }, [id]);
+
+  // Update document title when organization data loads
+  useEffect(() => {
+    if (organization?.name) {
+      document.title = `${organization.name} - Performance Hub`;
+    }
+    return () => {
+      document.title = "Performance Hub";
+    };
+  }, [organization?.name]);
+
+  // Debug: Log organization data
+  useEffect(() => {
+    if (organization) {
+      console.log('Organization data loaded:', {
+        id: organization.id,
+        name: organization.name,
+        description: organization.description,
+        coaches: organization.coaches.length,
+        players: organization.players.length
+      });
+    }
+  }, [organization]);
+
+  // Force refresh organization data when component mounts
+  useEffect(() => {
+    if (id) {
+      console.log('Force refreshing organization data for ID:', id);
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
     }
