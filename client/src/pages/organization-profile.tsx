@@ -412,6 +412,10 @@ export default function OrganizationProfile() {
   const { data: userOrganizations } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache at all
+    refetchOnMount: true,
+    refetchOnWindowFocus: true, // Enable refetch on focus
   });
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
@@ -428,7 +432,9 @@ export default function OrganizationProfile() {
     staleTime: 0, // Always fetch fresh data
     gcTime: 0, // Don't cache at all (renamed from cacheTime in v5)
     refetchOnMount: true,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true, // Enable refetch on focus to catch updates
+    refetchInterval: false, // Disable automatic polling
+    retry: 2, // Retry failed requests
   });
 
   // Auto-redirect non-site admins to their primary organization if they try to access a different one
@@ -464,18 +470,39 @@ export default function OrganizationProfile() {
     };
   }, [organization?.name]);
 
-  // Debug: Log organization data
+  // Debug: Log organization data and compare with sidebar data
   useEffect(() => {
     if (organization) {
-      console.log('Organization data loaded:', {
+      console.log('=== ORGANIZATION DATA COMPARISON ===');
+      console.log('Page title data (from /api/organizations/${id}/profile):', {
         id: organization.id,
         name: organization.name,
         description: organization.description,
         coaches: organization.coaches.length,
         players: organization.players.length
       });
+
+      if (userOrganizations) {
+        const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
+        if (matchingUserOrg) {
+          console.log('Sidebar data (from /api/auth/me/organizations):', {
+            organizationId: matchingUserOrg.organizationId,
+            name: matchingUserOrg.organization.name,
+            role: matchingUserOrg.role
+          });
+
+          if (matchingUserOrg.organization.name !== organization.name) {
+            console.log('❌ DATA MISMATCH DETECTED:');
+            console.log('  - Profile endpoint says:', organization.name);
+            console.log('  - User orgs endpoint says:', matchingUserOrg.organization.name);
+            console.log('  - This suggests the organization name in the database is actually:', organization.name);
+          } else {
+            console.log('✅ Data is consistent between endpoints');
+          }
+        }
+      }
     }
-  }, [organization]);
+  }, [organization, userOrganizations]);
 
   // Force refresh organization data when component mounts
   useEffect(() => {
@@ -483,8 +510,28 @@ export default function OrganizationProfile() {
       console.log('Force refreshing organization data for ID:', id);
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
+      // Also invalidate user organizations to sync sidebar data
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me/organizations"] });
     }
   }, [id]);
+
+  // Additional cache refresh when userOrganizations loads but organization name doesn't match
+  useEffect(() => {
+    if (organization && userOrganizations && id) {
+      const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
+      if (matchingUserOrg && matchingUserOrg.organization.name !== organization.name) {
+        console.log('Detected data mismatch, refreshing all organization caches...');
+        // Force refresh both endpoints
+        queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me/organizations"] });
+        // Refetch after a short delay to allow cache clear
+        setTimeout(() => {
+          queryClient.refetchQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+          queryClient.refetchQueries({ queryKey: ["/api/auth/me/organizations"] });
+        }, 100);
+      }
+    }
+  }, [organization, userOrganizations, id]);
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
