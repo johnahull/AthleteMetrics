@@ -545,7 +545,39 @@ export function registerRoutes(app: Express) {
   // Team routes with basic organization support
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
-      const teams = await storage.getTeams();
+      const { organizationId } = req.query;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Determine organization context for filtering
+      let orgContextForFiltering: string | undefined;
+
+      if (userIsSiteAdmin) {
+        // Site admins can request specific org or all teams
+        orgContextForFiltering = organizationId as string;
+      } else {
+        // Non-site admins should only see teams from their organization
+        const requestedOrgId = organizationId as string;
+        if (requestedOrgId) {
+          if (!await canAccessOrganization(currentUser, requestedOrgId)) {
+            return res.status(403).json({ message: "Access denied to this organization" });
+          }
+          orgContextForFiltering = requestedOrgId;
+        } else {
+          // Use user's primary organization
+          if (!currentUser.primaryOrganizationId) {
+            return res.json([]); // No primary org, so no teams to show
+          }
+          orgContextForFiltering = currentUser.primaryOrganizationId;
+        }
+      }
+
+      const teams = await storage.getTeams(orgContextForFiltering);
       res.json(teams);
     } catch (error) {
       console.error("Error fetching teams:", error);
@@ -598,6 +630,81 @@ export function registerRoutes(app: Express) {
         console.error("Error creating team:", error);
         res.status(500).json({ message: "Failed to create team" });
       }
+    }
+  });
+
+  app.patch("/api/teams/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot edit teams
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot edit teams" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(id);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      const teamData = insertTeamSchema.partial().parse(req.body);
+      const updatedTeam = await storage.updateTeam(id, teamData);
+      res.json(updatedTeam);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error updating team:", error);
+        res.status(500).json({ message: "Failed to update team" });
+      }
+    }
+  });
+
+  app.delete("/api/teams/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot delete teams
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot delete teams" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(id);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      await storage.deleteTeam(id);
+      res.json({ message: "Team deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting team:", error);
+      res.status(500).json({ message: "Failed to delete team" });
     }
   });
 

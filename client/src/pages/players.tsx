@@ -166,8 +166,8 @@ export default function Players() {
 
   // Delete invitation mutation
   const deleteInvitationMutation = useMutation({
-    mutationFn: async ({ organizationId, invitationId }: { organizationId: string; invitationId: string }) => {
-      await apiRequest("DELETE", `/api/organizations/${organizationId}/invitations/${invitationId}`);
+    mutationFn: async ({ invitationId }: { invitationId: string }) => {
+      await apiRequest("DELETE", `/api/invitations/${invitationId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
@@ -229,13 +229,8 @@ export default function Players() {
   };
 
   const handleDeleteInvitation = (invitationId: string) => {
-    if (!userOrgs || userOrgs.length === 0) return;
-    
-    const orgId = userOrgs[0]?.organization?.id;
-    if (!orgId) return;
-    
     if (window.confirm('Are you sure you want to delete this invitation?')) {
-      deleteInvitationMutation.mutate({ organizationId: orgId, invitationId });
+      deleteInvitationMutation.mutate({ invitationId });
     }
   };
 
