@@ -1015,13 +1015,13 @@ export function registerRoutes(app: Express) {
       // Validate user can access the player being measured
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin) {
-        const player = await storage.getPlayer(measurementData.playerId);
+        const player = await storage.getPlayer(measurementData.userId);
         if (!player) {
           return res.status(404).json({ message: "Player not found" });
         }
 
         // Check if player is in user's organization
-        const playerTeams = await storage.getPlayerTeams(measurementData.playerId);
+        const playerTeams = await storage.getPlayerTeams(measurementData.userId);
         const teams = await storage.getTeams();
         const playerOrganizations = playerTeams
           .map(pt => teams.find(t => t.id === pt.teamId))

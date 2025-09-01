@@ -273,9 +273,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   units: true,
   verifiedBy: true,
   isVerified: true,
+  submittedBy: true, // Backend handles this automatically based on session
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
-  submittedBy: z.string().min(1, "Submitted by is required"),
   date: z.string().min(1, "Date is required"),
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"]),
   value: z.number().positive("Value must be positive"),
