@@ -168,13 +168,13 @@ export default function UserManagement() {
 
       if (data.inviteLink) {
         navigator.clipboard.writeText(data.inviteLink);
-        toast({ 
-          title: "Invitation sent successfully!", 
+        toast({
+          title: "Invitation sent successfully!",
           description: `Invitation link copied to clipboard. ${data.email} will receive access once they accept the invitation.`
         });
       } else {
-        toast({ 
-          title: "Invitation created successfully!", 
+        toast({
+          title: "Invitation created successfully!",
           description: `Invitation sent to ${data.email}. They will appear in the user list once they accept the invitation.`
         });
       }
@@ -187,10 +187,10 @@ export default function UserManagement() {
       }
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error sending invitation", 
+      toast({
+        title: "Error sending invitation",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -204,18 +204,18 @@ export default function UserManagement() {
       // Refresh the site admins list
       queryClient.invalidateQueries({ queryKey: ["/api/site-admins"] });
 
-      toast({ 
-        title: "Site admin created successfully!", 
+      toast({
+        title: "Site admin created successfully!",
         description: `${data.user.firstName} ${data.user.lastName} has been created as a site admin.`
       });
       setSiteAdminDialogOpen(false);
       siteAdminForm.reset();
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error creating site admin", 
+      toast({
+        title: "Error creating site admin",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -230,10 +230,10 @@ export default function UserManagement() {
       toast({ title: "User role updated successfully!" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error updating user role", 
+      toast({
+        title: "Error updating user role",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -248,10 +248,10 @@ export default function UserManagement() {
       toast({ title: "User deleted successfully!" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error deleting user", 
+      toast({
+        title: "Error deleting user",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -263,16 +263,16 @@ export default function UserManagement() {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
-      toast({ 
-        title: "User status updated!", 
+      toast({
+        title: "User status updated!",
         description: `User has been ${variables.isActive ? 'activated' : 'deactivated'}`
       });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error updating user status", 
+      toast({
+        title: "Error updating user status",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -557,8 +557,8 @@ export default function UserManagement() {
                         >
                           Cancel
                         </Button>
-                        <Button 
-                          type="submit" 
+                        <Button
+                          type="submit"
                           disabled={sendInviteMutation.isPending}
                           data-testid="submit-invite-button"
                         >
@@ -648,11 +648,11 @@ export default function UserManagement() {
                                 <FormItem>
                                   <FormLabel>Password</FormLabel>
                                   <FormControl>
-                                    <Input 
-                                      type="password" 
-                                      placeholder="Min 12 chars, uppercase, lowercase, number, special char" 
-                                      {...field} 
-                                      data-testid="site-admin-password-input" 
+                                    <Input
+                                      type="password"
+                                      placeholder="Min 12 chars, uppercase, lowercase, number, special char"
+                                      {...field}
+                                      data-testid="site-admin-password-input"
                                     />
                                   </FormControl>
                                   <div className="text-xs text-gray-500 mt-1">
@@ -672,8 +672,8 @@ export default function UserManagement() {
                               >
                                 Cancel
                               </Button>
-                              <Button 
-                                type="submit" 
+                              <Button
+                                type="submit"
                                 disabled={createSiteAdminMutation.isPending}
                                 data-testid="submit-site-admin-button"
                               >
@@ -690,8 +690,8 @@ export default function UserManagement() {
                 <div className="space-y-2">
                   {/* Active Site Admins */}
                   {siteAdmins.map((admin) => (
-                    <div 
-                      key={admin.id} 
+                    <div
+                      key={admin.id}
                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
                     >
                       <div className="flex-1">
@@ -758,8 +758,8 @@ export default function UserManagement() {
                   <div className="space-y-2">
                     {/* Active Users */}
                     {org.users?.map((userOrg) => (
-                      <div 
-                        key={userOrg.id} 
+                      <div
+                        key={userOrg.id}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
                       >
                         <div className="flex-1">
@@ -788,7 +788,7 @@ export default function UserManagement() {
 
                                   // Validate role transitions
                                   if ((currentRole === 'athlete' && (newRole === 'coach' || newRole === 'org_admin')) ||
-                                      ((currentRole === 'coach' || currentRole === 'org_admin') && newRole === 'athlete')) {
+                                    ((currentRole === 'coach' || currentRole === 'org_admin') && newRole === 'athlete')) {
                                     if (!confirm('Athletes cannot be coaches or admins, and coaches/admins cannot be athletes. Are you sure you want to change this role?')) {
                                       return;
                                     }
@@ -820,6 +820,25 @@ export default function UserManagement() {
                               data-testid={`user-impersonate-${userOrg.user.id}`}
                             >
                               <UserCheck className="h-4 w-4 text-blue-600" />
+                            </Button>
+                          )}
+
+                          {/* Generate new invitation link button - only show for inactive users */}
+                          {userOrg.user.isActive !== "true" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateInviteLink(
+                                userOrg.user.email,
+                                userOrg.user.firstName,
+                                userOrg.user.lastName,
+                                userOrg.role,
+                                org.id
+                              )}
+                              title="Generate new invitation link"
+                              data-testid={`user-generate-invite-${userOrg.user.id}`}
+                            >
+                              <LinkIcon className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
                           <Button
@@ -860,8 +879,8 @@ export default function UserManagement() {
                       const isUsed = invitation.isUsed === "true";
 
                       return (
-                        <div 
-                          key={invitation.id} 
+                        <div
+                          key={invitation.id}
                           className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200"
                         >
                           <div className="flex-1">
@@ -878,7 +897,7 @@ export default function UserManagement() {
                                   {invitation.email}
                                 </p>
                                 <p className="text-sm text-gray-600">
-                                  {invitation.role} • 
+                                  {invitation.role} •
                                   {isUsed ? (
                                     <span className="text-green-600 ml-1">Accepted</span>
                                   ) : isExpired ? (

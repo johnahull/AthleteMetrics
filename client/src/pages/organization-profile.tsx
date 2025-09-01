@@ -16,7 +16,7 @@ import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -417,6 +417,21 @@ export default function OrganizationProfile() {
 
   // Check if user has access to this specific organization
   const userHasAccessToOrg = user?.isSiteAdmin || hasOrgAccess;
+
+  // Auto-redirect non-site admins to their primary organization if they try to access a different one
+  useEffect(() => {
+    if (!user?.isSiteAdmin && userOrganizations && userOrganizations.length > 0 && id) {
+      const userBelongsToRequestedOrg = userOrganizations.some((org: any) => org.organizationId === id);
+      
+      if (!userBelongsToRequestedOrg) {
+        // Redirect to user's primary organization
+        const primaryOrg = userOrganizations[0];
+        console.log(`Redirecting user from org ${id} to their primary org ${primaryOrg.organizationId}`);
+        setLocation(`/organizations/${primaryOrg.organizationId}`);
+        return;
+      }
+    }
+  }, [user, userOrganizations, id, setLocation]);
 
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
@@ -831,8 +846,8 @@ export default function OrganizationProfile() {
                         {/* Action Buttons - only for admin users */}
                         {(user?.isSiteAdmin || isOrgAdmin) && (
                           <div className="flex items-center gap-1">
-                            {/* Send Invitation Button - only if no pending invitation */}
-                            {!pendingInvitation && (
+                            {/* Send Invitation Button - only show if user is not active (no invitation needed for active users) */}
+                            {!pendingInvitation && coach.user.isActive !== "true" && (
                               <Button
                                 size="sm"
                                 variant="outline"

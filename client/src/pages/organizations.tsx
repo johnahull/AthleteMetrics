@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,10 +80,28 @@ export default function Organizations() {
         description: "Now viewing organization-specific data. Use 'Back to Site' to return to site view.",
       });
     } else {
-      // Other users go directly to organization profile
-      setLocation(`/organizations/${orgId}`);
+      // Check if user belongs to this organization before allowing access
+      const userBelongsToOrg = organizations?.some(org => org.id === orgId);
+      if (userBelongsToOrg) {
+        setLocation(`/organizations/${orgId}`);
+      } else {
+        toast({ 
+          title: "Access Denied",
+          description: "You can only access organizations you belong to.",
+          variant: "destructive"
+        });
+      }
     }
   };
+
+  // Auto-redirect non-site admins to their primary organization if they only have one
+  useEffect(() => {
+    if (!user?.isSiteAdmin && organizations && organizations.length === 1) {
+      const primaryOrg = organizations[0];
+      console.log(`Auto-redirecting user to their primary organization: ${primaryOrg.name}`);
+      setLocation(`/organizations/${primaryOrg.id}`);
+    }
+  }, [user, organizations, setLocation]);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
