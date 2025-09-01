@@ -1017,7 +1017,7 @@ export function registerRoutes(app: Express) {
         const playerTeams = await storage.getPlayerTeams(measurementData.userId);
         const playerOrganizations = playerTeams.map(team => team.organization.id);
 
-        const userOrgs = await storage.getUserOrganizations(submittedById);
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const userOrganizationIds = userOrgs.map(userOrg => userOrg.organizationId);
         
         const hasAccess = playerOrganizations.some(orgId => 
