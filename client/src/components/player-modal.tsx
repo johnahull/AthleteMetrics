@@ -161,6 +161,21 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     if (isEditing) {
       updatePlayerMutation.mutate(submissionData);
     } else {
+      const playerData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        birthDate: data.birthDate || undefined,
+        graduationYear: data.graduationYear || undefined,
+        school: data.school || undefined,
+        sports: data.sports?.filter(Boolean) || [],
+        phoneNumbers: data.phoneNumbers?.filter(Boolean) || [],
+        height: data.height || undefined,
+        weight: data.weight || undefined,
+        emails: data.emails?.filter(Boolean) || [],
+        teamIds: data.teamIds?.filter(Boolean) || []
+      };
+
+      console.log('Creating player with data:', playerData);
       createPlayerMutation.mutate(submissionData);
     }
   };
@@ -178,7 +193,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </DialogDescription>
           </DialogHeader>
         </div>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
           <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
@@ -541,7 +556,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </FormItem>
             </div>
           </div>
-          
+
           <div className="px-6 py-4 border-t bg-white flex-shrink-0">
             <div className="flex justify-end space-x-3">
               <Button 

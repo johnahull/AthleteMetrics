@@ -591,11 +591,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
-    const [userTeam] = await db.insert(userTeams).values({
-      userId,
-      teamId
-    }).returning();
-    return userTeam;
+    try {
+      // Check if user is already in this team
+      const existingAssignment = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId)
+        ));
+
+      if (existingAssignment.length > 0) {
+        console.log(`User ${userId} is already in team ${teamId}`);
+        return existingAssignment[0];
+      }
+
+      const [userTeam] = await db.insert(userTeams).values({
+        userId,
+        teamId
+      }).returning();
+      
+      console.log(`Successfully added user ${userId} to team ${teamId}`);
+      return userTeam;
+    } catch (error) {
+      console.error(`Error adding user ${userId} to team ${teamId}:`, error);
+      throw error;
+    }
   }
 
   async removeUserFromOrganization(userId: string, organizationId: string): Promise<void> {
@@ -911,7 +931,12 @@ export class DatabaseStorage implements IStorage {
     // Add to teams if specified and determine organization from first team if not already set
     if (player.teamIds && player.teamIds.length > 0) {
       for (const teamId of player.teamIds) {
-        await this.addUserToTeam(newUser.id, teamId);
+        try {
+          await this.addUserToTeam(newUser.id, teamId);
+          console.log(`Successfully added athlete ${newUser.id} to team ${teamId}`);
+        } catch (error) {
+          console.error(`Failed to add athlete ${newUser.id} to team ${teamId}:`, error);
+        }
         
         // Get the organization from the first team if not already specified
         if (!organizationId) {

@@ -840,6 +840,8 @@ export function registerRoutes(app: Express) {
 
       const playerData = insertPlayerSchema.parse(req.body);
       
+      console.log('Received player data in API:', playerData);
+      
       // Add organization context for non-site admins
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin && currentUser?.primaryOrganizationId) {
@@ -847,6 +849,9 @@ export function registerRoutes(app: Express) {
       }
 
       const player = await storage.createPlayer(playerData);
+      
+      console.log('Created player:', { id: player.id, teamIds: playerData.teamIds });
+      
       res.status(201).json(player);
     } catch (error) {
       if (error instanceof z.ZodError) {
