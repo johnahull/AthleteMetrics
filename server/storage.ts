@@ -687,38 +687,16 @@ export class DatabaseStorage implements IStorage {
     const invitation = await this.getInvitation(token);
     if (!invitation) throw new Error("Invalid or expired invitation");
 
-    // Check if user already exists
-    let user = await this.getUserByEmail(invitation.email);
+    // Always create a new user - email addresses are not unique identifiers for athletes
+    const createUserData = {
+      username: userInfo.username,
+      emails: [invitation.email],
+      password: userInfo.password,
+      firstName: userInfo.firstName,
+      lastName: userInfo.lastName
+    };
 
-    if (user) {
-      // User exists - update their info
-      const updateData: any = {
-        password: await bcrypt.hash(userInfo.password, 10),
-        username: userInfo.username,
-        firstName: userInfo.firstName,
-        lastName: userInfo.lastName,
-        fullName: `${userInfo.firstName} ${userInfo.lastName}`
-      };
-
-      await db.update(users)
-        .set(updateData)
-        .where(sql`${invitation.email} = ANY(${users.emails})`);
-
-      // Get updated user
-      user = await this.getUserByEmail(invitation.email);
-      if (!user) throw new Error("Failed to update existing user");
-    } else {
-      // Create new user
-      const createUserData = {
-        username: userInfo.username,
-        emails: [invitation.email],
-        password: userInfo.password,
-        firstName: userInfo.firstName,
-        lastName: userInfo.lastName
-      };
-
-      user = await this.createUser(createUserData);
-    }
+    const user = await this.createUser(createUserData);
 
     // Add user to organization with the invitation role (this will remove any existing roles first)
     await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);

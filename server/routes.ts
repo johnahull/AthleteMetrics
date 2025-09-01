@@ -1576,23 +1576,8 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Cannot create site administrators" });
       }
 
-      // Check if user already exists with this email
-      let user = await storage.getUserByEmail(parsedUserData.emails[0]);
-
-      if (!user) {
-        // Create new user if they don't exist
-        user = await storage.createUser(parsedUserData);
-      } else {
-        // Update existing user's basic info if needed
-        if (parsedUserData.firstName || parsedUserData.lastName) {
-          await storage.updateUser(user.id, {
-            firstName: parsedUserData.firstName || user.firstName,
-            lastName: parsedUserData.lastName || user.lastName
-          });
-          // Refresh user data
-          user = await storage.getUser(user.id) || user;
-        }
-      }
+      // Always create new user - email addresses are not unique identifiers for athletes
+      const user = await storage.createUser(parsedUserData);
 
       // Add user to organization with the specified role (removes any existing roles first)
       await storage.addUserToOrganization(user.id, organizationId, role);
