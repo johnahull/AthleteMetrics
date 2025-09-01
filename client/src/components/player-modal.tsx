@@ -158,6 +158,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         </div>
         
         <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
           <div className="px-6 py-4 overflow-y-auto" style={{ gridArea: 'content', minHeight: 0 }}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -532,12 +533,12 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 type="submit" 
                 disabled={isPending}
                 data-testid="button-save-player"
-                onClick={form.handleSubmit(onSubmit)}
               >
                 {isPending ? "Saving..." : isEditing ? "Update Player" : "Add Player"}
               </Button>
             </div>
           </div>
+          </form>
         </Form>
       </DialogContent>
     </Dialog>
