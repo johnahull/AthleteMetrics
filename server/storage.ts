@@ -123,7 +123,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -131,7 +131,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
     return user || undefined;
   }
 
@@ -149,8 +149,12 @@ export class DatabaseStorage implements IStorage {
     const fullName = `${user.firstName} ${user.lastName}`;
     const birthYear = user.birthDate ? new Date(user.birthDate).getFullYear() : undefined;
 
+    // Ensure emails array is properly set
+    const emails = user.emails || [`${user.username || 'user'}@temp.local`];
+
     const [newUser] = await db.insert(users).values({
       ...user,
+      emails,
       password: hashedPassword,
       fullName,
       birthYear
@@ -692,12 +696,13 @@ export class DatabaseStorage implements IStorage {
         password: await bcrypt.hash(userInfo.password, 10),
         username: userInfo.username,
         firstName: userInfo.firstName,
-        lastName: userInfo.lastName
+        lastName: userInfo.lastName,
+        fullName: `${userInfo.firstName} ${userInfo.lastName}`
       };
 
       await db.update(users)
         .set(updateData)
-        .where(eq(users.email, invitation.email));
+        .where(sql`${invitation.email} = ANY(${users.emails})`);
 
       // Get updated user
       user = await this.getUserByEmail(invitation.email);
@@ -706,7 +711,8 @@ export class DatabaseStorage implements IStorage {
       // Create new user
       const createUserData = {
         username: userInfo.username,
-        email: userInfo.email,
+        email: invitation.email,
+        emails: [invitation.email],
         password: userInfo.password,
         firstName: userInfo.firstName,
         lastName: userInfo.lastName
@@ -885,7 +891,6 @@ export class DatabaseStorage implements IStorage {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
       birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
-      emails: [user.email],
       teams: userTeams.map(ut => ut.team)
     };
 
@@ -897,11 +902,11 @@ export class DatabaseStorage implements IStorage {
     const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // Use primary email or generate one
-    const email = (player.emails && player.emails.length > 0) ? player.emails[0] : `${username}@temp.local`;
+    const emails = (player.emails && player.emails.length > 0) ? player.emails : [`${username}@temp.local`];
 
     const [newUser] = await db.insert(users).values({
       username,
-      email,
+      emails, // Ensure emails array is always provided
       firstName: player.firstName,
       lastName: player.lastName,
       birthDate: player.birthday || player.birthDate,
@@ -911,6 +916,8 @@ export class DatabaseStorage implements IStorage {
       phoneNumbers: player.phoneNumbers,
       height: player.height,
       weight: player.weight,
+      fullName: `${player.firstName} ${player.lastName}`,
+      birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : undefined,
       // role: "athlete", // Role field doesn't exist on users table
       password: "INVITATION_PENDING", // Will be set when they accept invitation
       isActive: "true"
@@ -963,23 +970,20 @@ export class DatabaseStorage implements IStorage {
       await this.setPlayerTeams(id, player.teamIds);
     }
 
-    // Update any existing user records if name or emails changed
-    if ((player.firstName || player.lastName || player.emails) && finalFirstName && finalLastName) {
-      // Get current player emails (either updated or existing)
-      const currentEmails = player.emails || (await this.getPlayer(id))?.emails || [];
-
-      for (const email of currentEmails) {
-        try {
-          await db.update(users)
-            .set({
-              firstName: finalFirstName,
-              lastName: finalLastName
-            })
-            .where(eq(users.email, email));
-        } catch (error) {
-          // Log but don't fail if user update fails
-          console.log(`Could not update user record for email ${email}:`, error);
-        }
+    // Update any existing user records if name changed
+    if ((player.firstName || player.lastName) && finalFirstName && finalLastName) {
+      // Update the user record directly by ID
+      try {
+        await db.update(users)
+          .set({
+            firstName: finalFirstName,
+            lastName: finalLastName,
+            fullName: `${finalFirstName} ${finalLastName}`
+          })
+          .where(eq(users.id, id));
+      } catch (error) {
+        // Log but don't fail if user update fails
+        console.log(`Could not update user record for ID ${id}:`, error);
       }
     }
 
@@ -1020,7 +1024,6 @@ export class DatabaseStorage implements IStorage {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
       birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
-      emails: [user.email],
       teams: []
     };
   }
@@ -1062,6 +1065,7 @@ export class DatabaseStorage implements IStorage {
   // Measurements
   async getMeasurements(filters?: {
     userId?: string;
+    playerId?: string; // Legacy support
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -1080,8 +1084,9 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(measurements.userId, users.id));
 
     const conditions = [];
-    if (filters?.userId) {
-      conditions.push(eq(measurements.userId, filters.userId));
+    if (filters?.userId || filters?.playerId) {
+      const targetUserId = filters.userId || filters.playerId;
+      conditions.push(eq(measurements.userId, targetUserId));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));

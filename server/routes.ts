@@ -157,12 +157,12 @@ async function initializeDefaultUser() {
     if (!existingUser) {
       await storage.createUser({
         username: "admin",
-        email: adminEmail,
+        emails: [adminEmail],
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
-        role: "site_admin"
-      });
+        isSiteAdmin: "true"
+      } as any);
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
@@ -234,7 +234,7 @@ export function registerRoutes(app: Express) {
         req.session.user = {
           id: user.id,
           username: user.username,
-          email: user.email,
+          email: user.emails[0], // Use first email for backward compatibility in session
           firstName: user.firstName,
           lastName: user.lastName,
           role: userRole,
@@ -358,7 +358,7 @@ export function registerRoutes(app: Express) {
       };
       req.session.user = {
         id: targetUser.id,
-        email: targetUser.email,
+        email: targetUser.emails[0], // Use first email for backward compatibility in session
         firstName: targetUser.firstName,
         lastName: targetUser.lastName,
         role: targetRole,
@@ -747,7 +747,7 @@ export function registerRoutes(app: Express) {
         // Athletes can only see their own player data
         if (currentUser.role === "athlete" && currentUser.playerId) {
           const filters: any = {
-            playerId: currentUser.playerId,
+            userId: currentUser.playerId, // Convert playerId to userId for database query
             organizationId: orgContextForFiltering,
           };
           const players = await storage.getPlayers(filters);
@@ -1543,7 +1543,11 @@ export function registerRoutes(app: Express) {
       }
 
       const { role, ...userData } = req.body;
-      const parsedUserData = insertUserSchema.omit({ role: true }).parse(userData);
+      const { emails, ...otherUserData } = req.body;
+      const parsedUserData = insertUserSchema.omit({ role: true }).parse({
+        ...otherUserData,
+        emails: emails || [otherUserData.email || `${otherUserData.username}@temp.local`]
+      });
 
       // Validate single role
       if (!role || typeof role !== 'string') {

@@ -40,7 +40,7 @@ export default function Analytics() {
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.search.trim()) params.append('search', filters.search.trim());
-      
+
       // Add date filtering based on dateRange
       const now = new Date();
       if (filters.dateRange === "last7") {
@@ -53,7 +53,7 @@ export default function Analytics() {
         const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
         params.append('dateFrom', quarterAgo.toISOString().split('T')[0]);
       }
-      
+
       const response = await fetch(`/api/measurements?${params}`);
       if (!response.ok) throw new Error('Failed to fetch measurements');
       return response.json();
@@ -79,11 +79,11 @@ export default function Analytics() {
 
   const calculatePercentiles = (data: number[], metric: string) => {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
-    
+
     // For time-based metrics, lower values are better, so we need to reverse the percentile logic
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(metric);
     const sorted = [...data].sort((a, b) => a - b);
-    
+
     const getPercentile = (p: number) => {
       let index: number;
       if (isTimeBased) {
@@ -134,12 +134,12 @@ export default function Analytics() {
       <Card className="bg-white mb-6 sticky top-4 z-20">
         <CardContent className="p-6">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search Players</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Athletes</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 type="text"
-                placeholder="Search by player name..."
+                placeholder="Search by athlete name..."
                 value={filters.search}
                 onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 className="pl-10"
@@ -345,17 +345,16 @@ export default function Analytics() {
                         </span>
                         <div>
                           <button 
-                            onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                            onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                             className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                           >
-                            {measurement.player.fullName}
+                            {measurement.user.fullName}
                           </button>
                           <p className="text-xs text-gray-500">
-                            {measurement.player.teams && measurement.player.teams.length > 0 
-                              ? measurement.player.teams.map((team: any) => team.name).join(", ")
-                              : "Independent Player"
-                            }
-                          </p>
+                            {measurement.user.teams && measurement.user.teams.length > 0 
+                              ? measurement.user.teams.map((team: any) => team.name).join(", ")
+                              : "Independent Athlete"
+                            }</p>
                         </div>
                       </div>
                       <span className="font-mono text-sm">{measurement.value}s</span>
@@ -377,17 +376,16 @@ export default function Analytics() {
                         </span>
                         <div>
                           <button 
-                            onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                            onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                             className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                           >
-                            {measurement.player.fullName}
+                            {measurement.user.fullName}
                           </button>
                           <p className="text-xs text-gray-500">
-                            {measurement.player.teams && measurement.player.teams.length > 0 
-                              ? measurement.player.teams.map((team: any) => team.name).join(", ")
-                              : "Independent Player"
-                            }
-                          </p>
+                            {measurement.user.teams && measurement.user.teams.length > 0 
+                              ? measurement.user.teams.map((team: any) => team.name).join(", ")
+                              : "Independent Athlete"
+                            }</p>
                         </div>
                       </div>
                       <span className="font-mono text-sm">{measurement.value}in</span>
@@ -456,15 +454,15 @@ export default function Analytics() {
       <Card className="bg-white mb-6">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">All Players ({measurements?.length || 0} measurements)</h3>
+            <h3 className="text-lg font-semibold text-gray-900">All Athletes ({measurements?.length || 0} measurements)</h3>
           </div>
-          
+
           {measurements && measurements.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr className="text-left text-sm font-medium text-gray-500">
-                    <th className="px-4 py-3">Player</th>
+                    <th className="px-4 py-3">Athlete</th>
                     <th className="px-4 py-3">Team</th>
                     <th className="px-4 py-3">Sport</th>
                     <th className="px-4 py-3">Metric</th>
@@ -480,27 +478,27 @@ export default function Analytics() {
                         <div className="flex items-center space-x-3">
                           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-xs">
-                              {measurement.player.fullName.split(' ').map((n: string) => n[0]).join('')}
+                              {measurement.user.fullName.split(' ').map((n: string) => n[0]).join('')}
                             </span>
                           </div>
                           <div>
                             <button 
-                              onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                              onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                               className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                             >
-                              {measurement.player.fullName}
+                              {measurement.user.fullName}
                             </button>
-                            <p className="text-gray-500 text-xs">Birth Year: {measurement.player.birthYear}</p>
+                            <p className="text-gray-500 text-xs">Birth Year: {measurement.user.birthYear}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {measurement.player.teams && measurement.player.teams.length > 0 
-                          ? measurement.player.teams.map((team: any) => team.name).join(", ")
-                          : "Independent Player"
+                        {measurement.user.teams && measurement.user.teams.length > 0 
+                          ? measurement.user.teams.map((team: any) => team.name).join(", ")
+                          : "Independent Athlete"
                         }
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{measurement.player.sport || "N/A"}</td>
+                      <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           getMetricColor(measurement.metric)
