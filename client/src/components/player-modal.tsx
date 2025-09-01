@@ -30,7 +30,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     defaultValues: {
       firstName: "",
       lastName: "",
-      email: "",
+      emails: [],
       birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
@@ -40,6 +40,11 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     },
   });
 
+
+  const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
+    control: form.control,
+    name: "emails"
+  }) as any;
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
@@ -56,7 +61,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: player.firstName,
         lastName: player.lastName,
-        email: player.email,
+        emails: player.emails || [],
         birthDate: player.birthDate || "",
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
@@ -68,7 +73,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: "",
         lastName: "",
-        email: "",
+        emails: [],
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
@@ -196,27 +201,6 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Email Address <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input 
-                      {...field} 
-                      type="email"
-                      placeholder="Enter email address"
-                      disabled={isPending}
-                      data-testid="input-player-email"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -423,6 +407,59 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
 
+
+            {/* Email Addresses */}
+            <FormItem>
+              <FormLabel className="flex items-center">
+                <Mail className="h-4 w-4 mr-2" />
+                Email Addresses <span className="text-red-500">*</span>
+              </FormLabel>
+              <div className="space-y-2">
+                {emailFields.map((field: any, index: number) => (
+                  <div key={field.id} className="flex space-x-2">
+                    <FormField
+                      control={form.control}
+                      name={`emails.${index}`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input 
+                              {...field}
+                              type="email"
+                              placeholder="Enter email address"
+                              disabled={isPending}
+                              data-testid={`input-email-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeEmail(index)}
+                      disabled={isPending}
+                      data-testid={`button-remove-email-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendEmail("")}
+                  disabled={isPending}
+                  data-testid="button-add-email"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Email
+                </Button>
+              </div>
+            </FormItem>
 
             {/* Phone Numbers */}
             <FormItem>
