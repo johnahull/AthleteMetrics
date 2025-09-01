@@ -54,9 +54,8 @@ export default function MeasurementForm() {
 
   const createMeasurementMutation = useMutation({
     mutationFn: async (data: InsertMeasurement) => {
-      // Remove submittedBy from data since backend will set it automatically
-      const { submittedBy, ...measurementData } = data;
-      const response = await apiRequest("POST", "/api/measurements", measurementData);
+      // Backend will set submittedBy automatically based on session
+      const response = await apiRequest("POST", "/api/measurements", data);
       return response.json();
     },
     onSuccess: () => {
