@@ -281,7 +281,9 @@ export class DatabaseStorage implements IStorage {
         ))
         .limit(1); // Enforce single role
 
-      return result.length > 0 ? [result[0].role] : [];
+      const roles = result.length > 0 ? [result[0].role] : [];
+      console.log(`User ${userId} roles in org ${organizationId}:`, { roles, foundRecords: result.length });
+      return roles;
     } else {
       // Get all organization roles for the user (one per organization maximum)
       const orgRoles = await db.select({
@@ -357,7 +359,7 @@ export class DatabaseStorage implements IStorage {
     players: (User & { teams: (Team & { organization: Organization })[] })[],
     invitations: Invitation[]
   } | null> {
-    const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
+    const [organization] = await db.select().from(organizations).where(eq(organizationId, organizationId));
     if (!organization) return null;
 
     // Get users with all their roles grouped

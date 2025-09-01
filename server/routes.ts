@@ -461,11 +461,23 @@ export function registerRoutes(app: Express) {
 
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Check if user has access to this organization
+      // For non-site admins, check if user belongs to this specific organization
       if (!userIsSiteAdmin) {
-        const hasAccess = await canAccessOrganization(currentUser, id);
-        if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied to this organization" });
+        // Get user's organization memberships
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const userOrgIds = userOrgs.map(uo => uo.organizationId);
+        const hasOrgAccess = userOrgIds.includes(id);
+
+        console.log(`Access check for user ${currentUser.email} to org ${id}:`, {
+          userOrgIds,
+          requestedOrgId: id,
+          hasOrgAccess,
+          isSiteAdmin: userIsSiteAdmin
+        });
+
+        if (!hasOrgAccess) {
+          console.log(`Access denied for user ${currentUser.email} to org ${id} - not a member`);
+          return res.status(403).json({ message: "Access denied. You can only view organizations you belong to." });
         }
       }
 
