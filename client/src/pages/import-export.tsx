@@ -158,9 +158,9 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Import Data</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Players Import */}
+              {/* Athletes Import */}
               <div>
-                <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Players" : "Measurements"}</h4>
+                <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Athletes" : "Measurements"}</h4>
                 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Import Type</label>
@@ -169,7 +169,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="players">Players</SelectItem>
+                      <SelectItem value="players">Athletes</SelectItem>
                       <SelectItem value="measurements">Measurements</SelectItem>
                     </SelectContent>
                   </Select>
@@ -233,7 +233,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                           className="text-primary focus:ring-primary"
                           data-testid="radio-match-players"
                         />
-                        <span className="text-sm text-gray-700">Match players by firstName + lastName + birthYear</span>
+                        <span className="text-sm text-gray-700">Match athletes by firstName + lastName + birthYear</span>
                       </label>
                       <label className="flex items-center space-x-3">
                         <input 
@@ -245,7 +245,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                           className="text-primary focus:ring-primary"
                           data-testid="radio-create-players"
                         />
-                        <span className="text-sm text-gray-700">Create missing players and assign to team:</span>
+                        <span className="text-sm text-gray-700">Create missing athletes and assign to team:</span>
                       </label>
                     </div>
                   </div>
@@ -324,7 +324,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Players Template */}
               <div>
-                <h4 className="text-md font-medium text-gray-700 mb-4">Players CSV Format</h4>
+                <h4 className="text-md font-medium text-gray-700 mb-4">Athletes CSV Format</h4>
                 <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm">
                   <div className="text-gray-600 mb-2"># players.csv</div>
                   <pre className="whitespace-pre-wrap">{playersTemplate}</pre>
@@ -375,7 +375,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                     <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
                     <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
                     <li>• Date format: YYYY-MM-DD</li>
-                    <li>• Player matching is case-sensitive</li>
+                    <li>• Athlete matching is case-sensitive</li>
                   </ul>
                 </div>
               </div>
@@ -393,15 +393,15 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Download className="h-6 w-6 text-blue-600" />
                 </div>
-                <h4 className="font-medium text-gray-900 mb-2">Export Players</h4>
-                <p className="text-sm text-gray-600 mb-4">Download all player information including team assignments</p>
+                <h4 className="font-medium text-gray-900 mb-2">Export Athletes</h4>
+                <p className="text-sm text-gray-600 mb-4">Download all athlete information including team assignments</p>
                 <Button 
                   onClick={() => handleExport("players")}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                   data-testid="button-export-players"
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Export Players CSV
+                  Export Athletes CSV
                 </Button>
               </div>
 
@@ -449,7 +449,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                   <ul className="space-y-1 text-xs">
                     <li>• Exported files will include all data visible in your current view/filters</li>
                     <li>• Use the analytics page filters to customize what gets exported</li>
-                    <li>• Full export includes all teams, players, and measurements</li>
+                    <li>• Full export includes all teams, athletes, and measurements</li>
                   </ul>
                 </div>
               </div>

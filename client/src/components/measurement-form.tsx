@@ -99,13 +99,13 @@ export default function MeasurementForm() {
       quickAddForm.reset();
       toast({
         title: "Success",
-        description: "Player created successfully",
+        description: "Athlete created successfully",
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to create player",
+        description: "Failed to create athlete",
         variant: "destructive",
       });
     },
@@ -123,7 +123,7 @@ export default function MeasurementForm() {
     if (!selectedPlayer) {
       toast({
         title: "Error",
-        description: "Please select a player",
+        description: "Please select an athlete",
         variant: "destructive",
       });
       return;
@@ -160,11 +160,11 @@ export default function MeasurementForm() {
           {/* Player Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Player <span className="text-red-500">*</span>
+              Athlete <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <Input
-                placeholder="Search and select player..."
+                placeholder="Search and select athlete..."
                 value={selectedPlayer ? selectedPlayer.fullName : searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -361,7 +361,7 @@ export default function MeasurementForm() {
               data-testid="checkbox-quick-add-player"
             />
             <label htmlFor="quick-add-player" className="text-sm font-medium text-gray-700">
-              Add new player
+              Add new athlete
             </label>
           </div>
 
@@ -461,7 +461,7 @@ export default function MeasurementForm() {
                         disabled={createPlayerMutation.isPending}
                         data-testid="button-quick-add-player"
                       >
-                        {createPlayerMutation.isPending ? "Adding..." : "Add Player"}
+                        {createPlayerMutation.isPending ? "Adding..." : "Add Athlete"}
                       </Button>
                     </div>
                   </form>
