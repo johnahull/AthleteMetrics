@@ -496,7 +496,7 @@ export default function OrganizationProfile() {
   // Function to delete a pending invitation
   const deletePendingUser = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/organizations/${id}/invitations/${invitationId}`, {
+      const response = await fetch(`/api/invitations/${invitationId}`, {
         method: "DELETE",
       });
 
