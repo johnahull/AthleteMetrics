@@ -2126,5 +2126,175 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Export routes
+  app.get("/api/export/players", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get all athletes with comprehensive data
+      const athletes = await storage.getAthletes();
+      
+      // Transform to CSV format with all database fields
+      const csvHeaders = [
+        'id', 'firstName', 'lastName', 'fullName', 'username', 'emails', 'phoneNumbers',
+        'birthDate', 'birthYear', 'graduationYear', 'school', 'sports', 'height', 'weight',
+        'teams', 'isActive', 'createdAt'
+      ];
+
+      const csvRows = athletes.map(athlete => {
+        const teams = athlete.teams ? athlete.teams.map(t => t.name).join(';') : '';
+        const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
+        const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
+        const sports = Array.isArray(athlete.sports) ? athlete.sports.join(';') : (athlete.sports || '');
+
+        return [
+          athlete.id,
+          athlete.firstName,
+          athlete.lastName,
+          athlete.fullName,
+          athlete.username,
+          emails,
+          phoneNumbers,
+          athlete.birthDate || '',
+          athlete.birthYear || '',
+          athlete.graduationYear || '',
+          athlete.school || '',
+          sports,
+          athlete.height || '',
+          athlete.weight || '',
+          teams,
+          athlete.isActive,
+          athlete.createdAt
+        ].map(field => {
+          // Escape commas and quotes for CSV
+          const value = String(field || '');
+          if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        }).join(',');
+      });
+
+      const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="athletes.csv"');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error exporting athletes:", error);
+      res.status(500).json({ message: "Failed to export athletes" });
+    }
+  });
+
+  app.get("/api/export/measurements", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get all measurements with comprehensive data
+      const measurements = await storage.getMeasurements();
+      
+      // Transform to CSV format with all database fields
+      const csvHeaders = [
+        'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'teams',
+        'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes',
+        'submittedBy', 'verifiedBy', 'isVerified', 'createdAt'
+      ];
+
+      const csvRows = measurements.map(measurement => {
+        const user = measurement.user;
+        const teams = user?.teams ? user.teams.map(t => t.name).join(';') : '';
+        const submittedBy = measurement.submittedBy || '';
+        const verifiedBy = measurement.verifiedBy || '';
+
+        return [
+          measurement.id,
+          user?.firstName || '',
+          user?.lastName || '',
+          user?.fullName || '',
+          user?.birthYear || '',
+          teams,
+          measurement.date,
+          measurement.age,
+          measurement.metric,
+          measurement.value,
+          measurement.units,
+          measurement.flyInDistance || '',
+          measurement.notes || '',
+          submittedBy,
+          verifiedBy,
+          measurement.isVerified,
+          measurement.createdAt
+        ].map(field => {
+          // Escape commas and quotes for CSV
+          const value = String(field || '');
+          if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        }).join(',');
+      });
+
+      const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error exporting measurements:", error);
+      res.status(500).json({ message: "Failed to export measurements" });
+    }
+  });
+
+  app.get("/api/export/teams", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get all teams with comprehensive data
+      const teams = await storage.getTeams();
+      
+      // Transform to CSV format with all database fields
+      const csvHeaders = [
+        'id', 'name', 'organizationId', 'organizationName', 'level', 'notes', 'createdAt'
+      ];
+
+      const csvRows = teams.map(team => {
+        return [
+          team.id,
+          team.name,
+          team.organizationId,
+          team.organization?.name || '',
+          team.level || '',
+          team.notes || '',
+          team.createdAt
+        ].map(field => {
+          // Escape commas and quotes for CSV
+          const value = String(field || '');
+          if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        }).join(',');
+      });
+
+      const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="teams.csv"');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error exporting teams:", error);
+      res.status(500).json({ message: "Failed to export teams" });
+    }
+  });
+
   return server;
 }
