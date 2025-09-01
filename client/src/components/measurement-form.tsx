@@ -38,7 +38,6 @@ export default function MeasurementForm() {
       value: 0,
       flyInDistance: undefined,
       notes: "",
-      submittedBy: "",
     },
   });
 
@@ -55,7 +54,9 @@ export default function MeasurementForm() {
 
   const createMeasurementMutation = useMutation({
     mutationFn: async (data: InsertMeasurement) => {
-      const response = await apiRequest("POST", "/api/measurements", data);
+      // Remove submittedBy from data since backend will set it automatically
+      const { submittedBy, ...measurementData } = data;
+      const response = await apiRequest("POST", "/api/measurements", measurementData);
       return response.json();
     },
     onSuccess: () => {
@@ -72,7 +73,6 @@ export default function MeasurementForm() {
         value: 0,
         flyInDistance: undefined,
         notes: "",
-        submittedBy: "",
       });
       setSelectedPlayer(null);
       setSearchTerm("");
@@ -147,7 +147,6 @@ export default function MeasurementForm() {
       value: 0,
       flyInDistance: undefined,
       notes: "",
-      submittedBy: "",
     });
     setSelectedPlayer(null);
     setSearchTerm("");
