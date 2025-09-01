@@ -1065,6 +1065,7 @@ export class DatabaseStorage implements IStorage {
   // Measurements
   async getMeasurements(filters?: {
     userId?: string;
+    playerId?: string; // Legacy support
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -1083,8 +1084,9 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(measurements.userId, users.id));
 
     const conditions = [];
-    if (filters?.userId) {
-      conditions.push(eq(measurements.userId, filters.userId));
+    if (filters?.userId || filters?.playerId) {
+      const targetUserId = filters.userId || filters.playerId;
+      conditions.push(eq(measurements.userId, targetUserId));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));

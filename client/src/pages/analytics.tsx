@@ -345,17 +345,16 @@ export default function Analytics() {
                         </span>
                         <div>
                           <button 
-                            onClick={() => setLocation(`/athletes/${measurement.player.id}`)}
+                            onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                             className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                           >
-                            {measurement.player.fullName}
+                            {measurement.user.fullName}
                           </button>
                           <p className="text-xs text-gray-500">
-                            {measurement.player.teams && measurement.player.teams.length > 0 
-                              ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                            {measurement.user.teams && measurement.user.teams.length > 0 
+                              ? measurement.user.teams.map((team: any) => team.name).join(", ")
                               : "Independent Athlete"
-                            }
-                          </p>
+                            }</p>
                         </div>
                       </div>
                       <span className="font-mono text-sm">{measurement.value}s</span>
@@ -377,17 +376,16 @@ export default function Analytics() {
                         </span>
                         <div>
                           <button 
-                            onClick={() => setLocation(`/athletes/${measurement.player.id}`)}
+                            onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                             className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                           >
-                            {measurement.player.fullName}
+                            {measurement.user.fullName}
                           </button>
                           <p className="text-xs text-gray-500">
-                            {measurement.player.teams && measurement.player.teams.length > 0 
-                              ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                            {measurement.user.teams && measurement.user.teams.length > 0 
+                              ? measurement.user.teams.map((team: any) => team.name).join(", ")
                               : "Independent Athlete"
-                            }
-                          </p>
+                            }</p>
                         </div>
                       </div>
                       <span className="font-mono text-sm">{measurement.value}in</span>
@@ -480,27 +478,27 @@ export default function Analytics() {
                         <div className="flex items-center space-x-3">
                           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-xs">
-                              {measurement.player.fullName.split(' ').map((n: string) => n[0]).join('')}
+                              {measurement.user.fullName.split(' ').map((n: string) => n[0]).join('')}
                             </span>
                           </div>
                           <div>
                             <button 
-                              onClick={() => setLocation(`/athletes/${measurement.player.id}`)}
+                              onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                               className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                             >
-                              {measurement.player.fullName}
+                              {measurement.user.fullName}
                             </button>
-                            <p className="text-gray-500 text-xs">Birth Year: {measurement.player.birthYear}</p>
+                            <p className="text-gray-500 text-xs">Birth Year: {measurement.user.birthYear}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {measurement.player.teams && measurement.player.teams.length > 0 
-                          ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                        {measurement.user.teams && measurement.user.teams.length > 0 
+                          ? measurement.user.teams.map((team: any) => team.name).join(", ")
                           : "Independent Athlete"
                         }
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{measurement.player.sport || "N/A"}</td>
+                      <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           getMetricColor(measurement.metric)

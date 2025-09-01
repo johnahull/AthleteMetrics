@@ -747,7 +747,7 @@ export function registerRoutes(app: Express) {
         // Athletes can only see their own player data
         if (currentUser.role === "athlete" && currentUser.playerId) {
           const filters: any = {
-            playerId: currentUser.playerId,
+            userId: currentUser.playerId, // Convert playerId to userId for database query
             organizationId: orgContextForFiltering,
           };
           const players = await storage.getPlayers(filters);
