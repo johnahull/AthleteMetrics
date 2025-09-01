@@ -1396,6 +1396,7 @@ export class DatabaseStorage implements IStorage {
 
   async getDashboardStats(organizationId?: string): Promise<{
     totalAthletes: number;
+    activeAthletes: number;
     totalTeams: number;
     bestFly10Today?: { value: number; userName: string };
     bestVerticalToday?: { value: number; userName: string };
@@ -1403,10 +1404,13 @@ export class DatabaseStorage implements IStorage {
     const athletes = await this.getAthletes({ organizationId });
     const teams = await this.getTeams(organizationId);
 
-    // Count active athletes (players who have user accounts)
-    const allUsers = organizationId
-      ? await this.getOrganizationUsers(organizationId)
-      : await this.getUsers();
+    // Count athletes in the organization
+    const totalAthletes = athletes.length;
+    
+    // Active athletes are those with active user accounts (not just invitation pending)
+    const activeAthletes = athletes.filter(athlete => 
+      athlete.isActive === "true" && athlete.password !== "INVITATION_PENDING"
+    ).length;
 
     const today = new Date().toISOString().split('T')[0];
     const todaysMeasurements = await this.getMeasurements({
@@ -1425,7 +1429,8 @@ export class DatabaseStorage implements IStorage {
       .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
 
     return {
-      totalAthletes: athletes.length,
+      totalAthletes,
+      activeAthletes,
       totalTeams: teams.length,
       bestFly10Today: todaysFly10.length > 0 ? todaysFly10.reduce((best, current) =>
         current.value < best.value ? current : best

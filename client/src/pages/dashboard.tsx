@@ -118,10 +118,10 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Athletes</p>
                 <p className="text-3xl font-bold text-gray-900" data-testid="stat-active-athletes">
-                  {stats.activeAthletes}
+                  {stats.totalAthletes || 0}
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  {stats.totalPlayers} total players
+                  {stats.activeAthletes || 0} with active accounts
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
