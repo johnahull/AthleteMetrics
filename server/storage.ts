@@ -886,6 +886,7 @@ export class DatabaseStorage implements IStorage {
     // Use primary email or generate one
     const emails = (player.emails && player.emails.length > 0) ? player.emails : [`${username}@temp.local`];
 
+    // Create new user directly without checking for existing emails
     const [newUser] = await db.insert(users).values({
       username,
       emails, // Ensure emails array is always provided
@@ -900,7 +901,6 @@ export class DatabaseStorage implements IStorage {
       weight: player.weight,
       fullName: `${player.firstName} ${player.lastName}`,
       birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : undefined,
-      // role: "athlete", // Role field doesn't exist on users table
       password: "INVITATION_PENDING", // Will be set when they accept invitation
       isActive: "true"
     }).returning();
