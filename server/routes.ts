@@ -6,6 +6,7 @@ import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
+import { AccessController } from "./access-control";
 
 // Session configuration
 declare module 'express-session' {
@@ -46,8 +47,9 @@ const requireAuth = (req: any, res: any, next: any) => {
   next();
 };
 
-// Initialize permission checker
+// Initialize permission checker and access controller
 const permissionChecker = new PermissionChecker(storage);
+const accessController = new AccessController(storage);
 
 // Helper functions
 const isSiteAdmin = (user: any): boolean => {
@@ -85,15 +87,7 @@ const canAccessOrganization = async (user: any, organizationId: string): Promise
 };
 
 const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
-  if (!userId || !organizationId) return false;
-
-  const user = await storage.getUser(userId);
-  if (!user) return false;
-
-  if (isSiteAdmin(user)) return true;
-
-  const userRoles = await storage.getUserRoles(userId, organizationId);
-  return userRoles.includes("org_admin");
+  return await accessController.canManageOrganization(userId, organizationId);
 };
 
 // Unified invitation permission checker
@@ -466,29 +460,13 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      // For non-site admins, check if user belongs to this specific organization
-      if (!userIsSiteAdmin) {
-        // Get user's organization memberships
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const userOrgIds = userOrgs.map(uo => uo.organizationId);
-        const hasOrgAccess = userOrgIds.includes(id);
-
-        // Get user's actual organizations for debugging
-        console.log(`Access check for user ${currentUser.email} to org ${id}:`, {
-          requestedOrgId: id,
-          userActualOrgs: userOrgs.map(uo => ({ orgId: uo.organizationId, orgName: uo.organization.name, role: uo.role })),
-          primaryOrgId: currentUser.primaryOrganizationId
+      // Simple access check
+      try {
+        await accessController.requireOrganizationAccess(currentUser.id, id);
+      } catch (error) {
+        return res.status(403).json({ 
+          message: "Access denied. You can only view organizations you belong to."
         });
-
-        if (!hasOrgAccess) {
-          console.log(`Access denied for user ${currentUser.email} to org ${id}. User should access org: ${currentUser.primaryOrganizationId}`);
-          return res.status(403).json({ 
-            message: "Access denied. You can only view organizations you belong to.",
-            userPrimaryOrg: currentUser.primaryOrganizationId
-          });
-        }
       }
 
       const organization = await storage.getOrganization(id);
@@ -643,7 +621,7 @@ export function registerRoutes(app: Express) {
         orgContextForFiltering = organizationId as string;
       } else {
         // Non-site admins should only see players from their organization
-        
+
         // Use user's primary organization if no specific org is requested
         const requestedOrgId = organizationId as string;
         if (requestedOrgId) {
@@ -1343,36 +1321,19 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Check if user has access to this organization
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
       // Athletes have no access to organization profiles
-      if (currentUser.role === "athlete" && !userIsSiteAdmin) {
+      const userRoles = await storage.getUserRoles(currentUser.id);
+      if (userRoles.includes("athlete") && !await accessController.isSiteAdmin(currentUser.id)) {
         return res.status(403).json({ message: "Athletes cannot access organization profiles" });
       }
 
-      // For non-site admins, check if user belongs to this specific organization
-      if (!userIsSiteAdmin) {
-        // Get user's organization memberships
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const userOrgIds = userOrgs.map(uo => uo.organizationId);
-        const hasOrgAccess = userOrgIds.includes(id);
-
-        console.log(`Access check for user ${currentUser.email} to org ${id}:`, {
-          requestedOrgId: id,
-          userActualOrgs: userOrgs.map(uo => ({ orgId: uo.organizationId, orgName: uo.organization.name, role: uo.role })),
-          hasOrgAccess,
-          isSiteAdmin: userIsSiteAdmin,
-          primaryOrgId: currentUser.primaryOrganizationId
+      // Check organization access
+      try {
+        await accessController.requireOrganizationAccess(currentUser.id, id);
+      } catch (error) {
+        return res.status(403).json({ 
+          message: "Access denied. You can only view organizations you belong to."
         });
-
-        if (!hasOrgAccess) {
-          console.log(`Access denied for user ${currentUser.email} to org ${id}. User belongs to orgs: ${userOrgIds.join(', ')}`);
-          return res.status(403).json({ 
-            message: "Access denied. You can only view organizations you belong to.",
-            userPrimaryOrg: currentUser.primaryOrganizationId
-          });
-        }
       }
 
       // Get organization profile
