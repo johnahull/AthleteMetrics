@@ -64,7 +64,7 @@ export default function Players() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: teams } = useQuery({
+  const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams", organizationContext],
     queryFn: async () => {
       const url = organizationContext 
@@ -76,17 +76,17 @@ export default function Players() {
   });
 
   // Get current user's organizations to fetch invitations
-  const { data: userOrgs } = useQuery({
+  const { data: userOrgs = [] } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
   });
 
   // Get athlete invitations for the current organization
-  const { data: athleteInvitations } = useQuery({
+  const { data: athleteInvitations = [] } = useQuery({
     queryKey: ["/api/invitations/athletes"],
     enabled: !!userOrgs && userOrgs.length > 0,
   });
 
-  const { data: players, isLoading } = useQuery({
+  const { data: players = [], isLoading } = useQuery({
     queryKey: ["/api/players", filters, organizationContext],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -303,7 +303,7 @@ export default function Players() {
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
                   <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
-                  {teams?.map((team) => (
+                  {teams?.map((team: any) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -360,7 +360,7 @@ export default function Players() {
                 <div className="flex space-x-2">
                   {filters.teamId && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                      Team: {teams?.find(t => t.id === filters.teamId)?.name}
+                      Team: {teams?.find((t: any) => t.id === filters.teamId)?.name}
                     </span>
                   )}
                   {filters.birthYearFrom && (
@@ -402,7 +402,7 @@ export default function Players() {
               Pending Athlete Invitations ({athleteInvitations.length})
             </h3>
             <div className="space-y-3">
-              {athleteInvitations.map((invitation: any) => {
+              {athleteInvitations?.map((invitation: any) => {
                 const isExpired = isInvitationExpired(invitation.expiresAt);
                 return (
                   <div 
@@ -493,7 +493,7 @@ export default function Players() {
               <UsersRound className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes found</h3>
               <p className="text-gray-600 text-center mb-4">
-                {Object.values(filters).some(v => v) ? 
+                {Object.values(filters).some((v: any) => v) ? 
                   "Try adjusting your filters or add new athletes." :
                   "Get started by adding your first athlete."
                 }
@@ -521,7 +521,7 @@ export default function Players() {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
-                  {players?.map((player) => (
+                  {players?.map((player: any) => (
                     <tr key={player.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">

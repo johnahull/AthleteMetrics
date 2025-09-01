@@ -30,20 +30,16 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthday: "",
+      email: "",
+      birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
       school: "",
       sports: [],
-      emails: [],
       phoneNumbers: [],
     },
   });
 
-  const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
-    control: form.control,
-    name: "emails"
-  }) as any;
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
@@ -60,24 +56,24 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: player.firstName,
         lastName: player.lastName,
-        birthday: player.birthday || "",
+        email: player.email,
+        birthDate: player.birthDate || "",
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sports: player.sports || [],
-        emails: player.emails || [],
         phoneNumbers: player.phoneNumbers || [],
       });
     } else {
       form.reset({
         firstName: "",
         lastName: "",
-        birthday: "",
+        email: "",
+        birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
         sports: [],
-        emails: [],
         phoneNumbers: [],
       });
     }
@@ -142,13 +138,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full p-0" style={{ 
-        height: '90vh', 
-        display: 'grid', 
-        gridTemplateRows: 'auto 1fr auto',
-        gridTemplateAreas: '"header" "content" "footer"'
-      }}>
-        <div className="px-6 pt-6 pb-4 border-b" style={{ gridArea: 'header' }}>
+      <DialogContent className="max-w-4xl w-full p-0 max-h-[90vh] flex flex-col">
+        <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
             <DialogDescription>
@@ -159,7 +150,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="px-6 py-4 overflow-y-auto" style={{ gridArea: 'content', minHeight: 0 }}>
+          <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -205,10 +196,32 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               />
             </div>
 
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Email Address <span className="text-red-500">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      type="email"
+                      placeholder="Enter email address"
+                      disabled={isPending}
+                      data-testid="input-player-email"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="birthday"
+                name="birthDate"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
@@ -219,7 +232,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         {...field} 
                         type="date"
                         disabled={isPending}
-                        data-testid="input-player-birthday"
+                        data-testid="input-player-birthdate"
                         value={field.value || ""}
                         placeholder="YYYY-MM-DD"
                         max={new Date().toISOString().split('T')[0]} // Prevent future dates
@@ -348,7 +361,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 Sports
               </FormLabel>
               <div className="space-y-2">
-                {sportsFields.map((field, index) => (
+                {sportsFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
@@ -410,58 +423,6 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
 
-            {/* Email Addresses */}
-            <FormItem>
-              <FormLabel className="flex items-center">
-                <Mail className="h-4 w-4 mr-2" />
-                Email Addresses
-              </FormLabel>
-              <div className="space-y-2">
-                {emailFields.map((field, index) => (
-                  <div key={field.id} className="flex space-x-2">
-                    <FormField
-                      control={form.control}
-                      name={`emails.${index}`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormControl>
-                            <Input 
-                              {...field}
-                              type="email"
-                              placeholder="Enter email address"
-                              disabled={isPending}
-                              data-testid={`input-email-${index}`}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeEmail(index)}
-                      disabled={isPending}
-                      data-testid={`button-remove-email-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => appendEmail("")}
-                  disabled={isPending}
-                  data-testid="button-add-email"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Email
-                </Button>
-              </div>
-            </FormItem>
 
             {/* Phone Numbers */}
             <FormItem>
@@ -470,7 +431,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 Phone Numbers
               </FormLabel>
               <div className="space-y-2">
-                {phoneFields.map((field, index) => (
+                {phoneFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
@@ -518,7 +479,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </div>
           </div>
           
-          <div className="px-6 py-4 border-t bg-white" style={{ gridArea: 'footer' }}>
+          <div className="px-6 py-4 border-t bg-white flex-shrink-0">
             <div className="flex justify-end space-x-3">
               <Button 
                 type="button" 
