@@ -363,7 +363,7 @@ export class DatabaseStorage implements IStorage {
     players: (User & { teams: (Team & { organization: Organization })[] })[],
     invitations: Invitation[]
   } | null> {
-    const [organization] = await db.select().from(organizations).where(eq(organizationId, organizationId));
+    const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
     if (!organization) return null;
 
     // Get users with all their roles grouped
@@ -711,11 +711,11 @@ export class DatabaseStorage implements IStorage {
       // Create new user
       const createUserData = {
         username: userInfo.username,
-        email: invitation.email,
         emails: [invitation.email],
         password: userInfo.password,
         firstName: userInfo.firstName,
-        lastName: userInfo.lastName
+        lastName: userInfo.lastName,
+        role: invitation.role
       };
 
       user = await this.createUser(createUserData);
@@ -832,7 +832,8 @@ export class DatabaseStorage implements IStorage {
       .selectDistinct({
         id: users.id,
         username: users.username,
-        email: users.email,
+        emails: users.emails,
+        password: users.password,
         firstName: users.firstName,
         lastName: users.lastName,
         fullName: users.fullName,
@@ -865,7 +866,7 @@ export class DatabaseStorage implements IStorage {
     return this.createUser({
       ...athlete,
       username: athlete.username || `athlete_${Date.now()}`,
-      email: athlete.email || `temp_${Date.now()}@temp.local`,
+      emails: athlete.emails || [`temp_${Date.now()}@temp.local`],
       firstName: athlete.firstName || "",
       lastName: athlete.lastName || "",
       password: "INVITATION_PENDING"
@@ -935,7 +936,7 @@ export class DatabaseStorage implements IStorage {
       ...newUser,
       fullName: `${newUser.firstName} ${newUser.lastName}`,
       birthYear: newUser.birthDate ? new Date(newUser.birthDate).getFullYear() : 0,
-      emails: [newUser.email],
+      emails: newUser.emails,
       teams: []
     };
 
