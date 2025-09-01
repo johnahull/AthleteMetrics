@@ -435,6 +435,14 @@ export default function OrganizationProfile() {
     }
   }, [user, userOrganizations, id, setLocation]);
 
+  // Invalidate organization queries when the ID changes to ensure fresh data
+  useEffect(() => {
+    if (id) {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
+    }
+  }, [id]);
+
   // Function to send invitation for a user
   const sendInvitation = async (email: string, roles: string[]) => {
     try {
@@ -603,6 +611,9 @@ export default function OrganizationProfile() {
     queryKey: [`/api/organizations/${id}/profile`],
     enabled: !!id && userHasAccessToOrg,
     staleTime: 0, // Always fetch fresh data
+    cacheTime: 0, // Don't cache at all
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   if (isLoading) {
