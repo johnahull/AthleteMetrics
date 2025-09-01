@@ -687,38 +687,16 @@ export class DatabaseStorage implements IStorage {
     const invitation = await this.getInvitation(token);
     if (!invitation) throw new Error("Invalid or expired invitation");
 
-    // Check if user already exists
-    let user = await this.getUserByEmail(invitation.email);
+    // Always create a new user - email addresses are not unique identifiers for athletes
+    const createUserData = {
+      username: userInfo.username,
+      emails: [invitation.email],
+      password: userInfo.password,
+      firstName: userInfo.firstName,
+      lastName: userInfo.lastName
+    };
 
-    if (user) {
-      // User exists - update their info
-      const updateData: any = {
-        password: await bcrypt.hash(userInfo.password, 10),
-        username: userInfo.username,
-        firstName: userInfo.firstName,
-        lastName: userInfo.lastName,
-        fullName: `${userInfo.firstName} ${userInfo.lastName}`
-      };
-
-      await db.update(users)
-        .set(updateData)
-        .where(sql`${invitation.email} = ANY(${users.emails})`);
-
-      // Get updated user
-      user = await this.getUserByEmail(invitation.email);
-      if (!user) throw new Error("Failed to update existing user");
-    } else {
-      // Create new user
-      const createUserData = {
-        username: userInfo.username,
-        emails: [invitation.email],
-        password: userInfo.password,
-        firstName: userInfo.firstName,
-        lastName: userInfo.lastName
-      };
-
-      user = await this.createUser(createUserData);
-    }
+    const user = await this.createUser(createUserData);
 
     // Add user to organization with the invitation role (this will remove any existing roles first)
     await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
@@ -761,12 +739,16 @@ export class DatabaseStorage implements IStorage {
     birthYearTo?: number;
     search?: string;
   }): Promise<User[]> {
-    // For "none" team filter, use a simpler query
+    // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
       const conditions = [eq(userOrganizations.role, 'athlete')];
 
+      // Organization filter is required for "none" team filter to work properly
       if (filters?.organizationId) {
         conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
+      } else {
+        // If no organization specified, return empty array since we need org context
+        return [];
       }
 
       if (filters?.search) {
@@ -789,7 +771,7 @@ export class DatabaseStorage implements IStorage {
       const result = await db
         .select()
         .from(users)
-        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .where(and(
           ...conditions,
           sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams} WHERE ${userTeams.userId} IS NOT NULL)`
@@ -923,11 +905,29 @@ export class DatabaseStorage implements IStorage {
       isActive: "true"
     }).returning();
 
-    // Add to teams if specified
+    // Determine organization for athlete association
+    let organizationId: string | undefined = player.organizationId;
+
+    // Add to teams if specified and determine organization from first team if not already set
     if (player.teamIds && player.teamIds.length > 0) {
       for (const teamId of player.teamIds) {
         await this.addUserToTeam(newUser.id, teamId);
+        
+        // Get the organization from the first team if not already specified
+        if (!organizationId) {
+          const team = await this.getTeam(teamId);
+          if (team) {
+            organizationId = team.organization.id;
+          }
+        }
       }
+    }
+
+    // Associate athlete with organization (required for proper listing)
+    if (organizationId) {
+      await this.addUserToOrganization(newUser.id, organizationId, "athlete");
+    } else {
+      console.warn(`Created athlete ${newUser.id} without organization association`);
     }
 
     // Transform to player format for return

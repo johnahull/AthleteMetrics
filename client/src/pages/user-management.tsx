@@ -337,9 +337,9 @@ export default function UserManagement() {
   const generateInviteLink = async (email: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
     try {
       const res = await apiRequest("POST", "/api/invitations", {
-        email,
-        firstName,
-        lastName,
+        email: email || '',
+        firstName: firstName || '',
+        lastName: lastName || '',
         role,
         organizationId
       });
@@ -352,12 +352,12 @@ export default function UserManagement() {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({
           title: "New invitation link generated!",
-          description: `Link for ${firstName} ${lastName} copied to clipboard. They will appear in the user list once they accept.`,
+          description: `Link for ${firstName || ''} ${lastName || ''} copied to clipboard. They will appear in the user list once they accept.`,
         });
       } else {
         toast({
           title: "New invitation created",
-          description: `Invitation sent to ${firstName} ${lastName}. They will appear once they accept.`,
+          description: `Invitation sent to ${firstName || ''} ${lastName || ''}.`,
         });
       }
     } catch (error: any) {
@@ -391,7 +391,7 @@ export default function UserManagement() {
   });
 
   const handleDeleteInvitation = (invitationId: string, email: string) => {
-    if (window.confirm(`Are you sure you want to delete the invitation for ${email}?`)) {
+    if (window.confirm(`Are you sure you want to delete the invitation for ${email || 'this user'}?`)) {
       deleteInvitationMutation.mutate(invitationId);
     }
   };
@@ -404,7 +404,7 @@ export default function UserManagement() {
       await navigator.clipboard.writeText(inviteLink);
       toast({
         title: "Invitation link copied!",
-        description: `Link for ${invitation.email} copied to clipboard.`,
+        description: `Link for ${invitation.email || 'user'} copied to clipboard.`,
       });
     } catch (error: any) {
       toast({
@@ -707,8 +707,8 @@ export default function UserManagement() {
                                 {admin.firstName} {admin.lastName}
                               </Link>
                             </p>
-                            <p className="text-sm text-gray-600" data-testid={`site-admin-email-${admin.id}`}>
-                              {admin.emails?.[0]?.replace('@admin.local', '') || admin.email?.replace('@admin.local', '') || 'No email'} • <span className="text-xs text-gray-500">Site Admin</span>
+                            <p className="text-gray-600 text-sm" data-testid={`site-admin-${admin.emails?.[0]?.replace('@admin.local', '') || admin.id}`}>
+                              {(admin.emails?.[0] || 'N/A').replace('@admin.local', '')} • Site Admin
                             </p>
                           </div>
                         </div>
@@ -833,9 +833,9 @@ export default function UserManagement() {
                               variant="outline"
                               size="sm"
                               onClick={() => generateInviteLink(
-                                userOrg.user.email,
-                                userOrg.user.firstName,
-                                userOrg.user.lastName,
+                                userOrg.user.emails?.[0] || userOrg.user.email || `${userOrg.user.username}@temp.local`,
+                                userOrg.user.firstName || '',
+                                userOrg.user.lastName || '',
                                 userOrg.role,
                                 org.id
                               )}
@@ -928,7 +928,7 @@ export default function UserManagement() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDeleteInvitation(invitation.id, invitation.email)}
+                              onClick={() => handleDeleteInvitation(invitation.id, invitation.email || '')}
                               data-testid={`invitation-delete-${invitation.id}`}
                             >
                               <Trash2 className="h-4 w-4 text-red-600" />

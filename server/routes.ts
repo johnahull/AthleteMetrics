@@ -236,7 +236,8 @@ export function registerRoutes(app: Express) {
 
         req.session.user = {
           id: user.id,
-          email: user.emails[0], // Use first email for backward compatibility in session
+          username: user.username,
+          email: user.emails?.[0] || `${user.username}@temp.local`, // Use first email for backward compatibility in session
           firstName: user.firstName,
           lastName: user.lastName,
           role: userRole,
@@ -246,7 +247,7 @@ export function registerRoutes(app: Express) {
         };
 
         // Add debugging info for role issues
-        console.log(`Login successful for user ${user.emails[0]} (${user.id}):`, {
+        console.log(`Login successful for user ${user.emails?.[0] || `${user.username}@temp.local` } (${user.id}):`, {
           isSiteAdmin: user.isSiteAdmin,
           determinedRole: userRole,
           userOrgsCount: userOrgs ? userOrgs.length : 0,
@@ -360,7 +361,8 @@ export function registerRoutes(app: Express) {
       };
       req.session.user = {
         id: targetUser.id,
-        email: targetUser.emails[0], // Use first email for backward compatibility in session
+        username: targetUser.username,
+        email: targetUser.emails?.[0] || `${targetUser.username}@temp.local`, // Use first email for backward compatibility in session
         firstName: targetUser.firstName,
         lastName: targetUser.lastName,
         role: targetRole,
@@ -547,7 +549,7 @@ export function registerRoutes(app: Express) {
   // Team routes with basic organization support
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
-      const { organizationId } = req.query;
+      const {organizationId} = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -837,6 +839,13 @@ export function registerRoutes(app: Express) {
       }
 
       const playerData = insertPlayerSchema.parse(req.body);
+      
+      // Add organization context for non-site admins
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      if (!userIsSiteAdmin && currentUser?.primaryOrganizationId) {
+        playerData.organizationId = currentUser.primaryOrganizationId;
+      }
+
       const player = await storage.createPlayer(playerData);
       res.status(201).json(player);
     } catch (error) {
@@ -1330,7 +1339,7 @@ export function registerRoutes(app: Express) {
       req.session.user = {
         id: result.user.id,
         username: result.user.username,
-        email: result.user.emails[0],
+        email: result.user.emails?.[0] || `${result.user.username}@temp.local`,
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: userRole,
@@ -1567,23 +1576,8 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Cannot create site administrators" });
       }
 
-      // Check if user already exists with this email
-      let user = await storage.getUserByEmail(parsedUserData.emails[0]);
-
-      if (!user) {
-        // Create new user if they don't exist
-        user = await storage.createUser(parsedUserData);
-      } else {
-        // Update existing user's basic info if needed
-        if (parsedUserData.firstName || parsedUserData.lastName) {
-          await storage.updateUser(user.id, {
-            firstName: parsedUserData.firstName || user.firstName,
-            lastName: parsedUserData.lastName || user.lastName
-          });
-          // Refresh user data
-          user = await storage.getUser(user.id) || user;
-        }
-      }
+      // Always create new user - email addresses are not unique identifiers for athletes
+      const user = await storage.createUser(parsedUserData);
 
       // Add user to organization with the specified role (removes any existing roles first)
       await storage.addUserToOrganization(user.id, organizationId, role);
@@ -1716,10 +1710,10 @@ export function registerRoutes(app: Express) {
       res.json({
         user: {
           id: newUser.id,
-          email: newUser.emails[0],
+          email: newUser.emails?.[0] || `${newUser.username}@admin.local`,
           firstName: newUser.firstName,
           lastName: newUser.lastName,
-          role: "site_admin",
+          role: newUser.role,
         },
         message: "Site admin created successfully"
       });
@@ -1992,14 +1986,14 @@ export function registerRoutes(app: Express) {
       // Update session with new data
       req.session.user = {
         ...req.session.user,
-        email: updatedUser.emails[0],
+        email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
       };
 
       res.json({
         id: updatedUser.id,
-        email: updatedUser.emails[0],
+        email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
       });
