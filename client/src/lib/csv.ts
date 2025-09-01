@@ -65,12 +65,31 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
     errors.push('Last name is required');
   }
   
-  if (!row.birthYear || isNaN(parseInt(row.birthYear))) {
-    errors.push('Valid birth year is required');
+  // Validate birth date format - now required
+  if (!row.birthDate || !row.birthDate.trim()) {
+    errors.push('Birth date is required');
   } else {
-    const year = parseInt(row.birthYear);
-    if (year < 1990 || year > 2020) {
-      errors.push('Birth year must be between 1990 and 2020');
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(row.birthDate)) {
+      errors.push('Birth date must be in YYYY-MM-DD format');
+    } else {
+      // Validate date is not in the future
+      const birthDate = new Date(row.birthDate);
+      if (birthDate > new Date()) {
+        errors.push('Birth date cannot be in the future');
+      }
+    }
+  }
+  
+  // Birth year is now optional but validate if provided
+  if (row.birthYear && row.birthYear.trim()) {
+    if (isNaN(parseInt(row.birthYear))) {
+      errors.push('Birth year must be a valid number');
+    } else {
+      const year = parseInt(row.birthYear);
+      if (year < 1990 || year > 2020) {
+        errors.push('Birth year must be between 1990 and 2020');
+      }
     }
   }
   
@@ -83,14 +102,6 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
     const invalidEmails = emails.filter((email: string) => !emailRegex.test(email));
     if (invalidEmails.length > 0) {
       errors.push(`Invalid email format: ${invalidEmails.join(', ')}`);
-    }
-  }
-  
-  // Validate birth date format if provided
-  if (row.birthDate && row.birthDate.trim()) {
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(row.birthDate)) {
-      errors.push('Birth date must be in YYYY-MM-DD format');
     }
   }
   
