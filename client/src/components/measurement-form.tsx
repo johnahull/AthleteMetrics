@@ -76,10 +76,11 @@ export default function MeasurementForm() {
       setSelectedPlayer(null);
       setSearchTerm("");
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Measurement creation error:", error);
       toast({
         title: "Error",
-        description: "Failed to add measurement",
+        description: `Failed to add measurement: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -128,10 +129,14 @@ export default function MeasurementForm() {
       return;
     }
 
-    createMeasurementMutation.mutate({
+    // Ensure playerId is set to the selected player
+    const measurementData = {
       ...data,
       playerId: selectedPlayer.id,
-    });
+    };
+
+    console.log("Submitting measurement data:", measurementData);
+    createMeasurementMutation.mutate(measurementData);
   };
 
   const onQuickAddSubmit = (data: InsertPlayer) => {
