@@ -25,7 +25,7 @@ export const teams = pgTable("teams", {
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  email: text("email").notNull().unique(),
+  emails: text("emails").array(),
   password: text("password").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
@@ -210,7 +210,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   fullName: true,
   birthYear: true, // birthYear is computed from birthDate, so exclude from input
 }).extend({
-  email: z.string().email("Invalid email format"),
+  emails: z.array(z.string().email("Invalid email format")).min(1, "At least one email is required"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -232,7 +232,7 @@ export const insertAthleteProfileSchema = createInsertSchema(athleteProfiles).om
 });
 
 export const updateProfileSchema = z.object({
-  email: z.string().email("Invalid email format").optional(),
+  emails: z.array(z.string().email("Invalid email format")).optional(),
   firstName: z.string().min(1, "First name is required").optional(),
   lastName: z.string().min(1, "Last name is required").optional(),
 });
@@ -363,7 +363,7 @@ export type InsertPlayer = Partial<InsertUser>;
 export const insertAthleteSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  email: z.string().email("Invalid email format"),
+  emails: z.array(z.string().email("Invalid email format")).min(1, "At least one email is required"),
   birthDate: z.string().optional(),
   graduationYear: z.number().int().min(2000).max(2040).optional(),
   teamIds: z.array(z.string()).optional(),
