@@ -134,10 +134,15 @@ Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","5
 Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
 Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,birthYear,date,metric,value,units,flyInDistance,notes
-Mia,Chen,2009,2025-01-20,FLY10_TIME,1.26,s,20,Electronic gates
-Elise,Ramos,2008,2025-01-19,VERTICAL_JUMP,21.5,in,,Jump mat
-Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
+  const measurementsTemplate = `firstName,lastName,birthYear,date,age,metric,value,units,flyInDistance,notes
+Mia,Chen,2009,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
+Elise,Ramos,2008,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
+Jordan,Williams,2009,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
+Alex,Johnson,2007,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
+Taylor,Rodriguez,2008,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
+Morgan,Lee,2009,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
+Casey,Thompson,2007,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
+Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -151,6 +156,51 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
     <div className="p-6">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">Import & Export Data</h1>
+
+        {/* CSV Format Examples */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Athletes CSV Format */}
+          <Card className="bg-white">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Athletes CSV Format</h3>
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <code className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
+                  {playersTemplate}
+                </code>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => copyToClipboard(playersTemplate, "athletes")}
+                className="w-full"
+                data-testid="button-copy-athletes-template"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Athletes Template
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Measurements CSV Format */}
+          <Card className="bg-white">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Measurements CSV Format</h3>
+              <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                <code className="text-xs text-gray-800 whitespace-pre-wrap font-mono">
+                  {measurementsTemplate}
+                </code>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => copyToClipboard(measurementsTemplate, "measurements")}
+                className="w-full"
+                data-testid="button-copy-measurements-template"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Measurements Template
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Import Section */}
         <Card className="bg-white mb-8">
