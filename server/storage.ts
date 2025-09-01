@@ -149,8 +149,14 @@ export class DatabaseStorage implements IStorage {
     const fullName = `${user.firstName} ${user.lastName}`;
     const birthYear = user.birthDate ? new Date(user.birthDate).getFullYear() : undefined;
 
+    // Ensure emails array is properly set
+    const emails = user.emails || (user.email ? [user.email] : [`${user.username || 'user'}@temp.local`]);
+    const email = emails[0]; // Primary email for backward compatibility
+
     const [newUser] = await db.insert(users).values({
       ...user,
+      email,
+      emails,
       password: hashedPassword,
       fullName,
       birthYear
@@ -692,12 +698,14 @@ export class DatabaseStorage implements IStorage {
         password: await bcrypt.hash(userInfo.password, 10),
         username: userInfo.username,
         firstName: userInfo.firstName,
-        lastName: userInfo.lastName
+        lastName: userInfo.lastName,
+        email: invitation.email, // Keep primary email updated
+        fullName: `${userInfo.firstName} ${userInfo.lastName}`
       };
 
       await db.update(users)
         .set(updateData)
-        .where(eq(users.email, invitation.email));
+        .where(sql`${invitation.email} = ANY(${users.emails})`);
 
       // Get updated user
       user = await this.getUserByEmail(invitation.email);
@@ -706,7 +714,8 @@ export class DatabaseStorage implements IStorage {
       // Create new user
       const createUserData = {
         username: userInfo.username,
-        email: userInfo.email,
+        email: invitation.email,
+        emails: [invitation.email],
         password: userInfo.password,
         firstName: userInfo.firstName,
         lastName: userInfo.lastName
