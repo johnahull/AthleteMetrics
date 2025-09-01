@@ -161,6 +161,7 @@ async function initializeDefaultUser() {
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
+        role: "site_admin",
         isSiteAdmin: "true"
       });
     }
@@ -244,7 +245,7 @@ export function registerRoutes(app: Express) {
         };
 
         // Add debugging info for role issues
-        console.log(`Login successful for user ${user.email} (${user.id}):`, {
+        console.log(`Login successful for user ${user.emails[0]} (${user.id}):`, {
           isSiteAdmin: user.isSiteAdmin,
           determinedRole: userRole,
           userOrgsCount: userOrgs ? userOrgs.length : 0,
@@ -531,7 +532,7 @@ export function registerRoutes(app: Express) {
         await storage.addUserToOrganization(user.id, req.body.organizationId, userData.role);
       }
 
-      res.status(201).json({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName });
+      res.status(201).json({ id: user.id, emails: user.emails, firstName: user.firstName, lastName: user.lastName });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Validation error", errors: error.errors });
@@ -1328,7 +1329,7 @@ export function registerRoutes(app: Express) {
       req.session.user = {
         id: result.user.id,
         username: result.user.username,
-        email: result.user.email,
+        email: result.user.emails[0],
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: userRole,
@@ -1566,7 +1567,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Check if user already exists with this email
-      let user = await storage.getUserByEmail(parsedUserData.email);
+      let user = await storage.getUserByEmail(parsedUserData.emails[0]);
 
       if (!user) {
         // Create new user if they don't exist
@@ -1588,7 +1589,7 @@ export function registerRoutes(app: Express) {
 
       res.status(201).json({ 
         id: user.id, 
-        email: user.email, 
+        emails: user.emails, 
         firstName: user.firstName, 
         lastName: user.lastName, 
         role: role,
@@ -1664,7 +1665,7 @@ export function registerRoutes(app: Express) {
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
-        email: user.email,
+        emails: user.emails,
         role: userRole,
         organizations: organizations.filter(org => org.id && org.name)
       };
