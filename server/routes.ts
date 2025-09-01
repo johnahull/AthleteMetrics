@@ -162,7 +162,7 @@ async function initializeDefaultUser() {
         firstName: "Site",
         lastName: "Administrator",
         isSiteAdmin: "true"
-      } as any);
+      });
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
