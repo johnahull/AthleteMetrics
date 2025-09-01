@@ -839,6 +839,13 @@ export function registerRoutes(app: Express) {
       }
 
       const playerData = insertPlayerSchema.parse(req.body);
+      
+      // Add organization context for non-site admins
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      if (!userIsSiteAdmin && currentUser?.primaryOrganizationId) {
+        playerData.organizationId = currentUser.primaryOrganizationId;
+      }
+
       const player = await storage.createPlayer(playerData);
       res.status(201).json(player);
     } catch (error) {

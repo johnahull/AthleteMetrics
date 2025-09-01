@@ -1,4 +1,3 @@
-
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, decimal, timestamp, date } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
@@ -330,7 +329,7 @@ export const MetricType = {
   FLY10_TIME: "FLY10_TIME",
   VERTICAL_JUMP: "VERTICAL_JUMP",
   AGILITY_505: "AGILITY_505",
-  AGILITY_5105: "AGILITY_5105", 
+  AGILITY_5105: "AGILITY_5105",
   T_TEST: "T_TEST",
   DASH_40YD: "DASH_40YD",
   RSI: "RSI",
@@ -338,7 +337,7 @@ export const MetricType = {
 
 export const TeamLevel = {
   CLUB: "Club",
-  HS: "HS", 
+  HS: "HS",
   COLLEGE: "College",
 } as const;
 
@@ -373,4 +372,17 @@ export const insertAthleteSchema = z.object({
 });
 
 // Legacy compatibility - export insertPlayerSchema as alias for insertAthleteSchema
-export const insertPlayerSchema = insertAthleteSchema;
+export const insertPlayerSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  birthDate: z.string().optional(),
+  graduationYear: z.coerce.number().optional(),
+  school: z.string().optional(),
+  phoneNumbers: z.array(z.string()).optional(),
+  sports: z.array(z.string()).optional(),
+  height: z.coerce.number().optional(),
+  weight: z.coerce.number().optional(),
+  teamIds: z.array(z.string()).optional(),
+  emails: z.array(z.string().email()).optional(),
+  organizationId: z.string().optional()
+});

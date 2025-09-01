@@ -923,11 +923,30 @@ export class DatabaseStorage implements IStorage {
       isActive: "true"
     }).returning();
 
-    // Add to teams if specified
+    // Add to teams if specified and determine organization from first team
+    let organizationId: string | undefined;
     if (player.teamIds && player.teamIds.length > 0) {
       for (const teamId of player.teamIds) {
         await this.addUserToTeam(newUser.id, teamId);
+        
+        // Get the organization from the first team to associate the athlete
+        if (!organizationId) {
+          const team = await this.getTeam(teamId);
+          if (team) {
+            organizationId = team.organization.id;
+          }
+        }
       }
+    }
+
+    // If organizationId is provided directly in player data, use that
+    if (player.organizationId) {
+      organizationId = player.organizationId;
+    }
+
+    // Associate athlete with organization if we have one
+    if (organizationId) {
+      await this.addUserToOrganization(newUser.id, organizationId, "athlete");
     }
 
     // Transform to player format for return
