@@ -112,28 +112,51 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
 export function validateMeasurementCSV(row: any): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  if (!row.fullName || !row.fullName.trim()) {
-    errors.push('Full name is required');
+  // Validate athlete identification
+  if (!row.firstName || !row.firstName.trim()) {
+    errors.push('First name is required');
+  }
+  
+  if (!row.lastName || !row.lastName.trim()) {
+    errors.push('Last name is required');
   }
   
   if (!row.birthYear || isNaN(parseInt(row.birthYear))) {
     errors.push('Valid birth year is required');
+  } else {
+    const year = parseInt(row.birthYear);
+    if (year < 1990 || year > 2020) {
+      errors.push('Birth year must be between 1990 and 2020');
+    }
   }
   
+  // Validate measurement date
   if (!row.date || !row.date.trim()) {
     errors.push('Date is required');
   } else {
-    // Validate date format (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(row.date)) {
       errors.push('Date must be in YYYY-MM-DD format');
     }
   }
   
-  if (!row.metric || !['FLY10_TIME', 'VERTICAL_JUMP'].includes(row.metric)) {
-    errors.push('Metric must be FLY10_TIME or VERTICAL_JUMP');
+  // Validate age
+  if (!row.age || isNaN(parseInt(row.age))) {
+    errors.push('Valid age is required');
+  } else {
+    const age = parseInt(row.age);
+    if (age < 10 || age > 25) {
+      errors.push('Age must be between 10 and 25');
+    }
   }
   
+  // Validate metric type
+  const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+  if (!row.metric || !validMetrics.includes(row.metric)) {
+    errors.push(`Metric must be one of: ${validMetrics.join(', ')}`);
+  }
+  
+  // Validate value
   if (!row.value || isNaN(parseFloat(row.value))) {
     errors.push('Valid numeric value is required');
   } else {
@@ -141,6 +164,17 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
     if (value <= 0) {
       errors.push('Value must be positive');
     }
+  }
+  
+  // Validate units
+  const validUnits = ['s', 'in', ''];
+  if (row.units && !validUnits.includes(row.units)) {
+    errors.push('Units must be "s" for time, "in" for distance, or empty for dimensionless');
+  }
+  
+  // Validate flyInDistance if provided
+  if (row.flyInDistance && row.flyInDistance.trim() && isNaN(parseFloat(row.flyInDistance))) {
+    errors.push('Fly-in distance must be a valid number');
   }
   
   return {
