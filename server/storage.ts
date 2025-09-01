@@ -150,12 +150,10 @@ export class DatabaseStorage implements IStorage {
     const birthYear = user.birthDate ? new Date(user.birthDate).getFullYear() : undefined;
 
     // Ensure emails array is properly set
-    const emails = user.emails || (user.email ? [user.email] : [`${user.username || 'user'}@temp.local`]);
-    const email = emails[0]; // Primary email for backward compatibility
+    const emails = user.emails || [`${user.username || 'user'}@temp.local`];
 
     const [newUser] = await db.insert(users).values({
       ...user,
-      email,
       emails,
       password: hashedPassword,
       fullName,
@@ -699,7 +697,6 @@ export class DatabaseStorage implements IStorage {
         username: userInfo.username,
         firstName: userInfo.firstName,
         lastName: userInfo.lastName,
-        email: invitation.email, // Keep primary email updated
         fullName: `${userInfo.firstName} ${userInfo.lastName}`
       };
 
@@ -894,7 +891,6 @@ export class DatabaseStorage implements IStorage {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
       birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
-      emails: [user.email],
       teams: userTeams.map(ut => ut.team)
     };
 
@@ -906,12 +902,11 @@ export class DatabaseStorage implements IStorage {
     const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // Use primary email or generate one
-    const email = (player.emails && player.emails.length > 0) ? player.emails[0] : `${username}@temp.local`;
+    const emails = (player.emails && player.emails.length > 0) ? player.emails : [`${username}@temp.local`];
 
     const [newUser] = await db.insert(users).values({
       username,
-      email,
-      emails: player.emails || [email], // Ensure emails array is always provided
+      emails, // Ensure emails array is always provided
       firstName: player.firstName,
       lastName: player.lastName,
       birthDate: player.birthday || player.birthDate,
@@ -975,23 +970,20 @@ export class DatabaseStorage implements IStorage {
       await this.setPlayerTeams(id, player.teamIds);
     }
 
-    // Update any existing user records if name or emails changed
-    if ((player.firstName || player.lastName || player.emails) && finalFirstName && finalLastName) {
-      // Get current player emails (either updated or existing)
-      const currentEmails = player.emails || (await this.getPlayer(id))?.emails || [];
-
-      for (const email of currentEmails) {
-        try {
-          await db.update(users)
-            .set({
-              firstName: finalFirstName,
-              lastName: finalLastName
-            })
-            .where(eq(users.email, email));
-        } catch (error) {
-          // Log but don't fail if user update fails
-          console.log(`Could not update user record for email ${email}:`, error);
-        }
+    // Update any existing user records if name changed
+    if ((player.firstName || player.lastName) && finalFirstName && finalLastName) {
+      // Update the user record directly by ID
+      try {
+        await db.update(users)
+          .set({
+            firstName: finalFirstName,
+            lastName: finalLastName,
+            fullName: `${finalFirstName} ${finalLastName}`
+          })
+          .where(eq(users.id, id));
+      } catch (error) {
+        // Log but don't fail if user update fails
+        console.log(`Could not update user record for ID ${id}:`, error);
       }
     }
 
@@ -1032,7 +1024,6 @@ export class DatabaseStorage implements IStorage {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
       birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
-      emails: [user.email],
       teams: []
     };
   }
