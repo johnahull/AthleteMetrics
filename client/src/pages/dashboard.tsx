@@ -61,7 +61,14 @@ export default function Dashboard() {
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams"],
+    queryKey: ["/api/analytics/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext
+        ? `/api/analytics/teams?organizationId=${organizationContext}`
+        : `/api/analytics/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   if (isLoading) {
@@ -118,10 +125,10 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Athletes</p>
                 <p className="text-3xl font-bold text-gray-900" data-testid="stat-active-athletes">
-                  {stats.activeAthletes}
+                  {stats.totalAthletes || 0}
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  {stats.totalPlayers} total players
+                  {stats.activeAthletes || 0} with active accounts
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -208,9 +215,12 @@ export default function Dashboard() {
                     }`}></div>
                     <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
                   </div>
-                  <span className="text-sm text-gray-600">{team.playerCount} players</span>
+                  <span className="text-sm text-gray-600">{team.athleteCount} athletes</span>
                 </div>
               ))}
+              {(!teamStats || teamStats.length === 0) && (
+                <p className="text-sm text-gray-500 text-center py-4">No teams found</p>
+              )}
             </div>
           </CardContent>
         </Card>

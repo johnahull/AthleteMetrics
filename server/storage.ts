@@ -316,10 +316,16 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(userTeams.userId, userId));
 
-    return result.map(({ user_teams, teams: team, organizations }) => ({
+    const mappedResult = result.map(({ user_teams, teams: team, organizations }) => ({
       ...user_teams,
       team: { ...team, organization: organizations }
     }));
+
+    if (result.length > 0) {
+      console.log(`User ${userId} has ${result.length} team(s):`, mappedResult.map(r => r.team.name));
+    }
+
+    return mappedResult;
   }
 
   // Organizations
@@ -609,7 +615,7 @@ export class DatabaseStorage implements IStorage {
         userId,
         teamId
       }).returning();
-      
+
       console.log(`Successfully added user ${userId} to team ${teamId}`);
       return userTeam;
     } catch (error) {
@@ -798,10 +804,22 @@ export class DatabaseStorage implements IStorage {
         ))
         .orderBy(asc(users.lastName), asc(users.firstName));
 
-      return result.map(row => row.users);
+      // Get team information for each athlete (should be empty for "none" filter)
+      const athletesWithTeams = await Promise.all(
+        result.map(async (row) => {
+          const athlete = row.users;
+          const athleteTeams = await this.getUserTeams(athlete.id);
+          return {
+            ...athlete,
+            teams: athleteTeams.map(ut => ut.team)
+          };
+        })
+      );
+
+      return athletesWithTeams;
     }
 
-    // For regular queries, select only users and use distinct
+    // For regular queries, get athletes with their team information
     const conditions = [eq(userOrganizations.role, 'athlete')];
 
     if (filters?.birthYearFrom && filters?.birthYearTo) {
@@ -825,11 +843,8 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
 
-    if (filters?.teamId && filters.teamId !== 'none') {
-      conditions.push(eq(userTeams.teamId, filters.teamId));
-    }
-
-    const result = await db
+    // Base query to get all athletes in the organization
+    let athleteQuery = db
       .selectDistinct({
         id: users.id,
         username: users.username,
@@ -851,12 +866,31 @@ export class DatabaseStorage implements IStorage {
         createdAt: users.createdAt
       })
       .from(users)
-      .leftJoin(userTeams, eq(users.id, userTeams.userId))
-      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .orderBy(asc(users.lastName), asc(users.firstName));
 
-    return result;
+    const result = await athleteQuery;
+
+    // Get team information for each athlete
+    const athletesWithTeams = await Promise.all(
+      result.map(async (athlete) => {
+        const athleteTeams = await this.getUserTeams(athlete.id);
+        return {
+          ...athlete,
+          teams: athleteTeams.map(ut => ut.team)
+        };
+      })
+    );
+
+    // Apply team filter after getting teams
+    if (filters?.teamId && filters.teamId !== 'none') {
+      return athletesWithTeams.filter(athlete => 
+        athlete.teams.some(team => team.id === filters.teamId)
+      );
+    }
+
+    return athletesWithTeams;
   }
 
   async getAthlete(id: string): Promise<User | undefined> {
@@ -937,7 +971,7 @@ export class DatabaseStorage implements IStorage {
         } catch (error) {
           console.error(`Failed to add athlete ${newUser.id} to team ${teamId}:`, error);
         }
-        
+
         // Get the organization from the first team if not already specified
         if (!organizationId) {
           const team = await this.getTeam(teamId);
@@ -1319,12 +1353,22 @@ export class DatabaseStorage implements IStorage {
     bestVertical?: number;
     latestTest?: string;
   }>> {
+    // Always require organization context for team stats to prevent cross-org data leakage
+    if (!organizationId) {
+      return [];
+    }
+
     const teams = await this.getTeams(organizationId);
 
     const teamStats = await Promise.all(
       teams.map(async (team) => {
-        const athletes = await this.getAthletes({ teamId: team.id });
-        const measurements = await this.getMeasurements({ teamIds: [team.id], includeUnverified: false });
+        // Ensure athletes are filtered by organization as well
+        const athletes = await this.getAthletes({ teamId: team.id, organizationId: team.organizationId });
+        const measurements = await this.getMeasurements({ 
+          teamIds: [team.id], 
+          organizationId: team.organizationId,
+          includeUnverified: false 
+        });
 
         const fly10Times = measurements
           .filter(m => m.metric === "FLY10_TIME")
@@ -1352,6 +1396,7 @@ export class DatabaseStorage implements IStorage {
 
   async getDashboardStats(organizationId?: string): Promise<{
     totalAthletes: number;
+    activeAthletes: number;
     totalTeams: number;
     bestFly10Today?: { value: number; userName: string };
     bestVerticalToday?: { value: number; userName: string };
@@ -1359,10 +1404,13 @@ export class DatabaseStorage implements IStorage {
     const athletes = await this.getAthletes({ organizationId });
     const teams = await this.getTeams(organizationId);
 
-    // Count active athletes (players who have user accounts)
-    const allUsers = organizationId
-      ? await this.getOrganizationUsers(organizationId)
-      : await this.getUsers();
+    // Count athletes in the organization
+    const totalAthletes = athletes.length;
+    
+    // Active athletes are those with active user accounts (not just invitation pending)
+    const activeAthletes = athletes.filter(athlete => 
+      athlete.isActive === "true" && athlete.password !== "INVITATION_PENDING"
+    ).length;
 
     const today = new Date().toISOString().split('T')[0];
     const todaysMeasurements = await this.getMeasurements({
@@ -1381,7 +1429,8 @@ export class DatabaseStorage implements IStorage {
       .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
 
     return {
-      totalAthletes: athletes.length,
+      totalAthletes,
+      activeAthletes,
       totalTeams: teams.length,
       bestFly10Today: todaysFly10.length > 0 ? todaysFly10.reduce((best, current) =>
         current.value < best.value ? current : best

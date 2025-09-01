@@ -32,13 +32,12 @@ export default function MeasurementForm() {
   const form = useForm<InsertMeasurement>({
     resolver: zodResolver(insertMeasurementSchema),
     defaultValues: {
-      playerId: "",
+      userId: "",
       date: new Date().toISOString().split('T')[0],
       metric: "FLY10_TIME",
       value: 0,
       flyInDistance: undefined,
       notes: "",
-      submittedBy: "",
     },
   });
 
@@ -55,6 +54,7 @@ export default function MeasurementForm() {
 
   const createMeasurementMutation = useMutation({
     mutationFn: async (data: InsertMeasurement) => {
+      // Backend will set submittedBy automatically based on session
       const response = await apiRequest("POST", "/api/measurements", data);
       return response.json();
     },
@@ -66,21 +66,21 @@ export default function MeasurementForm() {
         description: "Measurement added successfully",
       });
       form.reset({
-        playerId: "",
+        userId: "",
         date: new Date().toISOString().split('T')[0],
         metric: "FLY10_TIME",
         value: 0,
         flyInDistance: undefined,
         notes: "",
-        submittedBy: "",
       });
       setSelectedPlayer(null);
       setSearchTerm("");
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Measurement creation error:", error);
       toast({
         title: "Error",
-        description: "Failed to add measurement",
+        description: `Failed to add measurement: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -94,7 +94,7 @@ export default function MeasurementForm() {
     onSuccess: (newPlayer) => {
       queryClient.invalidateQueries({ queryKey: ["/api/players"] });
       setSelectedPlayer(newPlayer);
-      form.setValue("playerId", newPlayer.id);
+      form.setValue("userId", newPlayer.id);
       setShowQuickAdd(false);
       quickAddForm.reset();
       toast({
@@ -129,10 +129,14 @@ export default function MeasurementForm() {
       return;
     }
 
-    createMeasurementMutation.mutate({
+    // Ensure userId is set to the selected player
+    const measurementData = {
       ...data,
-      playerId: selectedPlayer.id,
-    });
+      userId: selectedPlayer.id,
+    };
+
+    console.log("Submitting measurement data:", measurementData);
+    createMeasurementMutation.mutate(measurementData);
   };
 
   const onQuickAddSubmit = (data: InsertPlayer) => {
@@ -141,13 +145,12 @@ export default function MeasurementForm() {
 
   const clearForm = () => {
     form.reset({
-      playerId: "",
+      userId: "",
       date: new Date().toISOString().split('T')[0],
       metric: "FLY10_TIME",
       value: 0,
       flyInDistance: undefined,
       notes: "",
-      submittedBy: "",
     });
     setSelectedPlayer(null);
     setSearchTerm("");
@@ -170,7 +173,7 @@ export default function MeasurementForm() {
                   setSearchTerm(e.target.value);
                   if (selectedPlayer && e.target.value !== selectedPlayer.fullName) {
                     setSelectedPlayer(null);
-                    form.setValue("playerId", "");
+                    form.setValue("userId", "");
                   }
                 }}
                 className="pl-10"
@@ -188,7 +191,7 @@ export default function MeasurementForm() {
                       onClick={() => {
                         setSelectedPlayer(player);
                         setSearchTerm("");
-                        form.setValue("playerId", player.id);
+                        form.setValue("userId", player.id);
                       }}
                       data-testid={`option-player-${player.id}`}
                     >
