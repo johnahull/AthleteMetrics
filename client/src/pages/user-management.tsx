@@ -31,6 +31,7 @@ type Organization = {
       id: string;
       username: string;
       email: string;
+      emails?: string[];
       firstName: string;
       lastName: string;
       role: string;
@@ -41,6 +42,8 @@ type Organization = {
   invitations: {
     id: string;
     email: string;
+    firstName: string;
+    lastName: string;
     role: string;
     organizationId: string;
     isUsed: string;
@@ -73,6 +76,7 @@ const siteAdminSchema = z.object({
 type SiteAdmin = {
   id: string;
   email: string;
+  emails?: string[];
   firstName: string;
   lastName: string;
   role: string;
@@ -704,7 +708,7 @@ export default function UserManagement() {
                               </Link>
                             </p>
                             <p className="text-sm text-gray-600" data-testid={`site-admin-email-${admin.id}`}>
-                              {admin.email.replace('@admin.local', '')} • <span className="text-green-600">Active</span>
+                              {admin.emails?.[0]?.replace('@admin.local', '') || admin.email?.replace('@admin.local', '') || 'No email'} • <span className="text-xs text-gray-500">Site Admin</span>
                             </p>
                           </div>
                         </div>
@@ -894,7 +898,7 @@ export default function UserManagement() {
                               )}
                               <div>
                                 <p className="font-medium text-gray-900" data-testid={`invitation-email-${invitation.id}`}>
-                                  {invitation.email}
+                                  {invitation.email || 'No email'}
                                 </p>
                                 <p className="text-sm text-gray-600">
                                   {invitation.role} •
