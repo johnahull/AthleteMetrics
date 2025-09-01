@@ -798,23 +798,29 @@ export function registerRoutes(app: Express) {
         }
       } else if (!userIsSiteAdmin) {
         // Coaches and org admins can only view players from their organization
-        // First, get the player's teams to determine organization
+        // Check if user has access to the same organization as the player
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "Access denied - no organization access" });
+        }
+
+        // Get the player's teams to determine organization
         const playerTeams = await storage.getPlayerTeams(id);
         if (playerTeams.length === 0) {
           return res.status(403).json({ message: "Player not associated with any team" });
         }
 
-        // Get team details to find organization
-        const teams = await storage.getTeams();
+        // Get all teams to find organization IDs
+        const allTeams = await storage.getTeams();
         const playerOrganizations = playerTeams
-          .map(pt => teams.find(t => t.id === pt.teamId))
+          .map(pt => allTeams.find(t => t.id === pt.teamId))
           .filter(Boolean)
           .map(team => team!.organizationId);
 
         // Check if user has access to any of the player's organizations
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const hasAccess = playerOrganizations.some(orgId => 
-          userOrgs.some(userOrg => userOrg.organizationId === orgId)
+        const hasAccess = playerOrganizations.some(playerOrgId => 
+          userOrgs.some(userOrg => userOrg.organizationId === playerOrgId)
         );
 
         if (!hasAccess) {
