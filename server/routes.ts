@@ -989,17 +989,8 @@ export function registerRoutes(app: Express) {
     try {
       const currentUser = req.session.user;
 
-      // Get current user info for submittedBy
-      let submittedById = currentUser?.id;
-
-      // If using old admin system, find the site admin user
-      if (!submittedById && req.session.admin) {
-        const siteAdmin = await storage.getUserByUsername("admin");
-        submittedById = siteAdmin?.id;
-      }
-
-      if (!submittedById) {
-        return res.status(400).json({ message: "Unable to determine current user" });
+      if (!currentUser?.id) {
+        return res.status(400).json({ message: "User not authenticated" });
       }
 
       // Athletes cannot submit measurements
@@ -1007,9 +998,11 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes cannot submit measurements" });
       }
 
+      // Parse the measurement data and ensure submittedBy is set
+      const { submittedBy, ...requestData } = req.body;
       const measurementData = insertMeasurementSchema.parse({
-        ...req.body,
-        submittedBy: submittedById
+        ...requestData,
+        submittedBy: currentUser.id  // Always use current user's ID
       });
 
       // Validate user can access the player being measured
