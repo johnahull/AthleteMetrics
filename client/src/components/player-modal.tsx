@@ -30,7 +30,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     defaultValues: {
       firstName: "",
       lastName: "",
-      emails: [],
+      emails: [""],
       birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
@@ -73,7 +73,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       form.reset({
         firstName: "",
         lastName: "",
-        emails: [],
+        emails: [""],
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
@@ -97,7 +97,17 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         description: "Player created successfully",
       });
       onClose();
-      form.reset();
+      form.reset({
+        firstName: "",
+        lastName: "",
+        emails: [""],
+        birthDate: "",
+        graduationYear: new Date().getFullYear() + 3,
+        teamIds: [],
+        school: "",
+        sports: [],
+        phoneNumbers: [],
+      });
     },
     onError: () => {
       toast({
@@ -132,10 +142,26 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
   });
 
   const onSubmit = (data: InsertPlayer) => {
+    // Filter out empty emails and ensure at least one email exists
+    const filteredEmails = data.emails?.filter(email => email.trim() !== "") || [];
+    if (filteredEmails.length === 0) {
+      toast({
+        title: "Error",
+        description: "At least one email address is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const submissionData = {
+      ...data,
+      emails: filteredEmails,
+    };
+
     if (isEditing) {
-      updatePlayerMutation.mutate(data);
+      updatePlayerMutation.mutate(submissionData);
     } else {
-      createPlayerMutation.mutate(data);
+      createPlayerMutation.mutate(submissionData);
     }
   };
 
@@ -158,7 +184,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
           <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-              <FormField
+                <FormField
                 control={form.control}
                 name="firstName"
                 render={({ field }) => (
