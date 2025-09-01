@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,7 +51,7 @@ export default function ImportExport() {
       setImportResults(data);
       const hasResults = data.results.length > 0;
       const hasErrors = data.errors.length > 0;
-      
+
       toast({
         title: hasResults ? "Import Complete" : "Import Issues",
         description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors.`,
@@ -109,14 +108,14 @@ export default function ImportExport() {
       const response = await fetch(`/api/export/${exportType}`, {
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         throw new Error('Export failed');
       }
 
       const csvData = await response.text();
       downloadCSV(csvData, `${exportType}.csv`);
-      
+
       toast({
         title: "Success",
         description: `${exportType} data exported successfully`,
@@ -162,12 +161,12 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
         <Card className="bg-white mb-8">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Import Data</h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* File Upload */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Athletes" : "Measurements"}</h4>
-                
+
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Import Type</label>
                   <Select value={importType} onValueChange={(value) => setImportType(value as "players" | "measurements")}>
@@ -194,7 +193,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                     click to browse
                   </Button>
                   <p className="text-xs text-gray-500 mt-2">Supports CSV and XLSX files</p>
-                  
+
                   <Input
                     id="file-upload"
                     type="file"
@@ -224,7 +223,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
               {/* Import Options */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Import Options</h4>
-                
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
@@ -301,7 +300,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                     <p className="text-gray-600">Errors</p>
                   </div>
                 </div>
-                
+
                 {importResults.errors.length > 0 && (
                   <div className="mt-4">
                     <h6 className="font-medium text-red-800 mb-2">Errors:</h6>
@@ -326,8 +325,8 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
         <Card className="bg-white mb-8">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">CSV Templates & Examples</h3>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+            <div className="space-y-8">
               {/* Athletes CSV Format */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Athletes CSV Format</h4>
@@ -336,7 +335,10 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <pre className="whitespace-pre-wrap">{playersTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: firstName, lastName, birthYear, teamName</span>
+                  <span className="text-xs text-gray-500">
+                    <span className="font-medium">Required:</span> firstName, lastName, birthDate (YYYY-MM-DD) • 
+                    <span className="font-medium">Optional:</span> teamName, birthYear, graduationYear, emails, phoneNumbers, sports, height (36-84 in), weight (50-400 lbs), school
+                  </span>
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -357,7 +359,10 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <pre className="whitespace-pre-wrap">{measurementsTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: firstName, lastName, birthYear, date, metric, value • Optional: flyInDistance (for fly 10 times)</span>
+                  <span className="text-xs text-gray-500">
+                    <span className="font-medium">Required:</span> firstName, lastName, birthYear (1990-2020), date (YYYY-MM-DD), age (10-25), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
+                    <span className="font-medium">Optional:</span> units (s/in), flyInDistance, notes
+                  </span>
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -393,7 +398,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
         <Card className="bg-white">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Export Data</h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center p-6 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
