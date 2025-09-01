@@ -601,6 +601,8 @@ export default function OrganizationProfile() {
 
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
     queryKey: [`/api/organizations/${id}/profile`],
+    enabled: !!id && userHasAccessToOrg,
+    staleTime: 0, // Always fetch fresh data
   });
 
   if (isLoading) {
@@ -656,7 +658,7 @@ export default function OrganizationProfile() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
+            <h1 className="text-3xl font-bold text-gray-900" data-testid="organization-title">{organization.name}</h1>
           </div>
           {organization.location && (
             <div className="flex items-center gap-2 text-gray-600">
