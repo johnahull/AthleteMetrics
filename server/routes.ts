@@ -795,6 +795,13 @@ export function registerRoutes(app: Express) {
       const { id } = req.params;
       const currentUser = req.session.user;
 
+      console.log(`Player profile request - Current user:`, {
+        id: currentUser?.id,
+        role: currentUser?.role,
+        playerId: currentUser?.playerId,
+        requestedPlayerId: id
+      });
+
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
@@ -805,9 +812,11 @@ export function registerRoutes(app: Express) {
       }
 
       const userIsSiteAdmin = isSiteAdmin(currentUser);
+      console.log(`Player profile request - User is site admin:`, userIsSiteAdmin);
 
       // Athletes can only view their own player data
       if (currentUser.role === "athlete") {
+        console.log(`Player profile request - Athlete check: currentUser.playerId=${currentUser.playerId}, requested id=${id}`);
         if (currentUser.playerId !== id) {
           return res.status(403).json({ message: "Athletes can only view their own profile" });
         }
