@@ -780,7 +780,7 @@ export function registerRoutes(app: Express) {
         id: p.id, 
         name: `${p.firstName} ${p.lastName}`, 
         teamCount: p.teams.length,
-        teamNames: p.teams.map(t => t.name)
+        teamNames: p.teams.map((t: any) => t.name)
       })));
 
       res.json(players);
@@ -2165,7 +2165,7 @@ export function registerRoutes(app: Express) {
       ];
 
       const csvRows = athletes.map(athlete => {
-        const teams = athlete.teams ? athlete.teams.map(t => t.name).join(';') : '';
+        const teams = athlete.teams ? athlete.teams.map((t: any) => t.name).join(';') : '';
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
         const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
         const sports = Array.isArray(athlete.sports) ? athlete.sports.join(';') : (athlete.sports || '');
@@ -2228,7 +2228,7 @@ export function registerRoutes(app: Express) {
 
       const csvRows = measurements.map(measurement => {
         const user = measurement.user;
-        const teams = user?.teams ? user.teams.map(t => t.name).join(';') : '';
+        const teams = user?.teams ? user.teams.map((t: any) => t.name).join(';') : '';
         const submittedBy = measurement.submittedBy || '';
         const verifiedBy = measurement.verifiedBy || '';
 
