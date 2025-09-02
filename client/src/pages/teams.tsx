@@ -68,7 +68,9 @@ export default function Teams() {
   };
 
   const getTeamStats = (teamId: string) => {
-    return teamStats?.find(stat => stat.teamId === teamId) || {
+    // Ensure teamStats is an array before calling find
+    const statsArray = Array.isArray(teamStats) ? teamStats : [];
+    return statsArray.find(stat => stat.teamId === teamId) || {
       playerCount: 0,
       bestFly10: undefined,
       bestVertical: undefined,
