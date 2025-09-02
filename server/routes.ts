@@ -826,12 +826,8 @@ export function registerRoutes(app: Express) {
           return res.status(403).json({ message: "Player not associated with any team" });
         }
 
-        // Get all teams to find organization IDs
-        const allTeams = await storage.getTeams();
-        const playerOrganizations = playerTeams
-          .map(pt => allTeams.find(t => t.id === pt.teamId))
-          .filter(Boolean)
-          .map(team => team!.organizationId);
+        // Get player organization IDs directly from the teams (which include organization data)
+        const playerOrganizations = playerTeams.map(team => team.organization.id);
 
         // Check if user has access to any of the player's organizations
         const hasAccess = playerOrganizations.some(playerOrgId => 
