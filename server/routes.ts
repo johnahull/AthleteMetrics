@@ -795,13 +795,6 @@ export function registerRoutes(app: Express) {
       const { id } = req.params;
       const currentUser = req.session.user;
 
-      console.log(`Player profile request - Current user:`, {
-        id: currentUser?.id,
-        role: currentUser?.role,
-        playerId: currentUser?.playerId,
-        requestedPlayerId: id
-      });
-
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
@@ -812,11 +805,9 @@ export function registerRoutes(app: Express) {
       }
 
       const userIsSiteAdmin = isSiteAdmin(currentUser);
-      console.log(`Player profile request - User is site admin:`, userIsSiteAdmin);
 
       // Athletes can only view their own player data
       if (currentUser.role === "athlete") {
-        console.log(`Player profile request - Athlete check: currentUser.playerId=${currentUser.playerId}, requested id=${id}`);
         if (currentUser.playerId !== id) {
           return res.status(403).json({ message: "Athletes can only view their own profile" });
         }
@@ -824,41 +815,27 @@ export function registerRoutes(app: Express) {
         // Coaches and org admins can only view players from their organization
         // Check if user has access to the same organization as the player
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        console.log(`Player profile access - User ${currentUser.id} organizations:`, userOrgs.map(org => ({ id: org.organizationId, name: org.organization?.name, role: org.role })));
 
         if (userOrgs.length === 0) {
-          console.log(`Player profile access denied - User ${currentUser.id} has no organization access`);
           return res.status(403).json({ message: "Access denied - no organization access" });
         }
 
         // Get the player's teams to determine organization
         const playerTeams = await storage.getPlayerTeams(id);
-        console.log(`Player profile access - Player ${id} teams:`, playerTeams.map(team => ({ teamName: team.name, orgId: team.organization.id, orgName: team.organization.name })));
         
         if (playerTeams.length === 0) {
-          console.log(`Player profile access denied - Player ${id} not associated with any team`);
           return res.status(403).json({ message: "Player not associated with any team" });
         }
 
         // Get player organization IDs directly from the teams (which include organization data)
         const playerOrganizations = playerTeams.map(team => team.organization.id);
-        console.log(`Player profile access - Player organizations:`, playerOrganizations);
-        console.log(`Player profile access - User organization IDs:`, userOrgs.map(org => org.organizationId));
 
         // Check if user has access to any of the player's organizations
         const hasAccess = playerOrganizations.some(playerOrgId => 
           userOrgs.some(userOrg => userOrg.organizationId === playerOrgId)
         );
 
-        console.log(`Player profile access check result:`, {
-          playerId: id,
-          playerOrganizations,
-          userOrganizationIds: userOrgs.map(org => org.organizationId),
-          hasAccess
-        });
-
         if (!hasAccess) {
-          console.log(`Player profile access denied - User ${currentUser.id} does not have access to player ${id}'s organizations`);
           return res.status(403).json({ message: "Access denied to this player" });
         }
       }
