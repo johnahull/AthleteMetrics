@@ -747,16 +747,7 @@ export class DatabaseStorage implements IStorage {
     return { user };
   }
 
-  // Athletes (users with athlete role)
-  async getPlayers(filters?: {
-    teamId?: string;
-    organizationId?: string;
-    birthYearFrom?: number;
-    birthYearTo?: number;
-    search?: string;
-  }): Promise<User[]> {
-    return this.getAthletes(filters);
-  }
+  // Athletes (users with athlete role) - consolidated from getPlayers
 
   async getAthletes(filters?: {
     teamId?: string;
@@ -843,9 +834,10 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
 
-    // Base query to get all athletes in the organization
-    let athleteQuery = db
-      .selectDistinct({
+    // Optimized query with team data joined to eliminate N+1
+    const athleteQuery = db
+      .select({
+        // User fields
         id: users.id,
         username: users.username,
         emails: users.emails,
@@ -863,34 +855,43 @@ export class DatabaseStorage implements IStorage {
         weight: users.weight,
         isSiteAdmin: users.isSiteAdmin,
         isActive: users.isActive,
-        createdAt: users.createdAt
+        createdAt: users.createdAt,
+        // Team data aggregated
+        teams: sql<any>`COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object(
+              'id', ${teams.id},
+              'name', ${teams.name},
+              'level', ${teams.level},
+              'organizationId', ${teams.organizationId},
+              'organization', jsonb_build_object(
+                'id', ${organizations.id},
+                'name', ${organizations.name}
+              )
+            )
+          ) FILTER (WHERE ${teams.id} IS NOT NULL),
+          '[]'
+        )`
       })
       .from(users)
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(userTeams, eq(users.id, userTeams.userId))
+      .leftJoin(teams, eq(userTeams.teamId, teams.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(and(...conditions))
+      .groupBy(users.id)
       .orderBy(asc(users.lastName), asc(users.firstName));
 
     const result = await athleteQuery;
 
-    // Get team information for each athlete
-    const athletesWithTeams = await Promise.all(
-      result.map(async (athlete) => {
-        const athleteTeams = await this.getUserTeams(athlete.id);
-        return {
-          ...athlete,
-          teams: athleteTeams.map(ut => ut.team)
-        };
-      })
-    );
-
-    // Apply team filter after getting teams
+    // Apply team filter
     if (filters?.teamId && filters.teamId !== 'none') {
-      return athletesWithTeams.filter(athlete => 
-        athlete.teams.some(team => team.id === filters.teamId)
+      return result.filter(athlete => 
+        athlete.teams.some((team: any) => team.id === filters.teamId)
       );
     }
 
-    return athletesWithTeams;
+    return result;
   }
 
   async getAthlete(id: string): Promise<User | undefined> {
@@ -1137,9 +1138,55 @@ export class DatabaseStorage implements IStorage {
     sport?: string;
     includeUnverified?: boolean;
   }): Promise<any[]> {
-    let query = db.select()
-      .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id));
+    // Optimized query with all joins to eliminate N+1
+    const query = db.select({
+      // Measurement fields
+      id: measurements.id,
+      userId: measurements.userId,
+      submittedBy: measurements.submittedBy,
+      verifiedBy: measurements.verifiedBy,
+      isVerified: measurements.isVerified,
+      date: measurements.date,
+      age: measurements.age,
+      metric: measurements.metric,
+      value: measurements.value,
+      units: measurements.units,
+      flyInDistance: measurements.flyInDistance,
+      notes: measurements.notes,
+      createdAt: measurements.createdAt,
+      // User data with teams aggregated
+      user: sql<any>`jsonb_build_object(
+        'id', ${users.id},
+        'firstName', ${users.firstName},
+        'lastName', ${users.lastName},
+        'fullName', ${users.fullName},
+        'birthYear', ${users.birthYear},
+        'sports', ${users.sports},
+        'teams', COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object(
+              'id', ${teams.id},
+              'name', ${teams.name},
+              'organization', jsonb_build_object(
+                'id', ${organizations.id},
+                'name', ${organizations.name}
+              )
+            )
+          ) FILTER (WHERE ${teams.id} IS NOT NULL),
+          '[]'
+        )
+      )`,
+      // Submitter and verifier info
+      submitterInfo: sql<any>`submitter_info.first_name || ' ' || submitter_info.last_name`,
+      verifierInfo: sql<any>`verifier_info.first_name || ' ' || verifier_info.last_name`
+    })
+    .from(measurements)
+    .innerJoin(users, eq(measurements.userId, users.id))
+    .leftJoin(userTeams, eq(users.id, userTeams.userId))
+    .leftJoin(teams, eq(userTeams.teamId, teams.id))
+    .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+    .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
+    .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 
     const conditions = [];
     if (filters?.userId || filters?.playerId) {
@@ -1176,40 +1223,17 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(measurements.isVerified, "true"));
     }
 
+    let finalQuery = query;
     if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
+      finalQuery = query.where(and(...conditions)) as any;
     }
 
-    const result = await query.orderBy(desc(measurements.date), desc(measurements.createdAt));
-
-    // Get teams for each user and additional user info
-    const measurementsWithDetails = await Promise.all(
-      result.map(async ({ measurements: measurement, users: user }) => {
-        const userTeams = await this.getUserTeams(user.id);
-
-        let submittedBy;
-        if (measurement.submittedBy) {
-          const [submitter] = await db.select().from(users).where(eq(users.id, measurement.submittedBy));
-          submittedBy = submitter;
-        }
-
-        let verifiedBy;
-        if (measurement.verifiedBy) {
-          const [verifier] = await db.select().from(users).where(eq(users.id, measurement.verifiedBy));
-          verifiedBy = verifier;
-        }
-
-        return {
-          ...measurement,
-          user: { ...user, teams: userTeams.map(ut => ut.team) },
-          submittedBy,
-          verifiedBy
-        };
-      })
-    );
+    const result = await finalQuery
+      .groupBy(measurements.id, users.id)
+      .orderBy(desc(measurements.date), desc(measurements.createdAt));
 
     // Apply team/organization filters
-    let filteredMeasurements = measurementsWithDetails;
+    let filteredMeasurements = result;
 
     if (filters?.teamIds && filters.teamIds.length > 0) {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
