@@ -16,6 +16,7 @@ declare module 'express-session' {
   interface SessionData {
     user?: {
       id: string;
+      username: string;
       email: string;
       firstName: string;
       lastName: string;
@@ -29,6 +30,7 @@ declare module 'express-session' {
     // Impersonation fields
     originalUser?: {
       id: string;
+      username: string;
       email: string;
       firstName: string;
       lastName: string;
@@ -53,6 +55,16 @@ const isSiteAdmin = (user: any): boolean => {
 
 const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
   return await accessController.canManageOrganization(userId, organizationId);
+};
+
+// Helper functions for access control
+const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
+  if (!user?.id) return false;
+  return await accessController.canAccessOrganization(user.id, organizationId);
+};
+
+const hasRole = (user: any, role: string): boolean => {
+  return user?.role === role;
 };
 
 // Unified invitation permission checker
@@ -685,7 +697,7 @@ export function registerRoutes(app: Express) {
             userId: currentUser.playerId, // Convert playerId to userId for database query
             organizationId: orgContextForFiltering,
           };
-          const players = await storage.getPlayers(filters);
+          const players = await storage.getAthletes(filters);
           return res.json(players);
         }
       }

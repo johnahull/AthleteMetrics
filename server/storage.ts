@@ -84,7 +84,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: InsertMeasurement): Promise<Measurement>;
+  createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -719,7 +719,8 @@ export class DatabaseStorage implements IStorage {
       emails: [invitation.email],
       password: userInfo.password,
       firstName: userInfo.firstName,
-      lastName: userInfo.lastName
+      lastName: userInfo.lastName,
+      role: invitation.role // Use the role from the invitation
     };
 
     const user = await this.createUser(createUserData);
@@ -1262,7 +1263,7 @@ export class DatabaseStorage implements IStorage {
     return measurement || undefined;
   }
 
-  async createMeasurement(measurement: InsertMeasurement): Promise<Measurement> {
+  async createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement> {
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");
@@ -1283,7 +1284,7 @@ export class DatabaseStorage implements IStorage {
                   measurement.metric === "RSI" ? "ratio" : "in";
 
     // Get submitter info to determine if auto-verify
-    const [submitter] = await db.select().from(users).where(eq(users.id, measurement.submittedBy));
+    const [submitter] = await db.select().from(users).where(eq(users.id, submittedBy));
 
     // Check if submitter is site admin or has coach/org_admin role in any organization
     let isCoach = submitter?.isSiteAdmin === "true";
@@ -1294,7 +1295,7 @@ export class DatabaseStorage implements IStorage {
 
     const [newMeasurement] = await db.insert(measurements).values({
       userId: measurement.userId,
-      submittedBy: measurement.submittedBy,
+      submittedBy: submittedBy,
       date: measurement.date,
       metric: measurement.metric,
       value: measurement.value.toString(),
@@ -1303,7 +1304,7 @@ export class DatabaseStorage implements IStorage {
       age,
       units,
       isVerified: isCoach ? "true" : "false",
-      verifiedBy: isCoach ? measurement.submittedBy : undefined
+      verifiedBy: isCoach ? submittedBy : undefined
     }).returning();
 
     return newMeasurement;
@@ -1312,7 +1313,7 @@ export class DatabaseStorage implements IStorage {
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
     const updateData: any = {};
     if (measurement.userId) updateData.userId = measurement.userId;
-    if (measurement.submittedBy) updateData.submittedBy = measurement.submittedBy;
+    // submittedBy cannot be updated after creation
     if (measurement.date) updateData.date = measurement.date;
     if (measurement.metric) updateData.metric = measurement.metric;
     if (measurement.value !== undefined) updateData.value = measurement.value.toString();
