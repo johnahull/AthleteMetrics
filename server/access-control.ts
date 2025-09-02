@@ -22,7 +22,7 @@ export class AccessController {
     if (await this.isSiteAdmin(userId)) return true;
     
     const userOrgs = await this.storage.getUserOrganizations(userId);
-    return userOrgs.some(org => org.organizationId === organizationId);
+    return userOrgs.some((org: any) => org.organizationId === organizationId);
   }
 
   async canManageOrganization(userId: string, organizationId: string): Promise<boolean> {
@@ -64,8 +64,8 @@ export class AccessController {
       const playerTeams = await this.storage.getPlayerTeams(playerId);
       const userOrgs = await this.storage.getUserOrganizations(userId);
       
-      return playerTeams.some(team => 
-        userOrgs.some(userOrg => userOrg.organizationId === team.organization.id)
+      return playerTeams.some((team: any) => 
+        userOrgs.some((userOrg: any) => userOrg.organizationId === team.organization.id)
       );
     }
     
@@ -89,11 +89,11 @@ export class AccessController {
   async getAccessibleOrganizations(userId: string): Promise<string[]> {
     if (await this.isSiteAdmin(userId)) {
       const allOrgs = await this.storage.getOrganizations();
-      return allOrgs.map(org => org.id);
+      return allOrgs.map((org: any) => org.id);
     }
     
     const userOrgs = await this.storage.getUserOrganizations(userId);
-    return userOrgs.map(org => org.organizationId);
+    return userOrgs.map((org: any) => org.organizationId);
   }
 
   async requireSiteAdmin(userId: string): Promise<void> {

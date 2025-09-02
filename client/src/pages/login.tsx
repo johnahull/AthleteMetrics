@@ -89,14 +89,6 @@ export default function Login() {
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
-
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Demo credentials:</strong><br />
-              Username: admin<br />
-              Password: password
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>

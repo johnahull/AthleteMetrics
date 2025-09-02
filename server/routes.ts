@@ -3,18 +3,20 @@ import { createServer } from "http";
 import session from "express-session";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
-import { insertOrganizationSchema, insertTeamSchema, insertPlayerSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations } from "@shared/schema";
+import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
 
 // Session configuration
 declare module 'express-session' {
   interface SessionData {
     user?: {
       id: string;
+      username: string;
       email: string;
       firstName: string;
       lastName: string;
@@ -28,6 +30,7 @@ declare module 'express-session' {
     // Impersonation fields
     originalUser?: {
       id: string;
+      username: string;
       email: string;
       firstName: string;
       lastName: string;
@@ -41,55 +44,27 @@ declare module 'express-session' {
   }
 }
 
-// Middleware to check authentication
-const requireAuth = (req: any, res: any, next: any) => {
-  if (!req.session.user && !req.session.admin) {
-    return res.status(401).json({ message: "Not authenticated" });
-  }
-  next();
-};
-
 // Initialize permission checker and access controller
 const permissionChecker = new PermissionChecker(storage);
 const accessController = new AccessController(storage);
 
-// Helper functions
+// Legacy helper functions (to be removed gradually)
 const isSiteAdmin = (user: any): boolean => {
   return user?.isSiteAdmin === true || user?.isSiteAdmin === 'true' || user?.role === "site_admin" || user?.admin === true;
 };
 
-const hasRole = async (userId: string, role: string, organizationId?: string): Promise<boolean> => {
-  if (!userId) return false;
-
-  const user = await storage.getUser(userId);
-  if (!user) return false;
-
-  // Check site admin
-  if (role === "site_admin" && user.isSiteAdmin === "true") {
-    return true;
-  }
-
-  // Check organization roles
-  if (organizationId) {
-    const userRoles = await storage.getUserRoles(userId, organizationId);
-    return userRoles.includes(role);
-  }
-
-  // No direct role on user object - roles are in userOrganizations
-  return false;
-};
-
-const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
-  if (!user?.id || !organizationId) return false;
-
-  if (isSiteAdmin(user)) return true;
-
-  const userOrgs = await storage.getUserOrganizations(user.id);
-  return userOrgs.some(org => org.organizationId === organizationId);
-};
-
 const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
   return await accessController.canManageOrganization(userId, organizationId);
+};
+
+// Helper functions for access control
+const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
+  if (!user?.id) return false;
+  return await accessController.canAccessOrganization(user.id, organizationId);
+};
+
+const hasRole = (user: any, role: string): boolean => {
+  return user?.role === role;
 };
 
 // Unified invitation permission checker
@@ -139,15 +114,7 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
   return { allowed: false, reason: "Insufficient permissions to send invitations" };
 };
 
-const requireSiteAdmin = async (req: any, res: any, next: any) => {
-  const user = req.session.user || { admin: req.session.admin };
-
-  if (isSiteAdmin(user)) {
-    return next();
-  }
-
-  return res.status(403).json({ message: "Site admin access required" });
-};
+// Old requireSiteAdmin removed - now using middleware version
 
 // Initialize default site admin user
 async function initializeDefaultUser() {
@@ -637,33 +604,9 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.patch("/api/teams/:id", requireAuth, async (req, res) => {
+  app.patch("/api/teams/:id", requireAuth, requireTeamAccess('write'), async (req, res) => {
     try {
       const { id } = req.params;
-      const currentUser = req.session.user;
-
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Athletes cannot edit teams
-      if (currentUser.role === "athlete") {
-        return res.status(403).json({ message: "Athletes cannot edit teams" });
-      }
-
-      // Get the team to check access
-      const team = await storage.getTeam(id);
-      if (!team) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      // Validate user has access to the team's organization
-      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
-        return res.status(403).json({ message: "Access denied to this organization" });
-      }
-
       const teamData = insertTeamSchema.partial().parse(req.body);
       const updatedTeam = await storage.updateTeam(id, teamData);
       res.json(updatedTeam);
@@ -754,7 +697,7 @@ export function registerRoutes(app: Express) {
             userId: currentUser.playerId, // Convert playerId to userId for database query
             organizationId: orgContextForFiltering,
           };
-          const players = await storage.getPlayers(filters);
+          const players = await storage.getAthletes(filters);
           return res.json(players);
         }
       }
@@ -856,7 +799,7 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes cannot create player records" });
       }
 
-      const playerData = insertPlayerSchema.parse(req.body);
+      const playerData = insertAthleteSchema.parse(req.body);
 
       console.log('Received player data in API:', playerData);
 
@@ -884,7 +827,7 @@ export function registerRoutes(app: Express) {
   app.patch("/api/players/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const playerData = insertPlayerSchema.partial().parse(req.body);
+      const playerData = insertAthleteSchema.partial().parse(req.body);
       const updatedPlayer = await storage.updatePlayer(id, playerData);
       res.json(updatedPlayer);
     } catch (error) {
@@ -1034,7 +977,7 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      const measurement = await storage.createMeasurement(measurementData);
+      const measurement = await storage.createMeasurement(measurementData, currentUser.id);
       res.status(201).json(measurement);
     } catch (error) {
       if (error instanceof z.ZodError) {

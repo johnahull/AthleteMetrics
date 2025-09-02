@@ -354,35 +354,27 @@ export const OrganizationRole = {
   ATHLETE: "athlete",
 } as const;
 
-// Legacy compatibility - athletes are now just users with athlete role
-export type Player = User;
-export type InsertPlayer = Partial<InsertUser>;
+// Unified athlete schema - consolidating player and athlete concepts
+export type Athlete = User;
+export type InsertAthlete = z.infer<typeof insertAthleteSchema>;
 
-// Legacy schema for athlete creation
+// Consolidated athlete creation schema
 export const insertAthleteSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  emails: z.array(z.string().email("Invalid email format")).min(1, "At least one email is required"),
+  emails: z.array(z.string().email("Invalid email format")).optional(),
   birthDate: z.string().optional(),
-  graduationYear: z.number().int().min(2000).max(2040).optional(),
-  teamIds: z.array(z.string()).optional(),
-  school: z.string().optional(),
-  sports: z.array(z.string()).optional(),
-  phoneNumbers: z.array(z.string()).optional(),
-});
-
-// Legacy compatibility - export insertPlayerSchema as alias for insertAthleteSchema
-export const insertPlayerSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  birthDate: z.string().optional(),
-  graduationYear: z.coerce.number().optional(),
+  graduationYear: z.coerce.number().int().min(2000).max(2040).optional(),
   school: z.string().optional(),
   phoneNumbers: z.array(z.string()).optional(),
   sports: z.array(z.string()).optional(),
   height: z.coerce.number().optional(),
   weight: z.coerce.number().optional(),
   teamIds: z.array(z.string()).optional(),
-  emails: z.array(z.string().email()).optional(),
   organizationId: z.string().optional()
 });
+
+// Legacy compatibility - maintain old exports temporarily
+export type Player = Athlete;
+export type InsertPlayer = InsertAthlete;
+export const insertPlayerSchema = insertAthleteSchema;
