@@ -20,6 +20,11 @@ export default function PlayerProfile() {
 
   const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
     queryKey: ["/api/players", playerId],
+    queryFn: async () => {
+      const response = await fetch(`/api/players/${playerId}`);
+      if (!response.ok) throw new Error('Failed to fetch player');
+      return response.json();
+    },
     enabled: !!playerId,
   });
 
@@ -52,9 +57,9 @@ export default function PlayerProfile() {
     return (
       <div className="p-6">
         <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Player Not Found</h2>
-          <p className="text-gray-600 mb-4">The player you're looking for doesn't exist.</p>
-          <Button onClick={() => setLocation('/players')}>Back to Players</Button>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Athlete Not Found</h2>
+          <p className="text-gray-600 mb-4">The athlete you're looking for doesn't exist.</p>
+          <Button onClick={() => setLocation('/athletes')}>Back to Athletes</Button>
         </div>
       </div>
     );
@@ -100,12 +105,12 @@ export default function PlayerProfile() {
       <div className="flex items-center mb-6">
         <Button 
           variant="ghost" 
-          onClick={() => setLocation('/players')}
+          onClick={() => setLocation('/athletes')}
           className="mr-4"
           data-testid="button-back-to-players"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Players
+          Back to Athletes
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-gray-900">{player?.fullName}</h1>
@@ -118,7 +123,7 @@ export default function PlayerProfile() {
               <Trophy className="h-4 w-4 mr-1" />
               {player?.teams && player.teams.length > 0 
                 ? player.teams.map(team => team.name).join(', ')
-                : 'Independent Player'
+                : 'Independent Athlete'
               }
             </span>
             {player?.school && (
@@ -143,7 +148,7 @@ export default function PlayerProfile() {
             data-testid="button-edit-player"
           >
             <Edit className="h-4 w-4 mr-2" />
-            Edit Player
+            Edit Athlete
           </Button>
           <Button 
             onClick={() => setShowAddMeasurementModal(true)}
@@ -330,7 +335,7 @@ export default function PlayerProfile() {
         </CardContent>
       </Card>
 
-      {/* Player Edit Modal */}
+      {/* Athlete Edit Modal */}
       {player && (
         <PlayerModal
           isOpen={showEditModal}
@@ -347,7 +352,7 @@ export default function PlayerProfile() {
             <DialogHeader>
               <DialogTitle>Add New Measurement for {player.fullName}</DialogTitle>
               <DialogDescription>
-                Record a new performance measurement for this player.
+                Record a new performance measurement for this athlete.
               </DialogDescription>
             </DialogHeader>
             <PlayerMeasurementForm 

@@ -1,0 +1,11 @@
+firstName,lastName,birthDate,birthYear,graduationYear,emails,phoneNumbers,sports,height,weight,school,teamName
+Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","512-555-0123,512-555-4567","Soccer,Track & Field",66,125,Westlake HS,Lonestar 09G Navy
+Elise,Ramos,2008-08-22,2008,2026,"elise.ramos@email.com","512-555-0234","Soccer",64,118,Anderson HS,Thunder Elite
+Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G
+Alex,Johnson,2007-12-05,2007,2025,"alex.johnson@email.com","512-555-0456","Soccer,Volleyball",62,115,Round Rock HS,Elite Soccer Club
+Taylor,Rodriguez,2008-07-18,2008,2026,"taylor.rodriguez@email.com,t.rod@personal.com","512-555-0567","Track & Field",65,128,Cedar Park HS,Austin Track Club
+Morgan,Lee,2009-04-03,2009,2027,"morgan.lee@email.com","512-555-0678","Basketball,Soccer",67,135,Georgetown HS,Wildcats Basketball
+Casey,Thompson,2007-11-25,2007,2025,"casey.thompson@email.com,casey.t.athlete@gmail.com","512-555-0789,512-555-1234","Volleyball,Track & Field",63,120,Pflugerville HS,Panther Athletics
+Jamie,Anderson,2008-09-14,2008,2026,"jamie.anderson@email.com","512-555-0890","Soccer",64,122,Leander HS,Leander Lions
+Riley,Martinez,2009-02-28,2009,2027,"riley.martinez@email.com,riley.m@family.com","512-555-0901","Basketball",66,130,Hutto HS,Hutto Hippos
+Avery,Brown,2007-06-11,2007,2025,"avery.brown@email.com","512-555-1012","Track & Field,Cross Country",65,125,Manor HS,Manor Mustangs

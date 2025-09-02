@@ -40,11 +40,11 @@ export default function DataEntry() {
                   <div className="flex items-center space-x-4">
                     <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
                       <span className="text-white text-sm font-medium">
-                        {measurement.player.firstName.charAt(0)}{measurement.player.lastName.charAt(0)}
+                        {measurement.user.firstName.charAt(0)}{measurement.user.lastName.charAt(0)}
                       </span>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">{measurement.player.fullName}</p>
+                      <p className="font-medium text-gray-900">{measurement.user.fullName}</p>
                       <div className="flex items-center space-x-4 text-sm text-gray-600">
                         <span>
                           {measurement.metric === "FLY10_TIME" ? "Fly-10" : "Vertical"}: {measurement.value}{measurement.units}

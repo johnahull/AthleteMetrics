@@ -1,23 +1,74 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { getMetricDisplayName, getMetricColor } from "@/lib/metrics";
+import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
+  const { user, organizationContext } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Use role from user session data
+  const userRole = user?.role || 'athlete';
+  const isSiteAdmin = user?.isSiteAdmin || false;
+
+  // Redirect athletes away from organization dashboard
+  useEffect(() => {
+    if (!isSiteAdmin && userRole === "athlete") {
+      setLocation(`/athletes/${user?.id}`);
+    }
+  }, [isSiteAdmin, userRole, user?.id, setLocation]);
+
+  // Don't render dashboard for athletes
+  if (!isSiteAdmin && userRole === "athlete") {
+    return null;
+  }
+
   const { data: dashboardStats, isLoading } = useQuery({
-    queryKey: ["/api/analytics/dashboard"],
+    queryKey: ["/api/analytics/dashboard", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext
+        ? `/api/analytics/dashboard?organizationId=${organizationContext}`
+        : `/api/analytics/dashboard`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   const { data: recentMeasurements } = useQuery({
-    queryKey: ["/api/measurements"],
+    queryKey: ["/api/measurements", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext
+        ? `/api/measurements?organizationId=${organizationContext}`
+        : `/api/measurements`;
+      const response = await fetch(url);
+      return response.json();
+    }
+  });
+
+  // Get organization name for context indicator
+  const { data: currentOrganization } = useQuery({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    enabled: !!organizationContext,
+    queryFn: async () => {
+      const response = await fetch(`/api/organizations/${organizationContext}`);
+      return response.json();
+    }
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams"],
+    queryKey: ["/api/analytics/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext
+        ? `/api/analytics/teams?organizationId=${organizationContext}`
+        : `/api/analytics/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   if (isLoading) {
@@ -37,6 +88,7 @@ export default function Dashboard() {
 
   const stats = (dashboardStats as any) || {
     totalPlayers: 0,
+    activeAthletes: 0,
     totalTeams: 0,
     bestFly10Today: null,
     bestVerticalToday: null,
@@ -46,8 +98,23 @@ export default function Dashboard() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
-        <p className="text-gray-600 mt-1">Track athlete performance and team analytics</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
+            <p className="text-gray-600 mt-1">
+              {organizationContext && currentOrganization
+                ? `${currentOrganization.name} - Performance overview`
+                : "Track athlete performance and team analytics"
+              }
+            </p>
+          </div>
+          {organizationContext && currentOrganization && (
+            <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg">
+              <p className="text-sm font-medium text-blue-900">Organization View</p>
+              <p className="text-xs text-blue-700">{currentOrganization.name}</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -56,13 +123,12 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Players</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-players">
-                  {stats.totalPlayers}
+                <p className="text-sm font-medium text-gray-600">Active Athletes</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="stat-active-athletes">
+                  {stats.totalAthletes || 0}
                 </p>
-                <p className="text-sm text-green-600 mt-1">
-                  <ArrowUp className="inline h-3 w-3 mr-1" />
-                  Active athletes
+                <p className="text-sm text-gray-500 mt-1">
+                  {stats.activeAthletes || 0} with active accounts
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -97,7 +163,7 @@ export default function Dashboard() {
                 <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-fly10">
                   {stats.bestFly10Today ? formatFly10TimeWithSpeed(parseFloat(stats.bestFly10Today.value)) : "N/A"}
                 </p>
-                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-player">
+                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-athlete">
                   {stats.bestFly10Today?.playerName || "No data today"}
                 </p>
               </div>
@@ -131,27 +197,30 @@ export default function Dashboard() {
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <PerformanceChart />
-        
+
         <Card className="bg-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900">Team Distribution</h3>
             </div>
             <div className="space-y-4">
-              {(teamStats as any)?.slice(0, 5).map((team: any, index: number) => (
+              {Array.isArray(teamStats) && teamStats.slice(0, 5).map((team: any, index: number) => (
                 <div key={team.teamId} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className={`w-3 h-3 rounded-full ${
-                      index === 0 ? 'bg-blue-500' : 
+                      index === 0 ? 'bg-blue-500' :
                       index === 1 ? 'bg-green-500' :
                       index === 2 ? 'bg-yellow-500' :
                       index === 3 ? 'bg-purple-500' : 'bg-gray-500'
                     }`}></div>
                     <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
                   </div>
-                  <span className="text-sm text-gray-600">{team.playerCount} players</span>
+                  <span className="text-sm text-gray-600">{team.athleteCount} athletes</span>
                 </div>
               ))}
+              {(!teamStats || teamStats.length === 0) && (
+                <p className="text-sm text-gray-500 text-center py-4">No teams found</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -175,28 +244,28 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {(recentMeasurements as any)?.slice(0, 10).map((measurement: any) => (
+                {Array.isArray(recentMeasurements) && recentMeasurements.slice(0, 10).map((measurement: any) => (
                   <tr key={measurement.id} className="border-b border-gray-100">
                     <td className="py-3">
                       <div className="flex items-center space-x-3">
                         <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                           <span className="text-xs font-medium">
-                            {measurement.player.firstName.charAt(0)}{measurement.player.lastName.charAt(0)}
+                            {measurement.user.firstName.charAt(0)}{measurement.user.lastName.charAt(0)}
                           </span>
                         </div>
-                        <button 
-                          onClick={() => setLocation(`/players/${measurement.player.id}`)}
+                        <button
+                          onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
                           className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                         >
-                          {measurement.player.fullName}
+                          {measurement.user.fullName}
                         </button>
                       </div>
                     </td>
                     <td className="py-3 text-gray-600">
-                      {measurement.player.teams && measurement.player.teams.length > 0 
-                        ? measurement.player.teams.length > 1 
-                          ? `${measurement.player.teams[0].name} (+${measurement.player.teams.length - 1})`
-                          : measurement.player.teams[0].name
+                      {measurement.user.teams && measurement.user.teams.length > 0
+                        ? measurement.user.teams.length > 1
+                          ? `${measurement.user.teams[0].name} (+${measurement.user.teams.length - 1})`
+                          : measurement.user.teams[0].name
                         : "Independent"
                       }
                     </td>
@@ -206,8 +275,8 @@ export default function Dashboard() {
                       </span>
                     </td>
                     <td className="py-3 font-mono">
-                      {measurement.metric === "FLY10_TIME" ? 
-                        formatFly10TimeWithSpeed(parseFloat(measurement.value)) : 
+                      {measurement.metric === "FLY10_TIME" ?
+                        formatFly10TimeWithSpeed(parseFloat(measurement.value)) :
                         `${measurement.value}${measurement.units}`
                       }
                     </td>

@@ -32,9 +32,9 @@ export default function MeasurementForm() {
   const form = useForm<InsertMeasurement>({
     resolver: zodResolver(insertMeasurementSchema),
     defaultValues: {
-      playerId: "",
+      userId: "",
       date: new Date().toISOString().split('T')[0],
-      metric: "",
+      metric: "FLY10_TIME",
       value: 0,
       flyInDistance: undefined,
       notes: "",
@@ -46,7 +46,7 @@ export default function MeasurementForm() {
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthYear: new Date().getFullYear() - 15,
+      birthday: "",
       teamIds: [],
       school: "",
     },
@@ -54,6 +54,7 @@ export default function MeasurementForm() {
 
   const createMeasurementMutation = useMutation({
     mutationFn: async (data: InsertMeasurement) => {
+      // Backend will set submittedBy automatically based on session
       const response = await apiRequest("POST", "/api/measurements", data);
       return response.json();
     },
@@ -65,9 +66,9 @@ export default function MeasurementForm() {
         description: "Measurement added successfully",
       });
       form.reset({
-        playerId: "",
+        userId: "",
         date: new Date().toISOString().split('T')[0],
-        metric: "",
+        metric: "FLY10_TIME",
         value: 0,
         flyInDistance: undefined,
         notes: "",
@@ -75,10 +76,11 @@ export default function MeasurementForm() {
       setSelectedPlayer(null);
       setSearchTerm("");
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Measurement creation error:", error);
       toast({
         title: "Error",
-        description: "Failed to add measurement",
+        description: `Failed to add measurement: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -92,27 +94,27 @@ export default function MeasurementForm() {
     onSuccess: (newPlayer) => {
       queryClient.invalidateQueries({ queryKey: ["/api/players"] });
       setSelectedPlayer(newPlayer);
-      form.setValue("playerId", newPlayer.id);
+      form.setValue("userId", newPlayer.id);
       setShowQuickAdd(false);
       quickAddForm.reset();
       toast({
         title: "Success",
-        description: "Player created successfully",
+        description: "Athlete created successfully",
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to create player",
+        description: "Failed to create athlete",
         variant: "destructive",
       });
     },
   });
 
-  const filteredPlayers = (players || []).filter(player =>
+  const filteredPlayers = Array.isArray(players) ? players.filter((player: any) =>
     player.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    player.teams?.some(team => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+    player.teams?.some((team: any) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  ) : [];
 
   const metric = form.watch("metric");
   const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
@@ -121,16 +123,20 @@ export default function MeasurementForm() {
     if (!selectedPlayer) {
       toast({
         title: "Error",
-        description: "Please select a player",
+        description: "Please select an athlete",
         variant: "destructive",
       });
       return;
     }
 
-    createMeasurementMutation.mutate({
+    // Ensure userId is set to the selected player
+    const measurementData = {
       ...data,
-      playerId: selectedPlayer.id,
-    });
+      userId: selectedPlayer.id,
+    };
+
+    console.log("Submitting measurement data:", measurementData);
+    createMeasurementMutation.mutate(measurementData);
   };
 
   const onQuickAddSubmit = (data: InsertPlayer) => {
@@ -139,9 +145,9 @@ export default function MeasurementForm() {
 
   const clearForm = () => {
     form.reset({
-      playerId: "",
+      userId: "",
       date: new Date().toISOString().split('T')[0],
-      metric: "",
+      metric: "FLY10_TIME",
       value: 0,
       flyInDistance: undefined,
       notes: "",
@@ -157,17 +163,17 @@ export default function MeasurementForm() {
           {/* Player Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Player <span className="text-red-500">*</span>
+              Athlete <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <Input
-                placeholder="Search and select player..."
+                placeholder="Search and select athlete..."
                 value={selectedPlayer ? selectedPlayer.fullName : searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
                   if (selectedPlayer && e.target.value !== selectedPlayer.fullName) {
                     setSelectedPlayer(null);
-                    form.setValue("playerId", "");
+                    form.setValue("userId", "");
                   }
                 }}
                 className="pl-10"
@@ -185,13 +191,13 @@ export default function MeasurementForm() {
                       onClick={() => {
                         setSelectedPlayer(player);
                         setSearchTerm("");
-                        form.setValue("playerId", player.id);
+                        form.setValue("userId", player.id);
                       }}
                       data-testid={`option-player-${player.id}`}
                     >
                       <div>
                         <p className="font-medium">{player.fullName}</p>
-                        <p className="text-sm text-gray-500">{player.teams.map(t => t.name).join(', ')} • {player.birthYear}</p>
+                        <p className="text-sm text-gray-500">{(player as any).teams?.map((t: any) => t.name).join(', ')} • {(player as any).birthYear}</p>
                       </div>
                     </button>
                   ))}
@@ -336,6 +342,7 @@ export default function MeasurementForm() {
               <FormControl>
                 <Textarea 
                   {...field}
+                  value={field.value || ""}
                   placeholder="Optional notes about this measurement..."
                   disabled={createMeasurementMutation.isPending}
                   rows={3}
@@ -353,11 +360,11 @@ export default function MeasurementForm() {
             <Checkbox 
               id="quick-add-player" 
               checked={showQuickAdd}
-              onCheckedChange={setShowQuickAdd}
+              onCheckedChange={(checked) => setShowQuickAdd(checked === true)}
               data-testid="checkbox-quick-add-player"
             />
             <label htmlFor="quick-add-player" className="text-sm font-medium text-gray-700">
-              Add new player
+              Add new athlete
             </label>
           </div>
 
@@ -404,19 +411,17 @@ export default function MeasurementForm() {
                     
                     <FormField
                       control={quickAddForm.control}
-                      name="birthYear"
+                      name="birthday"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Birth Year</FormLabel>
+                          <FormLabel>Birth Date</FormLabel>
                           <FormControl>
                             <Input 
                               {...field}
-                              type="number"
-                              min="2000"
-                              max="2015"
+                              type="date"
                               disabled={createPlayerMutation.isPending}
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
-                              data-testid="input-quick-add-birthyear"
+                              data-testid="input-quick-add-birthday"
+                              max={new Date().toISOString().split('T')[0]} // Prevent future dates
                             />
                           </FormControl>
                           <FormMessage />
@@ -426,13 +431,13 @@ export default function MeasurementForm() {
                     
                     <FormField
                       control={quickAddForm.control}
-                      name="teamId"
+                      name="teamIds"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Team</FormLabel>
                           <Select 
-                            value={field.value} 
-                            onValueChange={field.onChange}
+                            value={Array.isArray(field.value) ? field.value[0] || "" : field.value || ""} 
+                            onValueChange={(value) => field.onChange([value])}
                             disabled={createPlayerMutation.isPending}
                           >
                             <FormControl>
@@ -441,11 +446,11 @@ export default function MeasurementForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {teams?.map((team) => (
+                              {Array.isArray(teams) ? teams.map((team: any) => (
                                 <SelectItem key={team.id} value={team.id}>
                                   {team.name}
                                 </SelectItem>
-                              ))}
+                              )) : null}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -459,7 +464,7 @@ export default function MeasurementForm() {
                         disabled={createPlayerMutation.isPending}
                         data-testid="button-quick-add-player"
                       >
-                        {createPlayerMutation.isPending ? "Adding..." : "Add Player"}
+                        {createPlayerMutation.isPending ? "Adding..." : "Add Athlete"}
                       </Button>
                     </div>
                   </form>

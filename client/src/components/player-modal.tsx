@@ -30,56 +30,55 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthYear: new Date().getFullYear() - 15,
+      emails: [""],
+      birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
       teamIds: [],
       school: "",
       sports: [],
-      emails: [],
       phoneNumbers: [],
     },
   });
 
+
   const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
     control: form.control,
     name: "emails"
-  });
+  }) as any;
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
     name: "phoneNumbers"
-  });
+  }) as any;
 
   const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
     control: form.control,
     name: "sports"
-  });
+  }) as any;
 
   useEffect(() => {
     if (player) {
       form.reset({
         firstName: player.firstName,
         lastName: player.lastName,
-        birthYear: player.birthYear,
-        birthday: player.birthday,
+        emails: player.emails || [],
+        birthDate: player.birthDate || "",
         graduationYear: player.graduationYear,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sports: player.sports || [],
-        emails: player.emails || [],
         phoneNumbers: player.phoneNumbers || [],
       });
     } else {
       form.reset({
         firstName: "",
         lastName: "",
-        birthYear: new Date().getFullYear() - 15,
-        birthday: undefined,
+        emails: [""],
+        birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         teamIds: [],
         school: "",
         sports: [],
-        emails: [],
         phoneNumbers: [],
       });
     }
@@ -95,15 +94,25 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({
         title: "Success",
-        description: "Player created successfully",
+        description: "Athlete created successfully",
       });
       onClose();
-      form.reset();
+      form.reset({
+        firstName: "",
+        lastName: "",
+        emails: [""],
+        birthDate: "",
+        graduationYear: new Date().getFullYear() + 3,
+        teamIds: [],
+        school: "",
+        sports: [],
+        phoneNumbers: [],
+      });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to create player",
+        description: "Failed to create athlete",
         variant: "destructive",
       });
     },
@@ -119,24 +128,55 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({
         title: "Success",
-        description: "Player updated successfully",
+        description: "Athlete updated successfully",
       });
       onClose();
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to update player",
+        description: "Failed to update athlete",
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: InsertPlayer) => {
+    // Filter out empty emails and ensure at least one email exists
+    const filteredEmails = data.emails?.filter(email => email.trim() !== "") || [];
+    if (filteredEmails.length === 0) {
+      toast({
+        title: "Error",
+        description: "At least one email address is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const submissionData = {
+      ...data,
+      emails: filteredEmails,
+    };
+
     if (isEditing) {
-      updatePlayerMutation.mutate(data);
+      updatePlayerMutation.mutate(submissionData);
     } else {
-      createPlayerMutation.mutate(data);
+      const playerData = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        birthDate: data.birthDate || undefined,
+        graduationYear: data.graduationYear || undefined,
+        school: data.school || undefined,
+        sports: data.sports?.filter(Boolean) || [],
+        phoneNumbers: data.phoneNumbers?.filter(Boolean) || [],
+        height: data.height || undefined,
+        weight: data.weight || undefined,
+        emails: data.emails?.filter(Boolean) || [],
+        teamIds: data.teamIds?.filter(Boolean) || []
+      };
+
+      console.log('Creating player with data:', playerData);
+      createPlayerMutation.mutate(submissionData);
     }
   };
 
@@ -144,18 +184,22 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Player" : "Add New Player"}</DialogTitle>
-          <DialogDescription>
-            {isEditing ? "Update player information below." : "Add a new player to your team by filling out the form below."}
-          </DialogDescription>
-        </DialogHeader>
-        
+      <DialogContent className="max-w-4xl w-full p-0 max-h-[90vh] flex flex-col">
+        <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? "Edit Athlete" : "Add New Athlete"}</DialogTitle>
+            <DialogDescription>
+              {isEditing ? "Update athlete information below." : "Add a new athlete to your team by filling out the form below."}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
                 control={form.control}
                 name="firstName"
                 render={({ field }) => (
@@ -198,24 +242,25 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               />
             </div>
 
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="birthYear"
+                name="birthDate"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Birth Year <span className="text-red-500">*</span>
+                      Birth Date <span className="text-red-500">*</span>
                     </FormLabel>
                     <FormControl>
                       <Input 
                         {...field} 
-                        type="number"
-                        min="1990"
-                        max="2020"
+                        type="date"
                         disabled={isPending}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        data-testid="input-player-birthyear"
+                        data-testid="input-player-birthdate"
+                        value={field.value || ""}
+                        placeholder="YYYY-MM-DD"
+                        max={new Date().toISOString().split('T')[0]} // Prevent future dates
                       />
                     </FormControl>
                     <FormMessage />
@@ -242,32 +287,6 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                       />
                     </FormControl>
                     <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              <FormField
-                control={form.control}
-                name="birthday"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Birthday (optional)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        {...field} 
-                        type="date"
-                        disabled={isPending}
-                        data-testid="input-player-birthday"
-                        value={field.value || ""}
-                        placeholder="YYYY-MM-DD"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                    <p className="text-sm text-gray-500">
-                      If provided, this will be used for precise age calculations in measurements
-                    </p>
                   </FormItem>
                 )}
               />
@@ -315,9 +334,9 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                                     checked={field.value?.includes(team.id)}
                                     onCheckedChange={(checked) => {
                                       return checked
-                                        ? field.onChange([...field.value, team.id])
+                                        ? field.onChange([...(field.value || []), team.id])
                                         : field.onChange(
-                                            field.value?.filter(
+                                            (field.value || []).filter(
                                               (value) => value !== team.id
                                             )
                                           )
@@ -367,7 +386,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 Sports
               </FormLabel>
               <div className="space-y-2">
-                {sportsFields.map((field, index) => (
+                {sportsFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
@@ -429,14 +448,15 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
 
+
             {/* Email Addresses */}
             <FormItem>
               <FormLabel className="flex items-center">
                 <Mail className="h-4 w-4 mr-2" />
-                Email Addresses
+                Email Addresses <span className="text-red-500">*</span>
               </FormLabel>
               <div className="space-y-2">
-                {emailFields.map((field, index) => (
+                {emailFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
@@ -489,7 +509,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 Phone Numbers
               </FormLabel>
               <div className="space-y-2">
-                {phoneFields.map((field, index) => (
+                {phoneFields.map((field: any, index: number) => (
                   <div key={field.id} className="flex space-x-2">
                     <FormField
                       control={form.control}
@@ -534,8 +554,11 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 </Button>
               </div>
             </FormItem>
+            </div>
+          </div>
 
-            <div className="flex justify-end space-x-3 pt-4">
+          <div className="px-6 py-4 border-t bg-white flex-shrink-0">
+            <div className="flex justify-end space-x-3">
               <Button 
                 type="button" 
                 variant="outline" 
@@ -550,9 +573,10 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 disabled={isPending}
                 data-testid="button-save-player"
               >
-                {isPending ? "Saving..." : isEditing ? "Update Player" : "Add Player"}
+                {isPending ? "Saving..." : isEditing ? "Update Athlete" : "Add Athlete"}
               </Button>
             </div>
+          </div>
           </form>
         </Form>
       </DialogContent>

@@ -51,7 +51,7 @@ export default function ImportExport() {
       setImportResults(data);
       const hasResults = data.results.length > 0;
       const hasErrors = data.errors.length > 0;
-      
+
       toast({
         title: hasResults ? "Import Complete" : "Import Issues",
         description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors.`,
@@ -108,14 +108,14 @@ export default function ImportExport() {
       const response = await fetch(`/api/export/${exportType}`, {
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         throw new Error('Export failed');
       }
 
       const csvData = await response.text();
       downloadCSV(csvData, `${exportType}.csv`);
-      
+
       toast({
         title: "Success",
         description: `${exportType} data exported successfully`,
@@ -129,15 +129,20 @@ export default function ImportExport() {
     }
   };
 
-  const playersTemplate = `firstName,lastName,birthYear,teamName,school
-Mia,Chen,2009,Lonestar 09G Navy,Westlake HS
-Elise,Ramos,2008,Thunder Elite,Anderson HS
-Jordan,Williams,2009,Lightning 08G,Lake Travis HS`;
+  const playersTemplate = `firstName,lastName,birthDate,birthYear,graduationYear,emails,phoneNumbers,sports,height,weight,school,teamName
+Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","512-555-0123,512-555-4567","Soccer,Track & Field",66,125,Westlake HS,Lonestar 09G Navy
+Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
+Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,birthYear,date,metric,value,units,flyInDistance,notes
-Mia,Chen,2009,2025-01-20,FLY10_TIME,1.26,s,20,Electronic gates
-Elise,Ramos,2008,2025-01-19,VERTICAL_JUMP,21.5,in,,Jump mat
-Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
+  const measurementsTemplate = `firstName,lastName,birthYear,date,age,metric,value,units,flyInDistance,notes
+Mia,Chen,2009,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
+Elise,Ramos,2008,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
+Jordan,Williams,2009,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
+Alex,Johnson,2007,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
+Taylor,Rodriguez,2008,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
+Morgan,Lee,2009,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
+Casey,Thompson,2007,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
+Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -156,12 +161,12 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
         <Card className="bg-white mb-8">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Import Data</h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Players Import */}
+              {/* File Upload */}
               <div>
-                <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Players" : "Measurements"}</h4>
-                
+                <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Athletes" : "Measurements"}</h4>
+
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Import Type</label>
                   <Select value={importType} onValueChange={(value) => setImportType(value as "players" | "measurements")}>
@@ -169,7 +174,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="players">Players</SelectItem>
+                      <SelectItem value="players">Athletes</SelectItem>
                       <SelectItem value="measurements">Measurements</SelectItem>
                     </SelectContent>
                   </Select>
@@ -188,7 +193,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                     click to browse
                   </Button>
                   <p className="text-xs text-gray-500 mt-2">Supports CSV and XLSX files</p>
-                  
+
                   <Input
                     id="file-upload"
                     type="file"
@@ -204,13 +209,13 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                     variant="ghost"
                     onClick={() => copyToClipboard(
                       importType === "players" ? playersTemplate : measurementsTemplate,
-                      importType
+                      importType === "players" ? "athletes" : importType
                     )}
                     className="text-primary hover:text-blue-700 text-sm"
                     data-testid="button-download-template"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download {importType} template
+                    Download {importType === "players" ? "athletes" : importType} template
                   </Button>
                 </div>
               </div>
@@ -218,7 +223,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
               {/* Import Options */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Import Options</h4>
-                
+
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
@@ -233,7 +238,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                           className="text-primary focus:ring-primary"
                           data-testid="radio-match-players"
                         />
-                        <span className="text-sm text-gray-700">Match players by firstName + lastName + birthYear</span>
+                        <span className="text-sm text-gray-700">Match athletes by firstName + lastName + birthYear</span>
                       </label>
                       <label className="flex items-center space-x-3">
                         <input 
@@ -245,7 +250,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                           className="text-primary focus:ring-primary"
                           data-testid="radio-create-players"
                         />
-                        <span className="text-sm text-gray-700">Create missing players and assign to team:</span>
+                        <span className="text-sm text-gray-700">Create missing athletes and assign to team:</span>
                       </label>
                     </div>
                   </div>
@@ -295,7 +300,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                     <p className="text-gray-600">Errors</p>
                   </div>
                 </div>
-                
+
                 {importResults.errors.length > 0 && (
                   <div className="mt-4">
                     <h6 className="font-medium text-red-800 mb-2">Errors:</h6>
@@ -316,25 +321,28 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
           </CardContent>
         </Card>
 
-        {/* CSV Templates */}
+        {/* CSV Templates & Examples */}
         <Card className="bg-white mb-8">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">CSV Templates & Examples</h3>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Players Template */}
+
+            <div className="space-y-8">
+              {/* Athletes CSV Format */}
               <div>
-                <h4 className="text-md font-medium text-gray-700 mb-4">Players CSV Format</h4>
+                <h4 className="text-md font-medium text-gray-700 mb-4">Athletes CSV Format</h4>
                 <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm">
-                  <div className="text-gray-600 mb-2"># players.csv</div>
+                  <div className="text-gray-600 mb-2"># athletes.csv</div>
                   <pre className="whitespace-pre-wrap">{playersTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: firstName, lastName, birthYear, teamName</span>
+                  <span className="text-xs text-gray-500">
+                    <span className="font-medium">Required:</span> firstName, lastName, birthDate (YYYY-MM-DD) • 
+                    <span className="font-medium">Optional:</span> teamName, birthYear, graduationYear, emails, phoneNumbers, sports, height (36-84 in), weight (50-400 lbs), school
+                  </span>
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => copyToClipboard(playersTemplate, "Players")}
+                    onClick={() => copyToClipboard(playersTemplate, "Athletes")}
                     data-testid="button-copy-players-template"
                   >
                     <Copy className="h-4 w-4 mr-1" />
@@ -343,7 +351,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                 </div>
               </div>
 
-              {/* Measurements Template */}
+              {/* Measurements CSV Format */}
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Measurements CSV Format</h4>
                 <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm">
@@ -351,7 +359,10 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                   <pre className="whitespace-pre-wrap">{measurementsTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Required: firstName, lastName, birthYear, date, metric, value • Optional: flyInDistance (for fly 10 times)</span>
+                  <span className="text-xs text-gray-500">
+                    <span className="font-medium">Required:</span> firstName, lastName, birthYear (1990-2020), date (YYYY-MM-DD), age (10-25), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
+                    <span className="font-medium">Optional:</span> units (s/in), flyInDistance, notes
+                  </span>
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -375,7 +386,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                     <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
                     <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
                     <li>• Date format: YYYY-MM-DD</li>
-                    <li>• Player matching is case-sensitive</li>
+                    <li>• Athlete matching is case-sensitive</li>
                   </ul>
                 </div>
               </div>
@@ -387,21 +398,21 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
         <Card className="bg-white">
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Export Data</h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center p-6 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Download className="h-6 w-6 text-blue-600" />
                 </div>
-                <h4 className="font-medium text-gray-900 mb-2">Export Players</h4>
-                <p className="text-sm text-gray-600 mb-4">Download all player information including team assignments</p>
+                <h4 className="font-medium text-gray-900 mb-2">Export Athletes</h4>
+                <p className="text-sm text-gray-600 mb-4">Download all athlete information including team assignments</p>
                 <Button 
                   onClick={() => handleExport("players")}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                   data-testid="button-export-players"
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Export Players CSV
+                  Export Athletes CSV
                 </Button>
               </div>
 
@@ -449,7 +460,7 @@ Jordan,Williams,2009,2025-01-18,FLY10_TIME,1.31,s,15,Manual timing`;
                   <ul className="space-y-1 text-xs">
                     <li>• Exported files will include all data visible in your current view/filters</li>
                     <li>• Use the analytics page filters to customize what gets exported</li>
-                    <li>• Full export includes all teams, players, and measurements</li>
+                    <li>• Full export includes all teams, athletes, and measurements</li>
                   </ul>
                 </div>
               </div>

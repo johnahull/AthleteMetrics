@@ -1,65 +1,188 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "./queryClient";
-import { useLocation } from "wouter";
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 
 interface User {
-  username: string;
+  id: string;
+  username?: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  role: string;
+  isSiteAdmin?: boolean;
+  playerId?: string;
+}
+
+interface ImpersonationStatus {
+  isImpersonating: boolean;
+  originalUser?: User;
+  targetUser?: User;
+  startTime?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
   isLoading: boolean;
+  organizationContext: string | null;
+  setOrganizationContext: (orgId: string | null) => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
+  logout: () => void;
+  impersonationStatus: ImpersonationStatus | null;
+  startImpersonation: (userId: string) => Promise<{ success: boolean; message?: string }>;
+  stopImpersonation: () => Promise<{ success: boolean; message?: string }>;
+  checkImpersonationStatus: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [organizationContext, setOrganizationContext] = useState<string | null>(null);
+  const [impersonationStatus, setImpersonationStatus] = useState<ImpersonationStatus | null>(null);
   const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
 
-  const { data: user, isLoading } = useQuery({
-    queryKey: ["/api/auth/me"],
-    retry: false,
-  });
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
-  const loginMutation = useMutation({
-    mutationFn: async ({ username, password }: { username: string; password: string }) => {
-      const response = await apiRequest("POST", "/api/auth/login", { username, password });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/");
-    },
-  });
+  useEffect(() => {
+    if (user && user.isSiteAdmin) {
+      checkImpersonationStatus();
+    }
+  }, [user]);
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/auth/logout");
-    },
-    onSuccess: () => {
-      queryClient.clear();
-      setLocation("/login");
-    },
-  });
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+      } else {
+        setUser(null);
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const login = async (username: string, password: string) => {
-    await loginMutation.mutateAsync({ username, password });
+  const checkImpersonationStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/impersonation-status', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setImpersonationStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to check impersonation status:', error);
+    }
+  };
+
+  const startImpersonation = async (userId: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await fetch(`/api/admin/impersonate/${userId}`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        setImpersonationStatus(data.impersonationStatus);
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Failed to start impersonation' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error occurred' };
+    }
+  };
+
+  const stopImpersonation = async (): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const response = await fetch('/api/admin/stop-impersonation', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUser(data.user);
+        setImpersonationStatus(data.impersonationStatus);
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.message || 'Failed to stop impersonation' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Network error occurred' };
+    }
+  };
+
+  const login = async (username: string, password: string): Promise<{ success: boolean; redirectUrl?: string; message?: string }> => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return { success: false, message: error.message || 'Login failed' };
+      }
+
+      const data = await response.json();
+      setUser(data.user);
+
+      // Redirect to the specified URL or default to dashboard
+      setLocation(data.redirectUrl || '/');
+      return { success: true, redirectUrl: data.redirectUrl || '/' };
+    } catch (error) {
+      return { success: false, message: 'Network error occurred' };
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const logout = async () => {
-    await logoutMutation.mutateAsync();
+    try {
+      await fetch('/api/auth/logout', { 
+        method: 'POST',
+        credentials: 'include'
+      });
+      setUser(null);
+      setLocation('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      setUser(null);
+      setLocation('/login');
+    }
   };
 
   return (
-    <AuthContext.Provider value={{
-      user: (user as any)?.user || null,
-      login,
-      logout,
-      isLoading: isLoading || loginMutation.isPending || logoutMutation.isPending,
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      logout, 
+      isLoading, 
+      organizationContext, 
+      setOrganizationContext,
+      impersonationStatus,
+      startImpersonation,
+      stopImpersonation,
+      checkImpersonationStatus
     }}>
       {children}
     </AuthContext.Provider>
@@ -68,8 +191,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }

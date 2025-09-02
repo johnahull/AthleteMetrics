@@ -50,7 +50,7 @@ export default function Publish() {
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
     
     measurements.forEach((measurement: any) => {
-      const playerId = measurement.player.id;
+      const playerId = measurement.user.id;
       const value = parseFloat(measurement.value);
       
       if (!playerBest.has(playerId)) {
@@ -147,12 +147,12 @@ export default function Publish() {
         yPos = 30;
       }
       
-      const teamNames = measurement.player.teams && measurement.player.teams.length > 0 
-        ? measurement.player.teams.map((team: any) => team.name).join(", ")
+      const teamNames = measurement.user.teams && measurement.user.teams.length > 0 
+        ? measurement.user.teams.map((team: any) => team.name).join(", ")
         : "Independent";
       
       pdf.text(`${index + 1}`, 20, yPos);
-      pdf.text(measurement.player.fullName, 40, yPos);
+      pdf.text(measurement.user.fullName, 40, yPos);
       pdf.text(teamNames, 100, yPos);
       pdf.text(`${measurement.value}${getMetricUnits(filters.metric)}`, 140, yPos);
       pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
@@ -364,17 +364,17 @@ export default function Publish() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-900">
-                          {measurement.player.fullName}
+                          {measurement.user.fullName}
                         </div>
-                        <p className="text-gray-500 text-xs">Birth Year: {measurement.player.birthYear}</p>
+                        <p className="text-gray-500 text-xs">Birth Year: {measurement.user.birthYear}</p>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {measurement.player.teams && measurement.player.teams.length > 0 
-                          ? measurement.player.teams.map((team: any) => team.name).join(", ")
+                        {measurement.user.teams && measurement.user.teams.length > 0 
+                          ? measurement.user.teams.map((team: any) => team.name).join(", ")
                           : "Independent Player"
                         }
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{measurement.player.sport || "N/A"}</td>
+                      <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-gray-900">

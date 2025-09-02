@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
+import { useAuth } from "@/lib/auth";
 
 export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -15,13 +16,28 @@ export default function Teams() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { organizationContext } = useAuth();
 
   const { data: teams, isLoading } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["/api/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/teams?organizationId=${organizationContext}`
+        : `/api/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams"],
+    queryKey: ["/api/analytics/teams", organizationContext],
+    queryFn: async () => {
+      const url = organizationContext 
+        ? `/api/analytics/teams?organizationId=${organizationContext}`
+        : `/api/analytics/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   });
 
   const deleteTeamMutation = useMutation({
@@ -160,11 +176,11 @@ export default function Teams() {
                   <Button 
                     variant="ghost" 
                     className="w-full text-primary hover:bg-blue-50"
-                    onClick={() => setLocation(`/players?teamId=${team.id}`)}
-                    data-testid={`button-view-players-${team.id}`}
+                    onClick={() => setLocation(`/athletes?teamId=${team.id}`)}
+                    data-testid={`button-view-athletes-${team.id}`}
                   >
                     <Users className="h-4 w-4 mr-2" />
-                    View Players
+                    View Athletes
                   </Button>
                 </div>
               </CardContent>

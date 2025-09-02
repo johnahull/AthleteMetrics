@@ -65,17 +65,53 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
     errors.push('Last name is required');
   }
   
-  if (!row.birthYear || isNaN(parseInt(row.birthYear))) {
-    errors.push('Valid birth year is required');
+  // Validate birth date format - now required
+  if (!row.birthDate || !row.birthDate.trim()) {
+    errors.push('Birth date is required');
   } else {
-    const year = parseInt(row.birthYear);
-    if (year < 1990 || year > 2020) {
-      errors.push('Birth year must be between 1990 and 2020');
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(row.birthDate)) {
+      errors.push('Birth date must be in YYYY-MM-DD format');
+    } else {
+      // Validate date is not in the future
+      const birthDate = new Date(row.birthDate);
+      if (birthDate > new Date()) {
+        errors.push('Birth date cannot be in the future');
+      }
     }
   }
   
-  if (!row.teamName || !row.teamName.trim()) {
-    errors.push('Team name is required');
+  // Birth year is now optional but validate if provided
+  if (row.birthYear && row.birthYear.trim()) {
+    if (isNaN(parseInt(row.birthYear))) {
+      errors.push('Birth year must be a valid number');
+    } else {
+      const year = parseInt(row.birthYear);
+      if (year < 1990 || year > 2020) {
+        errors.push('Birth year must be between 1990 and 2020');
+      }
+    }
+  }
+  
+  // Team name is now optional since athletes can be independent
+  
+  // Validate emails format if provided
+  if (row.emails && row.emails.trim()) {
+    const emails = row.emails.split(',').map((e: string) => e.trim());
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = emails.filter((email: string) => !emailRegex.test(email));
+    if (invalidEmails.length > 0) {
+      errors.push(`Invalid email format: ${invalidEmails.join(', ')}`);
+    }
+  }
+  
+  // Validate height and weight if provided
+  if (row.height && (isNaN(parseInt(row.height)) || parseInt(row.height) < 36 || parseInt(row.height) > 84)) {
+    errors.push('Height must be between 36-84 inches');
+  }
+  
+  if (row.weight && (isNaN(parseInt(row.weight)) || parseInt(row.weight) < 50 || parseInt(row.weight) > 400)) {
+    errors.push('Weight must be between 50-400 pounds');
   }
   
   return {
@@ -87,28 +123,51 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
 export function validateMeasurementCSV(row: any): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
-  if (!row.fullName || !row.fullName.trim()) {
-    errors.push('Full name is required');
+  // Validate athlete identification
+  if (!row.firstName || !row.firstName.trim()) {
+    errors.push('First name is required');
+  }
+  
+  if (!row.lastName || !row.lastName.trim()) {
+    errors.push('Last name is required');
   }
   
   if (!row.birthYear || isNaN(parseInt(row.birthYear))) {
     errors.push('Valid birth year is required');
+  } else {
+    const year = parseInt(row.birthYear);
+    if (year < 1990 || year > 2020) {
+      errors.push('Birth year must be between 1990 and 2020');
+    }
   }
   
+  // Validate measurement date
   if (!row.date || !row.date.trim()) {
     errors.push('Date is required');
   } else {
-    // Validate date format (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(row.date)) {
       errors.push('Date must be in YYYY-MM-DD format');
     }
   }
   
-  if (!row.metric || !['FLY10_TIME', 'VERTICAL_JUMP'].includes(row.metric)) {
-    errors.push('Metric must be FLY10_TIME or VERTICAL_JUMP');
+  // Validate age
+  if (!row.age || isNaN(parseInt(row.age))) {
+    errors.push('Valid age is required');
+  } else {
+    const age = parseInt(row.age);
+    if (age < 10 || age > 25) {
+      errors.push('Age must be between 10 and 25');
+    }
   }
   
+  // Validate metric type
+  const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+  if (!row.metric || !validMetrics.includes(row.metric)) {
+    errors.push(`Metric must be one of: ${validMetrics.join(', ')}`);
+  }
+  
+  // Validate value
   if (!row.value || isNaN(parseFloat(row.value))) {
     errors.push('Valid numeric value is required');
   } else {
@@ -116,6 +175,17 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
     if (value <= 0) {
       errors.push('Value must be positive');
     }
+  }
+  
+  // Validate units
+  const validUnits = ['s', 'in', ''];
+  if (row.units && !validUnits.includes(row.units)) {
+    errors.push('Units must be "s" for time, "in" for distance, or empty for dimensionless');
+  }
+  
+  // Validate flyInDistance if provided
+  if (row.flyInDistance && row.flyInDistance.trim() && isNaN(parseFloat(row.flyInDistance))) {
+    errors.push('Fly-in distance must be a valid number');
   }
   
   return {

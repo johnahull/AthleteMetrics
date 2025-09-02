@@ -29,6 +29,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       name: "",
       level: "",
       notes: "",
+      organizationId: undefined,
     },
   });
 
@@ -38,12 +39,14 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         name: team.name,
         level: team.level || "",
         notes: team.notes || "",
+        organizationId: team.organizationId,
       });
     } else {
       form.reset({
         name: "",
         level: "",
         notes: "",
+        organizationId: undefined,
       });
     }
   }, [team, form]);
@@ -145,7 +148,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                 <FormItem>
                   <FormLabel>Level</FormLabel>
                   <Select 
-                    value={field.value} 
+                    value={field.value || ""} 
                     onValueChange={field.onChange}
                     disabled={isPending}
                   >
@@ -174,6 +177,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                   <FormControl>
                     <Textarea 
                       {...field} 
+                      value={field.value || ""}
                       placeholder="Optional notes about this team..."
                       disabled={isPending}
                       rows={3}

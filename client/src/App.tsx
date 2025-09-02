@@ -14,20 +14,35 @@ import DataEntry from "./pages/data-entry";
 import Analytics from "./pages/analytics";
 import Publish from "./pages/publish";
 import ImportExport from "./pages/import-export";
+import AdminPage from "./pages/admin";
+import Organizations from "./pages/organizations";
+import UserManagement from "./pages/user-management";
+import Profile from "./pages/profile";
+import UserProfile from "./pages/user-profile";
+import OrganizationProfile from "./pages/organization-profile";
+import AcceptInvitation from "./pages/accept-invitation";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
+      <Route path="/accept-invitation" component={AcceptInvitation} />
+      <Route path="/register" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
-      <Route path="/" component={Dashboard} />
-      <Route path="/teams" component={Teams} />
-      <Route path="/players" component={Players} />
-      <Route path="/players/:id" component={PlayerProfile} />
+      <Route path="/athletes/:id" component={PlayerProfile} />
+      <Route path="/athletes" component={Players} />
+      <Route path="/organizations/:id" component={OrganizationProfile} />
+      <Route path="/organizations" component={Organizations} />
+      <Route path="/users/:id" component={UserProfile} />
+      <Route path="/user-management" component={UserManagement} />
       <Route path="/data-entry" component={DataEntry} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/publish" component={Publish} />
       <Route path="/import-export" component={ImportExport} />
+      <Route path="/admin" component={AdminPage} />
+      <Route path="/teams" component={Teams} />
+      <Route path="/profile" component={Profile} />
+      <Route path="/" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>
   );

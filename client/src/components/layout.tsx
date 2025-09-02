@@ -4,17 +4,22 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut } from "lucide-react";
 import Sidebar from "./sidebar";
+import ImpersonationBanner from "./impersonation-banner";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  // Don't redirect to login for invitation pages
+  const isInvitationPage = location.startsWith('/accept-invitation') || location.startsWith('/register');
+  const isLoginPage = location === '/login';
+
   useEffect(() => {
-    if (!isLoading && !user && location !== "/login") {
+    if (!isLoading && !user && !isInvitationPage && !isLoginPage) {
       setLocation("/login");
     }
-  }, [user, isLoading, location, setLocation]);
+  }, [user, isLoading, location, setLocation, isInvitationPage, isLoginPage]);
 
   if (isLoading) {
     return (
@@ -27,18 +32,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user && location !== "/login") {
-    return null;
-  }
-
-  if (location === "/login") {
-    return <>{children}</>;
+  // For invitation and login pages, render without sidebar
+  if (isInvitationPage || isLoginPage || !user) {
+    return <div className="min-h-screen bg-background">{children}</div>;
   }
 
   return (
     <div className="min-h-screen flex bg-gray-50">
       {isSidebarOpen && <Sidebar />}
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Impersonation Banner */}
+        <ImpersonationBanner />
         {/* Toggle Button Bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm sticky top-0 z-10">
           <Button
@@ -59,7 +63,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500">Welcome,</span>
-                  <span className="font-medium text-gray-900">{user.username}</span>
+                  <span className="font-medium text-gray-900">{user.firstName || user.username}</span>
                 </div>
                 <Button
                   variant="ghost"
