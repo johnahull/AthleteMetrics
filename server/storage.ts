@@ -1230,7 +1230,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await finalQuery
-      .groupBy(measurements.id, users.id)
+      .groupBy(
+        measurements.id, 
+        users.id, 
+        sql`submitter_info.first_name`,
+        sql`submitter_info.last_name`,
+        sql`verifier_info.first_name`,
+        sql`verifier_info.last_name`
+      )
       .orderBy(desc(measurements.date), desc(measurements.createdAt));
 
     // Apply team/organization filters

@@ -977,7 +977,7 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      const measurement = await storage.createMeasurement(measurementData);
+      const measurement = await storage.createMeasurement(measurementData, currentUser.id);
       res.status(201).json(measurement);
     } catch (error) {
       if (error instanceof z.ZodError) {
