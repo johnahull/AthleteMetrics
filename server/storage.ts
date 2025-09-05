@@ -286,7 +286,7 @@ export class DatabaseStorage implements IStorage {
         .limit(1); // Enforce single role
 
       const roles = result.length > 0 ? [result[0].role] : [];
-      console.log(`User ${userId} roles in org ${organizationId}:`, { roles, foundRecords: result.length });
+      console.log(`User roles query: found ${result.length} records`);
       return roles;
     } else {
       // Get all organization roles for the user (one per organization maximum)
@@ -322,7 +322,7 @@ export class DatabaseStorage implements IStorage {
     }));
 
     if (result.length > 0) {
-      console.log(`User ${userId} has ${result.length} team(s):`, mappedResult.map(r => r.team.name));
+      console.log(`User teams query: found ${result.length} team(s)`);
     }
 
     return mappedResult;
@@ -607,7 +607,7 @@ export class DatabaseStorage implements IStorage {
         ));
 
       if (existingAssignment.length > 0) {
-        console.log(`User ${userId} is already in team ${teamId}`);
+        console.log('User already assigned to team');
         return existingAssignment[0];
       }
 
@@ -616,7 +616,7 @@ export class DatabaseStorage implements IStorage {
         teamId
       }).returning();
 
-      console.log(`Successfully added user ${userId} to team ${teamId}`);
+      console.log('User added to team successfully');
       return userTeam;
     } catch (error) {
       console.error(`Error adding user ${userId} to team ${teamId}:`, error);
@@ -969,7 +969,7 @@ export class DatabaseStorage implements IStorage {
       for (const teamId of player.teamIds) {
         try {
           await this.addUserToTeam(newUser.id, teamId);
-          console.log(`Successfully added athlete ${newUser.id} to team ${teamId}`);
+          console.log('Athlete added to team successfully');
         } catch (error) {
           console.error(`Failed to add athlete ${newUser.id} to team ${teamId}:`, error);
         }
@@ -1044,7 +1044,7 @@ export class DatabaseStorage implements IStorage {
           .where(eq(users.id, id));
       } catch (error) {
         // Log but don't fail if user update fails
-        console.log(`Could not update user record for ID ${id}:`, error);
+        console.log('Could not update user record:', error.message);
       }
     }
 
