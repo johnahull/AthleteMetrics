@@ -1128,6 +1128,119 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Update measurement route (coaches and org admins only)
+  app.patch("/api/measurements/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get measurement to verify it exists and user has access
+      const measurement = await storage.getMeasurement(id);
+      if (!measurement) {
+        return res.status(404).json({ message: "Measurement not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      if (!userIsSiteAdmin) {
+        // Check if measurement's player is in user's organization
+        const player = await storage.getPlayer(measurement.userId);
+        if (!player) {
+          return res.status(404).json({ message: "Player not found" });
+        }
+
+        const playerTeams = await storage.getPlayerTeams(measurement.userId);
+        const teams = await storage.getTeams();
+        const playerOrganizations = playerTeams
+          .map(pt => teams.find(t => t.id === pt.teamId))
+          .filter(Boolean)
+          .map(team => team!.organizationId);
+
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasAccess = playerOrganizations.some(orgId => 
+          userOrgs.some(userOrg => userOrg.organizationId === orgId)
+        );
+
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Cannot update measurements for players outside your organization" });
+        }
+
+        // Athletes cannot update measurements
+        if (currentUser.role === "athlete") {
+          return res.status(403).json({ message: "Athletes cannot update measurements" });
+        }
+      }
+
+      // Update measurement
+      const updatedMeasurement = await storage.updateMeasurement(id, updateData);
+      res.json(updatedMeasurement);
+    } catch (error) {
+      console.error("Error updating measurement:", error);
+      res.status(500).json({ message: "Failed to update measurement" });
+    }
+  });
+
+  // Delete measurement route (coaches and org admins only)
+  app.delete("/api/measurements/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get measurement to verify it exists and user has access
+      const measurement = await storage.getMeasurement(id);
+      if (!measurement) {
+        return res.status(404).json({ message: "Measurement not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      if (!userIsSiteAdmin) {
+        // Check if measurement's player is in user's organization
+        const player = await storage.getPlayer(measurement.userId);
+        if (!player) {
+          return res.status(404).json({ message: "Player not found" });
+        }
+
+        const playerTeams = await storage.getPlayerTeams(measurement.userId);
+        const teams = await storage.getTeams();
+        const playerOrganizations = playerTeams
+          .map(pt => teams.find(t => t.id === pt.teamId))
+          .filter(Boolean)
+          .map(team => team!.organizationId);
+
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasAccess = playerOrganizations.some(orgId => 
+          userOrgs.some(userOrg => userOrg.organizationId === orgId)
+        );
+
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Cannot delete measurements for players outside your organization" });
+        }
+
+        // Athletes cannot delete measurements
+        if (currentUser.role === "athlete") {
+          return res.status(403).json({ message: "Athletes cannot delete measurements" });
+        }
+      }
+
+      // Delete measurement
+      await storage.deleteMeasurement(id);
+      res.json({ message: "Measurement deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting measurement:", error);
+      res.status(500).json({ message: "Failed to delete measurement" });
+    }
+  });
+
   // Keep existing analytics routes
   app.get("/api/analytics/dashboard", requireAuth, async (req, res) => {
     try {
