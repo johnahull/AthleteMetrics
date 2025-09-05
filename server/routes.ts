@@ -15,6 +15,8 @@ import { AccessController } from "./access-control";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
+import multer from "multer";
+import csv from "csv-parser";
 
 // Session configuration
 declare module 'express-session' {
@@ -2137,6 +2139,220 @@ export function registerRoutes(app: Express) {
         console.error("Error changing password:", error);
         res.status(500).json({ message: "Failed to change password" });
       }
+    }
+  });
+
+  // Configure multer for file uploads
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only CSV files are allowed'));
+      }
+    }
+  });
+
+  // Import routes
+  app.post("/api/import/:type", requireAuth, upload.single('file'), async (req, res) => {
+    try {
+      const { type } = req.params;
+      const { createMissing, teamId } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      if (type !== 'players' && type !== 'measurements') {
+        return res.status(400).json({ message: "Invalid import type. Use 'players' or 'measurements'" });
+      }
+
+      const results: any[] = [];
+      const errors: any[] = [];
+      let totalRows = 0;
+
+      // Parse CSV data
+      const csvData: any[] = [];
+      const csvText = file.buffer.toString('utf-8');
+      
+      // Split CSV into lines and parse
+      const lines = csvText.split('\n').filter(line => line.trim());
+      if (lines.length === 0) {
+        return res.status(400).json({ message: "CSV file is empty" });
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        csvData.push(row);
+        totalRows++;
+      }
+
+      if (type === 'players') {
+        // Process players import
+        for (const row of csvData) {
+          try {
+            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName } = row;
+            
+            if (!firstName || !lastName) {
+              errors.push({ row: totalRows, error: "First name and last name are required" });
+              continue;
+            }
+
+            // Parse arrays from semicolon-separated strings
+            const emailArray = emails ? emails.split(';').map((e: string) => e.trim()).filter(Boolean) : [];
+            const phoneArray = phoneNumbers ? phoneNumbers.split(';').map((p: string) => p.trim()).filter(Boolean) : [];
+            const sportsArray = sports ? sports.split(';').map((s: string) => s.trim()).filter(Boolean) : [];
+
+            // Generate username
+            const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
+            let username = baseUsername;
+            let counter = 1;
+            while (await storage.getUserByUsername(username)) {
+              username = `${baseUsername}${counter}`;
+              counter++;
+            }
+
+            const playerData = {
+              username,
+              firstName,
+              lastName,
+              emails: emailArray.length > 0 ? emailArray : [`${username}@temp.local`],
+              phoneNumbers: phoneArray,
+              birthDate: birthDate || undefined,
+              birthYear: birthYear ? parseInt(birthYear) : (birthDate ? new Date(birthDate).getFullYear() : undefined),
+              graduationYear: graduationYear ? parseInt(graduationYear) : undefined,
+              sports: sportsArray,
+              height: height ? parseInt(height) : undefined,
+              weight: weight ? parseInt(weight) : undefined,
+              school: school || undefined,
+              password: 'TempPassword123!', // Temporary password
+              isActive: "true"
+            };
+
+            // Create or find player
+            let player;
+            if (createMissing === 'true') {
+              player = await storage.createUser(playerData);
+              
+              // Add to team if specified
+              if (teamId) {
+                await storage.addUserToTeam(player.id, teamId);
+              }
+            } else {
+              // Match existing player by name and birth year
+              const existingPlayer = await storage.getAthletes({
+                search: `${firstName} ${lastName}`
+              });
+              
+              const matchedPlayer = existingPlayer.find(p => 
+                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
+                p.lastName?.toLowerCase() === lastName.toLowerCase() &&
+                (birthYear ? p.birthYear === parseInt(birthYear) : true)
+              );
+              
+              if (matchedPlayer) {
+                player = matchedPlayer;
+              } else {
+                errors.push({ row: totalRows, error: `Player ${firstName} ${lastName} not found` });
+                continue;
+              }
+            }
+
+            results.push({
+              action: createMissing === 'true' ? 'created' : 'matched',
+              player: {
+                id: player.id,
+                name: `${player.firstName} ${player.lastName}`,
+                username: player.username
+              }
+            });
+          } catch (error) {
+            console.error('Error processing player row:', error);
+            errors.push({ row: totalRows, error: error instanceof Error ? error.message : 'Unknown error' });
+          }
+        }
+      } else if (type === 'measurements') {
+        // Process measurements import
+        for (const row of csvData) {
+          try {
+            const { firstName, lastName, birthYear, date, age, metric, value, units, flyInDistance, notes } = row;
+            
+            if (!firstName || !lastName || !metric || !value || !date) {
+              errors.push({ row: totalRows, error: "First name, last name, metric, value, and date are required" });
+              continue;
+            }
+
+            // Find player
+            const athletes = await storage.getAthletes({
+              search: `${firstName} ${lastName}`
+            });
+            
+            const matchedPlayer = athletes.find(p => 
+              p.firstName?.toLowerCase() === firstName.toLowerCase() && 
+              p.lastName?.toLowerCase() === lastName.toLowerCase() &&
+              (birthYear ? p.birthYear === parseInt(birthYear) : true)
+            );
+            
+            if (!matchedPlayer) {
+              errors.push({ row: totalRows, error: `Player ${firstName} ${lastName} not found` });
+              continue;
+            }
+
+            const measurementData = {
+              userId: matchedPlayer.id,
+              date,
+              age: age ? parseInt(age) : undefined,
+              metric,
+              value: parseFloat(value),
+              units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : ''),
+              flyInDistance: flyInDistance ? parseInt(flyInDistance) : undefined,
+              notes: notes || undefined,
+              isVerified: "false"
+            };
+
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
+            
+            results.push({
+              action: 'created',
+              measurement: {
+                id: measurement.id,
+                player: `${matchedPlayer.firstName} ${matchedPlayer.lastName}`,
+                metric: measurement.metric,
+                value: measurement.value,
+                date: measurement.date
+              }
+            });
+          } catch (error) {
+            console.error('Error processing measurement row:', error);
+            errors.push({ row: totalRows, error: error instanceof Error ? error.message : 'Unknown error' });
+          }
+        }
+      }
+
+      res.json({
+        type,
+        totalRows,
+        results,
+        errors,
+        summary: {
+          successful: results.length,
+          failed: errors.length
+        }
+      });
+    } catch (error) {
+      console.error('Import error:', error);
+      res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
