@@ -1050,12 +1050,7 @@ export function registerRoutes(app: Express) {
         includeUnverified: true
       };
 
-      console.log('Measurements API - orgContextForFiltering:', orgContextForFiltering);
-      console.log('Measurements API - filters:', filters);
-      
       const measurements = await storage.getMeasurements(filters);
-      console.log('Measurements API - results count:', measurements.length);
-      
       res.json(measurements);
     } catch (error) {
       console.error("Error fetching measurements:", error);

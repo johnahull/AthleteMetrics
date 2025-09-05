@@ -63,7 +63,7 @@ export default function ImportExport() {
       console.error("Import error:", error);
       toast({
         title: "Import Failed",
-        description: error?.message || "Failed to process CSV file",
+        description: error instanceof Error ? error.message : "Failed to process CSV file",
         variant: "destructive",
       });
     },
