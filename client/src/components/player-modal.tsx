@@ -185,7 +185,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full p-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl w-full p-0 h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Athlete" : "Add New Athlete"}</DialogTitle>
@@ -196,8 +196,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-          <ScrollArea className="h-full max-h-[60vh]">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 min-h-0 flex-col">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="px-6 py-4">
               <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
