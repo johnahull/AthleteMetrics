@@ -71,19 +71,30 @@ export default function Players() {
         ? `/api/teams?organizationId=${organizationContext}`
         : `/api/teams`;
       const response = await fetch(url);
-      return response.json();
+      if (!response.ok) throw new Error('Failed to fetch teams');
+      return response.json() as any[];
     }
   });
 
   // Get current user's organizations to fetch invitations
   const { data: userOrgs = [] } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/me/organizations");
+      if (!response.ok) throw new Error('Failed to fetch organizations');
+      return response.json() as any[];
+    }
   });
 
   // Get athlete invitations for the current organization
   const { data: athleteInvitations = [] } = useQuery({
     queryKey: ["/api/invitations/athletes"],
     enabled: !!userOrgs && userOrgs.length > 0,
+    queryFn: async () => {
+      const response = await fetch("/api/invitations/athletes");
+      if (!response.ok) throw new Error('Failed to fetch invitations');
+      return response.json() as any[];
+    }
   });
 
   const { data: players = [], isLoading } = useQuery({
@@ -105,7 +116,7 @@ export default function Players() {
       
       const response = await fetch(`/api/players?${params}`);
       if (!response.ok) throw new Error('Failed to fetch players');
-      return response.json();
+      return response.json() as any[];
     },
   });
 

@@ -45,17 +45,17 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
   const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
     control: form.control,
     name: "emails"
-  }) as any;
+  });
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
-    name: "phoneNumbers"
-  }) as any;
+    name: "phoneNumbers" 
+  });
 
   const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
     control: form.control,
     name: "sports"
-  }) as any;
+  });
 
   useEffect(() => {
     if (player) {
@@ -64,7 +64,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         lastName: player.lastName,
         emails: player.emails || [],
         birthDate: player.birthDate || "",
-        graduationYear: player.graduationYear,
+        graduationYear: player.graduationYear || undefined,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sports: player.sports || [],
