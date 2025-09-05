@@ -90,7 +90,8 @@ export default function PlayerProfile() {
   const updateMeasurementMutation = useMutation({
     mutationFn: mutations.updateMeasurement,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { playerId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/players", playerId] });
       toast({ title: "Success", description: "Measurement updated successfully" });
       setShowEditDialog(false);
       setEditingMeasurement(null);
@@ -107,7 +108,8 @@ export default function PlayerProfile() {
   const deleteMeasurementMutation = useMutation({
     mutationFn: mutations.deleteMeasurement,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { playerId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/players", playerId] });
       toast({ title: "Success", description: "Measurement deleted successfully" });
       setDeleteConfirmId(null);
     },
@@ -228,7 +230,7 @@ export default function PlayerProfile() {
       <div className="flex items-center mb-6">
         <Button 
           variant="ghost" 
-          onClick={() => setLocation('/athletes')}
+          onClick={() => setLocation('/players')}
           className="mr-4"
           data-testid="button-back-to-players"
         >
@@ -273,13 +275,15 @@ export default function PlayerProfile() {
             <Edit className="h-4 w-4 mr-2" />
             Edit Athlete
           </Button>
-          <Button 
-            onClick={() => setShowAddMeasurementModal(true)}
-            data-testid="button-add-measurement"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Measurement
-          </Button>
+          {canEditMeasurements && (
+            <Button 
+              onClick={() => setShowAddMeasurementModal(true)}
+              data-testid="button-add-measurement"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Measurement
+            </Button>
+          )}
         </div>
       </div>
 
@@ -460,6 +464,7 @@ export default function PlayerProfile() {
                               size="sm"
                               onClick={() => handleEditMeasurement(measurement)}
                               data-testid={`button-edit-measurement-${measurement.id}`}
+                              aria-label="Edit measurement"
                             >
                               <Edit2 className="h-4 w-4" />
                             </Button>
@@ -468,6 +473,7 @@ export default function PlayerProfile() {
                               size="sm"
                               onClick={() => handleDeleteMeasurement(measurement.id)}
                               data-testid={`button-delete-measurement-${measurement.id}`}
+                              aria-label="Delete measurement"
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
