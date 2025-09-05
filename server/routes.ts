@@ -2542,24 +2542,53 @@ export function registerRoutes(app: Express) {
 
             let matchedPlayer;
             if (teamName) {
+              // Clean up team name for comparison
+              const cleanTeamName = teamName.toLowerCase().trim();
+              
               // Match by firstName + lastName + team
               matchedPlayer = (athletes as any[]).find((p: any) => 
-                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
-                p.lastName?.toLowerCase() === lastName.toLowerCase() &&
-                p.teams?.some((team: any) => team.name?.toLowerCase() === teamName.toLowerCase())
+                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
+                p.teams?.some((team: any) => team.name?.toLowerCase().trim() === cleanTeamName)
               );
+
+              // If no exact match, try partial team name matching
+              if (!matchedPlayer) {
+                matchedPlayer = (athletes as any[]).find((p: any) => 
+                  p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                  p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
+                  p.teams?.some((team: any) => {
+                    const teamNameClean = team.name?.toLowerCase().trim();
+                    return teamNameClean?.includes(cleanTeamName) || cleanTeamName.includes(teamNameClean);
+                  })
+                );
+              }
             } else {
               // Fallback to just name matching if no team specified
               matchedPlayer = athletes.find(p => 
-                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
-                p.lastName?.toLowerCase() === lastName.toLowerCase()
+                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
               );
             }
 
             if (!matchedPlayer) {
-              const errorMsg = teamName 
-                ? `Player ${firstName} ${lastName} not found in team "${teamName}"`
-                : `Player ${firstName} ${lastName} not found`;
+              // Add debugging information to error message
+              const nameMatches = athletes.filter(p => 
+                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
+              );
+              
+              let errorMsg;
+              if (teamName) {
+                if (nameMatches.length > 0) {
+                  const availableTeams = nameMatches.flatMap(p => p.teams?.map((t: any) => t.name) || []).join(', ');
+                  errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}". Available teams: ${availableTeams}`;
+                } else {
+                  errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}"`;
+                }
+              } else {
+                errorMsg = `Player ${firstName} ${lastName} not found`;
+              }
               errors.push({ row: rowNum, error: errorMsg });
               continue;
             }
