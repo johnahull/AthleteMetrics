@@ -130,24 +130,38 @@ export default function Analytics() {
       });
       
       if (!response.ok) {
-        const error = new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `Failed to delete measurement: ${response.status}`;
+        
         try {
-          const errorData = await response.json();
-          error.message = errorData.message || error.message;
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } else {
+            const textResponse = await response.text();
+            if (textResponse) {
+              errorMessage = textResponse;
+            }
+          }
         } catch {
-          // Response doesn't contain JSON, use status text
-          error.message = response.statusText || error.message;
+          // Use default error message if parsing fails
         }
-        throw error;
+        
+        throw new Error(errorMessage);
       }
       
-      // Try to parse as JSON, but don't fail if it's not JSON
-      try {
-        return await response.json();
-      } catch {
-        // Return a success indicator if response isn't JSON
-        return { success: true };
+      // Check if response has content and is JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          return await response.json();
+        } catch {
+          return { success: true };
+        }
       }
+      
+      // Return success for non-JSON responses (like empty responses)
+      return { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
