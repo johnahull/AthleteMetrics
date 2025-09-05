@@ -144,7 +144,7 @@ async function initializeDefaultUser() {
     // Check if admin user already exists by email or username
     const existingUserByEmail = await storage.getUserByEmail(adminEmail);
     const existingUserByUsername = await storage.getUserByUsername("admin");
-    
+
     if (!existingUserByEmail && !existingUserByUsername) {
       await storage.createUser({
         username: "admin",
@@ -195,10 +195,10 @@ export function registerRoutes(app: Express) {
 
   // Security headers middleware
   app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+    contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI components
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: ["'self'"],
@@ -207,7 +207,7 @@ export function registerRoutes(app: Express) {
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
       },
-    } : false, // Disable CSP in development
+    },
     crossOriginEmbedderPolicy: false, // Allow for development
   }));
 
@@ -842,7 +842,7 @@ export function registerRoutes(app: Express) {
 
         // Get the player's teams to determine organization
         const playerTeams = await storage.getPlayerTeams(id);
-        
+
         if (playerTeams.length === 0) {
           return res.status(403).json({ message: "Player not associated with any team" });
         }
@@ -1037,7 +1037,7 @@ export function registerRoutes(app: Express) {
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const userOrganizationIds = userOrgs.map(userOrg => userOrg.organizationId);
-        
+
         const hasAccess = playerOrganizations.some(orgId => 
           userOrganizationIds.includes(orgId)
         );
@@ -1100,7 +1100,7 @@ export function registerRoutes(app: Express) {
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
         const playerOrganizations = playerTeams
-          .map(pt => pt.team.organizationId);
+          .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
@@ -1150,7 +1150,7 @@ export function registerRoutes(app: Express) {
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
         const playerOrganizations = playerTeams
-          .map(pt => pt.team.organizationId);
+          .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
@@ -1203,7 +1203,7 @@ export function registerRoutes(app: Express) {
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
         const playerOrganizations = playerTeams
-          .map(pt => pt.team.organizationId);
+          .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
@@ -1375,7 +1375,7 @@ export function registerRoutes(app: Express) {
 
           // Generate invite link for email sending (token should not be exposed to client)
           const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
-          
+
           // Log invitation creation for admin reference
           console.log(`Invitation created: ${invitation.id} for ${email}`);
 
@@ -2292,7 +2292,7 @@ export function registerRoutes(app: Express) {
       // Parse CSV data
       const csvData: any[] = [];
       const csvText = file.buffer.toString('utf-8');
-      
+
       // Split CSV into lines and parse
       const lines = csvText.split('\n').filter(line => line.trim());
       if (lines.length === 0) {
@@ -2300,7 +2300,7 @@ export function registerRoutes(app: Express) {
       }
 
       const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-      
+
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
         const row: any = {};
@@ -2316,7 +2316,7 @@ export function registerRoutes(app: Express) {
         for (const row of csvData) {
           try {
             const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName } = row;
-            
+
             if (!firstName || !lastName) {
               errors.push({ row: totalRows, error: "First name and last name are required" });
               continue;
@@ -2357,11 +2357,11 @@ export function registerRoutes(app: Express) {
             let player;
             if (createMissing === 'true') {
               player = await storage.createUser(playerData);
-              
+
               // Add to team if specified
               if (teamId) {
                 await storage.addUserToTeam(player.id, teamId);
-                
+
                 // Also add to organization as athlete
                 const team = await storage.getTeam(teamId);
                 if (team?.organization?.id) {
@@ -2373,13 +2373,13 @@ export function registerRoutes(app: Express) {
               const existingPlayer = await storage.getAthletes({
                 search: `${firstName} ${lastName}`
               });
-              
+
               const matchedPlayer = existingPlayer.find(p => 
                 p.firstName?.toLowerCase() === firstName.toLowerCase() && 
                 p.lastName?.toLowerCase() === lastName.toLowerCase() &&
                 (birthYear ? p.birthYear === parseInt(birthYear) : true)
               );
-              
+
               if (matchedPlayer) {
                 player = matchedPlayer;
               } else {
@@ -2406,7 +2406,7 @@ export function registerRoutes(app: Express) {
         for (const row of csvData) {
           try {
             const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
-            
+
             // Validate required fields
             if (!firstName || !lastName || !teamName || !date || !metric || !value) {
               errors.push({ row: totalRows, error: "First name, last name, team name, date, metric, and value are required" });
@@ -2417,7 +2417,7 @@ export function registerRoutes(app: Express) {
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`
             });
-            
+
             let matchedPlayer;
             if (teamName) {
               // Match by firstName + lastName + team
@@ -2433,7 +2433,7 @@ export function registerRoutes(app: Express) {
                 p.lastName?.toLowerCase() === lastName.toLowerCase()
               );
             }
-            
+
             if (!matchedPlayer) {
               const errorMsg = teamName 
                 ? `Player ${firstName} ${lastName} not found in team "${teamName}"`
@@ -2455,7 +2455,7 @@ export function registerRoutes(app: Express) {
             };
 
             const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
-            
+
             results.push({
               action: 'created',
               measurement: {
@@ -2499,7 +2499,7 @@ export function registerRoutes(app: Express) {
 
       // Get all athletes with comprehensive data
       const athletes = await storage.getAthletes();
-      
+
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'firstName', 'lastName', 'fullName', 'username', 'emails', 'phoneNumbers',
@@ -2542,7 +2542,7 @@ export function registerRoutes(app: Express) {
       });
 
       const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="athletes.csv"');
       res.send(csvContent);
@@ -2561,7 +2561,7 @@ export function registerRoutes(app: Express) {
 
       // Get all measurements with comprehensive data
       const measurements = await storage.getMeasurements();
-      
+
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'teams',
@@ -2604,7 +2604,7 @@ export function registerRoutes(app: Express) {
       });
 
       const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
       res.send(csvContent);
@@ -2623,7 +2623,7 @@ export function registerRoutes(app: Express) {
 
       // Get all teams with comprehensive data
       const teams = await storage.getTeams();
-      
+
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'name', 'organizationId', 'organizationName', 'level', 'notes', 'createdAt'
@@ -2649,7 +2649,7 @@ export function registerRoutes(app: Express) {
       });
 
       const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="teams.csv"');
       res.send(csvContent);
