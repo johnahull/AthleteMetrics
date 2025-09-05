@@ -139,8 +139,11 @@ async function initializeDefaultUser() {
       process.exit(1);
     }
 
-    const existingUser = await storage.getUserByEmail(adminEmail);
-    if (!existingUser) {
+    // Check if admin user already exists by email or username
+    const existingUserByEmail = await storage.getUserByEmail(adminEmail);
+    const existingUserByUsername = await storage.getUserByUsername("admin");
+    
+    if (!existingUserByEmail && !existingUserByUsername) {
       await storage.createUser({
         username: "admin",
         emails: [adminEmail],
@@ -151,6 +154,8 @@ async function initializeDefaultUser() {
         isSiteAdmin: "true"
       });
       console.log("Site administrator account created successfully");
+    } else {
+      console.log("Site administrator account already exists");
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
