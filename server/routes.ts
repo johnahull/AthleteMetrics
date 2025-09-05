@@ -1222,10 +1222,17 @@ export function registerRoutes(app: Express) {
 
       // Delete measurement
       await storage.deleteMeasurement(id);
-      res.json({ message: "Measurement deleted successfully" });
+      res.status(200).json({ 
+        success: true, 
+        message: "Measurement deleted successfully" 
+      });
     } catch (error) {
       console.error("Error deleting measurement:", error);
-      res.status(500).json({ message: "Failed to delete measurement" });
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to delete measurement",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

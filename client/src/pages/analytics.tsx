@@ -123,7 +123,46 @@ export default function Analytics() {
   });
 
   const deleteMeasurementMutation = useMutation({
-    mutationFn: (id: string) => mutations.deleteMeasurement(id),
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/measurements/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `Failed to delete measurement: ${response.status}`;
+        
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } else {
+            const textResponse = await response.text();
+            if (textResponse) {
+              errorMessage = textResponse;
+            }
+          }
+        } catch {
+          // Use default error message if parsing fails
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      // Check if response has content and is JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          return await response.json();
+        } catch {
+          return { success: true };
+        }
+      }
+      
+      // Return success for non-JSON responses (like empty responses)
+      return { success: true };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       toast({ title: "Success", description: "Measurement deleted successfully" });
