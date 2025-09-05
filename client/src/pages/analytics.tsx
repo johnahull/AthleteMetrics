@@ -123,7 +123,32 @@ export default function Analytics() {
   });
 
   const deleteMeasurementMutation = useMutation({
-    mutationFn: (id: string) => mutations.deleteMeasurement(id),
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/measurements/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const error = new Error(`HTTP error! status: ${response.status}`);
+        try {
+          const errorData = await response.json();
+          error.message = errorData.message || error.message;
+        } catch {
+          // Response doesn't contain JSON, use status text
+          error.message = response.statusText || error.message;
+        }
+        throw error;
+      }
+      
+      // Try to parse as JSON, but don't fail if it's not JSON
+      try {
+        return await response.json();
+      } catch {
+        // Return a success indicator if response isn't JSON
+        return { success: true };
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       toast({ title: "Success", description: "Measurement deleted successfully" });
