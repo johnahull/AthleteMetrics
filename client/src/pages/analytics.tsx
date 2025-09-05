@@ -1,17 +1,48 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Download, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Download, Search, Edit2, Trash2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { mutations } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 
+// Edit measurement form schema
+const editMeasurementSchema = z.object({
+  value: z.string().min(1, "Value is required").refine(
+    (val) => !isNaN(Number(val)) && Number(val) > 0,
+    "Value must be a positive number"
+  ),
+  date: z.string().min(1, "Date is required"),
+  age: z.string().min(1, "Age is required").refine(
+    (val) => !isNaN(Number(val)) && Number(val) >= 10 && Number(val) <= 25,
+    "Age must be between 10 and 25"
+  ),
+  flyInDistance: z.string().optional(),
+  notes: z.string().optional(),
+});
+
 export default function Analytics() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // State for edit/delete functionality
+  const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
     birthYearFrom: "2009",
@@ -22,6 +53,18 @@ export default function Analytics() {
     dateRange: "last30",
     sport: "",
     search: "",
+  });
+  
+  // Edit form
+  const editForm = useForm<z.infer<typeof editMeasurementSchema>>({
+    resolver: zodResolver(editMeasurementSchema),
+    defaultValues: {
+      value: "",
+      date: "",
+      age: "",
+      flyInDistance: "",
+      notes: "",
+    },
   });
 
   const { data: teams } = useQuery({
@@ -59,6 +102,42 @@ export default function Analytics() {
       return response.json();
     },
   });
+  
+  // Mutations for edit and delete
+  const updateMeasurementMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => mutations.updateMeasurement(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      toast({ title: "Success", description: "Measurement updated successfully" });
+      setShowEditDialog(false);
+      setEditingMeasurement(null);
+      editForm.reset();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update measurement",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteMeasurementMutation = useMutation({
+    mutationFn: (id: string) => mutations.deleteMeasurement(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      toast({ title: "Success", description: "Measurement deleted successfully" });
+      setDeleteConfirmId(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to delete measurement",
+        variant: "destructive" 
+      });
+      setDeleteConfirmId(null);
+    },
+  });
 
   const clearFilters = () => {
     setFilters({
@@ -71,6 +150,46 @@ export default function Analytics() {
       dateRange: "last30",
       sport: "",
       search: "",
+    });
+  };
+  
+  // Handler functions
+  const handleEditMeasurement = (measurement: any) => {
+    setEditingMeasurement(measurement);
+    editForm.reset({
+      value: measurement.value.toString(),
+      date: measurement.date,
+      age: measurement.age.toString(),
+      flyInDistance: measurement.flyInDistance?.toString() || "",
+      notes: measurement.notes || "",
+    });
+    setShowEditDialog(true);
+  };
+  
+  const handleDeleteMeasurement = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+  
+  const confirmDelete = () => {
+    if (deleteConfirmId) {
+      deleteMeasurementMutation.mutate(deleteConfirmId);
+    }
+  };
+  
+  const onEditSubmit = (values: z.infer<typeof editMeasurementSchema>) => {
+    if (!editingMeasurement) return;
+    
+    const updateData = {
+      value: parseFloat(values.value),
+      date: values.date,
+      age: parseInt(values.age),
+      flyInDistance: values.flyInDistance ? parseFloat(values.flyInDistance) : null,
+      notes: values.notes || null,
+    };
+    
+    updateMeasurementMutation.mutate({ 
+      id: editingMeasurement.id, 
+      data: updateData 
     });
   };
 
@@ -469,6 +588,7 @@ export default function Analytics() {
                     <th className="px-4 py-3">Value</th>
                     <th className="px-4 py-3">Age</th>
                     <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
@@ -515,6 +635,26 @@ export default function Analytics() {
                       <td className="px-4 py-3 text-gray-600">
                         {new Date(measurement.date).toLocaleDateString()}
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditMeasurement(measurement)}
+                            data-testid={`button-edit-measurement-${measurement.id}`}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteMeasurement(measurement.id)}
+                            data-testid={`button-delete-measurement-${measurement.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -528,6 +668,148 @@ export default function Analytics() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Edit Measurement Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Measurement</DialogTitle>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+              <FormField
+                control={editForm.control}
+                name="value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Value</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter measurement value"
+                        {...field}
+                        data-testid="input-edit-value"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-edit-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="age"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Age</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Age at time of measurement"
+                        {...field}
+                        data-testid="input-edit-age"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {editingMeasurement?.metric === 'FLY10_TIME' && (
+                <FormField
+                  control={editForm.control}
+                  name="flyInDistance"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fly In Distance (yards)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="Optional"
+                          {...field}
+                          data-testid="input-edit-fly-distance"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              <FormField
+                control={editForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Optional notes"
+                        {...field}
+                        data-testid="input-edit-notes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditDialog(false)}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateMeasurementMutation.isPending}
+                  data-testid="button-save-edit"
+                >
+                  {updateMeasurementMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Measurement</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this measurement? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteMeasurementMutation.isPending}
+              data-testid="button-confirm-delete"
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMeasurementMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
