@@ -212,7 +212,7 @@ export function registerRoutes(app: Express) {
   }));
 
   // CSRF protection setup
-  const csrfTokens = csrf();
+  const csrfTokens = new csrf();
 
   // Input sanitization middleware
   const sanitizeInput = (req: any, res: any, next: any) => {
@@ -1369,7 +1369,8 @@ export function registerRoutes(app: Express) {
         organizationId,
         teamIds: teamIds || [],
         role,
-        invitedBy: invitedById
+        invitedBy: invitedById,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
       });
 
           // Generate invite link for email sending (token should not be exposed to client)
@@ -1779,7 +1780,10 @@ export function registerRoutes(app: Express) {
       }
 
       // Always create new user - email addresses are not unique identifiers for athletes
-      const user = await storage.createUser(parsedUserData);
+      const user = await storage.createUser({
+        ...parsedUserData,
+        role: "athlete" // Default role, will be overridden by organization role
+      });
 
       // Add user to organization with the specified role (removes any existing roles first)
       await storage.addUserToOrganization(user.id, organizationId, role);
@@ -1906,6 +1910,7 @@ export function registerRoutes(app: Express) {
         firstName: adminData.firstName,
         lastName: adminData.lastName,
         password: adminData.password,
+        role: "site_admin",
         isSiteAdmin: "true"
       });
 

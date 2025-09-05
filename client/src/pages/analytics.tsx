@@ -67,7 +67,7 @@ export default function Analytics() {
     },
   });
 
-  const { data: teams } = useQuery({
+  const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   });
 
