@@ -1099,11 +1099,8 @@ export function registerRoutes(app: Express) {
         }
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const teams = await storage.getTeams();
         const playerOrganizations = playerTeams
-          .map(pt => teams.find(t => t.id === pt.teamId))
-          .filter(Boolean)
-          .map(team => team!.organizationId);
+          .map(pt => pt.team.organizationId);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
@@ -1152,11 +1149,8 @@ export function registerRoutes(app: Express) {
         }
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const teams = await storage.getTeams();
         const playerOrganizations = playerTeams
-          .map(pt => teams.find(t => t.id === pt.teamId))
-          .filter(Boolean)
-          .map(team => team!.organizationId);
+          .map(pt => pt.team.organizationId);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
@@ -1208,11 +1202,8 @@ export function registerRoutes(app: Express) {
         }
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const teams = await storage.getTeams();
         const playerOrganizations = playerTeams
-          .map(pt => teams.find(t => t.id === pt.teamId))
-          .filter(Boolean)
-          .map(team => team!.organizationId);
+          .map(pt => pt.team.organizationId);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
