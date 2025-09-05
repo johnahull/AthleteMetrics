@@ -950,7 +950,7 @@ export class DatabaseStorage implements IStorage {
       fullName: `${player.firstName} ${player.lastName}`,
       birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : undefined,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: "true"
+      isActive: player.isActive ?? "true" // Use provided value or default to active
     }).returning();
 
     // Determine organization for athlete association
