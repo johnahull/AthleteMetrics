@@ -850,7 +850,7 @@ export function registerRoutes(app: Express) {
       const athletes = await storage.getAthletes(filters);
 
       // Transform athletes to match the expected player format and ensure teams are included
-      const players = athletes.map(athlete => ({
+      const players = athletes.map((athlete: any) => ({
         ...athlete,
         teams: athlete.teams || [],
         hasLogin: athlete.password !== "INVITATION_PENDING"
@@ -1735,16 +1735,20 @@ export function registerRoutes(app: Express) {
       // Check if user has admin access to this organization
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       if (!userIsSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
-        const isOrgAdmin = userRoles.includes("org_admin") || await hasRole(currentUser.id, "org_admin", organizationId);
+        const isOrgAdmin = userRoles.includes("org_admin");
         if (!isOrgAdmin) {
           return res.status(403).json({ message: "Access denied. Only organization admins can delete users." });
         }
       }
 
       // Prevent users from deleting themselves
-      if (currentUser.id === userId) {
+      if (currentUser?.id === userId) {
         const isSiteAdminUser = isSiteAdmin(currentUser);
         const userRolesToCheck = await storage.getUserRoles(userId, organizationId);
         const isOrgAdminUser = userRolesToCheck.includes("org_admin");
@@ -1805,6 +1809,10 @@ export function registerRoutes(app: Express) {
 
       // Check if user has access to manage this organization
       const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
 
       if (!userIsSiteAdmin) {
         if (!await canManageUsers(currentUser.id, organizationId)) {
@@ -1976,7 +1984,7 @@ export function registerRoutes(app: Express) {
           email: newUser.emails?.[0] || `${newUser.username}@admin.local`,
           firstName: newUser.firstName,
           lastName: newUser.lastName,
-          role: newUser.role,
+          role: "site_admin",
         },
         message: "Site admin created successfully"
       });
@@ -2055,9 +2063,13 @@ export function registerRoutes(app: Express) {
       }
 
       // Prevent conflicting role combinations: athlete vs coach/org_admin
-      const currentRole = user.role;
-      if ((currentRole === 'athlete' && (role === 'coach' || role === 'org_admin')) ||
-          ((currentRole === 'coach' || currentRole === 'org_admin') && role === 'athlete')) {
+      // Note: Since roles are stored in userOrganizations, we'll get current roles from the organization context
+      const currentUserRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
+      const hasAthleteRole = currentUserRoles.includes('athlete');
+      const hasCoachOrAdminRole = currentUserRoles.some(r => ['coach', 'org_admin'].includes(r));
+      
+      if ((hasAthleteRole && (role === 'coach' || role === 'org_admin')) ||
+          (hasCoachOrAdminRole && role === 'athlete')) {
         return res.status(400).json({ 
           message: "Athletes cannot be coaches or admins, and coaches/admins cannot be athletes" 
         });
@@ -2071,8 +2083,11 @@ export function registerRoutes(app: Express) {
       }
 
       // Athletes cannot have their roles changed by org admins
-      if (!userIsSiteAdmin && user.role === "athlete") {
-        return res.status(403).json({ message: "Athlete roles cannot be changed by organization admins" });
+      if (!userIsSiteAdmin) {
+        const targetUserCurrentRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
+        if (targetUserCurrentRoles.includes("athlete")) {
+          return res.status(403).json({ message: "Athlete roles cannot be changed by organization admins" });
+        }
       }
 
       // Update user role differently based on who is making the change
@@ -2247,12 +2262,14 @@ export function registerRoutes(app: Express) {
       const updatedUser = await storage.updateUser(currentUser.id, profileData);
 
       // Update session with new data
-      req.session.user = {
-        ...req.session.user,
-        email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-      };
+      if (req.session.user) {
+        req.session.user = {
+          ...req.session.user,
+          email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+        };
+      }
 
       res.json({
         id: updatedUser.id,
@@ -2420,13 +2437,14 @@ export function registerRoutes(app: Express) {
               weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
               school: school || undefined,
               password: 'INVITATION_PENDING', // Inactive until invited
-              isActive: "false"
+              isActive: "false",
+              role: "athlete"
             };
 
             // Create or find player
             let player;
             if (createMissing === 'true') {
-              player = await storage.createUser(playerData);
+              player = await storage.createUser(playerData as any);
 
               // Add to team if specified
               if (teamId) {
@@ -2525,7 +2543,7 @@ export function registerRoutes(app: Express) {
             let matchedPlayer;
             if (teamName) {
               // Match by firstName + lastName + team
-              matchedPlayer = athletes.find(p => 
+              matchedPlayer = (athletes as any[]).find((p: any) => 
                 p.firstName?.toLowerCase() === firstName.toLowerCase() && 
                 p.lastName?.toLowerCase() === lastName.toLowerCase() &&
                 p.teams?.some((team: any) => team.name?.toLowerCase() === teamName.toLowerCase())
@@ -2613,7 +2631,7 @@ export function registerRoutes(app: Express) {
         'teams', 'isActive', 'createdAt'
       ];
 
-      const csvRows = athletes.map(athlete => {
+      const csvRows = (athletes as any[]).map((athlete: any) => {
         const teams = athlete.teams ? athlete.teams.map((t: any) => t.name).join(';') : '';
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
         const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
