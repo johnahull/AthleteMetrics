@@ -1115,11 +1115,8 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      // Update measurement verification
-      const updatedMeasurement = await storage.updateMeasurement(id, {
-        verifiedBy: currentUser.id,
-        isVerified: "true"
-      });
+      // Update measurement verification - use the verifyMeasurement method instead
+      const updatedMeasurement = await storage.verifyMeasurement(id, currentUser.id);
 
       res.json(updatedMeasurement);
     } catch (error) {
