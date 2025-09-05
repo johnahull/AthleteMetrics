@@ -1242,9 +1242,18 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters?.organizationId) {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some((team: any) => team.organization.id === filters.organizationId)
-      );
+      console.log('getMeasurements - filtering by organizationId:', filters.organizationId);
+      console.log('getMeasurements - before org filter:', filteredMeasurements.length);
+      
+      filteredMeasurements = filteredMeasurements.filter(measurement => {
+        const hasMatchingTeam = measurement.user.teams.some((team: any) => team.organization.id === filters.organizationId);
+        if (!hasMatchingTeam) {
+          console.log('getMeasurements - filtered out user:', measurement.user.firstName, measurement.user.lastName, 'teams:', measurement.user.teams.map((t: any) => `${t.name}(${t.organization.id})`));
+        }
+        return hasMatchingTeam;
+      });
+      
+      console.log('getMeasurements - after org filter:', filteredMeasurements.length);
     }
 
     // Filter by sport if specified
