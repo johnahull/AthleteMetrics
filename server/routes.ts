@@ -2294,8 +2294,9 @@ export function registerRoutes(app: Express) {
           try {
             const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
             
-            if (!firstName || !lastName || !metric || !value || !date) {
-              errors.push({ row: totalRows, error: "First name, last name, metric, value, and date are required" });
+            // Validate required fields
+            if (!firstName || !lastName || !teamName || !date || !metric || !value) {
+              errors.push({ row: totalRows, error: "First name, last name, team name, date, metric, and value are required" });
               continue;
             }
 
