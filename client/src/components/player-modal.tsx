@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
@@ -196,8 +197,9 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
-            <div className="space-y-4">
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="px-6 py-4">
+              <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                 control={form.control}
@@ -555,7 +557,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
             </div>
-          </div>
+            </div>
+          </ScrollArea>
 
           <div className="px-6 py-4 border-t bg-white flex-shrink-0">
             <div className="flex justify-end space-x-3">
