@@ -830,7 +830,7 @@ export function registerRoutes(app: Express) {
 
         // Athletes can only see their own player data
         if (currentUser.role === "athlete" && currentUser.playerId) {
-          const filters: any = {
+          const filters = {
             userId: currentUser.playerId, // Convert playerId to userId for database query
             organizationId: orgContextForFiltering,
           };
@@ -839,7 +839,7 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      const filters: any = {
+      const filters = {
         teamId: teamId as string,
         birthYearFrom: birthYearFrom ? parseInt(birthYearFrom as string) : undefined,
         birthYearTo: birthYearTo ? parseInt(birthYearTo as string) : undefined,
@@ -849,10 +849,10 @@ export function registerRoutes(app: Express) {
 
       const athletes = await storage.getAthletes(filters);
 
-      // Transform athletes to match the expected player format and ensure teams are included
-      const players = athletes.map((athlete: any) => ({
+      // Transform athletes to match the expected player format
+      const players = athletes.map((athlete) => ({
         ...athlete,
-        teams: athlete.teams || [],
+        teams: athlete.teams,
         hasLogin: athlete.password !== "INVITATION_PENDING",
         isActive: athlete.isActive === "true"
       }));
@@ -2574,7 +2574,7 @@ export function registerRoutes(app: Express) {
 
             if (!matchedPlayer) {
               // Add debugging information to error message
-              const nameMatches = athletes.filter(p => 
+              const nameMatches = (athletes as any[]).filter((p: any) => 
                 p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
                 p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
               );
@@ -2582,7 +2582,7 @@ export function registerRoutes(app: Express) {
               let errorMsg;
               if (teamName) {
                 if (nameMatches.length > 0) {
-                  const availableTeams = nameMatches.flatMap(p => p.teams?.map((t: any) => t.name) || []).join(', ');
+                  const availableTeams = nameMatches.flatMap((p: any) => p.teams?.map((t: any) => t.name) || []).join(', ');
                   errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}". Available teams: ${availableTeams}`;
                 } else {
                   errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}"`;
