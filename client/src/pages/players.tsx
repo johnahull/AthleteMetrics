@@ -71,19 +71,30 @@ export default function Players() {
         ? `/api/teams?organizationId=${organizationContext}`
         : `/api/teams`;
       const response = await fetch(url);
-      return response.json();
+      if (!response.ok) throw new Error('Failed to fetch teams');
+      return response.json() as any[];
     }
   });
 
   // Get current user's organizations to fetch invitations
   const { data: userOrgs = [] } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/me/organizations");
+      if (!response.ok) throw new Error('Failed to fetch organizations');
+      return response.json() as any[];
+    }
   });
 
   // Get athlete invitations for the current organization
   const { data: athleteInvitations = [] } = useQuery({
     queryKey: ["/api/invitations/athletes"],
     enabled: !!userOrgs && userOrgs.length > 0,
+    queryFn: async () => {
+      const response = await fetch("/api/invitations/athletes");
+      if (!response.ok) throw new Error('Failed to fetch invitations');
+      return response.json() as any[];
+    }
   });
 
   const { data: players = [], isLoading } = useQuery({
@@ -105,7 +116,7 @@ export default function Players() {
       
       const response = await fetch(`/api/players?${params}`);
       if (!response.ok) throw new Error('Failed to fetch players');
-      return response.json();
+      return response.json() as any[];
     },
   });
 
@@ -252,6 +263,14 @@ export default function Players() {
     });
   };
 
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+    toast({
+      title: "Success",
+      description: "Athletes list refreshed",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -270,6 +289,14 @@ export default function Players() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
         <h1 className="text-2xl font-semibold text-gray-900">Athletes Management</h1>
         <div className="flex space-x-3">
+          <Button 
+            variant="outline" 
+            onClick={refreshData}
+            data-testid="button-refresh-athletes"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
           <Button 
             variant="outline" 
             className="bg-gray-600 text-white hover:bg-gray-700"
@@ -560,7 +587,7 @@ export default function Players() {
                         }
                       </td>
                       <td className="px-6 py-4">
-                        {(player as any).hasLogin ? (
+                        {(player as any).isActive ? (
                           <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
                             Active
                           </Badge>

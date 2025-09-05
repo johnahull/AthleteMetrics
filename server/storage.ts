@@ -57,7 +57,7 @@ export interface IStorage {
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
-  }): Promise<User[]>;
+  }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
   updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
@@ -756,7 +756,7 @@ export class DatabaseStorage implements IStorage {
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
-  }): Promise<User[]> {
+  }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]> {
     // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
       const conditions = [eq(userOrganizations.role, 'athlete')];
@@ -792,19 +792,11 @@ export class DatabaseStorage implements IStorage {
         ))
         .orderBy(asc(users.lastName), asc(users.firstName));
 
-      // Get team information for each athlete (should be empty for "none" filter)
-      const athletesWithTeams = await Promise.all(
-        result.map(async (row) => {
-          const athlete = row.users;
-          const athleteTeams = await this.getUserTeams(athlete.id);
-          return {
-            ...athlete,
-            teams: athleteTeams.map(ut => ut.team)
-          };
-        })
-      );
-
-      return athletesWithTeams;
+      // For "none" team filter, athletes should have empty teams array
+      return result.map(row => ({
+        ...row.users,
+        teams: []
+      }));
     }
 
     // For regular queries, get athletes with their team information
@@ -827,55 +819,60 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
 
-    // Optimized query with team data joined to eliminate N+1
+    // Get athletes first with optimized batched query approach
     const athleteQuery = db
-      .select({
-        // User fields
-        id: users.id,
-        username: users.username,
-        emails: users.emails,
-        password: users.password,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        fullName: users.fullName,
-        birthDate: users.birthDate,
-        birthYear: users.birthYear,
-        graduationYear: users.graduationYear,
-        school: users.school,
-        phoneNumbers: users.phoneNumbers,
-        sports: users.sports,
-        height: users.height,
-        weight: users.weight,
-        isSiteAdmin: users.isSiteAdmin,
-        isActive: users.isActive,
-        createdAt: users.createdAt,
-        // Team data aggregated
-        teams: sql<any>`COALESCE(
-          json_agg(
-            DISTINCT jsonb_build_object(
-              'id', ${teams.id},
-              'name', ${teams.name},
-              'level', ${teams.level},
-              'organizationId', ${teams.organizationId},
-              'organization', jsonb_build_object(
-                'id', ${organizations.id},
-                'name', ${organizations.name}
-              )
-            )
-          ) FILTER (WHERE ${teams.id} IS NOT NULL),
-          '[]'
-        )`
-      })
+      .select()
       .from(users)
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
-      .leftJoin(userTeams, eq(users.id, userTeams.userId))
-      .leftJoin(teams, eq(userTeams.teamId, teams.id))
-      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(and(...conditions))
-      .groupBy(users.id)
       .orderBy(asc(users.lastName), asc(users.firstName));
 
-    const result = await athleteQuery;
+    const athleteResults = await athleteQuery;
+    const athletes = athleteResults.map(row => row.users);
+
+    // If no athletes found, return empty array
+    if (athletes.length === 0) {
+      return [];
+    }
+
+    // Batch fetch all teams for all athletes in a single query
+    const athleteIds = athletes.map(a => a.id);
+    const userTeamsResults = await db
+      .select()
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(inArray(userTeams.userId, athleteIds));
+
+    // Build a map of user ID to teams array
+    const userTeamsMap = new Map<string, (Team & { organization: Organization })[]>();
+    
+    // Initialize empty arrays for all athletes
+    athletes.forEach(athlete => {
+      userTeamsMap.set(athlete.id, []);
+    });
+
+    // Populate the map with team data
+    userTeamsResults.forEach(row => {
+      const userId = row.user_teams.userId;
+      const team = {
+        ...row.teams,
+        organization: row.organizations
+      };
+      
+      if (!userTeamsMap.has(userId)) {
+        userTeamsMap.set(userId, []);
+      }
+      userTeamsMap.get(userId)!.push(team);
+    });
+
+    // Create final result with teams attached
+    const athletesWithTeams = athletes.map(athlete => ({
+      ...athlete,
+      teams: userTeamsMap.get(athlete.id) || []
+    }));
+
+    const result = athletesWithTeams;
 
     // Apply team filter
     if (filters?.teamId && filters.teamId !== 'none') {
@@ -938,19 +935,19 @@ export class DatabaseStorage implements IStorage {
     const [newUser] = await db.insert(users).values({
       username,
       emails, // Ensure emails array is always provided
-      firstName: player.firstName,
-      lastName: player.lastName,
-      birthDate: player.birthDate,
-      graduationYear: player.graduationYear,
-      school: player.school,
-      sports: player.sports,
-      phoneNumbers: player.phoneNumbers,
-      height: player.height,
-      weight: player.weight,
+      firstName: player.firstName!,
+      lastName: player.lastName!,
+      birthDate: player.birthDate || null,
+      graduationYear: player.graduationYear || null,
+      school: player.school || null,
+      sports: player.sports || null,
+      phoneNumbers: player.phoneNumbers || null,
+      height: player.height || null,
+      weight: player.weight || null,
       fullName: `${player.firstName} ${player.lastName}`,
-      birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : undefined,
+      birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: "true"
+      isActive: player.isActive ?? "true" // Use provided value or default to active
     }).returning();
 
     // Determine organization for athlete association

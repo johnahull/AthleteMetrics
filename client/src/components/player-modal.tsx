@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
@@ -44,17 +45,17 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
   const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
     control: form.control,
     name: "emails"
-  }) as any;
+  });
 
   const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
     control: form.control,
-    name: "phoneNumbers"
-  }) as any;
+    name: "phoneNumbers" 
+  });
 
   const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
     control: form.control,
     name: "sports"
-  }) as any;
+  });
 
   useEffect(() => {
     if (player) {
@@ -63,7 +64,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         lastName: player.lastName,
         emails: player.emails || [],
         birthDate: player.birthDate || "",
-        graduationYear: player.graduationYear,
+        graduationYear: player.graduationYear || undefined,
         teamIds: player.teams?.map(team => team.id) || [],
         school: player.school || "",
         sports: player.sports || [],
@@ -184,7 +185,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full p-0 max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl w-full p-0 h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <DialogHeader>
             <DialogTitle>{isEditing ? "Edit Athlete" : "Add New Athlete"}</DialogTitle>
@@ -195,9 +196,10 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
-            <div className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 min-h-0 flex-col">
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="px-6 py-4">
+              <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                 control={form.control}
@@ -555,7 +557,8 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
             </div>
-          </div>
+            </div>
+          </ScrollArea>
 
           <div className="px-6 py-4 border-t bg-white flex-shrink-0">
             <div className="flex justify-end space-x-3">

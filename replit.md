@@ -6,6 +6,14 @@ The Athlete Performance Hub is a comprehensive full-stack web application design
 
 The system supports flexible player management where athletes can be assigned to multiple teams, participate in multiple sports, or exist as independent players without any team affiliations.
 
+## Recent Changes
+
+### Performance Optimization (September 5, 2025)
+- **Resolved N+1 Query Issue**: Fixed performance bottleneck in `getAthletes()` method that was making individual database calls for each athlete's team data
+- **Implemented Batched Query Approach**: Replaced individual `getUserTeams()` calls with a single batched query using `inArray()` to fetch all athlete-team relationships at once
+- **Improved Type Safety**: Updated IStorage interface return type for `getAthletes()` to properly include teams property, eliminating need for "any" type casts
+- **Reduced Database Load**: Significantly reduced database round trips when loading athlete lists, improving response times and scalability
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -26,6 +34,7 @@ Preferred communication style: Simple, everyday language.
 - **Session-based Authentication**: Simple admin authentication using environment variables
 - **Multer File Upload**: Handles CSV file uploads for bulk data import
 - **Comprehensive REST API**: Full CRUD operations for teams, players, and measurements
+- **Optimized Query Performance**: Batched data fetching to prevent N+1 query issues
 
 ### Database Architecture
 - **Drizzle ORM**: Type-safe database operations with PostgreSQL support
@@ -33,6 +42,7 @@ Preferred communication style: Simple, everyday language.
 - **UUID Primary Keys**: Secure, non-sequential identifiers for all entities
 - **Referential Integrity**: Foreign key constraints ensuring data consistency
 - **Computed Fields**: Full name generation and automatic unit assignment
+- **Performance Optimizations**: Batched queries for athlete-team relationships to minimize database round trips
 
 ### Data Management
 - **CSV Import/Export**: Bulk data operations with validation and error reporting

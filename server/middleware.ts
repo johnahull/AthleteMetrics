@@ -153,7 +153,7 @@ export const requireAthleteAccess = (actionRequired?: 'read' | 'write') => {
 
     // Athletes can only access their own data
     if (user.role === "athlete") {
-      if (user.playerId !== athleteId && user.id !== athleteId) {
+      if (user.id !== athleteId) {
         return res.status(403).json({ message: "Athletes can only access their own data" });
       }
       req.user = user;

@@ -1,22 +1,67 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getMetricDisplayName, getMetricBadgeVariant } from "@/lib/metrics";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2 } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
 import PlayerModal from "@/components/player-modal";
 import PlayerMeasurementForm from "@/components/player-measurement-form";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { mutations } from "@/lib/api";
 import type { Player, Team, Measurement } from "@shared/schema";
+
+// Edit measurement form schema
+const editMeasurementSchema = z.object({
+  value: z.string().min(1, "Value is required").refine(
+    (val) => !isNaN(Number(val)) && Number(val) > 0,
+    "Value must be a positive number"
+  ),
+  date: z.string().min(1, "Date is required"),
+  age: z.string().min(1, "Age is required").refine(
+    (val) => !isNaN(Number(val)) && Number(val) >= 10 && Number(val) <= 25,
+    "Age must be between 10 and 25"
+  ),
+  flyInDistance: z.string().optional(),
+  notes: z.string().optional(),
+});
 
 export default function PlayerProfile() {
   const { id: playerId } = useParams();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
+  
+  // State for edit/delete functionality
+  const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
+  // Edit form
+  const editForm = useForm<z.infer<typeof editMeasurementSchema>>({
+    resolver: zodResolver(editMeasurementSchema),
+    defaultValues: {
+      value: "",
+      date: "",
+      age: "",
+      flyInDistance: "",
+      notes: "",
+    },
+  });
 
   const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
     queryKey: ["/api/players", playerId],
@@ -40,6 +85,86 @@ export default function PlayerProfile() {
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   });
+
+  // Mutations for edit/delete functionality  
+  const updateMeasurementMutation = useMutation({
+    mutationFn: mutations.updateMeasurement,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { playerId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/players", playerId] });
+      toast({ title: "Success", description: "Measurement updated successfully" });
+      setShowEditDialog(false);
+      setEditingMeasurement(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update measurement",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteMeasurementMutation = useMutation({
+    mutationFn: mutations.deleteMeasurement,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { playerId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/players", playerId] });
+      toast({ title: "Success", description: "Measurement deleted successfully" });
+      setDeleteConfirmId(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to delete measurement",
+        variant: "destructive" 
+      });
+      setDeleteConfirmId(null);
+    },
+  });
+
+  // Check if user can edit measurements (coaches and site admins)
+  const canEditMeasurements = user?.role === "coach" || user?.role === "org_admin" || user?.isSiteAdmin;
+
+  // Handler functions
+  const handleEditMeasurement = (measurement: any) => {
+    setEditingMeasurement(measurement);
+    editForm.reset({
+      value: measurement.value.toString(),
+      date: measurement.date,
+      age: measurement.age.toString(),
+      flyInDistance: measurement.flyInDistance?.toString() || "",
+      notes: measurement.notes || "",
+    });
+    setShowEditDialog(true);
+  };
+  
+  const handleDeleteMeasurement = (id: string) => {
+    setDeleteConfirmId(id);
+  };
+  
+  const confirmDelete = () => {
+    if (deleteConfirmId) {
+      deleteMeasurementMutation.mutate(deleteConfirmId);
+    }
+  };
+  
+  const onEditSubmit = (values: z.infer<typeof editMeasurementSchema>) => {
+    if (!editingMeasurement) return;
+    
+    const updateData = {
+      value: parseFloat(values.value),
+      date: values.date,
+      age: parseInt(values.age),
+      flyInDistance: values.flyInDistance ? parseFloat(values.flyInDistance) : null,
+      notes: values.notes || null,
+    };
+    
+    updateMeasurementMutation.mutate({ 
+      id: editingMeasurement.id, 
+      data: updateData 
+    });
+  };
 
   if (playerLoading || measurementsLoading) {
     return (
@@ -150,13 +275,15 @@ export default function PlayerProfile() {
             <Edit className="h-4 w-4 mr-2" />
             Edit Athlete
           </Button>
-          <Button 
-            onClick={() => setShowAddMeasurementModal(true)}
-            data-testid="button-add-measurement"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Measurement
-          </Button>
+          {canEditMeasurements && (
+            <Button 
+              onClick={() => setShowAddMeasurementModal(true)}
+              data-testid="button-add-measurement"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Measurement
+            </Button>
+          )}
         </div>
       </div>
 
@@ -295,6 +422,9 @@ export default function PlayerProfile() {
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Speed (mph)</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Fly-In Distance</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Notes</th>
+                    {canEditMeasurements && (
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -326,6 +456,30 @@ export default function PlayerProfile() {
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {measurement.notes || '-'}
                       </td>
+                      {canEditMeasurements && (
+                        <td className="py-3 px-4 text-sm">
+                          <div className="flex space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditMeasurement(measurement)}
+                              data-testid={`button-edit-measurement-${measurement.id}`}
+                              aria-label="Edit measurement"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteMeasurement(measurement.id)}
+                              data-testid={`button-delete-measurement-${measurement.id}`}
+                              aria-label="Delete measurement"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -363,6 +517,148 @@ export default function PlayerProfile() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Edit Measurement Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Measurement</DialogTitle>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+              <FormField
+                control={editForm.control}
+                name="value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Value</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter measurement value"
+                        {...field}
+                        data-testid="input-edit-value"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-edit-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="age"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Age</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Age at time of measurement"
+                        {...field}
+                        data-testid="input-edit-age"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {editingMeasurement?.metric === 'FLY10_TIME' && (
+                <FormField
+                  control={editForm.control}
+                  name="flyInDistance"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fly In Distance (yards)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="Optional"
+                          {...field}
+                          data-testid="input-edit-fly-distance"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              <FormField
+                control={editForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Optional notes"
+                        {...field}
+                        data-testid="input-edit-notes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowEditDialog(false)}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateMeasurementMutation.isPending}
+                  data-testid="button-save-edit"
+                >
+                  {updateMeasurementMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Measurement</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this measurement? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={deleteMeasurementMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteMeasurementMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

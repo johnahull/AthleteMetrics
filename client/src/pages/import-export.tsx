@@ -51,10 +51,11 @@ export default function ImportExport() {
       setImportResults(data);
       const hasResults = data.results.length > 0;
       const hasErrors = data.errors.length > 0;
+      const hasWarnings = data.warnings?.length > 0;
 
       toast({
         title: hasResults ? "Import Complete" : "Import Issues",
-        description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors.`,
+        description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors${hasWarnings ? `, ${data.warnings.length} warnings` : ''}.`,
         variant: hasResults ? "default" : "destructive",
       });
     },
@@ -62,7 +63,7 @@ export default function ImportExport() {
       console.error("Import error:", error);
       toast({
         title: "Import Failed",
-        description: error?.message || "Failed to process CSV file",
+        description: error instanceof Error ? error.message : "Failed to process CSV file",
         variant: "destructive",
       });
     },
@@ -134,15 +135,15 @@ Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","5
 Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
 Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,birthYear,date,age,metric,value,units,flyInDistance,notes
-Mia,Chen,2009,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
-Elise,Ramos,2008,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
-Jordan,Williams,2009,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
-Alex,Johnson,2007,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
-Taylor,Rodriguez,2008,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
-Morgan,Lee,2009,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
-Casey,Thompson,2007,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
-Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
+  const measurementsTemplate = `firstName,lastName,teamName,date,age,metric,value,units,flyInDistance,notes
+Mia,Chen,FIERCE 08G,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
+Elise,Ramos,Thunder Elite,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
+Jordan,Williams,Lightning 08G,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
+Alex,Johnson,FIERCE 08G,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
+Taylor,Rodriguez,Thunder Elite,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
+Morgan,Lee,Lightning 08G,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
+Casey,Thompson,FIERCE 08G,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
+Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -286,7 +287,7 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
             {importResults && (
               <div className="mt-6 p-4 border border-gray-200 rounded-lg">
                 <h5 className="font-medium text-gray-900 mb-3">Import Results</h5>
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className={`grid gap-4 text-sm ${importResults.warnings?.length > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-gray-900">{importResults.totalRows}</p>
                     <p className="text-gray-600">Total Rows</p>
@@ -299,7 +300,29 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                     <p className="text-2xl font-bold text-red-600">{importResults.errors.length}</p>
                     <p className="text-gray-600">Errors</p>
                   </div>
+                  {importResults.warnings?.length > 0 && (
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-yellow-600">{importResults.warnings.length}</p>
+                      <p className="text-gray-600">Warnings</p>
+                    </div>
+                  )}
                 </div>
+
+                {importResults.warnings?.length > 0 && (
+                  <div className="mt-4">
+                    <h6 className="font-medium text-yellow-800 mb-2">Smart Data Placement:</h6>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {importResults.warnings.slice(0, 5).map((warning, index) => (
+                        <p key={index} className="text-sm text-yellow-600">
+                          {warning.row}: {warning.warning}
+                        </p>
+                      ))}
+                      {importResults.warnings.length > 5 && (
+                        <p className="text-sm text-gray-500">... and {importResults.warnings.length - 5} more warnings</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {importResults.errors.length > 0 && (
                   <div className="mt-4">
@@ -360,8 +383,8 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 </div>
                 <div className="mt-3 flex justify-between items-center">
                   <span className="text-xs text-gray-500">
-                    <span className="font-medium">Required:</span> firstName, lastName, birthYear (1990-2020), date (YYYY-MM-DD), age (10-25), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
-                    <span className="font-medium">Optional:</span> units (s/in), flyInDistance, notes
+                    <span className="font-medium">Required:</span> firstName, lastName, teamName, date (YYYY-MM-DD), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
+                    <span className="font-medium">Optional:</span> age (10-25), units (s/in), flyInDistance, notes
                   </span>
                   <Button 
                     variant="ghost" 
@@ -382,11 +405,13 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 <div className="text-sm text-blue-800">
                   <p className="font-medium mb-1">Import Guidelines:</p>
                   <ul className="space-y-1 text-xs">
+                    <li>• <strong>Smart Contact Detection:</strong> Emails and phone numbers are automatically validated and placed in correct fields regardless of which column they're in</li>
                     <li>• Metric values: FLY10_TIME (seconds) or VERTICAL_JUMP (inches)</li>
                     <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
                     <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
                     <li>• Date format: YYYY-MM-DD</li>
                     <li>• Athlete matching is case-sensitive</li>
+                    <li>• Phone numbers support US format: (555) 123-4567, 555-123-4567, or 5551234567</li>
                   </ul>
                 </div>
               </div>

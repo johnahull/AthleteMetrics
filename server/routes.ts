@@ -15,6 +15,8 @@ import { AccessController } from "./access-control";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
+import multer from "multer";
+import csv from "csv-parser";
 
 // Session configuration
 declare module 'express-session' {
@@ -142,7 +144,7 @@ async function initializeDefaultUser() {
     // Check if admin user already exists by email or username
     const existingUserByEmail = await storage.getUserByEmail(adminEmail);
     const existingUserByUsername = await storage.getUserByUsername("admin");
-    
+
     if (!existingUserByEmail && !existingUserByUsername) {
       await storage.createUser({
         username: "admin",
@@ -193,7 +195,7 @@ export function registerRoutes(app: Express) {
 
   // Security headers middleware
   app.use(helmet({
-    contentSecurityPolicy: {
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI components
@@ -205,12 +207,12 @@ export function registerRoutes(app: Express) {
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
       },
-    },
+    } : false, // Disable CSP in development for Vite compatibility
     crossOriginEmbedderPolicy: false, // Allow for development
   }));
 
   // CSRF protection setup
-  const csrfTokens = csrf();
+  const csrfTokens = new csrf();
 
   // Input sanitization middleware
   const sanitizeInput = (req: any, res: any, next: any) => {
@@ -238,6 +240,62 @@ export function registerRoutes(app: Express) {
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   });
+
+  // Email validation function
+  const isValidEmail = (value: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(value.trim());
+  };
+
+  // Phone number validation function
+  const isValidPhoneNumber = (value: string): boolean => {
+    // Remove all non-digit characters for validation
+    const cleaned = value.replace(/\D/g, '');
+    // Support various formats:
+    // - US/Canada: 10 digits or 1 + 10 digits
+    // - International: 7-15 digits, optionally starting with +
+    // - Extensions are not supported in this simplified version
+    return /^(\+?1?\d{10}|\+?\d{7,15})$/.test(cleaned) && cleaned.length >= 7 && cleaned.length <= 15;
+  };
+
+  // Smart data placement function - detects emails and phone numbers regardless of column
+  const smartPlaceContactData = (row: any): { emails: string[], phoneNumbers: string[], warnings: string[] } => {
+    const emails: string[] = [];
+    const phoneNumbers: string[] = [];
+    const warnings: string[] = [];
+    
+    // Check all possible contact fields for smart detection
+    const contactFields = ['emails', 'phoneNumbers', 'email', 'phone', 'contact', 'contactInfo'];
+    
+    contactFields.forEach(field => {
+      if (row[field] && row[field].trim()) {
+        const values = row[field].split(/[,;]/).map((v: string) => v.trim()).filter(Boolean);
+        
+        values.forEach((value: string) => {
+          if (isValidEmail(value)) {
+            if (!emails.includes(value)) {
+              emails.push(value);
+              if (field === 'phoneNumbers' || field === 'phone') {
+                warnings.push(`Found email "${value}" in phone number field, moved to emails`);
+              }
+            }
+          } else if (isValidPhoneNumber(value)) {
+            if (!phoneNumbers.includes(value)) {
+              phoneNumbers.push(value);
+              if (field === 'emails' || field === 'email') {
+                warnings.push(`Found phone number "${value}" in email field, moved to phone numbers`);
+              }
+            }
+          } else if (value.length > 0) {
+            // If it's not empty but doesn't match either format, warn about it
+            warnings.push(`Unrecognized contact format: "${value}" in ${field} field`);
+          }
+        });
+      }
+    });
+    
+    return { emails, phoneNumbers, warnings };
+  };
 
   // Initialize default user
   initializeDefaultUser();
@@ -772,7 +830,7 @@ export function registerRoutes(app: Express) {
 
         // Athletes can only see their own player data
         if (currentUser.role === "athlete" && currentUser.playerId) {
-          const filters: any = {
+          const filters = {
             userId: currentUser.playerId, // Convert playerId to userId for database query
             organizationId: orgContextForFiltering,
           };
@@ -781,7 +839,7 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      const filters: any = {
+      const filters = {
         teamId: teamId as string,
         birthYearFrom: birthYearFrom ? parseInt(birthYearFrom as string) : undefined,
         birthYearTo: birthYearTo ? parseInt(birthYearTo as string) : undefined,
@@ -791,11 +849,12 @@ export function registerRoutes(app: Express) {
 
       const athletes = await storage.getAthletes(filters);
 
-      // Transform athletes to match the expected player format and ensure teams are included
-      const players = athletes.map(athlete => ({
+      // Transform athletes to match the expected player format
+      const players = athletes.map((athlete) => ({
         ...athlete,
-        teams: athlete.teams || [],
-        hasLogin: athlete.password !== "INVITATION_PENDING"
+        teams: athlete.teams,
+        hasLogin: athlete.password !== "INVITATION_PENDING",
+        isActive: athlete.isActive === "true"
       }));
 
       console.log(`Returning ${players.length} athletes`);
@@ -840,7 +899,7 @@ export function registerRoutes(app: Express) {
 
         // Get the player's teams to determine organization
         const playerTeams = await storage.getPlayerTeams(id);
-        
+
         if (playerTeams.length === 0) {
           return res.status(403).json({ message: "Player not associated with any team" });
         }
@@ -1035,7 +1094,7 @@ export function registerRoutes(app: Express) {
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const userOrganizationIds = userOrgs.map(userOrg => userOrg.organizationId);
-        
+
         const hasAccess = playerOrganizations.some(orgId => 
           userOrganizationIds.includes(orgId)
         );
@@ -1097,11 +1156,8 @@ export function registerRoutes(app: Express) {
         }
 
         const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const teams = await storage.getTeams();
         const playerOrganizations = playerTeams
-          .map(pt => teams.find(t => t.id === pt.teamId))
-          .filter(Boolean)
-          .map(team => team!.organizationId);
+          .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const hasAccess = playerOrganizations.some(orgId => 
@@ -1113,16 +1169,127 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      // Update measurement verification
-      const updatedMeasurement = await storage.updateMeasurement(id, {
-        verifiedBy: currentUser.id,
-        isVerified: "true"
-      });
+      // Update measurement verification - use the verifyMeasurement method instead
+      const updatedMeasurement = await storage.verifyMeasurement(id, currentUser.id);
 
       res.json(updatedMeasurement);
     } catch (error) {
       console.error("Error verifying measurement:", error);
       res.status(500).json({ message: "Failed to verify measurement" });
+    }
+  });
+
+  // Update measurement route (coaches and org admins only)
+  app.patch("/api/measurements/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get measurement to verify it exists and user has access
+      const measurement = await storage.getMeasurement(id);
+      if (!measurement) {
+        return res.status(404).json({ message: "Measurement not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      if (!userIsSiteAdmin) {
+        // Check if measurement's player is in user's organization
+        const player = await storage.getPlayer(measurement.userId);
+        if (!player) {
+          return res.status(404).json({ message: "Player not found" });
+        }
+
+        const playerTeams = await storage.getPlayerTeams(measurement.userId);
+        const playerOrganizations = playerTeams
+          .map(pt => pt.organization.id);
+
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasAccess = playerOrganizations.some(orgId => 
+          userOrgs.some(userOrg => userOrg.organizationId === orgId)
+        );
+
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Cannot update measurements for players outside your organization" });
+        }
+
+        // Athletes cannot update measurements
+        if (currentUser.role === "athlete") {
+          return res.status(403).json({ message: "Athletes cannot update measurements" });
+        }
+      }
+
+      // Update measurement
+      const updatedMeasurement = await storage.updateMeasurement(id, updateData);
+      res.json(updatedMeasurement);
+    } catch (error) {
+      console.error("Error updating measurement:", error);
+      res.status(500).json({ message: "Failed to update measurement" });
+    }
+  });
+
+  // Delete measurement route (coaches and org admins only)
+  app.delete("/api/measurements/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get measurement to verify it exists and user has access
+      const measurement = await storage.getMeasurement(id);
+      if (!measurement) {
+        return res.status(404).json({ message: "Measurement not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      if (!userIsSiteAdmin) {
+        // Check if measurement's player is in user's organization
+        const player = await storage.getPlayer(measurement.userId);
+        if (!player) {
+          return res.status(404).json({ message: "Player not found" });
+        }
+
+        const playerTeams = await storage.getPlayerTeams(measurement.userId);
+        const playerOrganizations = playerTeams
+          .map(pt => pt.organization.id);
+
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasAccess = playerOrganizations.some(orgId => 
+          userOrgs.some(userOrg => userOrg.organizationId === orgId)
+        );
+
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Cannot delete measurements for players outside your organization" });
+        }
+
+        // Athletes cannot delete measurements
+        if (currentUser.role === "athlete") {
+          return res.status(403).json({ message: "Athletes cannot delete measurements" });
+        }
+      }
+
+      // Delete measurement
+      await storage.deleteMeasurement(id);
+      res.status(200).json({ 
+        success: true, 
+        message: "Measurement deleted successfully" 
+      });
+    } catch (error) {
+      console.error("Error deleting measurement:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to delete measurement",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
@@ -1259,12 +1426,13 @@ export function registerRoutes(app: Express) {
         organizationId,
         teamIds: teamIds || [],
         role,
-        invitedBy: invitedById
+        invitedBy: invitedById,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
       });
 
           // Generate invite link for email sending (token should not be exposed to client)
           const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
-          
+
           // Log invitation creation for admin reference
           console.log(`Invitation created: ${invitation.id} for ${email}`);
 
@@ -1568,16 +1736,20 @@ export function registerRoutes(app: Express) {
       // Check if user has admin access to this organization
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       if (!userIsSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
-        const isOrgAdmin = userRoles.includes("org_admin") || await hasRole(currentUser.id, "org_admin", organizationId);
+        const isOrgAdmin = userRoles.includes("org_admin");
         if (!isOrgAdmin) {
           return res.status(403).json({ message: "Access denied. Only organization admins can delete users." });
         }
       }
 
       // Prevent users from deleting themselves
-      if (currentUser.id === userId) {
+      if (currentUser?.id === userId) {
         const isSiteAdminUser = isSiteAdmin(currentUser);
         const userRolesToCheck = await storage.getUserRoles(userId, organizationId);
         const isOrgAdminUser = userRolesToCheck.includes("org_admin");
@@ -1639,6 +1811,10 @@ export function registerRoutes(app: Express) {
       // Check if user has access to manage this organization
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       if (!userIsSiteAdmin) {
         if (!await canManageUsers(currentUser.id, organizationId)) {
           return res.status(403).json({ message: "Access denied" });
@@ -1669,7 +1845,10 @@ export function registerRoutes(app: Express) {
       }
 
       // Always create new user - email addresses are not unique identifiers for athletes
-      const user = await storage.createUser(parsedUserData);
+      const user = await storage.createUser({
+        ...parsedUserData,
+        role: "athlete" // Default role, will be overridden by organization role
+      });
 
       // Add user to organization with the specified role (removes any existing roles first)
       await storage.addUserToOrganization(user.id, organizationId, role);
@@ -1796,6 +1975,7 @@ export function registerRoutes(app: Express) {
         firstName: adminData.firstName,
         lastName: adminData.lastName,
         password: adminData.password,
+        role: "site_admin",
         isSiteAdmin: "true"
       });
 
@@ -1805,7 +1985,7 @@ export function registerRoutes(app: Express) {
           email: newUser.emails?.[0] || `${newUser.username}@admin.local`,
           firstName: newUser.firstName,
           lastName: newUser.lastName,
-          role: newUser.role,
+          role: "site_admin",
         },
         message: "Site admin created successfully"
       });
@@ -1884,9 +2064,13 @@ export function registerRoutes(app: Express) {
       }
 
       // Prevent conflicting role combinations: athlete vs coach/org_admin
-      const currentRole = user.role;
-      if ((currentRole === 'athlete' && (role === 'coach' || role === 'org_admin')) ||
-          ((currentRole === 'coach' || currentRole === 'org_admin') && role === 'athlete')) {
+      // Note: Since roles are stored in userOrganizations, we'll get current roles from the organization context
+      const currentUserRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
+      const hasAthleteRole = currentUserRoles.includes('athlete');
+      const hasCoachOrAdminRole = currentUserRoles.some(r => ['coach', 'org_admin'].includes(r));
+      
+      if ((hasAthleteRole && (role === 'coach' || role === 'org_admin')) ||
+          (hasCoachOrAdminRole && role === 'athlete')) {
         return res.status(400).json({ 
           message: "Athletes cannot be coaches or admins, and coaches/admins cannot be athletes" 
         });
@@ -1900,8 +2084,11 @@ export function registerRoutes(app: Express) {
       }
 
       // Athletes cannot have their roles changed by org admins
-      if (!userIsSiteAdmin && user.role === "athlete") {
-        return res.status(403).json({ message: "Athlete roles cannot be changed by organization admins" });
+      if (!userIsSiteAdmin) {
+        const targetUserCurrentRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
+        if (targetUserCurrentRoles.includes("athlete")) {
+          return res.status(403).json({ message: "Athlete roles cannot be changed by organization admins" });
+        }
       }
 
       // Update user role differently based on who is making the change
@@ -2076,12 +2263,14 @@ export function registerRoutes(app: Express) {
       const updatedUser = await storage.updateUser(currentUser.id, profileData);
 
       // Update session with new data
-      req.session.user = {
-        ...req.session.user,
-        email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-      };
+      if (req.session.user) {
+        req.session.user = {
+          ...req.session.user,
+          email: updatedUser.emails?.[0] || `${updatedUser.username}@temp.local`,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+        };
+      }
 
       res.json({
         id: updatedUser.id,
@@ -2140,6 +2329,320 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Configure multer for file uploads
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only CSV files are allowed'));
+      }
+    }
+  });
+
+  // Import routes
+  app.post("/api/import/:type", requireAuth, upload.single('file'), async (req, res) => {
+    try {
+      const { type } = req.params;
+      const { createMissing, teamId } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      if (type !== 'players' && type !== 'measurements') {
+        return res.status(400).json({ message: "Invalid import type. Use 'players' or 'measurements'" });
+      }
+
+      const results: any[] = [];
+      const errors: any[] = [];
+      const warnings: any[] = [];
+      let totalRows = 0;
+
+      // Parse CSV data
+      const csvData: any[] = [];
+      const csvText = file.buffer.toString('utf-8');
+
+      // Split CSV into lines and parse
+      const lines = csvText.split('\n').filter(line => line.trim());
+      if (lines.length === 0) {
+        return res.status(400).json({ message: "CSV file is empty" });
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        csvData.push(row);
+        totalRows++;
+      }
+
+      if (type === 'players') {
+        // Process players import
+        for (let i = 0; i < csvData.length; i++) {
+          const row = csvData[i];
+          const rowNum = i + 2; // Account for header row
+          try {
+            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName } = row;
+
+            if (!firstName || !lastName) {
+              errors.push({ row: rowNum, error: "First name and last name are required" });
+              continue;
+            }
+
+            // Smart contact data detection and placement
+            const contactData = smartPlaceContactData(row);
+            const emailArray = contactData.emails;
+            const phoneArray = contactData.phoneNumbers;
+            
+            // Add any warnings to import results for user feedback
+            if (contactData.warnings.length > 0) {
+              contactData.warnings.forEach(warning => {
+                warnings.push({ 
+                  row: `Row ${rowNum} (${firstName} ${lastName})`, 
+                  warning: warning 
+                });
+              });
+            }
+            const sportsArray = sports ? sports.split(';').map((s: string) => s.trim()).filter(Boolean) : [];
+
+            // Generate username
+            const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
+            let username = baseUsername;
+            let counter = 1;
+            while (await storage.getUserByUsername(username)) {
+              username = `${baseUsername}${counter}`;
+              counter++;
+            }
+
+            const playerData = {
+              username,
+              firstName,
+              lastName,
+              emails: emailArray.length > 0 ? emailArray : [`${username}@temp.local`],
+              phoneNumbers: phoneArray,
+              birthDate: birthDate || undefined,
+              birthYear: birthYear && !isNaN(parseInt(birthYear)) ? parseInt(birthYear) : (birthDate ? new Date(birthDate).getFullYear() : undefined),
+              graduationYear: graduationYear && !isNaN(parseInt(graduationYear)) ? parseInt(graduationYear) : undefined,
+              sports: sportsArray,
+              height: height && !isNaN(parseInt(height)) ? parseInt(height) : undefined,
+              weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
+              school: school || undefined,
+              password: 'INVITATION_PENDING', // Inactive until invited
+              isActive: "false",
+              role: "athlete"
+            };
+
+            // Create or find player
+            let player;
+            if (createMissing === 'true') {
+              player = await storage.createUser(playerData as any);
+
+              // Add to team if specified
+              if (teamId) {
+                await storage.addUserToTeam(player.id, teamId);
+
+                // Also add to organization as athlete
+                const team = await storage.getTeam(teamId);
+                if (team?.organization?.id) {
+                  await storage.addUserToOrganization(player.id, team.organization.id, 'athlete');
+                }
+              }
+            } else {
+              // Match existing player by name and birth year
+              const existingPlayer = await storage.getAthletes({
+                search: `${firstName} ${lastName}`
+              });
+
+              const matchedPlayer = existingPlayer.find(p => 
+                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
+                p.lastName?.toLowerCase() === lastName.toLowerCase() &&
+                (birthYear ? p.birthYear === parseInt(birthYear) : true)
+              );
+
+              if (matchedPlayer) {
+                player = matchedPlayer;
+                
+                // Check if player is already on the target team using reliable method
+                let isAlreadyOnTeam = false;
+                if (teamId) {
+                  try {
+                    const userTeams = await storage.getUserTeams(player.id);
+                    isAlreadyOnTeam = userTeams.some((ut: any) => String(ut.team.id) === String(teamId));
+                  } catch (error) {
+                    console.warn(`Could not check team membership for user ${player.id}:`, error);
+                    // Err on the side of caution - don't deactivate if we can't verify membership
+                    isAlreadyOnTeam = true;
+                  }
+                }
+                
+                // If player is not already on the team, mark them as inactive when importing
+                // Only deactivate if we have a target team to check against
+                if (teamId && !isAlreadyOnTeam) {
+                  await storage.updateUser(player.id, { isActive: "false" });
+                  player.isActive = "false"; // Update local object for consistency
+                  
+                  results.push({
+                    action: 'matched_and_deactivated',
+                    player: {
+                      id: player.id,
+                      name: `${player.firstName} ${player.lastName}`,
+                      username: player.username,
+                      note: 'Player deactivated as they were not already on the target team'
+                    }
+                  });
+                  continue; // Skip the normal results.push below to avoid duplication
+                }
+                
+              } else {
+                errors.push({ row: rowNum, error: `Player ${firstName} ${lastName} not found` });
+                continue;
+              }
+            }
+
+            results.push({
+              action: createMissing === 'true' ? 'created' : 'matched',
+              player: {
+                id: player.id,
+                name: `${player.firstName} ${player.lastName}`,
+                username: player.username
+              }
+            });
+          } catch (error) {
+            console.error('Error processing player row:', error);
+            errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
+          }
+        }
+      } else if (type === 'measurements') {
+        // Process measurements import
+        for (let i = 0; i < csvData.length; i++) {
+          const row = csvData[i];
+          const rowNum = i + 2; // Account for header row
+          try {
+            const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
+
+            // Validate required fields
+            if (!firstName || !lastName || !teamName || !date || !metric || !value) {
+              errors.push({ row: rowNum, error: "First name, last name, team name, date, metric, and value are required" });
+              continue;
+            }
+
+            // Find player by name and team
+            const athletes = await storage.getAthletes({
+              search: `${firstName} ${lastName}`
+            });
+
+            let matchedPlayer;
+            if (teamName) {
+              // Clean up team name for comparison
+              const cleanTeamName = teamName.toLowerCase().trim();
+              
+              // Match by firstName + lastName + team
+              matchedPlayer = (athletes as any[]).find((p: any) => 
+                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
+                p.teams?.some((team: any) => team.name?.toLowerCase().trim() === cleanTeamName)
+              );
+
+              // If no exact match, try partial team name matching
+              if (!matchedPlayer) {
+                matchedPlayer = (athletes as any[]).find((p: any) => 
+                  p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                  p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
+                  p.teams?.some((team: any) => {
+                    const teamNameClean = team.name?.toLowerCase().trim();
+                    return teamNameClean?.includes(cleanTeamName) || cleanTeamName.includes(teamNameClean);
+                  })
+                );
+              }
+            } else {
+              // Fallback to just name matching if no team specified
+              matchedPlayer = athletes.find(p => 
+                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
+              );
+            }
+
+            if (!matchedPlayer) {
+              // Add debugging information to error message
+              const nameMatches = (athletes as any[]).filter((p: any) => 
+                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
+                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
+              );
+              
+              let errorMsg;
+              if (teamName) {
+                if (nameMatches.length > 0) {
+                  const availableTeams = nameMatches.flatMap((p: any) => p.teams?.map((t: any) => t.name) || []).join(', ');
+                  errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}". Available teams: ${availableTeams}`;
+                } else {
+                  errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}"`;
+                }
+              } else {
+                errorMsg = `Player ${firstName} ${lastName} not found`;
+              }
+              errors.push({ row: rowNum, error: errorMsg });
+              continue;
+            }
+
+            const measurementData = {
+              userId: matchedPlayer.id,
+              date,
+              age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
+              metric,
+              value: parseFloat(value),
+              units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : ''),
+              flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
+              notes: notes || undefined,
+              isVerified: "false"
+            };
+
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
+
+            results.push({
+              action: 'created',
+              measurement: {
+                id: measurement.id,
+                player: `${matchedPlayer.firstName} ${matchedPlayer.lastName}`,
+                metric: measurement.metric,
+                value: measurement.value,
+                date: measurement.date
+              }
+            });
+          } catch (error) {
+            console.error('Error processing measurement row:', error);
+            errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
+          }
+        }
+      }
+
+      res.json({
+        type,
+        totalRows,
+        results,
+        errors,
+        warnings,
+        summary: {
+          successful: results.length,
+          failed: errors.length,
+          warnings: warnings.length
+        }
+      });
+    } catch (error) {
+      console.error('Import error:', error);
+      res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   // Export routes
   app.get("/api/export/players", requireAuth, async (req, res) => {
     try {
@@ -2150,7 +2653,7 @@ export function registerRoutes(app: Express) {
 
       // Get all athletes with comprehensive data
       const athletes = await storage.getAthletes();
-      
+
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'firstName', 'lastName', 'fullName', 'username', 'emails', 'phoneNumbers',
@@ -2158,7 +2661,7 @@ export function registerRoutes(app: Express) {
         'teams', 'isActive', 'createdAt'
       ];
 
-      const csvRows = athletes.map(athlete => {
+      const csvRows = (athletes as any[]).map((athlete: any) => {
         const teams = athlete.teams ? athlete.teams.map((t: any) => t.name).join(';') : '';
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
         const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
@@ -2193,7 +2696,7 @@ export function registerRoutes(app: Express) {
       });
 
       const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="athletes.csv"');
       res.send(csvContent);
@@ -2212,7 +2715,7 @@ export function registerRoutes(app: Express) {
 
       // Get all measurements with comprehensive data
       const measurements = await storage.getMeasurements();
-      
+
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'teams',
@@ -2255,7 +2758,7 @@ export function registerRoutes(app: Express) {
       });
 
       const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
       res.send(csvContent);
@@ -2274,7 +2777,7 @@ export function registerRoutes(app: Express) {
 
       // Get all teams with comprehensive data
       const teams = await storage.getTeams();
-      
+
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'name', 'organizationId', 'organizationName', 'level', 'notes', 'createdAt'
@@ -2300,13 +2803,85 @@ export function registerRoutes(app: Express) {
       });
 
       const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
-      
+
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="teams.csv"');
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting teams:", error);
       res.status(500).json({ message: "Failed to export teams" });
+    }
+  });
+
+  // Admin endpoint to fix contact data for all athletes
+  app.post("/api/admin/fix-contact-data", requireAuth, async (req, res) => {
+    try {
+      // Check if user is site admin
+      if (req.session.user!.role !== 'site_admin') {
+        return res.status(403).json({ message: "Only site administrators can perform this action" });
+      }
+
+      const results: any[] = [];
+      const errors: any[] = [];
+
+      // Get all users (athletes)
+      const allUsers = await storage.getAthletes();
+      
+      for (const user of allUsers) {
+        try {
+          let hasChanges = false;
+          const currentEmails = [...(user.emails || [])];
+          const currentPhones = [...(user.phoneNumbers || [])];
+          const newEmails: string[] = [];
+          const newPhones: string[] = [];
+          
+          // Check phone numbers for emails
+          currentPhones.forEach(phone => {
+            if (isValidEmail(phone)) {
+              // Found email in phone numbers
+              if (!currentEmails.includes(phone) && !newEmails.includes(phone)) {
+                newEmails.push(phone);
+                hasChanges = true;
+                results.push({
+                  userId: user.id,
+                  name: `${user.firstName} ${user.lastName}`,
+                  action: `Moved email "${phone}" from phone numbers to emails`
+                });
+              }
+            } else {
+              // Keep as phone number
+              newPhones.push(phone);
+            }
+          });
+
+          // If we found emails in phone numbers, update the user
+          if (hasChanges) {
+            const updatedEmails = [...currentEmails, ...newEmails];
+            await storage.updateUser(user.id, {
+              emails: updatedEmails,
+              phoneNumbers: newPhones
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing user ${user.id}:`, error);
+          errors.push({
+            userId: user.id,
+            name: `${user.firstName} ${user.lastName}`,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+
+      res.json({
+        message: `Contact data cleanup completed. ${results.length} changes made, ${errors.length} errors.`,
+        results,
+        errors,
+        totalUsers: allUsers.length
+      });
+
+    } catch (error) {
+      console.error('Contact data cleanup error:', error);
+      res.status(500).json({ message: "Contact data cleanup failed", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
