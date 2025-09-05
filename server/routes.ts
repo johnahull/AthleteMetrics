@@ -2230,11 +2230,11 @@ export function registerRoutes(app: Express) {
               emails: emailArray.length > 0 ? emailArray : [`${username}@temp.local`],
               phoneNumbers: phoneArray,
               birthDate: birthDate || undefined,
-              birthYear: birthYear ? parseInt(birthYear) : (birthDate ? new Date(birthDate).getFullYear() : undefined),
-              graduationYear: graduationYear ? parseInt(graduationYear) : undefined,
+              birthYear: birthYear && !isNaN(parseInt(birthYear)) ? parseInt(birthYear) : (birthDate ? new Date(birthDate).getFullYear() : undefined),
+              graduationYear: graduationYear && !isNaN(parseInt(graduationYear)) ? parseInt(graduationYear) : undefined,
               sports: sportsArray,
-              height: height ? parseInt(height) : undefined,
-              weight: weight ? parseInt(weight) : undefined,
+              height: height && !isNaN(parseInt(height)) ? parseInt(height) : undefined,
+              weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
               school: school || undefined,
               password: 'TempPassword123!', // Temporary password
               isActive: "true"
@@ -2301,7 +2301,7 @@ export function registerRoutes(app: Express) {
             const matchedPlayer = athletes.find(p => 
               p.firstName?.toLowerCase() === firstName.toLowerCase() && 
               p.lastName?.toLowerCase() === lastName.toLowerCase() &&
-              (birthYear ? p.birthYear === parseInt(birthYear) : true)
+              (birthYear && !isNaN(parseInt(birthYear)) ? p.birthYear === parseInt(birthYear) : true)
             );
             
             if (!matchedPlayer) {
@@ -2312,11 +2312,11 @@ export function registerRoutes(app: Express) {
             const measurementData = {
               userId: matchedPlayer.id,
               date,
-              age: age ? parseInt(age) : undefined,
+              age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
               value: parseFloat(value),
               units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : ''),
-              flyInDistance: flyInDistance ? parseInt(flyInDistance) : undefined,
+              flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
               notes: notes || undefined,
               isVerified: "false"
             };
