@@ -197,7 +197,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-          <ScrollArea className="flex-1 h-0 max-h-[calc(90vh-200px)]">
+          <ScrollArea className="flex-1 min-h-0 overflow-hidden">
             <div className="px-6 py-4">
               <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
