@@ -54,8 +54,65 @@ export function arrayToCSV(data: any[], headers?: string[]): string {
   return [headerRow, ...rows].join('\n');
 }
 
-export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] } {
+// Email validation function
+function isValidEmail(value: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(value.trim());
+}
+
+// Phone number validation function
+function isValidPhoneNumber(value: string): boolean {
+  // Remove all non-digit characters for validation
+  const cleaned = value.replace(/\D/g, '');
+  // Support various formats:
+  // - US/Canada: 10 digits or 1 + 10 digits
+  // - International: 7-15 digits, optionally starting with +
+  // - Extensions are not supported in this simplified version
+  return /^(\+?1?\d{10}|\+?\d{7,15})$/.test(cleaned) && cleaned.length >= 7 && cleaned.length <= 15;
+}
+
+// Smart data placement function - detects emails and phone numbers regardless of column
+function smartPlaceContactData(row: any): { emails: string[], phoneNumbers: string[], warnings: string[] } {
+  const emails: string[] = [];
+  const phoneNumbers: string[] = [];
+  const warnings: string[] = [];
+  
+  // Check all possible contact fields for smart detection
+  const contactFields = ['emails', 'phoneNumbers', 'email', 'phone', 'contact', 'contactInfo'];
+  
+  contactFields.forEach(field => {
+    if (row[field] && row[field].trim()) {
+      const values = row[field].split(/[,;]/).map((v: string) => v.trim()).filter(Boolean);
+      
+      values.forEach((value: string) => {
+        if (isValidEmail(value)) {
+          if (!emails.includes(value)) {
+            emails.push(value);
+            if (field === 'phoneNumbers' || field === 'phone') {
+              warnings.push(`Found email "${value}" in phone number field, moved to emails`);
+            }
+          }
+        } else if (isValidPhoneNumber(value)) {
+          if (!phoneNumbers.includes(value)) {
+            phoneNumbers.push(value);
+            if (field === 'emails' || field === 'email') {
+              warnings.push(`Found phone number "${value}" in email field, moved to phone numbers`);
+            }
+          }
+        } else if (value.length > 0) {
+          // If it's not empty but doesn't match either format, warn about it
+          warnings.push(`Unrecognized contact format: "${value}" in ${field} field`);
+        }
+      });
+    }
+  });
+  
+  return { emails, phoneNumbers, warnings };
+}
+
+export function validatePlayerCSV(row: any): { valid: boolean; errors: string[]; warnings?: string[] } {
   const errors: string[] = [];
+  const warnings: string[] = [];
   
   if (!row.firstName || !row.firstName.trim()) {
     errors.push('First name is required');
@@ -93,15 +150,27 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
     }
   }
   
-  // Team name is now optional since athletes can be independent
+  // Smart contact data validation and placement
+  const contactData = smartPlaceContactData(row);
+  warnings.push(...contactData.warnings);
   
-  // Validate emails format if provided
-  if (row.emails && row.emails.trim()) {
-    const emails = row.emails.split(',').map((e: string) => e.trim());
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const invalidEmails = emails.filter((email: string) => !emailRegex.test(email));
+  // Update row data with properly placed contact information
+  row.emails = contactData.emails.join(',');
+  row.phoneNumbers = contactData.phoneNumbers.join(',');
+  
+  // Validate final email formats
+  if (contactData.emails.length > 0) {
+    const invalidEmails = contactData.emails.filter((email: string) => !isValidEmail(email));
     if (invalidEmails.length > 0) {
       errors.push(`Invalid email format: ${invalidEmails.join(', ')}`);
+    }
+  }
+  
+  // Validate final phone number formats
+  if (contactData.phoneNumbers.length > 0) {
+    const invalidPhones = contactData.phoneNumbers.filter((phone: string) => !isValidPhoneNumber(phone));
+    if (invalidPhones.length > 0) {
+      errors.push(`Invalid phone number format: ${invalidPhones.join(', ')}`);
     }
   }
   
@@ -117,8 +186,12 @@ export function validatePlayerCSV(row: any): { valid: boolean; errors: string[] 
   return {
     valid: errors.length === 0,
     errors,
+    warnings: warnings.length > 0 ? warnings : undefined,
   };
 }
+
+// Export the validation functions for use elsewhere
+export { isValidEmail, isValidPhoneNumber, smartPlaceContactData };
 
 export function validateMeasurementCSV(row: any): { valid: boolean; errors: string[] } {
   const errors: string[] = [];

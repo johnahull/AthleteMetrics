@@ -51,10 +51,11 @@ export default function ImportExport() {
       setImportResults(data);
       const hasResults = data.results.length > 0;
       const hasErrors = data.errors.length > 0;
+      const hasWarnings = data.warnings?.length > 0;
 
       toast({
         title: hasResults ? "Import Complete" : "Import Issues",
-        description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors.`,
+        description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors${hasWarnings ? `, ${data.warnings.length} warnings` : ''}.`,
         variant: hasResults ? "default" : "destructive",
       });
     },
@@ -286,7 +287,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
             {importResults && (
               <div className="mt-6 p-4 border border-gray-200 rounded-lg">
                 <h5 className="font-medium text-gray-900 mb-3">Import Results</h5>
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className={`grid gap-4 text-sm ${importResults.warnings?.length > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-gray-900">{importResults.totalRows}</p>
                     <p className="text-gray-600">Total Rows</p>
@@ -299,7 +300,29 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                     <p className="text-2xl font-bold text-red-600">{importResults.errors.length}</p>
                     <p className="text-gray-600">Errors</p>
                   </div>
+                  {importResults.warnings?.length > 0 && (
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-yellow-600">{importResults.warnings.length}</p>
+                      <p className="text-gray-600">Warnings</p>
+                    </div>
+                  )}
                 </div>
+
+                {importResults.warnings?.length > 0 && (
+                  <div className="mt-4">
+                    <h6 className="font-medium text-yellow-800 mb-2">Smart Data Placement:</h6>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {importResults.warnings.slice(0, 5).map((warning, index) => (
+                        <p key={index} className="text-sm text-yellow-600">
+                          {warning.row}: {warning.warning}
+                        </p>
+                      ))}
+                      {importResults.warnings.length > 5 && (
+                        <p className="text-sm text-gray-500">... and {importResults.warnings.length - 5} more warnings</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {importResults.errors.length > 0 && (
                   <div className="mt-4">
@@ -382,11 +405,13 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 <div className="text-sm text-blue-800">
                   <p className="font-medium mb-1">Import Guidelines:</p>
                   <ul className="space-y-1 text-xs">
+                    <li>• <strong>Smart Contact Detection:</strong> Emails and phone numbers are automatically validated and placed in correct fields regardless of which column they're in</li>
                     <li>• Metric values: FLY10_TIME (seconds) or VERTICAL_JUMP (inches)</li>
                     <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
                     <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
                     <li>• Date format: YYYY-MM-DD</li>
                     <li>• Athlete matching is case-sensitive</li>
+                    <li>• Phone numbers support US format: (555) 123-4567, 555-123-4567, or 5551234567</li>
                   </ul>
                 </div>
               </div>

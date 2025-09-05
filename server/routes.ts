@@ -195,7 +195,7 @@ export function registerRoutes(app: Express) {
 
   // Security headers middleware
   app.use(helmet({
-    contentSecurityPolicy: {
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI components
@@ -207,7 +207,7 @@ export function registerRoutes(app: Express) {
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
       },
-    },
+    } : false, // Disable CSP in development for Vite compatibility
     crossOriginEmbedderPolicy: false, // Allow for development
   }));
 
@@ -240,6 +240,62 @@ export function registerRoutes(app: Express) {
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   });
+
+  // Email validation function
+  const isValidEmail = (value: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(value.trim());
+  };
+
+  // Phone number validation function
+  const isValidPhoneNumber = (value: string): boolean => {
+    // Remove all non-digit characters for validation
+    const cleaned = value.replace(/\D/g, '');
+    // Support various formats:
+    // - US/Canada: 10 digits or 1 + 10 digits
+    // - International: 7-15 digits, optionally starting with +
+    // - Extensions are not supported in this simplified version
+    return /^(\+?1?\d{10}|\+?\d{7,15})$/.test(cleaned) && cleaned.length >= 7 && cleaned.length <= 15;
+  };
+
+  // Smart data placement function - detects emails and phone numbers regardless of column
+  const smartPlaceContactData = (row: any): { emails: string[], phoneNumbers: string[], warnings: string[] } => {
+    const emails: string[] = [];
+    const phoneNumbers: string[] = [];
+    const warnings: string[] = [];
+    
+    // Check all possible contact fields for smart detection
+    const contactFields = ['emails', 'phoneNumbers', 'email', 'phone', 'contact', 'contactInfo'];
+    
+    contactFields.forEach(field => {
+      if (row[field] && row[field].trim()) {
+        const values = row[field].split(/[,;]/).map((v: string) => v.trim()).filter(Boolean);
+        
+        values.forEach((value: string) => {
+          if (isValidEmail(value)) {
+            if (!emails.includes(value)) {
+              emails.push(value);
+              if (field === 'phoneNumbers' || field === 'phone') {
+                warnings.push(`Found email "${value}" in phone number field, moved to emails`);
+              }
+            }
+          } else if (isValidPhoneNumber(value)) {
+            if (!phoneNumbers.includes(value)) {
+              phoneNumbers.push(value);
+              if (field === 'emails' || field === 'email') {
+                warnings.push(`Found phone number "${value}" in email field, moved to phone numbers`);
+              }
+            }
+          } else if (value.length > 0) {
+            // If it's not empty but doesn't match either format, warn about it
+            warnings.push(`Unrecognized contact format: "${value}" in ${field} field`);
+          }
+        });
+      }
+    });
+    
+    return { emails, phoneNumbers, warnings };
+  };
 
   // Initialize default user
   initializeDefaultUser();
@@ -2287,6 +2343,7 @@ export function registerRoutes(app: Express) {
 
       const results: any[] = [];
       const errors: any[] = [];
+      const warnings: any[] = [];
       let totalRows = 0;
 
       // Parse CSV data
@@ -2313,18 +2370,31 @@ export function registerRoutes(app: Express) {
 
       if (type === 'players') {
         // Process players import
-        for (const row of csvData) {
+        for (let i = 0; i < csvData.length; i++) {
+          const row = csvData[i];
+          const rowNum = i + 2; // Account for header row
           try {
             const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName } = row;
 
             if (!firstName || !lastName) {
-              errors.push({ row: totalRows, error: "First name and last name are required" });
+              errors.push({ row: rowNum, error: "First name and last name are required" });
               continue;
             }
 
-            // Parse arrays from semicolon-separated strings
-            const emailArray = emails ? emails.split(';').map((e: string) => e.trim()).filter(Boolean) : [];
-            const phoneArray = phoneNumbers ? phoneNumbers.split(';').map((p: string) => p.trim()).filter(Boolean) : [];
+            // Smart contact data detection and placement
+            const contactData = smartPlaceContactData(row);
+            const emailArray = contactData.emails;
+            const phoneArray = contactData.phoneNumbers;
+            
+            // Add any warnings to import results for user feedback
+            if (contactData.warnings.length > 0) {
+              contactData.warnings.forEach(warning => {
+                warnings.push({ 
+                  row: `Row ${rowNum} (${firstName} ${lastName})`, 
+                  warning: warning 
+                });
+              });
+            }
             const sportsArray = sports ? sports.split(';').map((s: string) => s.trim()).filter(Boolean) : [];
 
             // Generate username
@@ -2383,7 +2453,7 @@ export function registerRoutes(app: Express) {
               if (matchedPlayer) {
                 player = matchedPlayer;
               } else {
-                errors.push({ row: totalRows, error: `Player ${firstName} ${lastName} not found` });
+                errors.push({ row: rowNum, error: `Player ${firstName} ${lastName} not found` });
                 continue;
               }
             }
@@ -2398,18 +2468,20 @@ export function registerRoutes(app: Express) {
             });
           } catch (error) {
             console.error('Error processing player row:', error);
-            errors.push({ row: totalRows, error: error instanceof Error ? error.message : 'Unknown error' });
+            errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
       } else if (type === 'measurements') {
         // Process measurements import
-        for (const row of csvData) {
+        for (let i = 0; i < csvData.length; i++) {
+          const row = csvData[i];
+          const rowNum = i + 2; // Account for header row
           try {
             const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
 
             // Validate required fields
             if (!firstName || !lastName || !teamName || !date || !metric || !value) {
-              errors.push({ row: totalRows, error: "First name, last name, team name, date, metric, and value are required" });
+              errors.push({ row: rowNum, error: "First name, last name, team name, date, metric, and value are required" });
               continue;
             }
 
@@ -2438,7 +2510,7 @@ export function registerRoutes(app: Express) {
               const errorMsg = teamName 
                 ? `Player ${firstName} ${lastName} not found in team "${teamName}"`
                 : `Player ${firstName} ${lastName} not found`;
-              errors.push({ row: totalRows, error: errorMsg });
+              errors.push({ row: rowNum, error: errorMsg });
               continue;
             }
 
@@ -2468,7 +2540,7 @@ export function registerRoutes(app: Express) {
             });
           } catch (error) {
             console.error('Error processing measurement row:', error);
-            errors.push({ row: totalRows, error: error instanceof Error ? error.message : 'Unknown error' });
+            errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
       }
@@ -2478,9 +2550,11 @@ export function registerRoutes(app: Express) {
         totalRows,
         results,
         errors,
+        warnings,
         summary: {
           successful: results.length,
-          failed: errors.length
+          failed: errors.length,
+          warnings: warnings.length
         }
       });
     } catch (error) {
