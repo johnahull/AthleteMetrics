@@ -2292,26 +2292,39 @@ export function registerRoutes(app: Express) {
         // Process measurements import
         for (const row of csvData) {
           try {
-            const { firstName, lastName, birthYear, date, age, metric, value, units, flyInDistance, notes } = row;
+            const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
             
             if (!firstName || !lastName || !metric || !value || !date) {
               errors.push({ row: totalRows, error: "First name, last name, metric, value, and date are required" });
               continue;
             }
 
-            // Find player
+            // Find player by name and team
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`
             });
             
-            const matchedPlayer = athletes.find(p => 
-              p.firstName?.toLowerCase() === firstName.toLowerCase() && 
-              p.lastName?.toLowerCase() === lastName.toLowerCase() &&
-              (birthYear && !isNaN(parseInt(birthYear)) ? p.birthYear === parseInt(birthYear) : true)
-            );
+            let matchedPlayer;
+            if (teamName) {
+              // Match by firstName + lastName + team
+              matchedPlayer = athletes.find(p => 
+                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
+                p.lastName?.toLowerCase() === lastName.toLowerCase() &&
+                p.teams?.some((team: any) => team.name?.toLowerCase() === teamName.toLowerCase())
+              );
+            } else {
+              // Fallback to just name matching if no team specified
+              matchedPlayer = athletes.find(p => 
+                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
+                p.lastName?.toLowerCase() === lastName.toLowerCase()
+              );
+            }
             
             if (!matchedPlayer) {
-              errors.push({ row: totalRows, error: `Player ${firstName} ${lastName} not found` });
+              const errorMsg = teamName 
+                ? `Player ${firstName} ${lastName} not found in team "${teamName}"`
+                : `Player ${firstName} ${lastName} not found`;
+              errors.push({ row: totalRows, error: errorMsg });
               continue;
             }
 
