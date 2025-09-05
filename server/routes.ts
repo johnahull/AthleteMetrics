@@ -2733,5 +2733,77 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Admin endpoint to fix contact data for all athletes
+  app.post("/api/admin/fix-contact-data", requireAuth, async (req, res) => {
+    try {
+      // Check if user is site admin
+      if (req.session.user!.role !== 'site_admin') {
+        return res.status(403).json({ message: "Only site administrators can perform this action" });
+      }
+
+      const results: any[] = [];
+      const errors: any[] = [];
+
+      // Get all users (athletes)
+      const allUsers = await storage.getAllUsers();
+      
+      for (const user of allUsers) {
+        try {
+          let hasChanges = false;
+          const currentEmails = [...(user.emails || [])];
+          const currentPhones = [...(user.phoneNumbers || [])];
+          const newEmails: string[] = [];
+          const newPhones: string[] = [];
+          
+          // Check phone numbers for emails
+          currentPhones.forEach(phone => {
+            if (isValidEmail(phone)) {
+              // Found email in phone numbers
+              if (!currentEmails.includes(phone) && !newEmails.includes(phone)) {
+                newEmails.push(phone);
+                hasChanges = true;
+                results.push({
+                  userId: user.id,
+                  name: `${user.firstName} ${user.lastName}`,
+                  action: `Moved email "${phone}" from phone numbers to emails`
+                });
+              }
+            } else {
+              // Keep as phone number
+              newPhones.push(phone);
+            }
+          });
+
+          // If we found emails in phone numbers, update the user
+          if (hasChanges) {
+            const updatedEmails = [...currentEmails, ...newEmails];
+            await storage.updateUser(user.id, {
+              emails: updatedEmails,
+              phoneNumbers: newPhones
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing user ${user.id}:`, error);
+          errors.push({
+            userId: user.id,
+            name: `${user.firstName} ${user.lastName}`,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+
+      res.json({
+        message: `Contact data cleanup completed. ${results.length} changes made, ${errors.length} errors.`,
+        results,
+        errors,
+        totalUsers: allUsers.length
+      });
+
+    } catch (error) {
+      console.error('Contact data cleanup error:', error);
+      res.status(500).json({ message: "Contact data cleanup failed", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   return server;
 }
