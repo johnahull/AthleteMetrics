@@ -2236,8 +2236,8 @@ export function registerRoutes(app: Express) {
               height: height && !isNaN(parseInt(height)) ? parseInt(height) : undefined,
               weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
               school: school || undefined,
-              password: 'TempPassword123!', // Temporary password
-              isActive: "true"
+              password: 'INVITATION_PENDING', // Inactive until invited
+              isActive: "false"
             };
 
             // Create or find player
