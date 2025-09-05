@@ -24,7 +24,7 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
   const form = useForm<InsertMeasurement>({
     resolver: zodResolver(insertMeasurementSchema),
     defaultValues: {
-      playerId: playerId,
+      userId: playerId,
       date: new Date().toISOString().split('T')[0],
       metric: "FLY10_TIME",
       value: 0,
@@ -47,7 +47,7 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
         description: "Measurement added successfully",
       });
       form.reset({
-        playerId: playerId,
+        userId: playerId,
         date: new Date().toISOString().split('T')[0],
         metric: "FLY10_TIME",
         value: 0,
@@ -71,7 +71,7 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
   const onSubmit = (data: InsertMeasurement) => {
     createMeasurementMutation.mutate({
       ...data,
-      playerId: playerId,
+      userId: playerId,
     });
   };
 

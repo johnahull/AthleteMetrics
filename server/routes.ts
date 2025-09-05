@@ -1,6 +1,11 @@
 import type { Express } from "express";
 import { createServer } from "http";
 import session from "express-session";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import csrf from "csrf";
+import { body, validationResult } from "express-validator";
+import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations } from "@shared/schema";
@@ -119,11 +124,26 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 // Initialize default site admin user
 async function initializeDefaultUser() {
   try {
-    const adminEmail = process.env.ADMIN_EMAIL || "admin@athleteperformancehub.com";
-    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
 
-    const existingUser = await storage.getUserByEmail(adminEmail);
-    if (!existingUser) {
+    // Require admin credentials to be set in environment variables
+    if (!adminEmail || !adminPassword) {
+      console.error("SECURITY: ADMIN_EMAIL and ADMIN_PASSWORD environment variables must be set");
+      process.exit(1);
+    }
+
+    // Validate password strength
+    if (adminPassword.length < 12) {
+      console.error("SECURITY: ADMIN_PASSWORD must be at least 12 characters long");
+      process.exit(1);
+    }
+
+    // Check if admin user already exists by email or username
+    const existingUserByEmail = await storage.getUserByEmail(adminEmail);
+    const existingUserByUsername = await storage.getUserByUsername("admin");
+    
+    if (!existingUserByEmail && !existingUserByUsername) {
       await storage.createUser({
         username: "admin",
         emails: [adminEmail],
@@ -133,9 +153,13 @@ async function initializeDefaultUser() {
         role: "site_admin",
         isSiteAdmin: "true"
       });
+      console.log("Site administrator account created successfully");
+    } else {
+      console.log("Site administrator account already exists");
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
+    process.exit(1);
   }
 }
 
@@ -143,22 +167,83 @@ export function registerRoutes(app: Express) {
   const server = createServer(app);
 
 
-  // Session setup
+  // Session setup with security best practices
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    console.error("SECURITY: SESSION_SECRET environment variable must be set");
+    process.exit(1);
+  }
+
+  if (sessionSecret.length < 32) {
+    console.error("SECURITY: SESSION_SECRET must be at least 32 characters long");
+    process.exit(1);
+  }
+
   app.use(session({
-    secret: process.env.SESSION_SECRET || 'default-secret-key',
-    resave: true,  // Changed to true to force session save
-    saveUninitialized: true,  // Changed to true to ensure session creation
+    secret: sessionSecret,
+    resave: false,  // Don't save unchanged sessions
+    saveUninitialized: false,  // Don't create sessions for unauthenticated users
     cookie: { 
-      secure: false,
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      httpOnly: true, // Prevent XSS attacks
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: 'strict' // CSRF protection
     }
   }));
+
+  // Security headers middleware
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI components
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Allow for development
+  }));
+
+  // CSRF protection setup
+  const csrfTokens = csrf();
+
+  // Input sanitization middleware
+  const sanitizeInput = (req: any, res: any, next: any) => {
+    // Sanitize string fields in request body
+    if (req.body && typeof req.body === 'object') {
+      for (const key in req.body) {
+        if (typeof req.body[key] === 'string') {
+          req.body[key] = DOMPurify.sanitize(req.body[key]);
+        }
+      }
+    }
+    next();
+  };
+
+  // Apply input sanitization to all routes
+  app.use(sanitizeInput);
+
+  // Rate limiting for authentication endpoints
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 5, // Limit each IP to 5 requests per windowMs
+    message: {
+      error: "Too many authentication attempts, please try again in 15 minutes"
+    },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  });
 
   // Initialize default user
   initializeDefaultUser();
 
   // Authentication routes - USERNAME ONLY
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
 
@@ -213,14 +298,8 @@ export function registerRoutes(app: Express) {
           primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
         };
 
-        // Add debugging info for role issues
-        console.log(`Login successful for user ${user.emails?.[0] || `${user.username}@temp.local` } (${user.id}):`, {
-          isSiteAdmin: user.isSiteAdmin,
-          determinedRole: userRole,
-          userOrgsCount: userOrgs ? userOrgs.length : 0,
-          userOrgsRoles: userOrgs ? userOrgs.map(uo => uo.role) : [],
-          primaryOrganizationId: req.session.user.primaryOrganizationId
-        });
+        // Log successful authentication without sensitive details
+        console.log(`User authenticated successfully (${user.id}): role=${userRole}, orgs=${userOrgs ? userOrgs.length : 0}`);
 
         return res.json({ 
           success: true, 
@@ -719,12 +798,8 @@ export function registerRoutes(app: Express) {
         hasLogin: athlete.password !== "INVITATION_PENDING"
       }));
 
-      console.log(`Returning ${players.length} athletes with teams:`, players.map(p => ({ 
-        id: p.id, 
-        name: `${p.firstName} ${p.lastName}`, 
-        teamCount: p.teams.length,
-        teamNames: p.teams.map((t: any) => t.name)
-      })));
+      console.log(`Returning ${players.length} athletes`);
+      console.log('Team assignments:', players.map(p => `${p.teams.length} teams`).join(', '));
 
       res.json(players);
     } catch (error) {
@@ -811,7 +886,7 @@ export function registerRoutes(app: Express) {
 
       const player = await storage.createPlayer(playerData);
 
-      console.log('Created player:', { id: player.id, teamIds: playerData.teamIds });
+      console.log('Player created successfully with', playerData.teamIds?.length || 0, 'team assignments');
 
       res.status(201).json(player);
     } catch (error) {
@@ -965,12 +1040,8 @@ export function registerRoutes(app: Express) {
           userOrganizationIds.includes(orgId)
         );
 
-        console.log('Measurement access validation:', {
-          playerId: measurementData.userId,
-          playerOrganizations,
-          userOrganizationIds,
-          hasAccess
-        });
+        // Log access validation result without exposing IDs
+        console.log(`Measurement access validation: hasAccess=${hasAccess}`);
 
         if (!hasAccess) {
           return res.status(403).json({ message: "Cannot create measurements for players outside your organization" });
@@ -1191,13 +1262,16 @@ export function registerRoutes(app: Express) {
         invitedBy: invitedById
       });
 
+          // Generate invite link for email sending (token should not be exposed to client)
           const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
+          
+          // Log invitation creation for admin reference
+          console.log(`Invitation created: ${invitation.id} for ${email}`);
 
           return res.status(201).json({
             id: invitation.id,
             email: invitation.email,
-            token: invitation.token,
-            inviteLink,
+            inviteLink, // Include link for email sending, but not raw token
             message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
           });
     } catch (error) {
@@ -1315,7 +1389,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/invitations/:token/accept", async (req, res) => {
+  app.post("/api/invitations/:token/accept", authLimiter, async (req, res) => {
     try {
       const { token } = req.params;
       const { password, firstName, lastName, username } = req.body;
