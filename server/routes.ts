@@ -2248,6 +2248,12 @@ export function registerRoutes(app: Express) {
               // Add to team if specified
               if (teamId) {
                 await storage.addUserToTeam(player.id, teamId);
+                
+                // Also add to organization as athlete
+                const team = await storage.getTeam(teamId);
+                if (team?.organization?.id) {
+                  await storage.addUserToOrganization(player.id, team.organization.id, 'athlete');
+                }
               }
             } else {
               // Match existing player by name and birth year
