@@ -195,10 +195,10 @@ export function registerRoutes(app: Express) {
 
   // Security headers middleware
   app.use(helmet({
-    contentSecurityPolicy: {
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI components
+        styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: ["'self'"],
@@ -207,7 +207,7 @@ export function registerRoutes(app: Express) {
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
       },
-    },
+    } : false, // Disable CSP in development
     crossOriginEmbedderPolicy: false, // Allow for development
   }));
 
