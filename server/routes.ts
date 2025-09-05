@@ -2745,7 +2745,7 @@ export function registerRoutes(app: Express) {
       const errors: any[] = [];
 
       // Get all users (athletes)
-      const allUsers = await storage.getAllUsers();
+      const allUsers = await storage.getAthletes();
       
       for (const user of allUsers) {
         try {
