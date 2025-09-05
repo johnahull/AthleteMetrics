@@ -134,15 +134,15 @@ Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","5
 Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
 Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,birthYear,date,age,metric,value,units,flyInDistance,notes
-Mia,Chen,2009,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
-Elise,Ramos,2008,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
-Jordan,Williams,2009,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
-Alex,Johnson,2007,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
-Taylor,Rodriguez,2008,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
-Morgan,Lee,2009,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
-Casey,Thompson,2007,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
-Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
+  const measurementsTemplate = `firstName,lastName,teamName,date,age,metric,value,units,flyInDistance,notes
+Mia,Chen,FIERCE 08G,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
+Elise,Ramos,Thunder Elite,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
+Jordan,Williams,Lightning 08G,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
+Alex,Johnson,FIERCE 08G,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
+Taylor,Rodriguez,Thunder Elite,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
+Morgan,Lee,Lightning 08G,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
+Casey,Thompson,FIERCE 08G,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
+Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -360,8 +360,8 @@ Jamie,Anderson,2008,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 </div>
                 <div className="mt-3 flex justify-between items-center">
                   <span className="text-xs text-gray-500">
-                    <span className="font-medium">Required:</span> firstName, lastName, birthYear (1990-2020), date (YYYY-MM-DD), age (10-25), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
-                    <span className="font-medium">Optional:</span> units (s/in), flyInDistance, notes
+                    <span className="font-medium">Required:</span> firstName, lastName, teamName, date (YYYY-MM-DD), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) • 
+                    <span className="font-medium">Optional:</span> age (10-25), units (s/in), flyInDistance, notes
                   </span>
                   <Button 
                     variant="ghost" 
