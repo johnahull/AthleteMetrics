@@ -252,6 +252,14 @@ export default function Players() {
     });
   };
 
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+    toast({
+      title: "Success",
+      description: "Athletes list refreshed",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -270,6 +278,14 @@ export default function Players() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
         <h1 className="text-2xl font-semibold text-gray-900">Athletes Management</h1>
         <div className="flex space-x-3">
+          <Button 
+            variant="outline" 
+            onClick={refreshData}
+            data-testid="button-refresh-athletes"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
           <Button 
             variant="outline" 
             className="bg-gray-600 text-white hover:bg-gray-700"
