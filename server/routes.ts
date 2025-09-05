@@ -2452,6 +2452,38 @@ export function registerRoutes(app: Express) {
 
               if (matchedPlayer) {
                 player = matchedPlayer;
+                
+                // Check if player is already on the target team using reliable method
+                let isAlreadyOnTeam = false;
+                if (teamId) {
+                  try {
+                    const userTeams = await storage.getUserTeams(player.id);
+                    isAlreadyOnTeam = userTeams.some((ut: any) => String(ut.team.id) === String(teamId));
+                  } catch (error) {
+                    console.warn(`Could not check team membership for user ${player.id}:`, error);
+                    // Err on the side of caution - don't deactivate if we can't verify membership
+                    isAlreadyOnTeam = true;
+                  }
+                }
+                
+                // If player is not already on the team, mark them as inactive when importing
+                // Only deactivate if we have a target team to check against
+                if (teamId && !isAlreadyOnTeam) {
+                  await storage.updateUser(player.id, { isActive: "false" });
+                  player.isActive = "false"; // Update local object for consistency
+                  
+                  results.push({
+                    action: 'matched_and_deactivated',
+                    player: {
+                      id: player.id,
+                      name: `${player.firstName} ${player.lastName}`,
+                      username: player.username,
+                      note: 'Player deactivated as they were not already on the target team'
+                    }
+                  });
+                  continue; // Skip the normal results.push below to avoid duplication
+                }
+                
               } else {
                 errors.push({ row: rowNum, error: `Player ${firstName} ${lastName} not found` });
                 continue;
