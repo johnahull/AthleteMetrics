@@ -97,7 +97,7 @@ export default function PerformanceChart() {
     };
   };
 
-  const chartData = processWeeklyData(measurements || []);
+  const chartData = processWeeklyData((measurements as any[]) || []);
 
   const options = {
     responsive: true,

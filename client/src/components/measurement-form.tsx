@@ -46,7 +46,7 @@ export default function MeasurementForm() {
     defaultValues: {
       firstName: "",
       lastName: "",
-      birthday: "",
+      birthDate: "",
       teamIds: [],
       school: "",
     },
@@ -411,7 +411,7 @@ export default function MeasurementForm() {
                     
                     <FormField
                       control={quickAddForm.control}
-                      name="birthday"
+                      name="birthDate"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Birth Date</FormLabel>

@@ -720,7 +720,7 @@ export class DatabaseStorage implements IStorage {
       password: userInfo.password,
       firstName: userInfo.firstName,
       lastName: userInfo.lastName,
-      role: invitation.role // Use the role from the invitation
+      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" // Use the role from the invitation
     };
 
     const user = await this.createUser(createUserData);
@@ -774,12 +774,8 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (filters?.birthYearFrom && filters?.birthYearTo) {
-        conditions.push(
-          and(
-            gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom),
-            lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo)
-          )
-        );
+        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
       } else if (filters?.birthYearFrom) {
         conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
       } else if (filters?.birthYearTo) {
@@ -815,12 +811,8 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(userOrganizations.role, 'athlete')];
 
     if (filters?.birthYearFrom && filters?.birthYearTo) {
-      conditions.push(
-        and(
-          gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom),
-          lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo)
-        )
-      );
+      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
     } else if (filters?.birthYearFrom) {
       conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
     } else if (filters?.birthYearTo) {
@@ -962,7 +954,7 @@ export class DatabaseStorage implements IStorage {
     }).returning();
 
     // Determine organization for athlete association
-    let organizationId: string | undefined = player.organizationId;
+    let organizationId: string | undefined = (player as any).organizationId;
 
     // Add to teams if specified and determine organization from first team if not already set
     if (player.teamIds && player.teamIds.length > 0) {
@@ -1044,7 +1036,7 @@ export class DatabaseStorage implements IStorage {
           .where(eq(users.id, id));
       } catch (error) {
         // Log but don't fail if user update fails
-        console.log('Could not update user record:', error.message);
+        console.log('Could not update user record:', (error as Error).message);
       }
     }
 
@@ -1245,13 +1237,13 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.teamIds && filters.teamIds.length > 0) {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some(team => filters.teamIds!.includes(team.id))
+        measurement.user.teams.some((team: any) => filters.teamIds!.includes(team.id))
       );
     }
 
     if (filters?.organizationId) {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some(team => team.organization.id === filters.organizationId)
+        measurement.user.teams.some((team: any) => team.organization.id === filters.organizationId)
       );
     }
 

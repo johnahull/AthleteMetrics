@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { teams, players, measurements } from "@shared/schema";
+import { teams, users, measurements, organizations } from "@shared/schema";
 
 async function seed() {
   try {
@@ -7,15 +7,24 @@ async function seed() {
 
     // Clear existing data
     await db.delete(measurements);
-    await db.delete(players);
+    await db.delete(users);
     await db.delete(teams);
+    await db.delete(organizations);
+
+    // Create organizations first
+    console.log("Creating organizations...");
+    const [organization] = await db.insert(organizations).values({
+      name: "Athletic Performance Center",
+      description: "Premier athletic training facility",
+      location: "Dallas, TX"
+    }).returning();
 
     // Create teams
     console.log("Creating teams...");
     const teamData = [
-      { name: "Lonestar 09G Navy", level: "Club", notes: "Competitive club team focused on technical development" },
-      { name: "Thunder Elite", level: "HS", notes: "High school varsity program with college prep focus" },
-      { name: "Lightning 08G", level: "Club", notes: "Elite development program for younger athletes" },
+      { name: "Lonestar 09G Navy", level: "Club", notes: "Competitive club team focused on technical development", organizationId: organization.id },
+      { name: "Thunder Elite", level: "HS", notes: "High school varsity program with college prep focus", organizationId: organization.id },
+      { name: "Lightning 08G", level: "Club", notes: "Elite development program for younger athletes", organizationId: organization.id },
     ];
 
     const createdTeams = await db.insert(teams).values(teamData).returning();
@@ -73,11 +82,13 @@ async function seed() {
           const fly10Time = Math.max(0.9, baseFly10 + variation);
           
           measurementData.push({
-            playerId: player.id,
+            userId: player.id,
+            submittedBy: player.id, // Self-submitted for seed data
             date: measurementDate.toISOString().split('T')[0],
             metric: "FLY10_TIME",
             value: fly10Time.toFixed(3),
             units: "s",
+            age: new Date().getFullYear() - (player.birthYear || 2000),
             notes: Math.random() > 0.7 ? (Math.random() > 0.5 ? "Electronic gates" : "Manual timing") : "",
           });
         }
@@ -88,11 +99,13 @@ async function seed() {
           const verticalJump = Math.max(15, baseVertical + variation);
           
           measurementData.push({
-            playerId: player.id,
+            userId: player.id,
+            submittedBy: player.id, // Self-submitted for seed data
             date: measurementDate.toISOString().split('T')[0],
             metric: "VERTICAL_JUMP", 
             value: verticalJump.toFixed(1),
             units: "in",
+            age: new Date().getFullYear() - (player.birthYear || 2000),
             notes: Math.random() > 0.7 ? (Math.random() > 0.5 ? "Jump mat" : "Wall test") : "",
           });
         }
