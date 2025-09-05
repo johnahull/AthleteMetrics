@@ -576,7 +576,7 @@ export default function Players() {
                         }
                       </td>
                       <td className="px-6 py-4">
-                        {(player as any).hasLogin ? (
+                        {(player as any).isActive ? (
                           <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
                             Active
                           </Badge>

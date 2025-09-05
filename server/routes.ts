@@ -853,7 +853,8 @@ export function registerRoutes(app: Express) {
       const players = athletes.map((athlete: any) => ({
         ...athlete,
         teams: athlete.teams || [],
-        hasLogin: athlete.password !== "INVITATION_PENDING"
+        hasLogin: athlete.password !== "INVITATION_PENDING",
+        isActive: athlete.isActive === "true"
       }));
 
       console.log(`Returning ${players.length} athletes`);
