@@ -291,11 +291,45 @@ export default function UserManagement() {
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
     console.log("Form submission data:", data);
     
-    // Additional validation to ensure email is present
+    // Force validation of all required fields
+    const validationResult = inviteSchema.safeParse(data);
+    if (!validationResult.success) {
+      console.error("Validation failed:", validationResult.error.errors);
+      
+      // Show specific validation errors
+      validationResult.error.errors.forEach(error => {
+        toast({
+          title: "Validation Error",
+          description: `${error.path.join('.')}: ${error.message}`,
+          variant: "destructive"
+        });
+      });
+      return;
+    }
+    
+    // Additional explicit checks
     if (!data.email || data.email.trim() === "") {
       toast({
         title: "Validation Error",
         description: "Email address is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.firstName || data.firstName.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "First name is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.lastName || data.lastName.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "Last name is required",
         variant: "destructive"
       });
       return;
@@ -492,9 +526,16 @@ export default function UserManagement() {
                           name="firstName"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>First Name</FormLabel>
+                              <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
                               <FormControl>
-                                <Input placeholder="John" {...field} data-testid="invite-firstname-input" />
+                                <Input 
+                                  placeholder="John" 
+                                  {...field} 
+                                  data-testid="invite-firstname-input"
+                                  required
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -505,9 +546,16 @@ export default function UserManagement() {
                           name="lastName"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Last Name</FormLabel>
+                              <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
                               <FormControl>
-                                <Input placeholder="Doe" {...field} data-testid="invite-lastname-input" />
+                                <Input 
+                                  placeholder="Doe" 
+                                  {...field} 
+                                  data-testid="invite-lastname-input"
+                                  required
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -519,13 +567,16 @@ export default function UserManagement() {
                         name="email"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Email Address</FormLabel>
+                            <FormLabel>Email Address <span className="text-red-500">*</span></FormLabel>
                             <FormControl>
                               <Input 
                                 type="email"
                                 placeholder="john.doe@example.com" 
                                 {...field} 
-                                data-testid="invite-email-input" 
+                                data-testid="invite-email-input"
+                                required
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(e.target.value)}
                               />
                             </FormControl>
                             <FormMessage />
