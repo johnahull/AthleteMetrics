@@ -32,7 +32,10 @@ const createUserSchema = z.object({
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
-  roles: z.array(z.enum(["org_admin", "coach"])).min(1, "At least one role must be selected"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  role: z.enum(["org_admin", "coach", "athlete"]),
+  organizationId: z.string().min(1, "Organization is required"),
 });
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
@@ -107,7 +110,10 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
     resolver: zodResolver(invitationSchema),
     defaultValues: {
       email: "",
-      roles: ["coach"],
+      firstName: "",
+      lastName: "",
+      role: "coach" as const,
+      organizationId,
     },
   });
 
@@ -143,11 +149,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          role: data.roles[0], // Take the first role from the array
-          organizationId
-        }),
+        body: JSON.stringify(data),
       });
 
       if (!response.ok) {
@@ -331,6 +333,35 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
           <TabsContent value="invite" className="space-y-4">
             <Form {...invitationForm}>
               <form onSubmit={invitationForm.handleSubmit((data) => invitationMutation.mutate(data))} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={invitationForm.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>First Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-invite-first-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={invitationForm.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-invite-last-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 <FormField
                   control={invitationForm.control}
                   name="email"
@@ -347,38 +378,21 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
                 <FormField
                   control={invitationForm.control}
-                  name="roles"
+                  name="role"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Roles</FormLabel>
-                      <div className="space-y-2">
-                        {[
-                          { value: "coach", label: "Coach" },
-                          { value: "org_admin", label: "Organization Admin" },
-                        ].map((role) => (
-                          <div key={role.value} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`invite-role-${role.value}`}
-                              checked={field.value?.includes(role.value as any)}
-                              onCheckedChange={(checked) => {
-                                const currentRoles = field.value || [];
-                                if (checked) {
-                                  field.onChange([...currentRoles, role.value]);
-                                } else {
-                                  field.onChange(currentRoles.filter((r: string) => r !== role.value));
-                                }
-                              }}
-                              data-testid={`checkbox-invite-role-${role.value}`}
-                            />
-                            <label
-                              htmlFor={`invite-role-${role.value}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                            >
-                              {role.label}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
+                      <FormLabel>Role</FormLabel>
+                      <FormControl>
+                        <select 
+                          {...field} 
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          data-testid="select-invite-role"
+                        >
+                          <option value="coach">Coach</option>
+                          <option value="org_admin">Organization Admin</option>
+                          <option value="athlete">Athlete</option>
+                        </select>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
