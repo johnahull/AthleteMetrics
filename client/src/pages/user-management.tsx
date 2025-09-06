@@ -156,14 +156,20 @@ export default function UserManagement() {
 
   // Auto-select first organization when data loads
   useEffect(() => {
-    if (organizations && organizations.length > 0) {
+    if (organizations && organizations.length > 0 && !inviteForm.getValues("organizationId")) {
       inviteForm.setValue("organizationId", organizations[0].id);
     }
   }, [organizations, inviteForm]);
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: z.infer<typeof inviteSchema>) => {
+      console.log("Sending invitation with data:", JSON.stringify(data, null, 2));
       const res = await apiRequest("POST", "/api/invitations", data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Server error:", errorData);
+        throw new Error(errorData.message || "Failed to send invitation");
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -183,12 +189,13 @@ export default function UserManagement() {
         });
       }
       setUserDialogOpen(false);
-      inviteForm.reset();
-
-      // Reset form to first organization
-      if (organizations && organizations.length > 0) {
-        inviteForm.setValue("organizationId", organizations[0].id);
-      }
+      inviteForm.reset({
+        email: "",
+        firstName: "",
+        lastName: "",
+        role: "athlete" as const,
+        organizationId: organizations && organizations.length > 0 ? organizations[0].id : "",
+      });
     },
     onError: (error: any) => {
       toast({
@@ -282,6 +289,27 @@ export default function UserManagement() {
   });
 
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
+    console.log("Form submission data:", data);
+    
+    // Additional validation to ensure email is present
+    if (!data.email || data.email.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "Email address is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.organizationId) {
+      toast({
+        title: "Validation Error", 
+        description: "Organization is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     sendInviteMutation.mutate(data);
   };
 
@@ -450,7 +478,14 @@ export default function UserManagement() {
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...inviteForm}>
-                    <form onSubmit={inviteForm.handleSubmit(onSendInvite)} className="space-y-4">
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        console.log("Form values before submission:", inviteForm.getValues());
+                        inviteForm.handleSubmit(onSendInvite)(e);
+                      }} 
+                      className="space-y-4"
+                    >
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={inviteForm.control}
@@ -486,7 +521,12 @@ export default function UserManagement() {
                           <FormItem>
                             <FormLabel>Email Address</FormLabel>
                             <FormControl>
-                              <Input placeholder="john.doe@example.com" {...field} data-testid="invite-email-input" />
+                              <Input 
+                                type="email"
+                                placeholder="john.doe@example.com" 
+                                {...field} 
+                                data-testid="invite-email-input" 
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
