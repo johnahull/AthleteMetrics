@@ -110,6 +110,38 @@ export interface IStorage {
     bestFly10Today?: { value: number; userName: string };
     bestVerticalToday?: { value: number; userName: string };
   }>;
+
+  // Enhanced Authentication Methods
+  findUserByEmail(email: string): Promise<User | null>;
+  findUserById(userId: string): Promise<User | null>;
+  resetLoginAttempts(userId: string): Promise<void>;
+  incrementLoginAttempts(userId: string, attempts: number): Promise<void>;
+  lockAccount(userId: string, lockUntil: Date): Promise<void>;
+  updateLastLogin(userId: string): Promise<void>;
+  createLoginSession(session: any): Promise<void>;
+  findLoginSession(token: string): Promise<any>;
+  updateSessionActivity(sessionId: string): Promise<void>;
+  revokeLoginSession(token: string): Promise<void>;
+  revokeAllUserSessions(userId: string): Promise<void>;
+  updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
+  createSecurityEvent(event: any): Promise<void>;
+  getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
+  getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]>;
+  getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]>;
+  getRecentPasswordResets(email: string, timeWindow: number): Promise<any[]>;
+  createPasswordResetToken(token: any): Promise<void>;
+  findPasswordResetToken(token: string): Promise<any>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
+  updatePasswordChangedAt(userId: string): Promise<void>;
+  createEmailVerificationToken(token: any): Promise<void>;
+  findEmailVerificationToken(token: string): Promise<any>;
+  markEmailAsVerified(userId: string, email: string): Promise<void>;
+  markEmailVerificationTokenUsed(token: string): Promise<void>;
+  getUserRole(userId: string, organizationId: string): Promise<string | null>;
+  updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
+  getUsersByOrganization(organizationId: string): Promise<any[]>;
+  getUserActivityStats(userId: string, organizationId: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1476,6 +1508,194 @@ export class DatabaseStorage implements IStorage {
       bestVerticalToday: todaysVertical.length > 0 ? todaysVertical.reduce((best, current) =>
         current.value > best.value ? current : best
       ) : undefined
+    };
+  }
+
+  // Enhanced Authentication Methods Implementation
+  async findUserByEmail(email: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(sql`${users.emails} @> ${[email]}`);
+    return user || null;
+  }
+
+  async findUserById(userId: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user || null;
+  }
+
+  async resetLoginAttempts(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ loginAttempts: 0, lockedUntil: null })
+      .where(eq(users.id, userId));
+  }
+
+  async incrementLoginAttempts(userId: string, attempts: number): Promise<void> {
+    await db.update(users)
+      .set({ loginAttempts: attempts })
+      .where(eq(users.id, userId));
+  }
+
+  async lockAccount(userId: string, lockUntil: Date): Promise<void> {
+    await db.update(users)
+      .set({ lockedUntil: lockUntil.toISOString() })
+      .where(eq(users.id, userId));
+  }
+
+  async updateLastLogin(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
+  // Simplified implementations - these would need proper schema tables
+  async createLoginSession(session: any): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Creating login session:', session.userId);
+  }
+
+  async findLoginSession(token: string): Promise<any> {
+    // Would need loginSessions table implementation
+    return null;
+  }
+
+  async updateSessionActivity(sessionId: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Updating session activity:', sessionId);
+  }
+
+  async revokeLoginSession(token: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Revoking login session:', token);
+  }
+
+  async revokeAllUserSessions(userId: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Revoking all sessions for user:', userId);
+  }
+
+  async updateUserBackupCodes(userId: string, codes: string[]): Promise<void> {
+    await db.update(users)
+      .set({ backupCodes: codes })
+      .where(eq(users.id, userId));
+  }
+
+  async createSecurityEvent(event: any): Promise<void> {
+    // Would need securityEvents table implementation
+    console.log('Creating security event:', event.eventType);
+  }
+
+  async getUserSecurityEvents(userId: string, limit: number): Promise<any[]> {
+    // Would need securityEvents table implementation
+    return [];
+  }
+
+  async getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]> {
+    // Would need securityEvents table implementation
+    return [];
+  }
+
+  async getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]> {
+    // Would need emailChanges table implementation
+    return [];
+  }
+
+  async getRecentPasswordResets(email: string, timeWindow: number): Promise<any[]> {
+    // Would need passwordResets table implementation
+    return [];
+  }
+
+  async createPasswordResetToken(token: any): Promise<void> {
+    // Would need passwordResetTokens table implementation
+    console.log('Creating password reset token for user:', token.userId);
+  }
+
+  async findPasswordResetToken(token: string): Promise<any> {
+    // Would need passwordResetTokens table implementation
+    return null;
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    // Would need passwordResetTokens table implementation
+    console.log('Marking password reset token as used:', token);
+  }
+
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {
+    await db.update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, userId));
+  }
+
+  async updatePasswordChangedAt(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() }) // Using lastLoginAt as placeholder
+      .where(eq(users.id, userId));
+  }
+
+  async createEmailVerificationToken(token: any): Promise<void> {
+    // Would need emailVerificationTokens table implementation
+    console.log('Creating email verification token for user:', token.userId);
+  }
+
+  async findEmailVerificationToken(token: string): Promise<any> {
+    // Would need emailVerificationTokens table implementation
+    return null;
+  }
+
+  async markEmailAsVerified(userId: string, email: string): Promise<void> {
+    await db.update(users)
+      .set({ emailVerified: 'true' })
+      .where(eq(users.id, userId));
+  }
+
+  async markEmailVerificationTokenUsed(token: string): Promise<void> {
+    // Would need emailVerificationTokens table implementation
+    console.log('Marking email verification token as used:', token);
+  }
+
+  async getUserRole(userId: string, organizationId: string): Promise<string | null> {
+    const [userOrg] = await db.select()
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+    return userOrg?.role || null;
+  }
+
+  async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
+    try {
+      await db.update(userOrganizations)
+        .set({ role })
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getUsersByOrganization(organizationId: string): Promise<any[]> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      emails: users.emails,
+      role: userOrganizations.role
+    })
+    .from(users)
+    .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+    .where(eq(userOrganizations.organizationId, organizationId));
+    
+    return result;
+  }
+
+  async getUserActivityStats(userId: string, organizationId: string): Promise<any> {
+    // Would need proper activity tracking
+    return {
+      measurementsCreated: 0,
+      teamsManaged: 0
     };
   }
 }

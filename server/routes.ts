@@ -19,10 +19,12 @@ import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
 import { OCRProcessingResult } from '@shared/ocr-types';
+import enhancedAuthRoutes from './routes/enhanced-auth';
 
 // Session configuration
 declare module 'express-session' {
   interface SessionData {
+    sessionToken?: string; // Added for enhanced auth
     user?: {
       id: string;
       username: string;
@@ -33,6 +35,7 @@ declare module 'express-session' {
       playerId?: string;
       isSiteAdmin?: boolean; // Added for clarity
       primaryOrganizationId?: string; // Added to store primary org ID
+      emailVerified?: boolean; // Added for enhanced auth
     };
     // Keep old admin for transition
     admin?: boolean;
@@ -47,6 +50,7 @@ declare module 'express-session' {
       playerId?: string;
       isSiteAdmin?: boolean;
       primaryOrganizationId?: string; // Added to store primary org ID
+      emailVerified?: boolean; // Added for enhanced auth
     };
     isImpersonating?: boolean;
     impersonationStartTime?: Date;
@@ -412,6 +416,9 @@ export function registerRoutes(app: Express) {
       res.json({ message: "Logged out successfully" });
     });
   });
+
+  // Mount enhanced authentication routes
+  app.use('/api/auth', enhancedAuthRoutes);
 
   // Admin Impersonation routes (Site Admin only)
   app.post("/api/admin/impersonate/:userId", requireSiteAdmin, async (req, res) => {

@@ -21,6 +21,9 @@ import Profile from "./pages/profile";
 import UserProfile from "./pages/user-profile";
 import OrganizationProfile from "./pages/organization-profile";
 import AcceptInvitation from "./pages/accept-invitation";
+import EnhancedLogin from "./pages/enhanced-login";
+import ForgotPassword from "./pages/forgot-password";
+import ResetPassword from "./pages/reset-password";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -29,6 +32,9 @@ function Router() {
       <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/register" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
+      <Route path="/enhanced-login" component={EnhancedLogin} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/athletes/:id" component={PlayerProfile} />
       <Route path="/athletes" component={Players} />
       <Route path="/organizations/:id" component={OrganizationProfile} />
