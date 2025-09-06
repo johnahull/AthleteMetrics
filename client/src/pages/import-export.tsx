@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CloudUpload, Download, Copy, Info, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { downloadCSV } from "@/lib/csv";
+import { PhotoUpload } from "@/components/photo-upload";
 
 export default function ImportExport() {
   const [importType, setImportType] = useState<"players" | "measurements">("players");
@@ -418,6 +419,15 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
             </div>
           </CardContent>
         </Card>
+
+        {/* Photo OCR Import Section */}
+        <PhotoUpload onSuccess={() => {
+          toast({
+            title: "Success",
+            description: "Measurements imported successfully from photo",
+          });
+          setImportResults(null); // Clear CSV results since this is a different import method
+        }} />
 
         {/* Export Section */}
         <Card className="bg-white">
