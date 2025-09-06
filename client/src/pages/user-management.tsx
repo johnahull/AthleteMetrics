@@ -163,7 +163,13 @@ export default function UserManagement() {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: z.infer<typeof inviteSchema>) => {
+      console.log("Sending invitation with data:", JSON.stringify(data, null, 2));
       const res = await apiRequest("POST", "/api/invitations", data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Server error:", errorData);
+        throw new Error(errorData.message || "Failed to send invitation");
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -283,6 +289,27 @@ export default function UserManagement() {
   });
 
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
+    console.log("Form submission data:", data);
+    
+    // Additional validation to ensure email is present
+    if (!data.email || data.email.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "Email address is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.organizationId) {
+      toast({
+        title: "Validation Error", 
+        description: "Organization is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     sendInviteMutation.mutate(data);
   };
 
@@ -451,7 +478,14 @@ export default function UserManagement() {
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...inviteForm}>
-                    <form onSubmit={inviteForm.handleSubmit(onSendInvite)} className="space-y-4">
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        console.log("Form values before submission:", inviteForm.getValues());
+                        inviteForm.handleSubmit(onSendInvite)(e);
+                      }} 
+                      className="space-y-4"
+                    >
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={inviteForm.control}
