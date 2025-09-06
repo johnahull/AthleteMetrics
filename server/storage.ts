@@ -699,7 +699,7 @@ export class DatabaseStorage implements IStorage {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
 
-    const [invitation] = await this.db.insert(invitations).values({
+    const [invitation] = await db.insert(invitations).values({
       email: data.email,
       firstName: data.firstName,
       lastName: data.lastName,
