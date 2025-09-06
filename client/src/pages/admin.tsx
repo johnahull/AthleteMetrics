@@ -23,7 +23,7 @@ const inviteSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   role: z.enum(["site_admin", "org_admin", "coach", "athlete"]),
-  organizationId: z.string().optional(),
+  organizationId: z.string().min(1, "Organization is required"),
 });
 
 type Organization = {
@@ -428,7 +428,7 @@ export default function AdminPage() {
                       name="organizationId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Organization (Optional)</FormLabel>
+                          <FormLabel>Organization</FormLabel>
                           <FormControl>
                             <select 
                               {...field} 
