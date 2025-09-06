@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -91,6 +91,7 @@ type OrganizationProfile = {
 // User Management Modal Component
 function UserManagementModal({ organizationId }: { organizationId: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -272,7 +273,27 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" {...field} data-testid="input-password" />
+                        <div className="relative">
+                          <Input 
+                            type={showPassword ? "text" : "password"} 
+                            {...field} 
+                            data-testid="input-password"
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                            onClick={() => setShowPassword(!showPassword)}
+                            tabIndex={-1}
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
