@@ -156,7 +156,7 @@ export default function UserManagement() {
 
   // Auto-select first organization when data loads
   useEffect(() => {
-    if (organizations && organizations.length > 0) {
+    if (organizations && organizations.length > 0 && !inviteForm.getValues("organizationId")) {
       inviteForm.setValue("organizationId", organizations[0].id);
     }
   }, [organizations, inviteForm]);
@@ -183,12 +183,13 @@ export default function UserManagement() {
         });
       }
       setUserDialogOpen(false);
-      inviteForm.reset();
-
-      // Reset form to first organization
-      if (organizations && organizations.length > 0) {
-        inviteForm.setValue("organizationId", organizations[0].id);
-      }
+      inviteForm.reset({
+        email: "",
+        firstName: "",
+        lastName: "",
+        role: "athlete" as const,
+        organizationId: organizations && organizations.length > 0 ? organizations[0].id : "",
+      });
     },
     onError: (error: any) => {
       toast({
@@ -486,7 +487,12 @@ export default function UserManagement() {
                           <FormItem>
                             <FormLabel>Email Address</FormLabel>
                             <FormControl>
-                              <Input placeholder="john.doe@example.com" {...field} data-testid="invite-email-input" />
+                              <Input 
+                                type="email"
+                                placeholder="john.doe@example.com" 
+                                {...field} 
+                                data-testid="invite-email-input" 
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
