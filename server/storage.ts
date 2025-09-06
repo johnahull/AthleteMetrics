@@ -684,17 +684,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Invitations
-  async createInvitation(invitation: InsertInvitation): Promise<Invitation> {
+  async createInvitation(data: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    organizationId: string;
+    teamIds?: string[];
+    role: string;
+    invitedBy: string;
+    athleteId?: string;
+    expiresAt: Date;
+  }): Promise<Invitation> {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
 
-    const [newInvitation] = await db.insert(invitations).values({
-      ...invitation,
+    const [invitation] = await db.insert(invitations).values({
+      email: data.email,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      organizationId: data.organizationId,
+      teamIds: data.teamIds || [],
+      role: data.role,
+      invitedBy: data.invitedBy,
+      playerId: data.athleteId, // Store athlete ID in playerId field
       token,
-      expiresAt
+      expiresAt,
     }).returning();
-    return newInvitation;
+    return invitation;
   }
 
 
@@ -846,7 +863,7 @@ export class DatabaseStorage implements IStorage {
 
     // Build a map of user ID to teams array
     const userTeamsMap = new Map<string, (Team & { organization: Organization })[]>();
-    
+
     // Initialize empty arrays for all athletes
     athletes.forEach(athlete => {
       userTeamsMap.set(athlete.id, []);
@@ -859,7 +876,7 @@ export class DatabaseStorage implements IStorage {
         ...row.teams,
         organization: row.organizations
       };
-      
+
       if (!userTeamsMap.has(userId)) {
         userTeamsMap.set(userId, []);
       }
@@ -1427,7 +1444,7 @@ export class DatabaseStorage implements IStorage {
 
     // Count athletes in the organization
     const totalAthletes = athletes.length;
-    
+
     // Active athletes are those with active user accounts (not just invitation pending)
     const activeAthletes = athletes.filter(athlete => 
       athlete.isActive === "true" && athlete.password !== "INVITATION_PENDING"
