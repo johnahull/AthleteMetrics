@@ -396,21 +396,38 @@ export default function UserManagement() {
     }
   };
 
-  const generateInviteLink = async (email: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
+  const generateInviteLink = async (userId: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
     try {
-      const res = await apiRequest("POST", "/api/invitations", {
-        email: email || '',
-        firstName: firstName || '',
-        lastName: lastName || '',
+      // For athletes, send invitations to all their email addresses
+      const requestData = role === "athlete" ? {
+        athleteId: userId,
         role,
         organizationId
-      });
+      } : {
+        // For non-athletes, we'd need their email - this is a fallback
+        email: `${firstName.toLowerCase()}${lastName.toLowerCase()}@temp.local`,
+        firstName,
+        lastName,
+        role,
+        organizationId
+      };
+
+      const res = await apiRequest("POST", "/api/invitations", requestData);
       const data = await res.json();
 
       // Refresh the user list
       queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
 
-      if (data.inviteLink) {
+      if (role === "athlete" && data.invitations) {
+        // Multiple invitations were created
+        const emailCount = data.invitations.length;
+        const emails = data.invitations.map((inv: any) => inv.email).join(', ');
+        
+        toast({
+          title: "New invitation links generated!",
+          description: `${emailCount} invitations sent to ${firstName} ${lastName} at: ${emails}`,
+        });
+      } else if (data.inviteLink) {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({
           title: "New invitation link generated!",
@@ -419,7 +436,7 @@ export default function UserManagement() {
       } else {
         toast({
           title: "New invitation created",
-          description: `Invitation sent to ${firstName || ''} ${lastName || ''}.`,
+          description: data.message || `Invitation sent to ${firstName || ''} ${lastName || ''}.`,
         });
       }
     } catch (error: any) {
@@ -924,7 +941,7 @@ export default function UserManagement() {
                               variant="outline"
                               size="sm"
                               onClick={() => generateInviteLink(
-                                userOrg.user.emails?.[0] || userOrg.user.email || `${userOrg.user.username}@temp.local`,
+                                userOrg.user.id,
                                 userOrg.user.firstName || '',
                                 userOrg.user.lastName || '',
                                 userOrg.role,
