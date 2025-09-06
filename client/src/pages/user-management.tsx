@@ -58,7 +58,7 @@ const inviteSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   role: z.enum(["athlete", "coach", "org_admin", "site_admin"]),
-  organizationId: z.string().optional(),
+  organizationId: z.string().min(1, "Organization is required"),
 });
 
 const siteAdminSchema = z.object({
@@ -156,14 +156,20 @@ export default function UserManagement() {
 
   // Auto-select first organization when data loads
   useEffect(() => {
-    if (organizations && organizations.length > 0) {
+    if (organizations && organizations.length > 0 && !inviteForm.getValues("organizationId")) {
       inviteForm.setValue("organizationId", organizations[0].id);
     }
   }, [organizations, inviteForm]);
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: z.infer<typeof inviteSchema>) => {
+      console.log("Sending invitation with data:", JSON.stringify(data, null, 2));
       const res = await apiRequest("POST", "/api/invitations", data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Server error:", errorData);
+        throw new Error(errorData.message || "Failed to send invitation");
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -183,12 +189,13 @@ export default function UserManagement() {
         });
       }
       setUserDialogOpen(false);
-      inviteForm.reset();
-
-      // Reset form to first organization
-      if (organizations && organizations.length > 0) {
-        inviteForm.setValue("organizationId", organizations[0].id);
-      }
+      inviteForm.reset({
+        email: "",
+        firstName: "",
+        lastName: "",
+        role: "athlete" as const,
+        organizationId: organizations && organizations.length > 0 ? organizations[0].id : "",
+      });
     },
     onError: (error: any) => {
       toast({
@@ -282,6 +289,61 @@ export default function UserManagement() {
   });
 
   const onSendInvite = (data: z.infer<typeof inviteSchema>) => {
+    console.log("Form submission data:", data);
+    
+    // Force validation of all required fields
+    const validationResult = inviteSchema.safeParse(data);
+    if (!validationResult.success) {
+      console.error("Validation failed:", validationResult.error.errors);
+      
+      // Show specific validation errors
+      validationResult.error.errors.forEach(error => {
+        toast({
+          title: "Validation Error",
+          description: `${error.path.join('.')}: ${error.message}`,
+          variant: "destructive"
+        });
+      });
+      return;
+    }
+    
+    // Additional explicit checks
+    if (!data.email || data.email.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "Email address is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.firstName || data.firstName.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "First name is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.lastName || data.lastName.trim() === "") {
+      toast({
+        title: "Validation Error",
+        description: "Last name is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!data.organizationId) {
+      toast({
+        title: "Validation Error", 
+        description: "Organization is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     sendInviteMutation.mutate(data);
   };
 
@@ -334,21 +396,38 @@ export default function UserManagement() {
     }
   };
 
-  const generateInviteLink = async (email: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
+  const generateInviteLink = async (userId: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
     try {
-      const res = await apiRequest("POST", "/api/invitations", {
-        email: email || '',
-        firstName: firstName || '',
-        lastName: lastName || '',
+      // For athletes, send invitations to all their email addresses
+      const requestData = role === "athlete" ? {
+        athleteId: userId,
         role,
         organizationId
-      });
+      } : {
+        // For non-athletes, we'd need their email - this is a fallback
+        email: `${firstName.toLowerCase()}${lastName.toLowerCase()}@temp.local`,
+        firstName,
+        lastName,
+        role,
+        organizationId
+      };
+
+      const res = await apiRequest("POST", "/api/invitations", requestData);
       const data = await res.json();
 
       // Refresh the user list
       queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
 
-      if (data.inviteLink) {
+      if (role === "athlete" && data.invitations) {
+        // Multiple invitations were created
+        const emailCount = data.invitations.length;
+        const emails = data.invitations.map((inv: any) => inv.email).join(', ');
+        
+        toast({
+          title: "New invitation links generated!",
+          description: `${emailCount} invitations sent to ${firstName} ${lastName} at: ${emails}`,
+        });
+      } else if (data.inviteLink) {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({
           title: "New invitation link generated!",
@@ -357,7 +436,7 @@ export default function UserManagement() {
       } else {
         toast({
           title: "New invitation created",
-          description: `Invitation sent to ${firstName || ''} ${lastName || ''}.`,
+          description: data.message || `Invitation sent to ${firstName || ''} ${lastName || ''}.`,
         });
       }
     } catch (error: any) {
@@ -450,16 +529,30 @@ export default function UserManagement() {
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...inviteForm}>
-                    <form onSubmit={inviteForm.handleSubmit(onSendInvite)} className="space-y-4">
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        console.log("Form values before submission:", inviteForm.getValues());
+                        inviteForm.handleSubmit(onSendInvite)(e);
+                      }} 
+                      className="space-y-4"
+                    >
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={inviteForm.control}
                           name="firstName"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>First Name</FormLabel>
+                              <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
                               <FormControl>
-                                <Input placeholder="John" {...field} data-testid="invite-firstname-input" />
+                                <Input 
+                                  placeholder="John" 
+                                  {...field} 
+                                  data-testid="invite-firstname-input"
+                                  required
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -470,9 +563,16 @@ export default function UserManagement() {
                           name="lastName"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Last Name</FormLabel>
+                              <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
                               <FormControl>
-                                <Input placeholder="Doe" {...field} data-testid="invite-lastname-input" />
+                                <Input 
+                                  placeholder="Doe" 
+                                  {...field} 
+                                  data-testid="invite-lastname-input"
+                                  required
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -484,9 +584,17 @@ export default function UserManagement() {
                         name="email"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Email Address</FormLabel>
+                            <FormLabel>Email Address <span className="text-red-500">*</span></FormLabel>
                             <FormControl>
-                              <Input placeholder="john.doe@example.com" {...field} data-testid="invite-email-input" />
+                              <Input 
+                                type="email"
+                                placeholder="john.doe@example.com" 
+                                {...field} 
+                                data-testid="invite-email-input"
+                                required
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(e.target.value)}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -833,7 +941,7 @@ export default function UserManagement() {
                               variant="outline"
                               size="sm"
                               onClick={() => generateInviteLink(
-                                userOrg.user.emails?.[0] || userOrg.user.email || `${userOrg.user.username}@temp.local`,
+                                userOrg.user.id,
                                 userOrg.user.firstName || '',
                                 userOrg.user.lastName || '',
                                 userOrg.role,

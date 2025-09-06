@@ -1389,7 +1389,7 @@ export function registerRoutes(app: Express) {
   // Unified invitation endpoint - handles all invitation types
   app.post("/api/invitations", requireAuth, async (req, res) => {
     try {
-      const { email, firstName, lastName, role, organizationId, teamIds } = req.body;
+      const { email, firstName, lastName, role, organizationId, teamIds, athleteId } = req.body;
 
       // Get current user info for invitedBy
       let invitedById = req.session.user?.id;
@@ -1402,7 +1402,70 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Unable to determine current user" });
       }
 
-      // Validate required fields
+      // Handle athlete invitation (send to all their emails)
+      if (athleteId && role === "athlete") {
+        const athlete = await storage.getPlayer(athleteId);
+        if (!athlete) {
+          return res.status(404).json({ message: "Athlete not found" });
+        }
+
+        // Check permissions using unified function
+        const permissionCheck = await checkInvitationPermissions(invitedById, 'general', role, organizationId);
+        if (!permissionCheck.allowed) {
+          return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
+        }
+
+        // Send invitations to all athlete's email addresses
+        const invitations = [];
+        const athleteEmails = athlete.emails || [];
+
+        if (athleteEmails.length === 0) {
+          return res.status(400).json({ message: "Athlete has no email addresses on file" });
+        }
+
+        for (const athleteEmail of athleteEmails) {
+          try {
+            const invitation = await storage.createInvitation({
+              email: athleteEmail,
+              firstName: athlete.firstName,
+              lastName: athlete.lastName,
+              organizationId,
+              teamIds: teamIds || [],
+              role,
+              invitedBy: invitedById,
+              athleteId: athlete.id,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
+            });
+            invitations.push(invitation);
+          } catch (error) {
+            console.error(`Failed to create invitation for ${athleteEmail}:`, error);
+          }
+        }
+
+        if (invitations.length === 0) {
+          return res.status(500).json({ message: "Failed to create any invitations" });
+        }
+
+        // Generate invite links for all emails
+        const inviteLinks = invitations.map(inv => 
+          `${req.protocol}://${req.get('host')}/accept-invitation?token=${inv.token}`
+        );
+
+        console.log(`Created ${invitations.length} invitations for athlete ${athlete.firstName} ${athlete.lastName}`);
+
+        return res.status(201).json({
+          invitations: invitations.map(inv => ({ id: inv.id, email: inv.email })),
+          inviteLinks,
+          athlete: { 
+            id: athlete.id, 
+            firstName: athlete.firstName, 
+            lastName: athlete.lastName 
+          },
+          message: `${invitations.length} invitations created for ${athlete.firstName} ${athlete.lastName}`
+        });
+      }
+
+      // Handle regular invitation (single email)
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
@@ -1432,18 +1495,18 @@ export function registerRoutes(app: Express) {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
       });
 
-          // Generate invite link for email sending (token should not be exposed to client)
-          const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
+      // Generate invite link for email sending (token should not be exposed to client)
+      const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
 
-          // Log invitation creation for admin reference
-          console.log(`Invitation created: ${invitation.id} for ${email}`);
+      // Log invitation creation for admin reference
+      console.log(`Invitation created: ${invitation.id} for ${email}`);
 
-          return res.status(201).json({
-            id: invitation.id,
-            email: invitation.email,
-            inviteLink, // Include link for email sending, but not raw token
-            message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
-          });
+      return res.status(201).json({
+        id: invitation.id,
+        email: invitation.email,
+        inviteLink, // Include link for email sending, but not raw token
+        message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
+      });
     } catch (error) {
       console.error("Error creating invitation:", error);
       res.status(500).json({ message: "Failed to create invitation" });
