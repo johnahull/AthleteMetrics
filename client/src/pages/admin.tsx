@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +78,13 @@ export default function AdminPage() {
     },
   });
 
+  // Update organizationId when organizations load
+  useEffect(() => {
+    if (organizations && organizations.length > 0 && !inviteForm.getValues("organizationId")) {
+      inviteForm.setValue("organizationId", organizations[0].id);
+    }
+  }, [organizations, inviteForm]);
+
   const createOrgMutation = useMutation({
     mutationFn: async (data: z.infer<typeof organizationSchema>) => {
       const res = await apiRequest("POST", "/api/organizations", data);
@@ -101,6 +108,7 @@ export default function AdminPage() {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: z.infer<typeof inviteSchema>) => {
+      console.log("Sending invitation data:", data);
       const res = await apiRequest("POST", "/api/invitations", data);
       return res.json();
     },
