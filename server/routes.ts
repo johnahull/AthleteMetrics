@@ -17,6 +17,7 @@ import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
 import multer from "multer";
 import csv from "csv-parser";
+import { ocrService } from "./ocr-service";
 
 // Session configuration
 declare module 'express-session' {
@@ -2329,7 +2330,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Configure multer for file uploads
+  // Configure multer for CSV file uploads
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -2340,6 +2341,22 @@ export function registerRoutes(app: Express) {
         cb(null, true);
       } else {
         cb(new Error('Only CSV files are allowed'));
+      }
+    }
+  });
+
+  // Configure multer for image uploads (OCR)
+  const imageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit for images
+    },
+    fileFilter: (req, file, cb) => {
+      const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
+      if (allowedMimes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files (JPG, PNG, WebP) and PDF files are allowed'));
       }
     }
   });
@@ -2640,6 +2657,163 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Import error:', error);
       res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Photo OCR upload route
+  app.post("/api/import/photo", requireAuth, imageUpload.single('file'), async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      const file = req.file;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot upload photos for import
+      if (currentUser?.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot import measurement data" });
+      }
+
+      if (!file) {
+        return res.status(400).json({ message: "No image file uploaded" });
+      }
+
+      console.log(`Processing OCR for file: ${file.originalname}, size: ${file.size} bytes, type: ${file.mimetype}`);
+
+      // Extract text and data using OCR
+      const ocrResult = await ocrService.extractTextFromImage(file.buffer);
+      
+      console.log(`OCR completed with confidence: ${ocrResult.confidence}%, extracted ${ocrResult.extractedData.length} measurements`);
+
+      // Convert extracted data to the same format as CSV import
+      const processedData: any[] = [];
+      const errors: any[] = [];
+      const warnings: string[] = [...ocrResult.warnings];
+
+      for (let i = 0; i < ocrResult.extractedData.length; i++) {
+        const extracted = ocrResult.extractedData[i];
+        const rowNum = i + 1;
+
+        try {
+          if (!extracted.firstName || !extracted.lastName || !extracted.metric || !extracted.value) {
+            errors.push({ 
+              row: rowNum, 
+              error: `Incomplete data: ${extracted.rawText}`,
+              data: extracted
+            });
+            continue;
+          }
+
+          // Validate and clean the measurement value
+          const numericValue = parseFloat(extracted.value);
+          if (isNaN(numericValue) || numericValue <= 0) {
+            errors.push({ 
+              row: rowNum, 
+              error: `Invalid measurement value: ${extracted.value}`,
+              data: extracted
+            });
+            continue;
+          }
+
+          // Find or suggest creating the athlete
+          const athletes = await storage.getAthletes({
+            search: `${extracted.firstName} ${extracted.lastName}`
+          });
+
+          let userId: string | null = null;
+          
+          if (athletes.length > 0) {
+            // Found existing athlete(s)
+            const exactMatch = athletes.find(a => 
+              a.firstName.toLowerCase() === extracted.firstName!.toLowerCase() &&
+              a.lastName.toLowerCase() === extracted.lastName!.toLowerCase()
+            );
+            
+            if (exactMatch) {
+              userId = exactMatch.id;
+            } else {
+              // Partial match - suggest the closest one
+              userId = athletes[0].id;
+              warnings.push(`Using closest match for ${extracted.firstName} ${extracted.lastName}: ${athletes[0].firstName} ${athletes[0].lastName}`);
+            }
+          } else {
+            errors.push({ 
+              row: rowNum, 
+              error: `Athlete not found: ${extracted.firstName} ${extracted.lastName}. Please create the athlete first or use CSV import with createMissing=true.`,
+              data: extracted
+            });
+            continue;
+          }
+
+          // Calculate age if not provided
+          let age = extracted.age ? parseInt(extracted.age) : undefined;
+          if (!age && extracted.date) {
+            const user = await storage.getUser(userId);
+            if (user?.birthDate) {
+              const measurementDate = new Date(extracted.date);
+              const birthDate = new Date(user.birthDate);
+              age = measurementDate.getFullYear() - birthDate.getFullYear();
+              if (measurementDate < new Date(measurementDate.getFullYear(), birthDate.getMonth(), birthDate.getDate())) {
+                age -= 1;
+              }
+            }
+          }
+
+          // Use current date if no date extracted
+          const measurementDate = extracted.date || new Date().toISOString().split('T')[0];
+
+          // Create measurement data
+          const measurementData = {
+            userId: userId,
+            date: measurementDate,
+            metric: extracted.metric as any,
+            value: numericValue,
+            age: age || 18, // Default age if we can't determine it
+            notes: `OCR Import - Raw: ${extracted.rawText} (Confidence: ${extracted.confidence}%)`
+          };
+
+          // Create the measurement
+          const measurement = await storage.createMeasurement(measurementData, currentUser.id);
+          
+          processedData.push({
+            measurement,
+            athlete: `${extracted.firstName} ${extracted.lastName}`,
+            rawText: extracted.rawText,
+            confidence: extracted.confidence
+          });
+
+        } catch (error) {
+          console.error(`Error processing measurement ${rowNum}:`, error);
+          errors.push({ 
+            row: rowNum, 
+            error: `Processing failed: ${error}`,
+            data: extracted
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `OCR processing completed`,
+        results: {
+          totalExtracted: ocrResult.extractedData.length,
+          successful: processedData.length,
+          failed: errors.length,
+          ocrConfidence: ocrResult.confidence,
+          extractedText: ocrResult.text,
+          processedData,
+          errors,
+          warnings
+        }
+      });
+
+    } catch (error) {
+      console.error("Photo OCR import error:", error);
+      res.status(500).json({ 
+        message: "Failed to process image", 
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
