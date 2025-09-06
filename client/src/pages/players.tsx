@@ -150,8 +150,7 @@ export default function Players() {
   const sendPlayerInvitationMutation = useMutation({
     mutationFn: async ({ playerId, organizationId }: { playerId: string; organizationId: string }) => {
       const response = await apiRequest("POST", "/api/invitations", {
-        type: "player",
-        playerId,
+        athleteId: playerId,
         role: "athlete", 
         organizationId,
         teamIds: []
@@ -161,15 +160,19 @@ export default function Players() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+      
+      const emailCount = data.invitations?.length || 1;
+      const athleteName = data.athlete ? `${data.athlete.firstName} ${data.athlete.lastName}` : 'athlete';
+      
       toast({
         title: "Success",
-        description: `${data.invitations?.length || 1} invitations sent to ${data.player?.firstName} ${data.player?.lastName}`,
+        description: `${emailCount} invitation${emailCount > 1 ? 's' : ''} sent to ${athleteName}`,
       });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to send player invitations",
+        description: error.message || "Failed to send player invitations",
         variant: "destructive",
       });
     },
