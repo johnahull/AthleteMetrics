@@ -1542,7 +1542,7 @@ export function registerRoutes(app: Express) {
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
 
-      // Enrich with player data
+      // Enrich with athlete data
       const enrichedInvitations = await Promise.all(
         athleteInvitations.map(async (invitation) => {
           if (invitation.playerId) {
@@ -2557,35 +2557,35 @@ export function registerRoutes(app: Express) {
                 (birthYear ? p.birthYear === parseInt(birthYear) : true)
               );
 
-              if (matchedPlayer) {
-                player = matchedPlayer;
+              if (matchedAthlete) {
+                athlete = matchedAthlete;
                 
-                // Check if player is already on the target team using reliable method
+                // Check if athlete is already on the target team using reliable method
                 let isAlreadyOnTeam = false;
                 if (teamId) {
                   try {
-                    const userTeams = await storage.getUserTeams(player.id);
+                    const userTeams = await storage.getUserTeams(athlete.id);
                     isAlreadyOnTeam = userTeams.some((ut: any) => String(ut.team.id) === String(teamId));
                   } catch (error) {
-                    console.warn(`Could not check team membership for user ${player.id}:`, error);
+                    console.warn(`Could not check team membership for user ${athlete.id}:`, error);
                     // Err on the side of caution - don't deactivate if we can't verify membership
                     isAlreadyOnTeam = true;
                   }
                 }
                 
-                // If player is not already on the team, mark them as inactive when importing
+                // If athlete is not already on the team, mark them as inactive when importing
                 // Only deactivate if we have a target team to check against
                 if (teamId && !isAlreadyOnTeam) {
-                  await storage.updateUser(player.id, { isActive: "false" });
-                  player.isActive = "false"; // Update local object for consistency
+                  await storage.updateUser(athlete.id, { isActive: "false" });
+                  athlete.isActive = "false"; // Update local object for consistency
                   
                   results.push({
                     action: 'matched_and_deactivated',
                     athlete: {
-                      id: player.id,
-                      name: `${player.firstName} ${player.lastName}`,
-                      username: player.username,
-                      note: 'Player deactivated as they were not already on the target team'
+                      id: athlete.id,
+                      name: `${athlete.firstName} ${athlete.lastName}`,
+                      username: athlete.username,
+                      note: 'Athlete deactivated as they were not already on the target team'
                     }
                   });
                   continue; // Skip the normal results.push below to avoid duplication
@@ -2600,13 +2600,13 @@ export function registerRoutes(app: Express) {
             results.push({
               action: createMissing === 'true' ? 'created' : 'matched',
               athlete: {
-                id: player.id,
-                name: `${player.firstName} ${player.lastName}`,
-                username: player.username
+                id: athlete.id,
+                name: `${athlete.firstName} ${athlete.lastName}`,
+                username: athlete.username
               }
             });
           } catch (error) {
-            console.error('Error processing player row:', error);
+            console.error('Error processing athlete row:', error);
             errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
@@ -2624,12 +2624,12 @@ export function registerRoutes(app: Express) {
               continue;
             }
 
-            // Find player by name and team
+            // Find athlete by name and team
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`
             });
 
-            let matchedPlayer;
+            let matchedAthlete;
             if (teamName) {
               // Clean up team name for comparison
               const cleanTeamName = teamName.toLowerCase().trim();
@@ -2642,7 +2642,7 @@ export function registerRoutes(app: Express) {
               );
 
               // If no exact match, try partial team name matching
-              if (!matchedPlayer) {
+              if (!matchedAthlete) {
                 matchedAthlete = (athletes as any[]).find((p: any) => 
                   p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
                   p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
@@ -2654,13 +2654,13 @@ export function registerRoutes(app: Express) {
               }
             } else {
               // Fallback to just name matching if no team specified
-              matchedPlayer = athletes.find(p => 
+              matchedAthlete = athletes.find(p => 
                 p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
                 p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
               );
             }
 
-            if (!matchedPlayer) {
+            if (!matchedAthlete) {
               // Add debugging information to error message
               const nameMatches = (athletes as any[]).filter((p: any) => 
                 p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 

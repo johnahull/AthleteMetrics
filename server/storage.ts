@@ -799,7 +799,7 @@ export class DatabaseStorage implements IStorage {
     return { user };
   }
 
-  // Athletes (users with athlete role) - consolidated from getPlayers
+  // Athletes (users with athlete role) - consolidated from legacy getPlayers
 
   async getAthletes(filters?: {
     teamId?: string;
