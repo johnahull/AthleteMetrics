@@ -110,7 +110,7 @@ function smartPlaceContactData(row: any): { emails: string[], phoneNumbers: stri
   return { emails, phoneNumbers, warnings };
 }
 
-export function validatePlayerCSV(row: any): { valid: boolean; errors: string[]; warnings?: string[] } {
+export function validateAthleteCSV(row: any): { valid: boolean; errors: string[]; warnings?: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
   

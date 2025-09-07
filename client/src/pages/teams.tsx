@@ -71,7 +71,7 @@ export default function Teams() {
     // Ensure teamStats is an array before calling find
     const statsArray = Array.isArray(teamStats) ? teamStats : [];
     return statsArray.find(stat => stat.teamId === teamId) || {
-      playerCount: 0,
+      athleteCount: 0,
       bestFly10: undefined,
       bestVertical: undefined,
       latestTest: undefined,
@@ -110,7 +110,7 @@ export default function Teams() {
 
       {/* Teams Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {teams?.map((team) => {
+        {teams?.map((team: any) => {
           const stats = getTeamStats(team.id);
           return (
             <Card key={team.id} className="bg-white hover:shadow-md transition-shadow">
@@ -145,8 +145,8 @@ export default function Teams() {
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Players</span>
-                    <span className="text-sm font-medium">{stats.playerCount}</span>
+                    <span className="text-sm text-gray-600">Athletes</span>
+                    <span className="text-sm font-medium">{stats.athleteCount}</span>
                   </div>
                   {stats.latestTest && (
                     <div className="flex items-center justify-between">

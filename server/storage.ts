@@ -399,7 +399,7 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationProfile(organizationId: string): Promise<Organization & {
     coaches: Array<{ user: User, roles: string[] }>,
-    players: (User & { teams: (Team & { organization: Organization })[] })[],
+    athletes: (User & { teams: (Team & { organization: Organization })[] })[],
     invitations: Invitation[]
   } | null> {
     const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
@@ -429,7 +429,7 @@ export class DatabaseStorage implements IStorage {
     );
 
     // Get athletes via organization filter
-    const players = await this.getAthletes({ organizationId });
+    const athletes = await this.getAthletes({ organizationId });
 
     // Get pending invitations for this organization
     let organizationInvitations: Invitation[] = [];
@@ -449,7 +449,7 @@ export class DatabaseStorage implements IStorage {
     return {
       ...organization,
       coaches,
-      players: players as any,
+      athletes: athletes as any,
       invitations: organizationInvitations
     };
   }
@@ -741,7 +741,7 @@ export class DatabaseStorage implements IStorage {
       teamIds: data.teamIds || [],
       role: data.role,
       invitedBy: data.invitedBy,
-      playerId: data.playerId, // Store player ID consistently
+      playerId: data.playerId, // Store athlete ID consistently
       token,
       expiresAt,
     }).returning();
@@ -935,78 +935,57 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getAthlete(id: string): Promise<User | undefined> {
-    return this.getUser(id);
-  }
+  // Legacy methods for backward compatibility - delegate to athlete methods
 
-  async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
-    return this.createUser({
-      ...athlete,
-      username: athlete.username || `athlete_${Date.now()}`,
-      emails: athlete.emails || [`temp_${Date.now()}@temp.local`],
-      firstName: athlete.firstName || "",
-      lastName: athlete.lastName || "",
-      password: "INVITATION_PENDING"
-    } as InsertUser);
-  }
-
-  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
-    return this.updateUser(id, athlete);
-  }
-
-  async deleteAthlete(id: string): Promise<void> {
-    return this.deleteUser(id);
-  }
-
-  async getPlayer(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
+  async getAthlete(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (!user) return undefined;
 
     const userTeams = await this.getUserTeams(user.id);
 
-    // Transform user to player format for backward compatibility
-    const player = {
+    // Transform user to athlete format for backward compatibility
+    const athlete = {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
       birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
       teams: userTeams.map(ut => ut.team)
     };
 
-    return player;
+    return athlete;
   }
 
-  async createPlayer(player: Partial<InsertUser>): Promise<User> {
+  async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
     // Generate a temporary username for the athlete
     const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // Use primary email or generate one
-    const emails = (player.emails && player.emails.length > 0) ? player.emails : [`${username}@temp.local`];
+    const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
 
     // Create new user directly without checking for existing emails
     const [newUser] = await db.insert(users).values({
       username,
       emails, // Ensure emails array is always provided
-      firstName: player.firstName!,
-      lastName: player.lastName!,
-      birthDate: player.birthDate || null,
-      graduationYear: player.graduationYear || null,
-      school: player.school || null,
-      sports: player.sports || null,
-      phoneNumbers: player.phoneNumbers || null,
-      height: player.height || null,
-      weight: player.weight || null,
-      fullName: `${player.firstName} ${player.lastName}`,
-      birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : null,
+      firstName: athlete.firstName!,
+      lastName: athlete.lastName!,
+      birthDate: athlete.birthDate || null,
+      graduationYear: athlete.graduationYear || null,
+      school: athlete.school || null,
+      sports: athlete.sports || null,
+      phoneNumbers: athlete.phoneNumbers || null,
+      height: athlete.height || null,
+      weight: athlete.weight || null,
+      fullName: `${athlete.firstName} ${athlete.lastName}`,
+      birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: player.isActive ?? "true" // Use provided value or default to active
+      isActive: athlete.isActive ?? "true" // Use provided value or default to active
     }).returning();
 
     // Determine organization for athlete association
-    let organizationId: string | undefined = (player as any).organizationId;
+    let organizationId: string | undefined = (athlete as any).organizationId;
 
     // Add to teams if specified and determine organization from first team if not already set
-    if (player.teamIds && player.teamIds.length > 0) {
-      for (const teamId of player.teamIds) {
+    if (athlete.teamIds && athlete.teamIds.length > 0) {
+      for (const teamId of athlete.teamIds) {
         try {
           await this.addUserToTeam(newUser.id, teamId);
           console.log('Athlete added to team successfully');
@@ -1031,8 +1010,8 @@ export class DatabaseStorage implements IStorage {
       console.warn(`Created athlete ${newUser.id} without organization association`);
     }
 
-    // Transform to player format for return
-    const playerResult = {
+    // Transform to athlete format for return
+    const athleteResult = {
       ...newUser,
       fullName: `${newUser.firstName} ${newUser.lastName}`,
       birthYear: newUser.birthDate ? new Date(newUser.birthDate).getFullYear() : 0,
@@ -1040,39 +1019,39 @@ export class DatabaseStorage implements IStorage {
       teams: []
     };
 
-    return playerResult;
+    return athleteResult;
   }
 
-  async updatePlayer(id: string, player: Partial<InsertUser>): Promise<User> {
-    const updateData: any = { ...player };
+  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
+    const updateData: any = { ...athlete };
 
     // Update full name if first or last name changed
     let finalFirstName: string | undefined;
     let finalLastName: string | undefined;
 
-    if (player.firstName || player.lastName) {
-      const existing = await this.getPlayer(id);
+    if (athlete.firstName || athlete.lastName) {
+      const existing = await this.getAthlete(id);
       if (existing) {
-        finalFirstName = player.firstName || existing.firstName;
-        finalLastName = player.lastName || existing.lastName;
+        finalFirstName = athlete.firstName || existing.firstName;
+        finalLastName = athlete.lastName || existing.lastName;
         updateData.fullName = `${finalFirstName} ${finalLastName}`;
       }
     }
 
     // Calculate birth year if birthDate changed
-    if (player.birthDate) {
-      updateData.birthYear = new Date(player.birthDate).getFullYear();
+    if (athlete.birthDate) {
+      updateData.birthYear = new Date(athlete.birthDate).getFullYear();
     }
 
     const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
 
     // Update teams if specified
-    if (player.teamIds !== undefined) {
-      await this.setPlayerTeams(id, player.teamIds);
+    if (athlete.teamIds !== undefined) {
+      await this.setAthleteTeams(id, athlete.teamIds);
     }
 
     // Update any existing user records if name changed
-    if ((player.firstName || player.lastName) && finalFirstName && finalLastName) {
+    if ((athlete.firstName || athlete.lastName) && finalFirstName && finalLastName) {
       // Update the user record directly by ID
       try {
         await db.update(users)
@@ -1091,7 +1070,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deletePlayer(id: string): Promise<void> {
+  async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx) => {
       // Delete all user-team relationships
@@ -1111,7 +1090,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<User | undefined> {
+  async getAthleteByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<User | undefined> {
     const [user] = await db.select().from(users)
       .where(and(
         eq(users.firstName, firstName),
@@ -1128,13 +1107,13 @@ export class DatabaseStorage implements IStorage {
     } as any;
   }
 
-  // Player Teams (now using userTeams)
-  async getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]> {
+  // Athlete Teams (now using userTeams)
+  async getAthleteTeams(athleteId: string): Promise<(Team & { organization: Organization })[]> {
     const result = await db.select()
       .from(userTeams)
       .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(userTeams.userId, playerId));
+      .where(eq(userTeams.userId, athleteId));
 
     return result.map(({ teams: team, organizations }) => ({
       ...team,
@@ -1142,22 +1121,22 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async addPlayerToTeam(playerId: string, teamId: string): Promise<UserTeam> {
-    return await this.addUserToTeam(playerId, teamId);
+  async addAthleteToTeam(athleteId: string, teamId: string): Promise<UserTeam> {
+    return await this.addUserToTeam(athleteId, teamId);
   }
 
-  async removePlayerFromTeam(playerId: string, teamId: string): Promise<void> {
-    return await this.removeUserFromTeam(playerId, teamId);
+  async removeAthleteFromTeam(athleteId: string, teamId: string): Promise<void> {
+    return await this.removeUserFromTeam(athleteId, teamId);
   }
 
-  async setPlayerTeams(playerId: string, teamIds: string[]): Promise<void> {
+  async setAthleteTeams(athleteId: string, teamIds: string[]): Promise<void> {
     // Remove existing teams
-    await db.delete(userTeams).where(eq(userTeams.userId, playerId));
+    await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
 
     // Add new teams
     if (teamIds.length > 0) {
       await db.insert(userTeams).values(
-        teamIds.map(teamId => ({ userId: playerId, teamId }))
+        teamIds.map(teamId => ({ userId: athleteId, teamId }))
       );
     }
   }
@@ -1165,7 +1144,7 @@ export class DatabaseStorage implements IStorage {
   // Measurements
   async getMeasurements(filters?: {
     userId?: string;
-    playerId?: string; // Legacy support
+    athleteId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -1230,8 +1209,8 @@ export class DatabaseStorage implements IStorage {
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 
     const conditions = [];
-    if (filters?.userId || filters?.playerId) {
-      const targetUserId = filters.userId || filters.playerId;
+    if (filters?.userId || filters?.athleteId) {
+      const targetUserId = filters.userId || filters.athleteId;
       if (targetUserId) {
         conditions.push(eq(measurements.userId, targetUserId));
       }
@@ -1392,10 +1371,10 @@ export class DatabaseStorage implements IStorage {
     bestVertical?: number;
     measurementCount: number;
   }> {
-    return this.getPlayerStats(userId);
+    return this.getAthleteStats(userId);
   }
 
-  async getPlayerStats(userId: string): Promise<{
+  async getAthleteStats(userId: string): Promise<{
     bestFly10?: number;
     bestVertical?: number;
     measurementCount: number;
@@ -1686,6 +1665,7 @@ export class DatabaseStorage implements IStorage {
       teamsManaged: 0
     };
   }
+
 }
 
 export const storage = new DatabaseStorage();

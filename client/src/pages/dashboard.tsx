@@ -87,7 +87,7 @@ export default function Dashboard() {
   }
 
   const stats = (dashboardStats as any) || {
-    totalPlayers: 0,
+    totalAthletes: 0,
     activeAthletes: 0,
     totalTeams: 0,
     bestFly10Today: null,
@@ -164,7 +164,7 @@ export default function Dashboard() {
                   {stats.bestFly10Today ? formatFly10TimeWithSpeed(parseFloat(stats.bestFly10Today.value)) : "N/A"}
                 </p>
                 <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-athlete">
-                  {stats.bestFly10Today?.playerName || "No data today"}
+                  {stats.bestFly10Today?.athleteName || "No data today"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
@@ -182,8 +182,8 @@ export default function Dashboard() {
                 <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-vertical">
                   {stats.bestVerticalToday ? `${stats.bestVerticalToday.value}in` : "N/A"}
                 </p>
-                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-vertical-player">
-                  {stats.bestVerticalToday?.playerName || "No data today"}
+                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-vertical-athlete">
+                  {stats.bestVerticalToday?.athleteName || "No data today"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -236,7 +236,7 @@ export default function Dashboard() {
             <table className="w-full">
               <thead>
                 <tr className="text-left text-sm font-medium text-gray-500 border-b border-gray-200">
-                  <th className="pb-3">Player</th>
+                  <th className="pb-3">Athlete</th>
                   <th className="pb-3">Team</th>
                   <th className="pb-3">Metric</th>
                   <th className="pb-3">Value</th>

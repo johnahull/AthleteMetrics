@@ -20,47 +20,47 @@ export default function ScatterChart({ data }: ScatterChartProps) {
   const processScatterData = (measurements: any[]) => {
     if (!measurements || measurements.length === 0) return { datasets: [] };
 
-    // Group measurements by player to get their best performances
-    const playerData = new Map();
+    // Group measurements by athlete to get their best performances
+    const athleteData = new Map();
     
     measurements.forEach(measurement => {
-      const playerId = measurement.user.id;
-      const playerName = measurement.user.fullName;
+      const athleteId = measurement.user.id;
+      const athleteName = measurement.user.fullName;
       const teamName = measurement.user.teams && measurement.user.teams.length > 0 
         ? measurement.user.teams.map((team: any) => team.name).join(", ")
-        : "Independent Player";
+        : "Independent Athlete";
       const value = parseFloat(measurement.value);
       
-      if (!playerData.has(playerId)) {
-        playerData.set(playerId, {
-          name: playerName,
+      if (!athleteData.has(athleteId)) {
+        athleteData.set(athleteId, {
+          name: athleteName,
           team: teamName,
           fly10: null,
           vertical: null,
         });
       }
       
-      const player = playerData.get(playerId);
+      const athlete = athleteData.get(athleteId);
       
       if (measurement.metric === "FLY10_TIME") {
-        if (!player.fly10 || value < player.fly10) {
-          player.fly10 = value;
+        if (!athlete.fly10 || value < athlete.fly10) {
+          athlete.fly10 = value;
         }
       } else if (measurement.metric === "VERTICAL_JUMP") {
-        if (!player.vertical || value > player.vertical) {
-          player.vertical = value;
+        if (!athlete.vertical || value > athlete.vertical) {
+          athlete.vertical = value;
         }
       }
     });
 
-    // Create scatter points for players with both metrics
-    const scatterPoints = Array.from(playerData.values())
-      .filter(player => player.fly10 !== null && player.vertical !== null)
-      .map(player => ({
-        x: player.fly10,
-        y: player.vertical,
-        playerName: player.name,
-        teamName: player.team,
+    // Create scatter points for athletes with both metrics
+    const scatterPoints = Array.from(athleteData.values())
+      .filter(athlete => athlete.fly10 !== null && athlete.vertical !== null)
+      .map(athlete => ({
+        x: athlete.fly10,
+        y: athlete.vertical,
+        athleteName: athlete.name,
+        teamName: athlete.team,
       }));
 
     return {
@@ -90,7 +90,7 @@ export default function ScatterChart({ data }: ScatterChartProps) {
         callbacks: {
           label: function(context: any) {
             const point = context.raw;
-            return `${point.playerName} (${point.teamName}): ${point.x}s, ${point.y}in`;
+            return `${point.athleteName} (${point.teamName}): ${point.x}s, ${point.y}in`;
           },
         },
       },

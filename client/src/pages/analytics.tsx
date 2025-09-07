@@ -69,7 +69,7 @@ export default function Analytics() {
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
-  });
+  }) as { data: any[] };
 
   const { data: measurements } = useQuery({
     queryKey: ["/api/measurements", filters],
@@ -301,7 +301,7 @@ export default function Analytics() {
                 value={filters.search}
                 onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 className="pl-10"
-                data-testid="input-search-players"
+                data-testid="input-search-athletes"
               />
             </div>
           </div>
@@ -608,7 +608,7 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* All Players Section */}
+      {/* All Athletes Section */}
       <Card className="bg-white mb-6">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-6">

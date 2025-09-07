@@ -11,20 +11,20 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 
-interface PlayerMeasurementFormProps {
-  playerId: string;
-  playerName: string;
+interface AthleteMeasurementFormProps {
+  athleteId: string;
+  athleteName: string;
   onSuccess?: () => void;
 }
 
-export default function PlayerMeasurementForm({ playerId, playerName, onSuccess }: PlayerMeasurementFormProps) {
+export default function AthleteMeasurementForm({ athleteId, athleteName, onSuccess }: AthleteMeasurementFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<InsertMeasurement>({
     resolver: zodResolver(insertMeasurementSchema),
     defaultValues: {
-      userId: playerId,
+      userId: athleteId,
       date: new Date().toISOString().split('T')[0],
       metric: "FLY10_TIME",
       value: 0,
@@ -41,13 +41,13 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/player", playerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/athlete", athleteId] });
       toast({
         title: "Success",
         description: "Measurement added successfully",
       });
       form.reset({
-        userId: playerId,
+        userId: athleteId,
         date: new Date().toISOString().split('T')[0],
         metric: "FLY10_TIME",
         value: 0,
@@ -71,14 +71,14 @@ export default function PlayerMeasurementForm({ playerId, playerName, onSuccess 
   const onSubmit = (data: InsertMeasurement) => {
     createMeasurementMutation.mutate({
       ...data,
-      userId: playerId,
+      userId: athleteId,
     });
   };
 
   return (
     <div className="space-y-6">
       <div className="text-sm text-gray-600 mb-4">
-        Adding measurement for: <span className="font-medium">{playerName}</span>
+        Adding measurement for: <span className="font-medium">{athleteName}</span>
       </div>
 
       <Form {...form}>

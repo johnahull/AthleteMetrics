@@ -13,7 +13,7 @@ export const RESOURCES = {
   USER: 'user',
   ORGANIZATION: 'organization',
   TEAM: 'team',
-  PLAYER: 'player',
+  ATHLETE: 'athlete',
   MEASUREMENT: 'measurement',
   SITE: 'site'
 } as const;
@@ -100,7 +100,7 @@ export class PermissionChecker {
         return hasOrgAdmin || hasCoach;
 
       case RESOURCES.TEAM:
-      case RESOURCES.PLAYER:
+      case RESOURCES.ATHLETE:
         if (action === ACTIONS.MANAGE) {
           return hasOrgAdmin || hasCoach;
         }

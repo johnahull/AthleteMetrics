@@ -56,7 +56,7 @@ type OrganizationProfile = {
     };
     roles: string[];
   }>;
-  players: Array<{
+  athletes: Array<{
     id: string;
     firstName: string;
     lastName: string;
@@ -188,10 +188,10 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   // Show for org admins, coaches, and site admins
   // Get user's organizations to check their role
-  const { data: userOrganizations } = useQuery({
+  const { data: userOrganizations = [] } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
-  });
+  }) as { data: any[] };
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some(org => org.organizationId === organizationId && org.role === "coach");
@@ -444,14 +444,14 @@ export default function OrganizationProfile() {
 
 
   // Get user's organizations to check if they're an org admin
-  const { data: userOrganizations } = useQuery({
+  const { data: userOrganizations = [] } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
     staleTime: 0, // Always fetch fresh data
     gcTime: 0, // Don't cache at all
     refetchOnMount: true,
     refetchOnWindowFocus: true, // Enable refetch on focus
-  });
+  }) as { data: any[] };
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
@@ -514,7 +514,7 @@ export default function OrganizationProfile() {
         name: organization.name,
         description: organization.description,
         coaches: organization.coaches.length,
-        players: organization.players.length
+        athletes: organization.athletes.length
       });
 
       if (userOrganizations) {
