@@ -27,7 +27,6 @@ export default function Profile() {
     defaultValues: {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
-      email: user?.email || "",
     },
   });
 
@@ -55,7 +54,6 @@ export default function Profile() {
       profileForm.reset({
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
-        email: updatedUser.email,
       });
     },
     onError: () => {
@@ -197,24 +195,18 @@ export default function Profile() {
                   </p>
                 </div>
 
-                <FormField
-                  control={profileForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input 
-                          {...field}
-                          type="email"
-                          disabled={updateProfileMutation.isPending}
-                          data-testid="input-profile-email"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div>
+                  <FormLabel>Email</FormLabel>
+                  <Input
+                    value={user?.email || ""}
+                    disabled
+                    className="bg-gray-50"
+                    data-testid="input-profile-email"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Primary email cannot be changed
+                  </p>
+                </div>
 
                 <Button
                   type="submit"

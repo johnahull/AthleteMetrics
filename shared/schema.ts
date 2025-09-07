@@ -105,6 +105,7 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
+  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete/player
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
   invitedBy: varchar("invited_by").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
@@ -177,6 +178,10 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
   invitedBy: one(users, {
     fields: [invitations.invitedBy],
+    references: [users.id],
+  }),
+  player: one(users, {
+    fields: [invitations.playerId],
     references: [users.id],
   }),
 }));

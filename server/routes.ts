@@ -1440,7 +1440,7 @@ export function registerRoutes(app: Express) {
               teamIds: teamIds || [],
               role,
               invitedBy: invitedById,
-              athleteId: athlete.id,
+              playerId: athlete.id,
               expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
             });
             invitations.push(invitation);

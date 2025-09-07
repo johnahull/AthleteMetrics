@@ -45,7 +45,17 @@ export interface IStorage {
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
 
   // Invitations
-  createInvitation(invitation: InsertInvitation): Promise<Invitation>;
+  createInvitation(data: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    organizationId: string;
+    teamIds?: string[];
+    role: string;
+    invitedBy: string;
+    playerId?: string;
+    expiresAt: Date;
+  }): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
   updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
@@ -203,7 +213,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
-  async getInvitations(): Promise<any[]> {
+  async getInvitations(): Promise<Invitation[]> {
     return await db.select().from(invitations).orderBy(asc(invitations.createdAt));
   }
 
@@ -512,6 +522,7 @@ export class DatabaseStorage implements IStorage {
         lastName: invitations.lastName,
         organizationId: invitations.organizationId,
         teamIds: invitations.teamIds,
+        playerId: invitations.playerId,
         role: invitations.role,
         token: invitations.token,
         invitedBy: invitations.invitedBy,
@@ -715,7 +726,7 @@ export class DatabaseStorage implements IStorage {
     teamIds?: string[];
     role: string;
     invitedBy: string;
-    athleteId?: string;
+    playerId?: string;
     expiresAt: Date;
   }): Promise<Invitation> {
     const token = crypto.randomBytes(32).toString('hex');
@@ -730,7 +741,7 @@ export class DatabaseStorage implements IStorage {
       teamIds: data.teamIds || [],
       role: data.role,
       invitedBy: data.invitedBy,
-      playerId: data.athleteId, // Store athlete ID in playerId field
+      playerId: data.playerId, // Store player ID consistently
       token,
       expiresAt,
     }).returning();
