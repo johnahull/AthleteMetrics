@@ -38,6 +38,16 @@ export const users = pgTable("users", {
   sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
   height: integer("height"), // inches
   weight: integer("weight"), // pounds
+  // Enhanced Authentication fields
+  mfaEnabled: text("mfa_enabled").default("false").notNull(),
+  mfaSecret: text("mfa_secret"), // TOTP secret
+  backupCodes: text("backup_codes").array(), // Recovery codes
+  lastLoginAt: timestamp("last_login_at"),
+  loginAttempts: integer("login_attempts").default(0),
+  lockedUntil: timestamp("locked_until"),
+  isEmailVerified: text("is_email_verified").default("false").notNull(),
+  requiresPasswordChange: text("requires_password_change").default("false").notNull(),
+  passwordChangedAt: timestamp("password_changed_at"),
   // System fields
   isSiteAdmin: text("is_site_admin").default("false").notNull(),
   isActive: text("is_active").default("true").notNull(),
