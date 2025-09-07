@@ -23,7 +23,7 @@ export class PasswordResetService {
         return { success: false, message: rateLimitCheck.reason! };
       }
 
-      const user = await storage.findUserByEmail(email);
+      const user = await storage.getUserByEmail(email);
       
       // Always return success to prevent email enumeration
       if (!user) {
@@ -288,7 +288,7 @@ export class PasswordResetService {
   ): Promise<{ success: boolean; message: string }> {
     try {
       // Get user
-      const user = await storage.findUserById(userId);
+      const user = await storage.getUser(userId);
       if (!user) {
         return { success: false, message: 'User not found' };
       }

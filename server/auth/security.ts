@@ -13,7 +13,7 @@ export class AuthSecurity {
    * Check if account is locked due to failed login attempts
    */
   static async checkAccountLock(email: string): Promise<{ isLocked: boolean; lockUntil?: Date }> {
-    const user = await storage.findUserByEmail(email);
+    const user = await storage.getUserByEmail(email);
     if (!user) return { isLocked: false };
 
     if (user.lockedUntil && new Date() < new Date(user.lockedUntil)) {
@@ -36,7 +36,7 @@ export class AuthSecurity {
     ipAddress: string, 
     userAgent?: string
   ): Promise<void> {
-    const user = await storage.findUserByEmail(email);
+    const user = await storage.getUserByEmail(email);
     
     // Log security event even if user doesn't exist (to track brute force attempts)
     await this.logSecurityEvent({
@@ -211,7 +211,7 @@ export class AuthSecurity {
    * Verify backup code
    */
   static async verifyBackupCode(userId: string, code: string): Promise<boolean> {
-    const user = await storage.findUserById(userId);
+    const user = await storage.getUser(userId);
     if (!user || !user.backupCodes) return false;
 
     const codeIndex = user.backupCodes.indexOf(code.toUpperCase());

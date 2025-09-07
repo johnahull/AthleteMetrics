@@ -10,7 +10,7 @@ export const ROLE_HIERARCHY = {
 
 export type Role = keyof typeof ROLE_HIERARCHY;
 
-export const PERMISSIONS = {
+export const PERMISSIONS: Record<string, Role[]> = {
   // Organization management
   CREATE_ORGANIZATION: ['site_admin'],
   MANAGE_ORGANIZATION: ['site_admin', 'org_admin'],
@@ -57,7 +57,7 @@ export type Permission = keyof typeof PERMISSIONS;
 export const roleSchema = z.enum(['site_admin', 'org_admin', 'coach', 'athlete', 'guest']);
 
 export function hasPermission(userRole: Role, permission: Permission): boolean {
-  return PERMISSIONS[permission].includes(userRole as Role);
+  return PERMISSIONS[permission].includes(userRole);
 }
 
 export function getRoleLevel(role: Role): number {

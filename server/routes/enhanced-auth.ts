@@ -35,7 +35,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Find user by email
-    const user = await storage.findUserByEmail(email);
+    const user = await storage.getUserByEmail(email);
     if (!user) {
       await AuthSecurity.recordFailedLogin(email, ipAddress, userAgent);
       return res.status(401).json({
@@ -55,7 +55,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Check if email verification is required
-    if (user.emailVerified === 'false') {
+    if (user.isEmailVerified === 'false') {
       return res.status(403).json({
         success: false,
         requiresEmailVerification: true,
@@ -95,17 +95,27 @@ router.post('/login', async (req: Request, res: Response) => {
     req.session.sessionToken = sessionToken;
     req.session.user = {
       id: user.id,
-      email: user.email,
+      username: user.username,
+      email: user.emails?.[0] || '',
       firstName: user.firstName,
       lastName: user.lastName,
-      role: user.role || 'guest',
-      emailVerified: user.emailVerified === 'true'
+      role: user.isSiteAdmin === 'true' ? 'site_admin' : 'guest',
+      emailVerified: user.isEmailVerified === 'true'
     };
 
     // Get user's role for redirect logic
-    const userRole = user.role || 'guest';
-    let redirectUrl = '/dashboard';
+    let userRole = 'guest';
+    if (user.isSiteAdmin === 'true') {
+      userRole = 'site_admin';
+    } else {
+      // Try to get organization role
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      if (userOrgs.length > 0) {
+        userRole = userOrgs[0].role;
+      }
+    }
     
+    let redirectUrl = '/dashboard';
     if (userRole === 'site_admin') redirectUrl = '/admin';
     else if (userRole === 'org_admin') redirectUrl = '/organization';
     else if (userRole === 'coach') redirectUrl = '/coaching';
@@ -371,11 +381,18 @@ router.post('/assign-role', RoleManager.requirePermission('MANAGE_USERS'), async
       });
     }
 
+    if (!assignerId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
     const result = await RoleManager.assignRole(
       assignerId,
       targetUserId,
       newRole,
-      organizationId || (req as any).organizationId,
+      organizationId || (req as any).organizationId || '',
       ipAddress
     );
     

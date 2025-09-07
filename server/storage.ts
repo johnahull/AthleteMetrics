@@ -112,7 +112,6 @@ export interface IStorage {
   }>;
 
   // Enhanced Authentication Methods
-  findUserByEmail(email: string): Promise<User | null>;
   findUserById(userId: string): Promise<User | null>;
   resetLoginAttempts(userId: string): Promise<void>;
   incrementLoginAttempts(userId: string, attempts: number): Promise<void>;
@@ -281,23 +280,15 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUserRole(userId: string, organizationId?: string): Promise<string | null> {
-    if (organizationId) {
-      // Get role from specific organization
-      const [result] = await db.select({ role: userOrganizations.role })
-        .from(userOrganizations)
-        .where(and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
-        ));
-      return result?.role || null;
-    } else {
-      // Check if user is site admin
-      const [user] = await db.select({ isSiteAdmin: users.isSiteAdmin })
-        .from(users)
-        .where(eq(users.id, userId));
-      return user?.isSiteAdmin === "true" ? "site_admin" : null;
-    }
+  async getUserRole(userId: string, organizationId: string): Promise<string | null> {
+    // Get role from specific organization
+    const [result] = await db.select({ role: userOrganizations.role })
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+    return result?.role || null;
   }
 
   async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
@@ -1512,11 +1503,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Enhanced Authentication Methods Implementation
-  async findUserByEmail(email: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(sql`${users.emails} @> ${[email]}`);
-    return user || null;
-  }
-
   async findUserById(userId: string): Promise<User | null> {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     return user || null;
@@ -1536,7 +1522,7 @@ export class DatabaseStorage implements IStorage {
 
   async lockAccount(userId: string, lockUntil: Date): Promise<void> {
     await db.update(users)
-      .set({ lockedUntil: lockUntil.toISOString() })
+      .set({ lockedUntil: lockUntil })
       .where(eq(users.id, userId));
   }
 
@@ -1642,7 +1628,7 @@ export class DatabaseStorage implements IStorage {
 
   async markEmailAsVerified(userId: string, email: string): Promise<void> {
     await db.update(users)
-      .set({ emailVerified: 'true' })
+      .set({ isEmailVerified: 'true' })
       .where(eq(users.id, userId));
   }
 
@@ -1651,15 +1637,6 @@ export class DatabaseStorage implements IStorage {
     console.log('Marking email verification token as used:', token);
   }
 
-  async getUserRole(userId: string, organizationId: string): Promise<string | null> {
-    const [userOrg] = await db.select()
-      .from(userOrganizations)
-      .where(and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, organizationId)
-      ));
-    return userOrg?.role || null;
-  }
 
   async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
     try {
