@@ -17,7 +17,8 @@ import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
 import multer from "multer";
 import csv from "csv-parser";
-import { ocrService } from "./ocr-service";
+import { ocrService } from "./ocr/ocr-service";
+import { OCRProcessingResult } from '@shared/ocr-types';
 
 // Session configuration
 declare module 'express-session' {
