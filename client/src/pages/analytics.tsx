@@ -54,7 +54,7 @@ export default function Analytics() {
     dateRange: "last30",
     sport: "",
     search: "",
-    gender: "Female",  // Default to Female for gender separation
+    gender: "all",  // Default to show all genders, user can filter as needed
   });
   
   // Edit form
@@ -435,7 +435,7 @@ export default function Analytics() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
               <Select value={filters.gender || "all"} onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Filter results by gender">
                   <SelectValue placeholder="All Genders" />
                 </SelectTrigger>
                 <SelectContent>

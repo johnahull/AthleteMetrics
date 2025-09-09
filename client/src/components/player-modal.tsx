@@ -309,7 +309,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                       disabled={isPending}
                     >
                       <FormControl>
-                        <SelectTrigger data-testid="select-player-gender">
+                        <SelectTrigger data-testid="select-player-gender" aria-label="Select athlete gender">
                           <SelectValue placeholder="Select gender..." />
                         </SelectTrigger>
                       </FormControl>

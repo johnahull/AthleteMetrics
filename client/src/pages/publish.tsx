@@ -18,7 +18,7 @@ export default function Publish() {
     sport: "",
     dateFrom: "",
     dateTo: "",
-    gender: "Female",  // Default to Female for gender separation
+    gender: "all",  // Default to show all genders, user can filter as needed
   });
 
   const { data: teams } = useQuery({
@@ -95,7 +95,7 @@ export default function Publish() {
       sport: "",
       dateFrom: "",
       dateTo: "",
-      gender: "Female",  // Keep default gender separation
+      gender: "all",  // Keep default to show all genders
     });
   };
 
@@ -324,7 +324,7 @@ export default function Publish() {
                 value={filters.gender || "all"} 
                 onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}
               >
-                <SelectTrigger data-testid="select-gender">
+                <SelectTrigger data-testid="select-gender" aria-label="Filter results by gender">
                   <SelectValue placeholder="All Genders" />
                 </SelectTrigger>
                 <SelectContent>

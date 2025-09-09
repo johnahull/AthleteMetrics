@@ -471,7 +471,7 @@ export default function MeasurementForm() {
                             disabled={createPlayerMutation.isPending}
                           >
                             <FormControl>
-                              <SelectTrigger data-testid="select-quick-add-gender">
+                              <SelectTrigger data-testid="select-quick-add-gender" aria-label="Select athlete gender">
                                 <SelectValue placeholder="Select gender..." />
                               </SelectTrigger>
                             </FormControl>

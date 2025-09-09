@@ -2482,11 +2482,26 @@ export function registerRoutes(app: Express) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
           try {
-            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName } = row;
+            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName, gender } = row;
 
             if (!firstName || !lastName) {
               errors.push({ row: rowNum, error: "First name and last name are required" });
               continue;
+            }
+
+            // Validate gender field if provided
+            let validatedGender: string | undefined;
+            if (gender && gender.trim()) {
+              const trimmedGender = gender.trim();
+              if (['Male', 'Female', 'Not Specified'].includes(trimmedGender)) {
+                validatedGender = trimmedGender;
+              } else {
+                warnings.push({
+                  row: `Row ${rowNum} (${firstName} ${lastName})`,
+                  warning: `Invalid gender value '${trimmedGender}'. Using 'Not Specified' instead. Valid values: Male, Female, Not Specified`
+                });
+                validatedGender = 'Not Specified';
+              }
             }
 
             // Smart contact data detection and placement
@@ -2527,6 +2542,7 @@ export function registerRoutes(app: Express) {
               height: height && !isNaN(parseInt(height)) ? parseInt(height) : undefined,
               weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
               school: school || undefined,
+              gender: validatedGender,
               password: 'INVITATION_PENDING', // Inactive until invited
               isActive: "false",
               role: "athlete"
@@ -2618,7 +2634,7 @@ export function registerRoutes(app: Express) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
           try {
-            const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
+            const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes, gender } = row;
 
             // Validate required fields
             if (!firstName || !lastName || !teamName || !date || !metric || !value) {
@@ -2627,6 +2643,7 @@ export function registerRoutes(app: Express) {
             }
 
             // Find player by name and team
+            // Note: gender field can be included in CSV for additional matching context
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`
             });

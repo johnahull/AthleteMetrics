@@ -38,7 +38,7 @@ export const users = pgTable("users", {
   sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
   height: integer("height"), // inches
   weight: integer("weight"), // pounds
-  gender: text("gender"), // "Male", "Female", "Not Specified", or null
+  gender: text("gender").$type<"Male" | "Female" | "Not Specified">(), // CHECK constraint in migration
   // Enhanced Authentication fields
   mfaEnabled: text("mfa_enabled").default("false").notNull(),
   mfaSecret: text("mfa_secret"), // TOTP secret
