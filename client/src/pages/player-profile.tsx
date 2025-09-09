@@ -244,6 +244,12 @@ export default function PlayerProfile() {
               <User className="h-4 w-4 mr-1" />
               Birth Year: {player?.birthYear}
             </span>
+            {player?.gender && (
+              <span className="flex items-center">
+                <User className="h-4 w-4 mr-1" />
+                Gender: {player.gender}
+              </span>
+            )}
             <span className="flex items-center">
               <Trophy className="h-4 w-4 mr-1" />
               {player?.teams && player.teams.length > 0 

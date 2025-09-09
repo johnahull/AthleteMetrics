@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertMeasurementSchema, insertPlayerSchema, type InsertMeasurement, type InsertPlayer } from "@shared/schema";
+import { insertMeasurementSchema, insertPlayerSchema, Gender, type InsertMeasurement, type InsertPlayer } from "@shared/schema";
 import { Search, Save } from "lucide-react";
 
 export default function MeasurementForm() {
@@ -49,6 +49,7 @@ export default function MeasurementForm() {
       birthDate: "",
       teamIds: [],
       school: "",
+      gender: "",
     },
   });
 
@@ -372,7 +373,7 @@ export default function MeasurementForm() {
             <Card className="bg-gray-50">
               <CardContent className="p-4">
                 <Form {...quickAddForm}>
-                  <form onSubmit={quickAddForm.handleSubmit(onQuickAddSubmit)} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <form onSubmit={quickAddForm.handleSubmit(onQuickAddSubmit)} className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <FormField
                       control={quickAddForm.control}
                       name="firstName"
@@ -458,7 +459,34 @@ export default function MeasurementForm() {
                       )}
                     />
                     
-                    <div className="md:col-span-4 flex justify-end">
+                    <FormField
+                      control={quickAddForm.control}
+                      name="gender"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gender</FormLabel>
+                          <Select 
+                            value={field.value || ""} 
+                            onValueChange={field.onChange}
+                            disabled={createPlayerMutation.isPending}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-quick-add-gender">
+                                <SelectValue placeholder="Select gender..." />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                              <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                              <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="md:col-span-5 flex justify-end">
                       <Button 
                         type="submit"
                         disabled={createPlayerMutation.isPending}

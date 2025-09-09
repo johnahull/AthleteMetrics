@@ -38,6 +38,7 @@ export const users = pgTable("users", {
   sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
   height: integer("height"), // inches
   weight: integer("weight"), // pounds
+  gender: text("gender"), // "Male", "Female", "Not Specified", or null
   // Enhanced Authentication fields
   mfaEnabled: text("mfa_enabled").default("false").notNull(),
   mfaSecret: text("mfa_secret"), // TOTP secret
@@ -243,6 +244,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
   sports: z.array(z.string().min(1, "Sport cannot be empty")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
+  gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
 });
 
 export const insertAthleteProfileSchema = createInsertSchema(athleteProfiles).omit({
@@ -366,6 +368,12 @@ export const TeamLevel = {
   COLLEGE: "College",
 } as const;
 
+export const Gender = {
+  MALE: "Male",
+  FEMALE: "Female",
+  NOT_SPECIFIED: "Not Specified",
+} as const;
+
 // Organization-specific roles only
 export const UserRole = {
   ORG_ADMIN: "org_admin",
@@ -395,6 +403,7 @@ export const insertAthleteSchema = z.object({
   sports: z.array(z.string()).optional(),
   height: z.coerce.number().optional(),
   weight: z.coerce.number().optional(),
+  gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
   teamIds: z.array(z.string()).optional(),
   organizationId: z.string().optional()
 });

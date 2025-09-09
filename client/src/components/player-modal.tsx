@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
+import { insertPlayerSchema, Gender, type InsertPlayer, type Player, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
 
 interface PlayerModalProps {
@@ -38,6 +38,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       school: "",
       sports: [],
       phoneNumbers: [],
+      gender: "",
     },
   });
 
@@ -69,6 +70,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         school: player.school || "",
         sports: player.sports || [],
         phoneNumbers: player.phoneNumbers || [],
+        gender: player.gender || "",
       });
     } else {
       form.reset({
@@ -81,6 +83,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         school: "",
         sports: [],
         phoneNumbers: [],
+        gender: "",
       });
     }
   }, [player, form]);
@@ -108,6 +111,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
         school: "",
         sports: [],
         phoneNumbers: [],
+        gender: "",
       });
     },
     onError: () => {
@@ -245,7 +249,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </div>
 
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="birthDate"
@@ -288,6 +292,33 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         value={field.value || ""}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select 
+                      value={field.value || ""} 
+                      onValueChange={field.onChange}
+                      disabled={isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-player-gender">
+                          <SelectValue placeholder="Select gender..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                        <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                        <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

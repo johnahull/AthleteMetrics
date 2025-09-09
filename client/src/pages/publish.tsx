@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Download, RotateCcw } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { Gender } from "@shared/schema";
 import jsPDF from "jspdf";
 
 export default function Publish() {
@@ -17,6 +18,7 @@ export default function Publish() {
     sport: "",
     dateFrom: "",
     dateTo: "",
+    gender: "Female",  // Default to Female for gender separation
   });
 
   const { data: teams } = useQuery({
@@ -37,6 +39,7 @@ export default function Publish() {
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
+      if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
       
       const response = await fetch(`/api/measurements?${params}`);
       return response.json();
@@ -92,6 +95,7 @@ export default function Publish() {
       sport: "",
       dateFrom: "",
       dateTo: "",
+      gender: "Female",  // Keep default gender separation
     });
   };
 
@@ -196,7 +200,7 @@ export default function Publish() {
       <Card className="bg-white">
         <CardContent className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
             {/* Metric - Required */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -309,6 +313,25 @@ export default function Publish() {
                   <SelectItem value="Baseball">Baseball</SelectItem>
                   <SelectItem value="Track">Track</SelectItem>
                   <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Gender */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+              <Select 
+                value={filters.gender || "all"} 
+                onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}
+              >
+                <SelectTrigger data-testid="select-gender">
+                  <SelectValue placeholder="All Genders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Genders</SelectItem>
+                  <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                  <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                  <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

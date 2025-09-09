@@ -807,6 +807,7 @@ export class DatabaseStorage implements IStorage {
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
+    gender?: string;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]> {
     // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
@@ -831,6 +832,10 @@ export class DatabaseStorage implements IStorage {
         conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
       } else if (filters?.birthYearTo) {
         conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      }
+
+      if (filters?.gender && filters.gender !== "all") {
+        conditions.push(eq(users.gender, filters.gender));
       }
 
       const result = await db
@@ -1177,6 +1182,7 @@ export class DatabaseStorage implements IStorage {
     ageTo?: number;
     search?: string;
     sport?: string;
+    gender?: string;
     includeUnverified?: boolean;
   }): Promise<any[]> {
     // Optimized query with all joins to eliminate N+1
@@ -1299,6 +1305,13 @@ export class DatabaseStorage implements IStorage {
     if (filters?.sport && filters.sport !== "all") {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
         measurement.user.sports?.includes(filters.sport!)
+      );
+    }
+
+    // Filter by gender if specified
+    if (filters?.gender && filters.gender !== "all") {
+      filteredMeasurements = filteredMeasurements.filter(measurement =>
+        measurement.user.gender === filters.gender
       );
     }
 
