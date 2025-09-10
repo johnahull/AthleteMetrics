@@ -544,6 +544,7 @@ export default function Athletes() {
                     <th className="px-6 py-3">Athlete</th>
                     <th className="px-6 py-3">Team</th>
                     <th className="px-6 py-3">Birth Year</th>
+                    <th className="px-6 py-3">Gender</th>
                     <th className="px-6 py-3">School</th>
                     <th className="px-6 py-3">Sport</th>
                     <th className="px-6 py-3">Status</th>
@@ -580,6 +581,7 @@ export default function Athletes() {
                         }
                       </td>
                       <td className="px-6 py-4 text-gray-600">{athlete.birthYear}</td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.gender || "Not Specified"}</td>
                       <td className="px-6 py-4 text-gray-600">{athlete.school || "N/A"}</td>
                       <td className="px-6 py-4 text-gray-600">
                         {athlete.sports && athlete.sports.length > 0 

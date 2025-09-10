@@ -131,20 +131,20 @@ export default function ImportExport() {
     }
   };
 
-  const athletesTemplate = `firstName,lastName,birthDate,birthYear,graduationYear,emails,phoneNumbers,sports,height,weight,school,teamName
-Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","512-555-0123,512-555-4567","Soccer,Track & Field",66,125,Westlake HS,Lonestar 09G Navy
-Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
-Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
+  const athletesTemplate = `firstName,lastName,birthDate,birthYear,graduationYear,gender,emails,phoneNumbers,sports,height,weight,school,teamName
+Mia,Chen,2009-03-15,2009,2027,Female,"mia.chen@email.com,mia.chen.athlete@gmail.com","512-555-0123,512-555-4567","Soccer,Track & Field",66,125,Westlake HS,Lonestar 09G Navy
+Elise,Ramos,2008-08-22,2008,2026,Female,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
+Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,teamName,date,age,metric,value,units,flyInDistance,notes
-Mia,Chen,FIERCE 08G,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
-Elise,Ramos,Thunder Elite,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
-Jordan,Williams,Lightning 08G,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
-Alex,Johnson,FIERCE 08G,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
-Taylor,Rodriguez,Thunder Elite,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
-Morgan,Lee,Lightning 08G,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
-Casey,Thompson,FIERCE 08G,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
-Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
+  const measurementsTemplate = `firstName,lastName,gender,teamName,date,age,metric,value,units,flyInDistance,notes
+Mia,Chen,Female,FIERCE 08G,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
+Elise,Ramos,Female,Thunder Elite,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
+Jordan,Williams,Male,Lightning 08G,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
+Alex,Johnson,Male,FIERCE 08G,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
+Taylor,Rodriguez,Female,Thunder Elite,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
+Morgan,Lee,Male,Lightning 08G,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
+Casey,Thompson,Female,FIERCE 08G,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
+Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);

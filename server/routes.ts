@@ -804,7 +804,7 @@ export function registerRoutes(app: Express) {
   // Athlete routes
   app.get("/api/athletes", requireAuth, async (req, res) => {
     try {
-      const {teamId, birthYearFrom, birthYearTo, search, organizationId } = req.query;
+      const {teamId, birthYearFrom, birthYearTo, search, gender, organizationId } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -853,6 +853,7 @@ export function registerRoutes(app: Express) {
         birthYearFrom: birthYearFrom ? parseInt(birthYearFrom as string) : undefined,
         birthYearTo: birthYearTo ? parseInt(birthYearTo as string) : undefined,
         search: search as string,
+        gender: gender as string,
         organizationId: orgContextForFiltering,
       };
 
@@ -997,7 +998,7 @@ export function registerRoutes(app: Express) {
   // Keep existing measurement routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
-      const {athleteId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, organizationId } = req.query;
+      const {athleteId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1045,7 +1046,7 @@ export function registerRoutes(app: Express) {
       }
 
       const filters: any = {
-        playerId: athleteId as string,
+        athleteId: athleteId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
         metric: metric as string,
         dateFrom: dateFrom as string,
@@ -1056,6 +1057,7 @@ export function registerRoutes(app: Express) {
         ageTo: ageTo ? parseInt(ageTo as string) : undefined,
         search: search as string,
         sport: sport as string,
+        gender: gender as string,
         organizationId: orgContextForFiltering,
         includeUnverified: true
       };
@@ -2480,11 +2482,26 @@ export function registerRoutes(app: Express) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
           try {
-            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName } = row;
+            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName, gender } = row;
 
             if (!firstName || !lastName) {
               errors.push({ row: rowNum, error: "First name and last name are required" });
               continue;
+            }
+
+            // Validate gender field if provided
+            let validatedGender: string | undefined;
+            if (gender && gender.trim()) {
+              const trimmedGender = gender.trim();
+              if (['Male', 'Female', 'Not Specified'].includes(trimmedGender)) {
+                validatedGender = trimmedGender;
+              } else {
+                warnings.push({
+                  row: `Row ${rowNum} (${firstName} ${lastName})`,
+                  warning: `Invalid gender value '${trimmedGender}'. Using 'Not Specified' instead. Valid values: Male, Female, Not Specified`
+                });
+                validatedGender = 'Not Specified';
+              }
             }
 
             // Smart contact data detection and placement
@@ -2525,6 +2542,7 @@ export function registerRoutes(app: Express) {
               height: height && !isNaN(parseInt(height)) ? parseInt(height) : undefined,
               weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
               school: school || undefined,
+              gender: validatedGender,
               password: 'INVITATION_PENDING', // Inactive until invited
               isActive: "false",
               role: "athlete"
@@ -2616,7 +2634,7 @@ export function registerRoutes(app: Express) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
           try {
-            const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes } = row;
+            const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes, gender } = row;
 
             // Validate required fields
             if (!firstName || !lastName || !teamName || !date || !metric || !value) {
@@ -2625,6 +2643,7 @@ export function registerRoutes(app: Express) {
             }
 
             // Find athlete by name and team
+            // Note: gender field can be included in CSV for additional matching context
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`
             });
@@ -2958,12 +2977,32 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Get all measurements with comprehensive data
-      const measurements = await storage.getMeasurements();
+      // Extract query parameters for filtering
+      const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
 
-      // Transform to CSV format with all database fields
+      const filters: any = {
+        playerId: playerId as string,
+        teamIds: teamIds ? (teamIds as string).split(',') : undefined,
+        metric: metric as string,
+        dateFrom: dateFrom as string,
+        dateTo: dateTo as string,
+        birthYearFrom: birthYearFrom ? parseInt(birthYearFrom as string) : undefined,
+        birthYearTo: birthYearTo ? parseInt(birthYearTo as string) : undefined,
+        ageFrom: ageFrom ? parseInt(ageFrom as string) : undefined,
+        ageTo: ageTo ? parseInt(ageTo as string) : undefined,
+        search: search as string,
+        sport: sport as string,
+        gender: gender as string,
+        organizationId: organizationId as string,
+        includeUnverified: true
+      };
+
+      // Get measurements with filtering
+      const measurements = await storage.getMeasurements(filters);
+
+      // Transform to CSV format with all database fields including gender
       const csvHeaders = [
-        'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'teams',
+        'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'gender', 'teams',
         'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes',
         'submittedBy', 'verifiedBy', 'isVerified', 'createdAt'
       ];
@@ -2980,6 +3019,7 @@ export function registerRoutes(app: Express) {
           user?.lastName || '',
           user?.fullName || '',
           user?.birthYear || '',
+          user?.gender || '',
           teams,
           measurement.date,
           measurement.age,

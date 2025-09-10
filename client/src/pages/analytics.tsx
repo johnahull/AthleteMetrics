@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { Gender } from "@shared/schema";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -53,6 +54,7 @@ export default function Analytics() {
     dateRange: "last30",
     sport: "",
     search: "",
+    gender: "all",  // Default to show all genders, user can filter as needed
   });
   
   // Edit form
@@ -83,6 +85,7 @@ export default function Analytics() {
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.search.trim()) params.append('search', filters.search.trim());
+      if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
 
       // Add date filtering based on dateRange
       const now = new Date();
@@ -189,6 +192,7 @@ export default function Analytics() {
       dateRange: "last30",
       sport: "",
       search: "",
+      gender: "",
     });
   };
   
@@ -429,6 +433,20 @@ export default function Analytics() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+              <Select value={filters.gender || "all"} onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}>
+                <SelectTrigger aria-label="Filter results by gender">
+                  <SelectValue placeholder="All Genders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Genders</SelectItem>
+                  <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                  <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                  <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
@@ -455,6 +473,11 @@ export default function Analytics() {
                 {filters.sport && filters.sport !== "all" && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.sport}
+                  </span>
+                )}
+                {filters.gender && filters.gender !== "all" && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                    {filters.gender}
                   </span>
                 )}
                 {filters.search && (

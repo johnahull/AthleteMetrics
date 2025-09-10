@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertUserSchema, type InsertUser, type User, type Team } from "@shared/schema";
+import { insertUserSchema, Gender, type InsertUser, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
 
 interface AthleteModalProps {
@@ -39,6 +39,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       school: "",
       sports: [],
       phoneNumbers: [],
+      gender: undefined,
       role: "athlete" as const,
     },
   });
@@ -83,6 +84,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         school: athlete.school || "",
         sports: athlete.sports || [],
         phoneNumbers: athlete.phoneNumbers || [],
+        gender: athlete.gender || undefined,
         role: "athlete" as const,
       });
     } else {
@@ -97,6 +99,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         school: "",
         sports: [],
         phoneNumbers: [],
+        gender: undefined,
         role: "athlete" as const,
       });
     }
@@ -116,15 +119,18 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       });
       onClose();
       form.reset({
+        username: "",
         firstName: "",
         lastName: "",
         emails: [""],
+        password: "",
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
-        teamIds: [],
         school: "",
         sports: [],
         phoneNumbers: [],
+        gender: undefined,
+        role: "athlete" as const,
       });
     },
     onError: () => {
@@ -247,7 +253,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
             </div>
 
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="birthDate"
@@ -290,6 +296,33 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
                         value={field.value || ""}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select 
+                      value={field.value || ""} 
+                      onValueChange={field.onChange}
+                      disabled={isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-athlete-gender" aria-label="Select athlete gender">
+                          <SelectValue placeholder="Select gender..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                        <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                        <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
