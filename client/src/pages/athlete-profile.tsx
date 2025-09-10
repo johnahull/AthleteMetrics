@@ -11,15 +11,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2 } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
-import PlayerModal from "@/components/player-modal";
-import PlayerMeasurementForm from "@/components/player-measurement-form";
+import AthleteModal from "@/components/athlete-modal";
+import AthleteMeasurementForm from "@/components/athlete-measurement-form";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { mutations } from "@/lib/api";
-import type { Player, Team, Measurement } from "@shared/schema";
+import type { Athlete, Team, Measurement } from "@shared/schema";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -36,8 +36,8 @@ const editMeasurementSchema = z.object({
   notes: z.string().optional(),
 });
 
-export default function PlayerProfile() {
-  const { id: playerId } = useParams();
+export default function AthleteProfile() {
+  const { id: athleteId } = useParams();
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -63,20 +63,20 @@ export default function PlayerProfile() {
     },
   });
 
-  const { data: player, isLoading: playerLoading, error: playerError } = useQuery({
-    queryKey: ["/api/players", playerId],
+  const { data: athlete, isLoading: athleteLoading, error: athleteError } = useQuery({
+    queryKey: ["/api/athletes", athleteId],
     queryFn: async () => {
-      const response = await fetch(`/api/players/${playerId}`);
-      if (!response.ok) throw new Error('Failed to fetch player');
+      const response = await fetch(`/api/athletes/${athleteId}`);
+      if (!response.ok) throw new Error('Failed to fetch athlete');
       return response.json();
     },
-    enabled: !!playerId,
+    enabled: !!athleteId,
   });
 
   const { data: measurements = [], isLoading: measurementsLoading } = useQuery({
-    queryKey: ["/api/measurements", { playerId }],
+    queryKey: ["/api/measurements", { athleteId }],
     queryFn: async () => {
-      const response = await fetch(`/api/measurements?playerId=${playerId}`);
+      const response = await fetch(`/api/measurements?athleteId=${athleteId}`);
       if (!response.ok) throw new Error('Failed to fetch measurements');
       return response.json();
     },
@@ -84,14 +84,14 @@ export default function PlayerProfile() {
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
-  });
+  }) as { data: any[] };
 
   // Mutations for edit/delete functionality  
   const updateMeasurementMutation = useMutation({
-    mutationFn: mutations.updateMeasurement,
+    mutationFn: ({ id, data }: { id: string; data: any }) => mutations.updateMeasurement(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { playerId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/players", playerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { athleteId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes", athleteId] });
       toast({ title: "Success", description: "Measurement updated successfully" });
       setShowEditDialog(false);
       setEditingMeasurement(null);
@@ -108,8 +108,8 @@ export default function PlayerProfile() {
   const deleteMeasurementMutation = useMutation({
     mutationFn: mutations.deleteMeasurement,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { playerId }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/players", playerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements", { athleteId }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes", athleteId] });
       toast({ title: "Success", description: "Measurement deleted successfully" });
       setDeleteConfirmId(null);
     },
@@ -166,7 +166,7 @@ export default function PlayerProfile() {
     });
   };
 
-  if (playerLoading || measurementsLoading) {
+  if (athleteLoading || measurementsLoading) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-6">
@@ -178,7 +178,7 @@ export default function PlayerProfile() {
     );
   }
 
-  if (playerError) {
+  if (athleteError) {
     return (
       <div className="p-6">
         <div className="text-center">
@@ -190,7 +190,7 @@ export default function PlayerProfile() {
     );
   }
 
-  if (!player) {
+  if (!athlete) {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-6">
@@ -232,17 +232,17 @@ export default function PlayerProfile() {
           variant="ghost" 
           onClick={() => setLocation('/athletes')}
           className="mr-4"
-          data-testid="button-back-to-players"
+          data-testid="button-back-to-athletes"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Athletes
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold text-gray-900">{player?.fullName}</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{athlete?.fullName}</h1>
           <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
             <span className="flex items-center">
               <User className="h-4 w-4 mr-1" />
-              Birth Year: {player?.birthYear}
+              Birth Year: {athlete?.birthYear}
             </span>
             {player?.gender && (
               <span className="flex items-center">
@@ -252,20 +252,20 @@ export default function PlayerProfile() {
             )}
             <span className="flex items-center">
               <Trophy className="h-4 w-4 mr-1" />
-              {player?.teams && player.teams.length > 0 
-                ? player.teams.map(team => team.name).join(', ')
+              {athlete?.teams && athlete.teams.length > 0 
+                ? athlete.teams.map((team: any) => team.name).join(', ')
                 : 'Independent Athlete'
               }
             </span>
-            {player?.school && (
+            {athlete?.school && (
               <span className="flex items-center">
                 <MapPin className="h-4 w-4 mr-1" />
-                {player.school}
+                {athlete.school}
               </span>
             )}
-            {player?.sports && player.sports.length > 0 && (
+            {athlete?.sports && athlete.sports.length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {player.sports.map((sport, index) => (
+                {athlete.sports.map((sport: any, index: number) => (
                   <Badge key={index} variant="secondary">{sport}</Badge>
                 ))}
               </div>
@@ -276,7 +276,7 @@ export default function PlayerProfile() {
           <Button 
             onClick={() => setShowEditModal(true)}
             variant="outline"
-            data-testid="button-edit-player"
+            data-testid="button-edit-athlete"
           >
             <Edit className="h-4 w-4 mr-2" />
             Edit Athlete
@@ -349,7 +349,7 @@ export default function PlayerProfile() {
       </div>
 
       {/* Contact Information */}
-      {((player?.emails && player.emails.length > 0) || (player?.phoneNumbers && player.phoneNumbers.length > 0)) && (
+      {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0)) && (
         <Card className="bg-white mb-8">
           <CardHeader>
             <CardTitle>Contact Information</CardTitle>
@@ -357,14 +357,14 @@ export default function PlayerProfile() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Email Addresses */}
-              {player?.emails && player.emails.length > 0 && (
+              {athlete?.emails && athlete.emails.length > 0 && (
                 <div>
                   <h4 className="font-medium text-gray-700 mb-3 flex items-center">
                     <Mail className="h-4 w-4 mr-2" />
                     Email Addresses
                   </h4>
                   <div className="space-y-2">
-                    {player.emails.map((email, index) => (
+                    {athlete.emails.map((email: any, index: number) => (
                       <div key={index} className="flex items-center space-x-2">
                         <a 
                           href={`mailto:${email}`}
@@ -380,14 +380,14 @@ export default function PlayerProfile() {
               )}
 
               {/* Phone Numbers */}
-              {player?.phoneNumbers && player.phoneNumbers.length > 0 && (
+              {athlete?.phoneNumbers && athlete.phoneNumbers.length > 0 && (
                 <div>
                   <h4 className="font-medium text-gray-700 mb-3 flex items-center">
                     <Phone className="h-4 w-4 mr-2" />
                     Phone Numbers
                   </h4>
                   <div className="space-y-2">
-                    {player.phoneNumbers.map((phone, index) => (
+                    {athlete.phoneNumbers.map((phone: any, index: number) => (
                       <div key={index} className="flex items-center space-x-2">
                         <a 
                           href={`tel:${phone}`}
@@ -496,28 +496,28 @@ export default function PlayerProfile() {
       </Card>
 
       {/* Athlete Edit Modal */}
-      {player && (
-        <PlayerModal
+      {athlete && (
+        <AthleteModal
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
-          player={player}
+          athlete={athlete}
           teams={teams}
         />
       )}
 
       {/* Add Measurement Modal */}
-      {player && (
+      {athlete && (
         <Dialog open={showAddMeasurementModal} onOpenChange={setShowAddMeasurementModal}>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add New Measurement for {player.fullName}</DialogTitle>
+              <DialogTitle>Add New Measurement for {athlete.fullName}</DialogTitle>
               <DialogDescription>
                 Record a new performance measurement for this athlete.
               </DialogDescription>
             </DialogHeader>
-            <PlayerMeasurementForm 
-              playerId={player.id}
-              playerName={player.fullName}
+            <AthleteMeasurementForm 
+              athleteId={athlete.id}
+              athleteName={athlete.fullName}
               onSuccess={() => setShowAddMeasurementModal(false)}
             />
           </DialogContent>

@@ -48,7 +48,7 @@ export class AccessController {
     return false;
   }
 
-  async canAccessPlayer(userId: string, playerId: string): Promise<boolean> {
+  async canAccessAthlete(userId: string, athleteId: string): Promise<boolean> {
     if (await this.isSiteAdmin(userId)) return true;
     
     // Athletes can only access their own profile
@@ -56,15 +56,15 @@ export class AccessController {
     const userRoles = await this.storage.getUserRoles(userId);
     
     if (userRoles.includes("athlete")) {
-      return userId === playerId;
+      return userId === athleteId;
     }
     
-    // Coaches and org admins can access players in their organizations
+    // Coaches and org admins can access athletes in their organizations
     if (userRoles.includes("coach") || userRoles.includes("org_admin")) {
-      const playerTeams = await this.storage.getPlayerTeams(playerId);
+      const athleteTeams = await this.storage.getAthleteTeams(athleteId);
       const userOrgs = await this.storage.getUserOrganizations(userId);
       
-      return playerTeams.some((team: any) => 
+      return athleteTeams.some((team: any) => 
         userOrgs.some((userOrg: any) => userOrg.organizationId === team.organization.id)
       );
     }

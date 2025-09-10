@@ -12,8 +12,8 @@ interface InvitationData {
   email: string;
   role: string;
   organizationId: string;
-  playerId?: string;
-  playerData?: {
+  athleteId?: string;
+  athleteData?: {
     id: string;
     firstName: string;
     lastName: string;
@@ -77,12 +77,12 @@ export default function AcceptInvitation() {
       const data = await response.json();
       setInvitation(data);
       
-      // Pre-populate form with existing player data if available
-      if (data.playerData) {
+      // Pre-populate form with existing athlete data if available
+      if (data.athleteData) {
         setFormData(prev => ({
           ...prev,
-          firstName: data.playerData.firstName,
-          lastName: data.playerData.lastName
+          firstName: data.athleteData.firstName,
+          lastName: data.athleteData.lastName
         }));
       }
     } catch (err) {
@@ -272,22 +272,22 @@ export default function AcceptInvitation() {
           </div>
 
           {/* Show which specific athlete they're signing up for */}
-          {invitation?.playerData && (
+          {invitation?.athleteData && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <UserCheck className="h-5 w-5 text-blue-600" />
                 <h3 className="font-semibold text-blue-900">Creating Account For</h3>
               </div>
               <p className="text-blue-800 font-medium">
-                {invitation.playerData?.firstName} {invitation.playerData?.lastName}
+                {invitation.athleteData?.firstName} {invitation.athleteData?.lastName}
               </p>
               <p className="text-blue-600 text-sm">
-                Player ID: #{invitation.playerData?.id?.slice(0, 8)}
+                Athlete ID: #{invitation.athleteData?.id?.slice(0, 8)}
               </p>
-              {invitation.playerData?.teams && invitation.playerData.teams.length > 0 && (
+              {invitation.athleteData?.teams && invitation.athleteData.teams.length > 0 && (
                 <div className="mt-3">
                   <p className="text-blue-700 text-sm font-medium mb-1">Teams:</p>
-                  {invitation.playerData.teams?.map((team, index) => (
+                  {invitation.athleteData.teams?.map((team, index) => (
                     <div key={team.id} className="text-blue-600 text-sm">
                       • {team.name} ({team.sport})
                     </div>

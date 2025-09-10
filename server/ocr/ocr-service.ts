@@ -46,7 +46,9 @@ export class OCRService {
         // Cache the processed image (limit cache size)
         if (this.imageCache.size >= 10) {
           const firstKey = this.imageCache.keys().next().value;
-          this.imageCache.delete(firstKey);
+          if (firstKey) {
+            this.imageCache.delete(firstKey);
+          }
         }
         this.imageCache.set(imageHash, processedImage);
         console.log('Processed image cached');

@@ -32,7 +32,7 @@ declare module 'express-session' {
       firstName: string;
       lastName: string;
       role: string;
-      playerId?: string;
+      athleteId?: string;
       isSiteAdmin?: boolean; // Added for clarity
       primaryOrganizationId?: string; // Added to store primary org ID
       emailVerified?: boolean; // Added for enhanced auth
@@ -47,7 +47,7 @@ declare module 'express-session' {
       firstName: string;
       lastName: string;
       role: string;
-      playerId?: string;
+      athleteId?: string;
       isSiteAdmin?: boolean;
       primaryOrganizationId?: string; // Added to store primary org ID
       emailVerified?: boolean; // Added for enhanced auth
@@ -358,7 +358,7 @@ export function registerRoutes(app: Express) {
           lastName: user.lastName,
           role: userRole,
           isSiteAdmin: user.isSiteAdmin === "true",
-          playerId: userRole === "athlete" ? user.id : undefined, // Use user ID as player ID for athletes
+          athleteId: userRole === "athlete" ? user.id : undefined, // Use user ID as athlete ID for athletes
           primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
         };
 
@@ -384,7 +384,7 @@ export function registerRoutes(app: Express) {
       return res.json({ 
         user: {
           ...req.session.user,
-          playerId: req.session.user.playerId // Ensure playerId is included
+          athleteId: req.session.user.athleteId // Ensure athleteId is included
         }
       });
     }
@@ -480,7 +480,7 @@ export function registerRoutes(app: Express) {
         lastName: targetUser.lastName,
         role: targetRole,
         isSiteAdmin: targetUser.isSiteAdmin === "true",
-        playerId: targetRole === "athlete" ? targetUser.id : undefined, // Use user ID as player ID for athletes
+        athleteId: targetRole === "athlete" ? targetUser.id : undefined, // Use user ID as athlete ID for athletes
         primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
       };
       req.session.isImpersonating = true;
@@ -801,8 +801,8 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Keep existing player routes for now
-  app.get("/api/players", requireAuth, async (req, res) => {
+  // Athlete routes
+  app.get("/api/athletes", requireAuth, async (req, res) => {
     try {
       const {teamId, birthYearFrom, birthYearTo, search, gender, organizationId } = req.query;
       const currentUser = req.session.user;
@@ -817,10 +817,10 @@ export function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        // Site admins can request specific org or all players
+        // Site admins can request specific org or all athletes
         orgContextForFiltering = organizationId as string;
       } else {
-        // Non-site admins should only see players from their organization
+        // Non-site admins should only see athletes from their organization
 
         // Use user's primary organization if no specific org is requested
         const requestedOrgId = organizationId as string;
@@ -832,19 +832,19 @@ export function registerRoutes(app: Express) {
         } else {
           // Use user's primary organization
           if (!currentUser.primaryOrganizationId) {
-            return res.json([]); // No primary org, so no players to show
+            return res.json([]); // No primary org, so no athletes to show
           }
           orgContextForFiltering = currentUser.primaryOrganizationId;
         }
 
-        // Athletes can only see their own player data
-        if (currentUser.role === "athlete" && currentUser.playerId) {
+        // Athletes can only see their own athlete data
+        if (currentUser.role === "athlete" && currentUser.athleteId) {
           const filters = {
-            userId: currentUser.playerId, // Convert playerId to userId for database query
+            userId: currentUser.athleteId, // Convert athleteId to userId for database query
             organizationId: orgContextForFiltering,
           };
-          const players = await storage.getAthletes(filters);
-          return res.json(players);
+          const athletes = await storage.getAthletes(filters);
+          return res.json(athletes);
         }
       }
 
@@ -859,25 +859,25 @@ export function registerRoutes(app: Express) {
 
       const athletes = await storage.getAthletes(filters);
 
-      // Transform athletes to match the expected player format
-      const players = athletes.map((athlete) => ({
+      // Transform athletes to match the expected athlete format
+      const athletesList = athletes.map((athlete) => ({
         ...athlete,
         teams: athlete.teams,
         hasLogin: athlete.password !== "INVITATION_PENDING",
         isActive: athlete.isActive === "true"
       }));
 
-      console.log(`Returning ${players.length} athletes`);
-      console.log('Team assignments:', players.map(p => `${p.teams.length} teams`).join(', '));
+      console.log(`Returning ${athletesList.length} athletes`);
+      console.log('Team assignments:', athletesList.map(a => `${a.teams.length} teams`).join(', '));
 
-      res.json(players);
+      res.json(athletesList);
     } catch (error) {
-      console.error("Error fetching players:", error);
-      res.status(500).json({ message: "Failed to fetch players" });
+      console.error("Error fetching athletes:", error);
+      res.status(500).json({ message: "Failed to fetch athletes" });
     }
   });
 
-  app.get("/api/players/:id", requireAuth, async (req, res) => {
+  app.get("/api/athletes/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const currentUser = req.session.user;
@@ -886,119 +886,119 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const player = await storage.getPlayer(id);
-      if (!player) {
-        return res.status(404).json({ message: "Player not found" });
+      const athlete = await storage.getAthlete(id);
+      if (!athlete) {
+        return res.status(404).json({ message: "Athlete not found" });
       }
 
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Athletes can only view their own player data
+      // Athletes can only view their own athlete data
       if (currentUser.role === "athlete") {
-        if (currentUser.playerId !== id) {
+        if (currentUser.athleteId !== id) {
           return res.status(403).json({ message: "Athletes can only view their own profile" });
         }
       } else if (!userIsSiteAdmin) {
-        // Coaches and org admins can only view players from their organization
-        // Check if user has access to the same organization as the player
+        // Coaches and org admins can only view athletes from their organization
+        // Check if user has access to the same organization as the athlete
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
 
         if (userOrgs.length === 0) {
           return res.status(403).json({ message: "Access denied - no organization access" });
         }
 
-        // Get the player's teams to determine organization
-        const playerTeams = await storage.getPlayerTeams(id);
+        // Get the athlete's teams to determine organization
+        const athleteTeams = await storage.getAthleteTeams(id);
 
-        if (playerTeams.length === 0) {
-          return res.status(403).json({ message: "Player not associated with any team" });
+        if (athleteTeams.length === 0) {
+          return res.status(403).json({ message: "Athlete not associated with any team" });
         }
 
-        // Get player organization IDs directly from the teams (which include organization data)
-        const playerOrganizations = playerTeams.map(team => team.organization.id);
+        // Get athlete organization IDs directly from the teams (which include organization data)
+        const athleteOrganizations = athleteTeams.map(team => team.organization.id);
 
-        // Check if user has access to any of the player's organizations
-        const hasAccess = playerOrganizations.some(playerOrgId => 
-          userOrgs.some(userOrg => userOrg.organizationId === playerOrgId)
+        // Check if user has access to any of the athlete's organizations
+        const hasAccess = athleteOrganizations.some(athleteOrgId => 
+          userOrgs.some(userOrg => userOrg.organizationId === athleteOrgId)
         );
 
         if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied to this player" });
+          return res.status(403).json({ message: "Access denied to this athlete" });
         }
       }
 
-      res.json(player);
+      res.json(athlete);
     } catch (error) {
-      console.error("Error fetching player:", error);
-      res.status(500).json({ message: "Failed to fetch player" });
+      console.error("Error fetching athlete:", error);
+      res.status(500).json({ message: "Failed to fetch athlete" });
     }
   });
 
-  app.post("/api/players", requireAuth, async (req, res) => {
+  app.post("/api/athletes", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
 
-      // Athletes cannot create player records
+      // Athletes cannot create athlete records
       if (currentUser?.role === "athlete") {
-        return res.status(403).json({ message: "Athletes cannot create player records" });
+        return res.status(403).json({ message: "Athletes cannot create athlete records" });
       }
 
-      const playerData = insertAthleteSchema.parse(req.body);
+      const athleteData = insertAthleteSchema.parse(req.body);
 
-      console.log('Received player data in API:', playerData);
+      console.log('Received athlete data in API:', athleteData);
 
       // Add organization context for non-site admins
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin && currentUser?.primaryOrganizationId) {
-        playerData.organizationId = currentUser.primaryOrganizationId;
+        athleteData.organizationId = currentUser.primaryOrganizationId;
       }
 
-      const player = await storage.createPlayer(playerData);
+      const athlete = await storage.createAthlete(athleteData);
 
-      console.log('Player created successfully with', playerData.teamIds?.length || 0, 'team assignments');
+      console.log('Athlete created successfully with', athleteData.teamIds?.length || 0, 'team assignments');
 
-      res.status(201).json(player);
+      res.status(201).json(athlete);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Validation error", errors: error.errors });
       } else {
-        console.error("Error creating player:", error);
-        res.status(500).json({ message: "Failed to create player" });
+        console.error("Error creating athlete:", error);
+        res.status(500).json({ message: "Failed to create athlete" });
       }
     }
   });
 
-  app.patch("/api/players/:id", requireAuth, async (req, res) => {
+  app.patch("/api/athletes/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const playerData = insertAthleteSchema.partial().parse(req.body);
-      const updatedPlayer = await storage.updatePlayer(id, playerData);
-      res.json(updatedPlayer);
+      const athleteData = insertAthleteSchema.partial().parse(req.body);
+      const updatedAthlete = await storage.updateAthlete(id, athleteData);
+      res.json(updatedAthlete);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Validation error", errors: error.errors });
       } else {
-        console.error("Error updating player:", error);
-        res.status(500).json({ message: "Failed to update player" });
+        console.error("Error updating athlete:", error);
+        res.status(500).json({ message: "Failed to update athlete" });
       }
     }
   });
 
-  app.delete("/api/players/:id", requireAuth, async (req, res) => {
+  app.delete("/api/athletes/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      await storage.deletePlayer(id);
-      res.json({ message: "Player deleted successfully" });
+      await storage.deleteAthlete(id);
+      res.json({ message: "Athlete deleted successfully" });
     } catch (error) {
-      console.error("Error deleting player:", error);
-      res.status(500).json({ message: "Failed to delete player" });
+      console.error("Error deleting athlete:", error);
+      res.status(500).json({ message: "Failed to delete athlete" });
     }
   });
 
   // Keep existing measurement routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
-      const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
+      const {athleteId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1009,12 +1009,12 @@ export function registerRoutes(app: Express) {
 
       // Athletes can only view their own measurements
       if (currentUser.role === "athlete") {
-        if (!currentUser.playerId) {
+        if (!currentUser.athleteId) {
           return res.json([]);
         }
 
         const filters: any = {
-          playerId: currentUser.playerId,
+          playerId: currentUser.athleteId,
           metric: metric as string,
           dateFrom: dateFrom as string,
           dateTo: dateTo as string,
@@ -1046,7 +1046,7 @@ export function registerRoutes(app: Express) {
       }
 
       const filters: any = {
-        playerId: playerId as string,
+        athleteId: athleteId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
         metric: metric as string,
         dateFrom: dateFrom as string,
@@ -1091,22 +1091,22 @@ export function registerRoutes(app: Express) {
         submittedBy: currentUser.id  // Always use current user's ID
       };
 
-      // Validate user can access the player being measured
+      // Validate user can access the athlete being measured
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin) {
-        const player = await storage.getPlayer(measurementData.userId);
-        if (!player) {
-          return res.status(404).json({ message: "Player not found" });
+        const athlete = await storage.getAthlete(measurementData.userId);
+        if (!athlete) {
+          return res.status(404).json({ message: "Athlete not found" });
         }
 
-        // Check if player is in user's organization
-        const playerTeams = await storage.getPlayerTeams(measurementData.userId);
-        const playerOrganizations = playerTeams.map(team => team.organization.id);
+        // Check if athlete is in user's organization
+        const athleteTeams = await storage.getAthleteTeams(measurementData.userId);
+        const athleteOrganizations = athleteTeams.map(team => team.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         const userOrganizationIds = userOrgs.map(userOrg => userOrg.organizationId);
 
-        const hasAccess = playerOrganizations.some(orgId => 
+        const hasAccess = athleteOrganizations.some(orgId => 
           userOrganizationIds.includes(orgId)
         );
 
@@ -1114,7 +1114,7 @@ export function registerRoutes(app: Express) {
         console.log(`Measurement access validation: hasAccess=${hasAccess}`);
 
         if (!hasAccess) {
-          return res.status(403).json({ message: "Cannot create measurements for players outside your organization" });
+          return res.status(403).json({ message: "Cannot create measurements for athletes outside your organization" });
         }
       }
 
@@ -1153,30 +1153,30 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      // Get measurement to verify user has access to the player's organization
+      // Get measurement to verify user has access to the athlete's organization
       const measurement = await storage.getMeasurement(id);
       if (!measurement) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
       if (!userIsSiteAdmin) {
-        // Check if measurement's player is in user's organization
-        const player = await storage.getPlayer(measurement.userId);
-        if (!player) {
-          return res.status(404).json({ message: "Player not found" });
+        // Check if measurement's athlete is in user's organization
+        const athlete = await storage.getAthlete(measurement.userId);
+        if (!athlete) {
+          return res.status(404).json({ message: "Athlete not found" });
         }
 
-        const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const playerOrganizations = playerTeams
+        const athleteTeams = await storage.getAthleteTeams(measurement.userId);
+        const athleteOrganizations = athleteTeams
           .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const hasAccess = playerOrganizations.some(orgId => 
+        const hasAccess = athleteOrganizations.some(orgId => 
           userOrgs.some(userOrg => userOrg.organizationId === orgId && userOrg.role === "org_admin")
         );
 
         if (!hasAccess) {
-          return res.status(403).json({ message: "Cannot verify measurements for players outside your organization" });
+          return res.status(403).json({ message: "Cannot verify measurements for athletes outside your organization" });
         }
       }
 
@@ -1210,23 +1210,23 @@ export function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
-        // Check if measurement's player is in user's organization
-        const player = await storage.getPlayer(measurement.userId);
-        if (!player) {
-          return res.status(404).json({ message: "Player not found" });
+        // Check if measurement's athlete is in user's organization
+        const athlete = await storage.getAthlete(measurement.userId);
+        if (!athlete) {
+          return res.status(404).json({ message: "Athlete not found" });
         }
 
-        const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const playerOrganizations = playerTeams
+        const athleteTeams = await storage.getAthleteTeams(measurement.userId);
+        const athleteOrganizations = athleteTeams
           .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const hasAccess = playerOrganizations.some(orgId => 
+        const hasAccess = athleteOrganizations.some(orgId => 
           userOrgs.some(userOrg => userOrg.organizationId === orgId)
         );
 
         if (!hasAccess) {
-          return res.status(403).json({ message: "Cannot update measurements for players outside your organization" });
+          return res.status(403).json({ message: "Cannot update measurements for athletes outside your organization" });
         }
 
         // Athletes cannot update measurements
@@ -1263,23 +1263,23 @@ export function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin) {
-        // Check if measurement's player is in user's organization
-        const player = await storage.getPlayer(measurement.userId);
-        if (!player) {
-          return res.status(404).json({ message: "Player not found" });
+        // Check if measurement's athlete is in user's organization
+        const athlete = await storage.getAthlete(measurement.userId);
+        if (!athlete) {
+          return res.status(404).json({ message: "Athlete not found" });
         }
 
-        const playerTeams = await storage.getPlayerTeams(measurement.userId);
-        const playerOrganizations = playerTeams
+        const athleteTeams = await storage.getAthleteTeams(measurement.userId);
+        const athleteOrganizations = athleteTeams
           .map(pt => pt.organization.id);
 
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const hasAccess = playerOrganizations.some(orgId => 
+        const hasAccess = athleteOrganizations.some(orgId => 
           userOrgs.some(userOrg => userOrg.organizationId === orgId)
         );
 
         if (!hasAccess) {
-          return res.status(403).json({ message: "Cannot delete measurements for players outside your organization" });
+          return res.status(403).json({ message: "Cannot delete measurements for athletes outside your organization" });
         }
 
         // Athletes cannot delete measurements
@@ -1413,7 +1413,7 @@ export function registerRoutes(app: Express) {
 
       // Handle athlete invitation (send to all their emails)
       if (athleteId && role === "athlete") {
-        const athlete = await storage.getPlayer(athleteId);
+        const athlete = await storage.getAthlete(athleteId);
         if (!athlete) {
           return res.status(404).json({ message: "Athlete not found" });
         }
@@ -1544,15 +1544,15 @@ export function registerRoutes(app: Express) {
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
 
-      // Enrich with player data
+      // Enrich with athlete data
       const enrichedInvitations = await Promise.all(
         athleteInvitations.map(async (invitation) => {
           if (invitation.playerId) {
-            const player = await storage.getPlayer(invitation.playerId);
+            const athlete = await storage.getAthlete(invitation.playerId);
             return {
               ...invitation,
-              firstName: player?.firstName,
-              lastName: player?.lastName
+              firstName: athlete?.firstName,
+              lastName: athlete?.lastName
             };
           }
           return invitation;
@@ -2445,8 +2445,8 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      if (type !== 'players' && type !== 'measurements') {
-        return res.status(400).json({ message: "Invalid import type. Use 'players' or 'measurements'" });
+      if (type !== 'athletes' && type !== 'measurements') {
+        return res.status(400).json({ message: "Invalid import type. Use 'athletes' or 'measurements'" });
       }
 
       const results: any[] = [];
@@ -2476,8 +2476,8 @@ export function registerRoutes(app: Express) {
         totalRows++;
       }
 
-      if (type === 'players') {
-        // Process players import
+      if (type === 'athletes') {
+        // Process athletes import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
@@ -2529,7 +2529,7 @@ export function registerRoutes(app: Express) {
               counter++;
             }
 
-            const playerData = {
+            const athleteData = {
               username,
               firstName,
               lastName,
@@ -2548,83 +2548,83 @@ export function registerRoutes(app: Express) {
               role: "athlete"
             };
 
-            // Create or find player
-            let player;
+            // Create or find athlete
+            let athlete;
             if (createMissing === 'true') {
-              player = await storage.createUser(playerData as any);
+              athlete = await storage.createUser(athleteData as any);
 
               // Add to team if specified
               if (teamId) {
-                await storage.addUserToTeam(player.id, teamId);
+                await storage.addUserToTeam(athlete.id, teamId);
 
                 // Also add to organization as athlete
                 const team = await storage.getTeam(teamId);
                 if (team?.organization?.id) {
-                  await storage.addUserToOrganization(player.id, team.organization.id, 'athlete');
+                  await storage.addUserToOrganization(athlete.id, team.organization.id, 'athlete');
                 }
               }
             } else {
-              // Match existing player by name and birth year
-              const existingPlayer = await storage.getAthletes({
+              // Match existing athlete by name and birth year
+              const existingAthlete = await storage.getAthletes({
                 search: `${firstName} ${lastName}`
               });
 
-              const matchedPlayer = existingPlayer.find(p => 
+              const matchedAthlete = existingAthlete.find(p => 
                 p.firstName?.toLowerCase() === firstName.toLowerCase() && 
                 p.lastName?.toLowerCase() === lastName.toLowerCase() &&
                 (birthYear ? p.birthYear === parseInt(birthYear) : true)
               );
 
-              if (matchedPlayer) {
-                player = matchedPlayer;
+              if (matchedAthlete) {
+                athlete = matchedAthlete;
                 
-                // Check if player is already on the target team using reliable method
+                // Check if athlete is already on the target team using reliable method
                 let isAlreadyOnTeam = false;
                 if (teamId) {
                   try {
-                    const userTeams = await storage.getUserTeams(player.id);
+                    const userTeams = await storage.getUserTeams(athlete.id);
                     isAlreadyOnTeam = userTeams.some((ut: any) => String(ut.team.id) === String(teamId));
                   } catch (error) {
-                    console.warn(`Could not check team membership for user ${player.id}:`, error);
+                    console.warn(`Could not check team membership for user ${athlete.id}:`, error);
                     // Err on the side of caution - don't deactivate if we can't verify membership
                     isAlreadyOnTeam = true;
                   }
                 }
                 
-                // If player is not already on the team, mark them as inactive when importing
+                // If athlete is not already on the team, mark them as inactive when importing
                 // Only deactivate if we have a target team to check against
                 if (teamId && !isAlreadyOnTeam) {
-                  await storage.updateUser(player.id, { isActive: "false" });
-                  player.isActive = "false"; // Update local object for consistency
+                  await storage.updateUser(athlete.id, { isActive: "false" });
+                  athlete.isActive = "false"; // Update local object for consistency
                   
                   results.push({
                     action: 'matched_and_deactivated',
-                    player: {
-                      id: player.id,
-                      name: `${player.firstName} ${player.lastName}`,
-                      username: player.username,
-                      note: 'Player deactivated as they were not already on the target team'
+                    athlete: {
+                      id: athlete.id,
+                      name: `${athlete.firstName} ${athlete.lastName}`,
+                      username: athlete.username,
+                      note: 'Athlete deactivated as they were not already on the target team'
                     }
                   });
                   continue; // Skip the normal results.push below to avoid duplication
                 }
                 
               } else {
-                errors.push({ row: rowNum, error: `Player ${firstName} ${lastName} not found` });
+                errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found` });
                 continue;
               }
             }
 
             results.push({
               action: createMissing === 'true' ? 'created' : 'matched',
-              player: {
-                id: player.id,
-                name: `${player.firstName} ${player.lastName}`,
-                username: player.username
+              athlete: {
+                id: athlete.id,
+                name: `${athlete.firstName} ${athlete.lastName}`,
+                username: athlete.username
               }
             });
           } catch (error) {
-            console.error('Error processing player row:', error);
+            console.error('Error processing athlete row:', error);
             errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
@@ -2642,27 +2642,27 @@ export function registerRoutes(app: Express) {
               continue;
             }
 
-            // Find player by name and team
+            // Find athlete by name and team
             // Note: gender field can be included in CSV for additional matching context
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`
             });
 
-            let matchedPlayer;
+            let matchedAthlete;
             if (teamName) {
               // Clean up team name for comparison
               const cleanTeamName = teamName.toLowerCase().trim();
               
               // Match by firstName + lastName + team
-              matchedPlayer = (athletes as any[]).find((p: any) => 
+              matchedAthlete = (athletes as any[]).find((p: any) => 
                 p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
                 p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
                 p.teams?.some((team: any) => team.name?.toLowerCase().trim() === cleanTeamName)
               );
 
               // If no exact match, try partial team name matching
-              if (!matchedPlayer) {
-                matchedPlayer = (athletes as any[]).find((p: any) => 
+              if (!matchedAthlete) {
+                matchedAthlete = (athletes as any[]).find((p: any) => 
                   p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
                   p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
                   p.teams?.some((team: any) => {
@@ -2673,13 +2673,13 @@ export function registerRoutes(app: Express) {
               }
             } else {
               // Fallback to just name matching if no team specified
-              matchedPlayer = athletes.find(p => 
+              matchedAthlete = athletes.find(p => 
                 p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
                 p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
               );
             }
 
-            if (!matchedPlayer) {
+            if (!matchedAthlete) {
               // Add debugging information to error message
               const nameMatches = (athletes as any[]).filter((p: any) => 
                 p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
@@ -2690,19 +2690,19 @@ export function registerRoutes(app: Express) {
               if (teamName) {
                 if (nameMatches.length > 0) {
                   const availableTeams = nameMatches.flatMap((p: any) => p.teams?.map((t: any) => t.name) || []).join(', ');
-                  errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}". Available teams: ${availableTeams}`;
+                  errorMsg = `Athlete ${firstName} ${lastName} not found in team "${teamName}". Available teams: ${availableTeams}`;
                 } else {
-                  errorMsg = `Player ${firstName} ${lastName} not found in team "${teamName}"`;
+                  errorMsg = `Athlete ${firstName} ${lastName} not found in team "${teamName}"`;
                 }
               } else {
-                errorMsg = `Player ${firstName} ${lastName} not found`;
+                errorMsg = `Athlete ${firstName} ${lastName} not found`;
               }
               errors.push({ row: rowNum, error: errorMsg });
               continue;
             }
 
             const measurementData = {
-              userId: matchedPlayer.id,
+              userId: matchedAthlete.id,
               date,
               age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
@@ -2719,7 +2719,7 @@ export function registerRoutes(app: Express) {
               action: 'created',
               measurement: {
                 id: measurement.id,
-                player: `${matchedPlayer.firstName} ${matchedPlayer.lastName}`,
+                athlete: `${matchedAthlete.firstName} ${matchedAthlete.lastName}`,
                 metric: measurement.metric,
                 value: measurement.value,
                 date: measurement.date
@@ -2908,7 +2908,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Export routes
-  app.get("/api/export/players", requireAuth, async (req, res) => {
+  app.get("/api/export/athletes", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       if (!currentUser?.id) {
