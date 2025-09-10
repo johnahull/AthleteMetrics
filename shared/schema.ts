@@ -105,7 +105,7 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
-  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete/player
+  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
   invitedBy: varchar("invited_by").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
@@ -379,7 +379,7 @@ export const OrganizationRole = {
   ATHLETE: "athlete",
 } as const;
 
-// Unified athlete schema - consolidating player and athlete concepts
+// Unified athlete schema
 export type Athlete = User;
 export type InsertAthlete = z.infer<typeof insertAthleteSchema>;
 
@@ -399,7 +399,4 @@ export const insertAthleteSchema = z.object({
   organizationId: z.string().optional()
 });
 
-// Legacy compatibility - maintain old exports temporarily
-export type Player = Athlete;
-export type InsertPlayer = InsertAthlete;
-export const insertPlayerSchema = insertAthleteSchema;
+// Legacy compatibility exports removed - use Athlete types instead

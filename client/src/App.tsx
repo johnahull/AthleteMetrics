@@ -8,8 +8,8 @@ import Layout from "./components/layout";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Teams from "./pages/teams";
-import Players from "./pages/players";
-import PlayerProfile from "./pages/player-profile";
+import Athletes from "./pages/athletes";
+import AthleteProfile from "./pages/athlete-profile";
 import DataEntry from "./pages/data-entry";
 import Analytics from "./pages/analytics";
 import Publish from "./pages/publish";
@@ -35,8 +35,8 @@ function Router() {
       <Route path="/enhanced-login" component={EnhancedLogin} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/athletes/:id" component={PlayerProfile} />
-      <Route path="/athletes" component={Players} />
+      <Route path="/athletes/:id" component={AthleteProfile} />
+      <Route path="/athletes" component={Athletes} />
       <Route path="/organizations/:id" component={OrganizationProfile} />
       <Route path="/organizations" component={Organizations} />
       <Route path="/users/:id" component={UserProfile} />

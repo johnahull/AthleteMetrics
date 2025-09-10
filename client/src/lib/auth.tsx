@@ -9,7 +9,7 @@ interface User {
   lastName?: string;
   role: string;
   isSiteAdmin?: boolean;
-  playerId?: string;
+  athleteId?: string;
 }
 
 interface ImpersonationStatus {

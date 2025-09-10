@@ -10,16 +10,16 @@ import { downloadCSV } from "@/lib/csv";
 import { PhotoUpload } from "@/components/photo-upload";
 
 export default function ImportExport() {
-  const [importType, setImportType] = useState<"players" | "measurements">("players");
+  const [importType, setImportType] = useState<"athletes" | "measurements">("athletes");
   const [importMode, setImportMode] = useState<"match" | "create">("match");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
   const { toast } = useToast();
 
-  const { data: teams } = useQuery({
+  const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
-  });
+  }) as { data: any[] };
 
   const importMutation = useMutation({
     mutationFn: async ({ file, type, mode, teamId }: { 
@@ -35,7 +35,7 @@ export default function ImportExport() {
       }
       formData.append('createMissing', mode === 'create' ? 'true' : 'false');
 
-      const response = await fetch(`/api/import/${type}`, {
+      const response = await fetch(`/api/import/${type === 'athletes' ? 'athletes' : type}`, {
         method: 'POST',
         body: formData,
         credentials: 'include',
@@ -91,7 +91,7 @@ export default function ImportExport() {
     if (importMode === "create" && !selectedTeamId) {
       toast({
         title: "Error", 
-        description: "Please select a team for creating missing players",
+        description: "Please select a team for creating missing athletes",
         variant: "destructive",
       });
       return;
@@ -131,7 +131,7 @@ export default function ImportExport() {
     }
   };
 
-  const playersTemplate = `firstName,lastName,birthDate,birthYear,graduationYear,emails,phoneNumbers,sports,height,weight,school,teamName
+  const athletesTemplate = `firstName,lastName,birthDate,birthYear,graduationYear,emails,phoneNumbers,sports,height,weight,school,teamName
 Mia,Chen,2009-03-15,2009,2027,"mia.chen@email.com,mia.chen.athlete@gmail.com","512-555-0123,512-555-4567","Soccer,Track & Field",66,125,Westlake HS,Lonestar 09G Navy
 Elise,Ramos,2008-08-22,2008,2026,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
 Jordan,Williams,2009-01-10,2009,2027,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
@@ -167,16 +167,16 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* File Upload */}
               <div>
-                <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "players" ? "Athletes" : "Measurements"}</h4>
+                <h4 className="text-md font-medium text-gray-700 mb-4">Import {importType === "athletes" ? "Athletes" : "Measurements"}</h4>
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Import Type</label>
-                  <Select value={importType} onValueChange={(value) => setImportType(value as "players" | "measurements")}>
+                  <Select value={importType} onValueChange={(value) => setImportType(value as "athletes" | "measurements")}>
                     <SelectTrigger data-testid="select-import-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="players">Athletes</SelectItem>
+                      <SelectItem value="athletes">Athletes</SelectItem>
                       <SelectItem value="measurements">Measurements</SelectItem>
                     </SelectContent>
                   </Select>
@@ -210,14 +210,14 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <Button
                     variant="ghost"
                     onClick={() => copyToClipboard(
-                      importType === "players" ? playersTemplate : measurementsTemplate,
-                      importType === "players" ? "athletes" : importType
+                      importType === "athletes" ? athletesTemplate : measurementsTemplate,
+                      importType === "athletes" ? "athletes" : importType
                     )}
                     className="text-primary hover:text-blue-700 text-sm"
                     data-testid="button-download-template"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download {importType === "players" ? "athletes" : importType} template
+                    Download {importType === "athletes" ? "athletes" : importType} template
                   </Button>
                 </div>
               </div>
@@ -238,7 +238,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                           checked={importMode === "match"}
                           onChange={(e) => setImportMode(e.target.value as "match" | "create")}
                           className="text-primary focus:ring-primary"
-                          data-testid="radio-match-players"
+                          data-testid="radio-match-athletes"
                         />
                         <span className="text-sm text-gray-700">Match athletes by firstName + lastName + birthYear</span>
                       </label>
@@ -250,7 +250,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                           checked={importMode === "create"}
                           onChange={(e) => setImportMode(e.target.value as "match" | "create")}
                           className="text-primary focus:ring-primary"
-                          data-testid="radio-create-players"
+                          data-testid="radio-create-athletes"
                         />
                         <span className="text-sm text-gray-700">Create missing athletes and assign to team:</span>
                       </label>
@@ -313,7 +313,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <div className="mt-4">
                     <h6 className="font-medium text-yellow-800 mb-2">Smart Data Placement:</h6>
                     <div className="max-h-32 overflow-y-auto space-y-1">
-                      {importResults.warnings.slice(0, 5).map((warning, index) => (
+                      {importResults.warnings.slice(0, 5).map((warning: any, index: number) => (
                         <p key={index} className="text-sm text-yellow-600">
                           {warning.row}: {warning.warning}
                         </p>
@@ -329,7 +329,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <div className="mt-4">
                     <h6 className="font-medium text-red-800 mb-2">Errors:</h6>
                     <div className="max-h-32 overflow-y-auto space-y-1">
-                      {importResults.errors.slice(0, 5).map((error, index) => (
+                      {importResults.errors.slice(0, 5).map((error: any, index: number) => (
                         <p key={index} className="text-sm text-red-600">
                           Row {index + 1}: {error.error}
                         </p>
@@ -356,7 +356,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 <h4 className="text-md font-medium text-gray-700 mb-4">Athletes CSV Format</h4>
                 <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm">
                   <div className="text-gray-600 mb-2"># athletes.csv</div>
-                  <pre className="whitespace-pre-wrap">{playersTemplate}</pre>
+                  <pre className="whitespace-pre-wrap">{athletesTemplate}</pre>
                 </div>
                 <div className="mt-3 flex justify-between items-center">
                   <span className="text-xs text-gray-500">
@@ -366,8 +366,8 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => copyToClipboard(playersTemplate, "Athletes")}
-                    data-testid="button-copy-players-template"
+                    onClick={() => copyToClipboard(athletesTemplate, "Athletes")}
+                    data-testid="button-copy-athletes-template"
                   >
                     <Copy className="h-4 w-4 mr-1" />
                     Copy
@@ -442,9 +442,9 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 <h4 className="font-medium text-gray-900 mb-2">Export Athletes</h4>
                 <p className="text-sm text-gray-600 mb-4">Download all athlete information including team assignments</p>
                 <Button 
-                  onClick={() => handleExport("players")}
+                  onClick={() => handleExport("athletes")}
                   className="w-full bg-blue-600 hover:bg-blue-700"
-                  data-testid="button-export-players"
+                  data-testid="button-export-athletes"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Export Athletes CSV
@@ -475,7 +475,7 @@ Jamie,Anderson,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test`;
                 <p className="text-sm text-gray-600 mb-4">Download complete database backup including all teams and data</p>
                 <Button 
                   onClick={() => {
-                    handleExport("players");
+                    handleExport("athletes");
                     handleExport("measurements");
                   }}
                   className="w-full bg-purple-600 hover:bg-purple-700"

@@ -3,7 +3,7 @@ interface ApiFilters {
   organizationId?: string;
   teamId?: string;
   athleteId?: string;
-  playerId?: string; // Legacy support
+  userId?: string;
   [key: string]: any;
 }
 
@@ -140,20 +140,16 @@ export const queries = {
     queryFn: () => apiClient.get(`/teams/${id}`),
   }),
 
-  // Athletes (consolidated from players)
+  // Athletes
   athletes: (filters?: ApiFilters) => ({
     queryKey: ['athletes', filters],
-    queryFn: () => apiClient.get('/players', filters), // Backend still uses /players endpoint
+    queryFn: () => apiClient.get('/athletes', filters),
   }),
 
   athlete: (id: string) => ({
     queryKey: ['athletes', id],
-    queryFn: () => apiClient.get(`/players/${id}`), // Backend still uses /players endpoint
+    queryFn: () => apiClient.get(`/athletes/${id}`),
   }),
-
-  // Legacy support
-  players: (filters?: ApiFilters) => queries.athletes(filters),
-  player: (id: string) => queries.athlete(id),
 
   // Measurements
   measurements: (filters?: ApiFilters) => ({
@@ -229,14 +225,9 @@ export const mutations = {
   deleteTeam: (id: string) => apiClient.delete(`/teams/${id}`),
 
   // Athletes
-  createAthlete: (data: any) => apiClient.post('/players', data), // Backend still uses /players
-  updateAthlete: (id: string, data: any) => apiClient.patch(`/players/${id}`, data),
-  deleteAthlete: (id: string) => apiClient.delete(`/players/${id}`),
-
-  // Legacy support
-  createPlayer: (data: any) => mutations.createAthlete(data),
-  updatePlayer: (id: string, data: any) => mutations.updateAthlete(id, data),
-  deletePlayer: (id: string) => mutations.deleteAthlete(id),
+  createAthlete: (data: any) => apiClient.post('/athletes', data),
+  updateAthlete: (id: string, data: any) => apiClient.patch(`/athletes/${id}`, data),
+  deleteAthlete: (id: string) => apiClient.delete(`/athletes/${id}`),
 
   // Measurements
   createMeasurement: (data: any) => apiClient.post('/measurements', data),
@@ -276,7 +267,7 @@ export const dataFetchers = {
   organizations: (filters?: ApiFilters) => apiClient.get('/organizations', filters),
   users: (filters?: ApiFilters) => apiClient.get('/users', filters),
   teams: (filters?: ApiFilters) => apiClient.get('/teams', filters),
-  players: (filters?: ApiFilters) => apiClient.get('/players', filters),
+  athletes: (filters?: ApiFilters) => apiClient.get('/athletes', filters),
   measurements: (filters?: ApiFilters) => apiClient.get('/measurements', filters),
   userOrganizations: (userId?: string) => 
     apiClient.get(userId ? `/users/${userId}/organizations` : '/auth/me/organizations'),

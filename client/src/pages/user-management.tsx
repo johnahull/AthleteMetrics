@@ -107,10 +107,10 @@ export default function UserManagement() {
   // Redirect athletes away from this management page
   useEffect(() => {
     if (!isSiteAdmin && userRole === "athlete") {
-      const playerId = user?.playerId || user?.id;
-      setLocation(`/athletes/${playerId}`);
+      const athleteId = user?.id;
+      setLocation(`/athletes/${athleteId}`);
     }
-  }, [isSiteAdmin, userRole, user?.id, user?.playerId, setLocation]);
+  }, [isSiteAdmin, userRole, user?.id, setLocation]);
 
   // Don't render management UI for athletes
   if (!isSiteAdmin && userRole === "athlete") {
