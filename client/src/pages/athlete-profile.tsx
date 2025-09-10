@@ -244,10 +244,10 @@ export default function AthleteProfile() {
               <User className="h-4 w-4 mr-1" />
               Birth Year: {athlete?.birthYear}
             </span>
-            {player?.gender && (
+            {athlete?.gender && (
               <span className="flex items-center">
                 <User className="h-4 w-4 mr-1" />
-                Gender: {player.gender}
+                Gender: {athlete.gender}
               </span>
             )}
             <span className="flex items-center">

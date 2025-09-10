@@ -49,7 +49,7 @@ export default function MeasurementForm() {
       birthDate: "",
       teamIds: [],
       school: "",
-      gender: "",
+      gender: undefined,
     },
   });
 

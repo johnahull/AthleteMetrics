@@ -39,7 +39,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       school: "",
       sports: [],
       phoneNumbers: [],
-      gender: "",
+      gender: undefined,
       role: "athlete" as const,
     },
   });
@@ -84,7 +84,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         school: athlete.school || "",
         sports: athlete.sports || [],
         phoneNumbers: athlete.phoneNumbers || [],
-        gender: athlete.gender || "",
+        gender: athlete.gender || undefined,
         role: "athlete" as const,
       });
     } else {
@@ -99,7 +99,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         school: "",
         sports: [],
         phoneNumbers: [],
-        gender: "",
+        gender: undefined,
         role: "athlete" as const,
       });
     }
@@ -129,7 +129,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         school: "",
         sports: [],
         phoneNumbers: [],
-        gender: "",
+        gender: undefined,
         role: "athlete" as const,
       });
     },

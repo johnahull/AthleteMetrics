@@ -192,6 +192,7 @@ export default function Analytics() {
       dateRange: "last30",
       sport: "",
       search: "",
+      gender: "",
     });
   };
   

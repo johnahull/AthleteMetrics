@@ -835,7 +835,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (filters?.gender && filters.gender !== "all") {
-        conditions.push(eq(users.gender, filters.gender));
+        conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
       }
 
       const result = await db
