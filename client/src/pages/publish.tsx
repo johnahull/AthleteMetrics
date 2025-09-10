@@ -200,7 +200,7 @@ export default function Publish() {
       <Card className="bg-white">
         <CardContent className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+          <div className="grid gap-4" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))'}}>
             {/* Metric - Required */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

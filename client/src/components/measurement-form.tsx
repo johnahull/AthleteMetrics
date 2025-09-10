@@ -373,7 +373,7 @@ export default function MeasurementForm() {
             <Card className="bg-gray-50">
               <CardContent className="p-4">
                 <Form {...quickAddForm}>
-                  <form onSubmit={quickAddForm.handleSubmit(onQuickAddSubmit)} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <form onSubmit={quickAddForm.handleSubmit(onQuickAddSubmit)} className="grid gap-4" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))'}}>
                     <FormField
                       control={quickAddForm.control}
                       name="firstName"

@@ -253,7 +253,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
             </div>
 
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-4" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))'}}>
               <FormField
                 control={form.control}
                 name="birthDate"

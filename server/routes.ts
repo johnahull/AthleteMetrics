@@ -1014,7 +1014,7 @@ export function registerRoutes(app: Express) {
         }
 
         const filters: any = {
-          playerId: currentUser.athleteId,
+          athleteId: currentUser.athleteId,
           metric: metric as string,
           dateFrom: dateFrom as string,
           dateTo: dateTo as string,
@@ -1442,7 +1442,7 @@ export function registerRoutes(app: Express) {
               teamIds: teamIds || [],
               role,
               invitedBy: invitedById,
-              playerId: athlete.id,
+              playerId: athlete.id, // DB field name
               expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
             });
             invitations.push(invitation);
@@ -2978,10 +2978,10 @@ export function registerRoutes(app: Express) {
       }
 
       // Extract query parameters for filtering
-      const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
+      const {athleteId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
 
       const filters: any = {
-        playerId: playerId as string,
+        athleteId: athleteId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
         metric: metric as string,
         dateFrom: dateFrom as string,

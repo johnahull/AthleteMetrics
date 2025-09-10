@@ -1,12 +1,18 @@
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
-  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
+  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation,
+  Gender
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+
+// Type guard for safe gender validation
+function isValidGender(value: string): value is "Male" | "Female" | "Not Specified" {
+  return value === Gender.MALE || value === Gender.FEMALE || value === Gender.NOT_SPECIFIED;
+}
 
 export interface IStorage {
   // Authentication & Users
@@ -834,8 +840,8 @@ export class DatabaseStorage implements IStorage {
         conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
       }
 
-      if (filters?.gender && filters.gender !== "all") {
-        conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+      if (filters?.gender && filters.gender !== "all" && isValidGender(filters.gender)) {
+        conditions.push(eq(users.gender, filters.gender));
       }
 
       const result = await db
@@ -1248,6 +1254,9 @@ export class DatabaseStorage implements IStorage {
     if (!filters?.includeUnverified) {
       conditions.push(eq(measurements.isVerified, "true"));
     }
+    if (filters?.gender && filters.gender !== "all" && isValidGender(filters.gender)) {
+      conditions.push(eq(users.gender, filters.gender));
+    }
 
     let finalQuery = query;
     if (conditions.length > 0) {
@@ -1287,12 +1296,7 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Filter by gender if specified
-    if (filters?.gender && filters.gender !== "all") {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.gender === filters.gender
-      );
-    }
+    // Gender filtering now handled at SQL level for performance
 
     return filteredMeasurements;
   }
