@@ -482,9 +482,9 @@ export function registerRoutes(app: Express) {
             });
           });
         });
+      } else {
+        res.status(401).json({ message: "Invalid credentials" });
       }
-
-      res.status(401).json({ message: "Invalid credentials" });
     } catch (error) {
       return handleError(error, res, "login");
     }
