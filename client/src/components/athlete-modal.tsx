@@ -187,6 +187,8 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       ...data,
       emails: filteredEmails,
       phoneNumbers: filteredPhones,
+      // Convert empty birthDate to null for database compatibility
+      birthDate: data.birthDate?.trim() === "" ? null : data.birthDate,
     };
 
     if (isEditing) {
