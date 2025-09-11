@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertUserSchema, Gender, type InsertUser, type User, type Team } from "@shared/schema";
+import { insertUserSchema, Gender, SoccerPosition, type InsertUser, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
 
 interface AthleteModalProps {
@@ -38,6 +38,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       graduationYear: new Date().getFullYear() + 3,
       school: "",
       sports: [],
+      positions: [],
       phoneNumbers: [],
       gender: undefined,
       role: "athlete" as const,
@@ -82,7 +83,10 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         birthDate: athlete.birthDate || "",
         graduationYear: athlete.graduationYear || undefined,
         school: athlete.school || "",
-        sports: athlete.sports || [],
+        sports: (athlete.sports || []).filter((s): s is "Soccer" => s === "Soccer"),
+        positions: (athlete.positions || []).filter((p): p is "F" | "M" | "D" | "GK" => 
+          ["F", "M", "D", "GK"].includes(p)
+        ),
         phoneNumbers: athlete.phoneNumbers || [],
         gender: athlete.gender || undefined,
         role: "athlete" as const,
@@ -98,6 +102,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         graduationYear: new Date().getFullYear() + 3,
         school: "",
         sports: [],
+        positions: [],
         phoneNumbers: [],
         gender: undefined,
         role: "athlete" as const,
@@ -128,6 +133,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         graduationYear: new Date().getFullYear() + 3,
         school: "",
         sports: [],
+        positions: [],
         phoneNumbers: [],
         gender: undefined,
         role: "athlete" as const,
@@ -441,17 +447,6 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="Soccer">Soccer</SelectItem>
-                                <SelectItem value="Track & Field">Track & Field</SelectItem>
-                                <SelectItem value="Basketball">Basketball</SelectItem>
-                                <SelectItem value="Football">Football</SelectItem>
-                                <SelectItem value="Tennis">Tennis</SelectItem>
-                                <SelectItem value="Baseball">Baseball</SelectItem>
-                                <SelectItem value="Volleyball">Volleyball</SelectItem>
-                                <SelectItem value="Cross Country">Cross Country</SelectItem>
-                                <SelectItem value="Swimming">Swimming</SelectItem>
-                                <SelectItem value="Wrestling">Wrestling</SelectItem>
-                                <SelectItem value="Golf">Golf</SelectItem>
-                                <SelectItem value="Other">Other</SelectItem>
                               </SelectContent>
                             </Select>
                           </FormControl>
@@ -485,6 +480,52 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
               </div>
             </FormItem>
 
+            {/* Soccer Positions */}
+            {sportsFields.some((field: any) => field.value === "Soccer") && (
+              <FormItem>
+                <FormLabel className="flex items-center">
+                  <Trophy className="h-4 w-4 mr-2" />
+                  Soccer Positions
+                </FormLabel>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(SoccerPosition).map(([key, value]) => (
+                    <FormField
+                      key={key}
+                      control={form.control}
+                      name="positions"
+                      render={({ field }) => {
+                        return (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(value) || false}
+                                onCheckedChange={(checked) => {
+                                  const currentPositions = field.value || [];
+                                  if (checked) {
+                                    field.onChange([...currentPositions, value]);
+                                  } else {
+                                    field.onChange(
+                                      currentPositions.filter((pos: string) => pos !== value)
+                                    );
+                                  }
+                                }}
+                                data-testid={`checkbox-position-${value}`}
+                              />
+                            </FormControl>
+                            <FormLabel className="text-sm font-normal">
+                              {value} - {key === 'FORWARD' ? 'Forward' : 
+                                      key === 'MIDFIELDER' ? 'Midfielder' :
+                                      key === 'DEFENDER' ? 'Defender' : 'Goalkeeper'}
+                            </FormLabel>
+                          </FormItem>
+                        )
+                      }}
+                    />
+                  ))}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
 
             {/* Email Addresses */}
             <FormItem>

@@ -35,7 +35,8 @@ export const users = pgTable("users", {
   graduationYear: integer("graduation_year"),
   school: text("school"),
   phoneNumbers: text("phone_numbers").array(),
-  sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
+  sports: text("sports").array(), // ["Soccer"] - restricted to soccer only
+  positions: text("positions").array(), // ["F", "M", "D", "GK"] for soccer positions
   height: integer("height"), // inches
   weight: integer("weight"), // pounds
   gender: text("gender").$type<"Male" | "Female" | "Not Specified">(), // CHECK constraint in migration
@@ -242,7 +243,8 @@ export const insertUserSchema = createInsertSchema(users).omit({
     return !isNaN(d.getTime()) && d <= new Date();
   }, "Invalid birth date or future date"),
   teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
-  sports: z.array(z.string().min(1, "Sport cannot be empty")).optional(),
+  sports: z.array(z.enum(["Soccer"])).optional(),
+  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
 });
@@ -374,6 +376,13 @@ export const Gender = {
   NOT_SPECIFIED: "Not Specified",
 } as const;
 
+export const SoccerPosition = {
+  FORWARD: "F",
+  MIDFIELDER: "M",
+  DEFENDER: "D",
+  GOALKEEPER: "GK",
+} as const;
+
 // Organization-specific roles only
 export const UserRole = {
   ORG_ADMIN: "org_admin",
@@ -400,7 +409,8 @@ export const insertAthleteSchema = z.object({
   graduationYear: z.coerce.number().int().min(2000).max(2040).optional(),
   school: z.string().optional(),
   phoneNumbers: z.array(z.string()).optional(),
-  sports: z.array(z.string()).optional(),
+  sports: z.array(z.enum(["Soccer"])).optional(),
+  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
   height: z.coerce.number().optional(),
   weight: z.coerce.number().optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),

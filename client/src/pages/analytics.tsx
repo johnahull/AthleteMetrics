@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
-import { Gender } from "@shared/schema";
+import { Gender, SoccerPosition } from "@shared/schema";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -55,6 +55,7 @@ export default function Analytics() {
     sport: "",
     search: "",
     gender: "all",  // Default to show all genders, user can filter as needed
+    position: "all",  // Default to show all positions
   });
   
   // Edit form
@@ -86,6 +87,7 @@ export default function Analytics() {
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.search.trim()) params.append('search', filters.search.trim());
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
+      if (filters.position && filters.position !== "all") params.append('position', filters.position);
 
       // Add date filtering based on dateRange
       const now = new Date();
@@ -193,6 +195,7 @@ export default function Analytics() {
       sport: "",
       search: "",
       gender: "",
+      position: "all",
     });
   };
   
@@ -447,6 +450,21 @@ export default function Analytics() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+              <Select value={filters.position || "all"} onValueChange={(value) => setFilters(prev => ({ ...prev, position: value }))}>
+                <SelectTrigger aria-label="Filter results by position">
+                  <SelectValue placeholder="All Positions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Positions</SelectItem>
+                  <SelectItem value={SoccerPosition.FORWARD}>{SoccerPosition.FORWARD} - Forward</SelectItem>
+                  <SelectItem value={SoccerPosition.MIDFIELDER}>{SoccerPosition.MIDFIELDER} - Midfielder</SelectItem>
+                  <SelectItem value={SoccerPosition.DEFENDER}>{SoccerPosition.DEFENDER} - Defender</SelectItem>
+                  <SelectItem value={SoccerPosition.GOALKEEPER}>{SoccerPosition.GOALKEEPER} - Goalkeeper</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
@@ -478,6 +496,11 @@ export default function Analytics() {
                 {filters.gender && filters.gender !== "all" && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.gender}
+                  </span>
+                )}
+                {filters.position && filters.position !== "all" && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                    Position: {filters.position}
                   </span>
                 )}
                 {filters.search && (

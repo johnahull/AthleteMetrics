@@ -4,7 +4,7 @@ import {
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -164,7 +164,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
+    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -172,7 +172,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
+    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
     return user || undefined;
   }
 
@@ -1162,6 +1162,7 @@ export class DatabaseStorage implements IStorage {
     search?: string;
     sport?: string;
     gender?: string;
+    position?: string;
     includeUnverified?: boolean;
   }): Promise<any[]> {
     // Optimized query with all joins to eliminate N+1
@@ -1291,6 +1292,13 @@ export class DatabaseStorage implements IStorage {
     if (filters?.gender && filters.gender !== "all") {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
         measurement.user.gender === filters.gender
+      );
+    }
+
+    // Filter by position if specified
+    if (filters?.position && filters.position !== "all") {
+      filteredMeasurements = filteredMeasurements.filter(measurement =>
+        measurement.user.positions?.includes(filters.position!)
       );
     }
 

@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import session from "express-session";
 import rateLimit from "express-rate-limit";
@@ -61,8 +61,65 @@ declare module 'express-session' {
 const permissionChecker = new PermissionChecker(storage);
 const accessController = new AccessController(storage);
 
+// User type for session user objects
+interface SessionUser {
+  id: string;
+  role?: string;
+  isSiteAdmin?: boolean | string;
+  admin?: boolean;
+  primaryOrganizationId?: string;
+  username?: string;
+  athleteId?: string;
+}
+
+// Centralized error handling utility
+const handleError = (error: unknown, res: Response, operation: string, statusCode: number = 500) => {
+  console.error(`Error in ${operation}:`, error);
+  
+  // Handle different error types
+  if (error instanceof z.ZodError) {
+    return res.status(400).json({ 
+      message: "Validation error", 
+      errors: error.errors 
+    });
+  }
+  
+  if (error instanceof Error) {
+    // Don't expose internal error messages in production
+    const isProduction = process.env.NODE_ENV === 'production';
+    return res.status(statusCode).json({ 
+      message: isProduction ? `Failed to ${operation}` : error.message 
+    });
+  }
+  
+  return res.status(statusCode).json({ 
+    message: `Failed to ${operation}` 
+  });
+};
+
+// Measurement filters type
+interface MeasurementFilters {
+  userId?: string;
+  athleteId?: string;
+  playerId?: string;
+  teamIds?: string[];
+  organizationId?: string;
+  metric?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  birthYearFrom?: number;
+  birthYearTo?: number;
+  ageFrom?: number;
+  ageTo?: number;
+  search?: string;
+  sport?: string;
+  gender?: string;
+  position?: string;
+  includeUnverified?: boolean;
+}
+
 // Legacy helper functions (to be removed gradually)
-const isSiteAdmin = (user: any): boolean => {
+const isSiteAdmin = (user: SessionUser | null | undefined): boolean => {
   return user?.isSiteAdmin === true || user?.isSiteAdmin === 'true' || user?.role === "site_admin" || user?.admin === true;
 };
 
@@ -71,12 +128,12 @@ const canManageUsers = async (userId: string, organizationId: string): Promise<b
 };
 
 // Helper functions for access control
-const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
+const canAccessOrganization = async (user: SessionUser | null | undefined, organizationId: string): Promise<boolean> => {
   if (!user?.id) return false;
   return await accessController.canAccessOrganization(user.id, organizationId);
 };
 
-const hasRole = (user: any, role: string): boolean => {
+const hasRole = (user: SessionUser | null | undefined, role: string): boolean => {
   return user?.role === role;
 };
 
@@ -221,7 +278,7 @@ export function registerRoutes(app: Express) {
   const csrfTokens = new csrf();
 
   // Input sanitization middleware
-  const sanitizeInput = (req: any, res: any, next: any) => {
+  const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
     // Sanitize string fields in request body
     if (req.body && typeof req.body === 'object') {
       for (const key in req.body) {
@@ -246,6 +303,46 @@ export function registerRoutes(app: Express) {
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   });
+
+  // Rate limiting for API endpoints (general usage)
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 100, // Limit each IP to 100 requests per windowMs
+    message: {
+      error: "Too many requests, please try again later"
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      // Skip rate limiting for local development
+      return req.ip === '127.0.0.1' || req.ip === '::1';
+    }
+  });
+
+  // Rate limiting for file upload endpoints
+  const uploadLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    limit: 10, // Limit each IP to 10 file uploads per hour
+    message: {
+      error: "Too many file uploads, please try again in an hour"
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Rate limiting for creation endpoints
+  const createLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 50, // Limit each IP to 50 create operations per windowMs
+    message: {
+      error: "Too many creation attempts, please slow down"
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Apply general rate limiting to all API routes
+  app.use('/api', apiLimiter);
 
   // Email validation function
   const isValidEmail = (value: string): boolean => {
@@ -350,32 +447,46 @@ export function registerRoutes(app: Express) {
           }
         }
 
-        req.session.user = {
-          id: user.id,
-          username: user.username,
-          email: user.emails?.[0] || `${user.username}@temp.local`, // Use first email for backward compatibility in session
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: userRole,
-          isSiteAdmin: user.isSiteAdmin === "true",
-          athleteId: userRole === "athlete" ? user.id : undefined, // Use user ID as athlete ID for athletes
-          primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
-        };
+        // Regenerate session to prevent session fixation attacks
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error('Session regeneration error:', err);
+            return res.status(500).json({ message: "Login failed due to session error" });
+          }
+          
+          req.session.user = {
+            id: user.id,
+            username: user.username,
+            email: user.emails?.[0] || `${user.username}@temp.local`, // Use first email for backward compatibility in session
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: userRole,
+            isSiteAdmin: user.isSiteAdmin === "true",
+            athleteId: userRole === "athlete" ? user.id : undefined, // Use user ID as athlete ID for athletes
+            primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
+          };
+          
+          req.session.save((saveErr) => {
+            if (saveErr) {
+              console.error('Session save error:', saveErr);
+              return res.status(500).json({ message: "Login failed due to session error" });
+            }
+            
+            // Log successful authentication without sensitive details
+            console.log(`User authenticated successfully (${user.id}): role=${userRole}, orgs=${userOrgs ? userOrgs.length : 0}`);
 
-        // Log successful authentication without sensitive details
-        console.log(`User authenticated successfully (${user.id}): role=${userRole}, orgs=${userOrgs ? userOrgs.length : 0}`);
-
-        return res.json({ 
-          success: true, 
-          user: req.session.user,
-          redirectUrl
+            return res.json({ 
+              success: true, 
+              user: req.session.user,
+              redirectUrl
+            });
+          });
         });
       }
 
       res.status(401).json({ message: "Invalid credentials" });
     } catch (error) {
-      console.error("Login error:", error);
-      res.status(500).json({ message: "Login failed" });
+      return handleError(error, res, "login");
     }
   });
 
@@ -617,34 +728,39 @@ export function registerRoutes(app: Express) {
         res.json(organizations);
       }
     } catch (error) {
-      console.error("Error fetching user organizations:", error);
-      res.status(500).json({ message: "Failed to fetch organizations" });
+      return handleError(error, res, "fetch organizations");
     }
   });
 
-  app.post("/api/organizations", requireSiteAdmin, async (req, res) => {
+  app.post("/api/organizations", createLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const organizationData = insertOrganizationSchema.parse(req.body);
       const organization = await storage.createOrganization(organizationData);
       res.status(201).json(organization);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Validation error", errors: error.errors });
-      } else {
-        console.error("Error creating organization:", error);
-        res.status(500).json({ message: "Failed to create organization" });
-      }
+      return handleError(error, res, "create organization");
     }
   });
 
   // User management routes (Site Admin only)
-  app.post("/api/users", requireSiteAdmin, async (req, res) => {
+  app.post("/api/users", createLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       const user = await storage.createUser(userData);
 
-      // If organization specified, add user to it
+      // If organization specified, validate and add user to it
       if (req.body.organizationId) {
+        // Validate organization exists
+        const org = await storage.getOrganization(req.body.organizationId);
+        if (!org) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+        
+        // Validate organizationId is a valid UUID/string format
+        if (typeof req.body.organizationId !== 'string' || req.body.organizationId.trim().length === 0) {
+          return res.status(400).json({ message: "Organization ID must be a valid string" });
+        }
+        
         await storage.addUserToOrganization(user.id, req.body.organizationId, userData.role);
       }
 
@@ -702,7 +818,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/teams", requireAuth, async (req, res) => {
+  app.post("/api/teams", createLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
 
@@ -730,6 +846,17 @@ export function registerRoutes(app: Express) {
 
       if (!organizationId) {
         return res.status(400).json({ message: "Organization ID is required" });
+      }
+
+      // Validate organizationId is a valid UUID/string format
+      if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
+        return res.status(400).json({ message: "Organization ID must be a valid string" });
+      }
+
+      // Validate organization exists
+      const org = await storage.getOrganization(organizationId);
+      if (!org) {
+        return res.status(400).json({ message: "Invalid organization ID" });
       }
 
       // Validate user has access to the organization
@@ -934,7 +1061,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/athletes", requireAuth, async (req, res) => {
+  app.post("/api/athletes", createLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
 
@@ -998,7 +1125,7 @@ export function registerRoutes(app: Express) {
   // Keep existing measurement routes
   app.get("/api/measurements", requireAuth, async (req, res) => {
     try {
-      const {athleteId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
+      const {athleteId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, position, organizationId } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1013,7 +1140,7 @@ export function registerRoutes(app: Express) {
           return res.json([]);
         }
 
-        const filters: any = {
+        const filters: MeasurementFilters = {
           playerId: currentUser.athleteId,
           metric: metric as string,
           dateFrom: dateFrom as string,
@@ -1045,7 +1172,7 @@ export function registerRoutes(app: Express) {
         }
       }
 
-      const filters: any = {
+      const filters: MeasurementFilters = {
         athleteId: athleteId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
         metric: metric as string,
@@ -1058,6 +1185,7 @@ export function registerRoutes(app: Express) {
         search: search as string,
         sport: sport as string,
         gender: gender as string,
+        position: position as string,
         organizationId: orgContextForFiltering,
         includeUnverified: true
       };
@@ -1070,7 +1198,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/measurements", requireAuth, async (req, res) => {
+  app.post("/api/measurements", createLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
 
@@ -1396,7 +1524,7 @@ export function registerRoutes(app: Express) {
 
   // Invitation routes
   // Unified invitation endpoint - handles all invitation types
-  app.post("/api/invitations", requireAuth, async (req, res) => {
+  app.post("/api/invitations", createLimiter, requireAuth, async (req, res) => {
     try {
       const { email, firstName, lastName, role, organizationId, teamIds, athleteId } = req.body;
 
@@ -1485,6 +1613,17 @@ export function registerRoutes(app: Express) {
 
       if (!organizationId) {
         return res.status(400).json({ message: "Organization is required" });
+      }
+
+      // Validate organizationId is a valid string format
+      if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
+        return res.status(400).json({ message: "Organization ID must be a valid string" });
+      }
+
+      // Validate organization exists
+      const org = await storage.getOrganization(organizationId);
+      if (!org) {
+        return res.status(400).json({ message: "Invalid organization ID" });
       }
 
       // Check permissions using unified function
@@ -1669,29 +1808,43 @@ export function registerRoutes(app: Express) {
         userRole = "site_admin";
       }
 
-      // Log the new user in
-      req.session.user = {
-        id: result.user.id,
-        username: result.user.username,
-        email: result.user.emails?.[0] || `${result.user.username}@temp.local`,
-        firstName: result.user.firstName,
-        lastName: result.user.lastName,
-        role: userRole,
-        isSiteAdmin: result.user.isSiteAdmin === "true"
-      };
+      // Log the new user in - regenerate session to prevent session fixation
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error('Session regeneration error during invitation acceptance:', err);
+          return res.status(500).json({ message: "Account creation successful but login failed" });
+        }
+        
+        req.session.user = {
+          id: result.user.id,
+          username: result.user.username,
+          email: result.user.emails?.[0] || `${result.user.username}@temp.local`,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          role: userRole,
+          isSiteAdmin: result.user.isSiteAdmin === "true"
+        };
 
-      // Determine redirect URL based on user role
-      let redirectUrl = "/";
-      if (userRole === "athlete") {
-        // For athletes, redirect to their user ID
-        redirectUrl = `/athletes/${result.user.id}`;
-      }
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error('Session save error during invitation acceptance:', saveErr);
+            return res.status(500).json({ message: "Account creation successful but login failed" });
+          }
 
-      res.json({ 
-        success: true, 
-        user: req.session.user,
-        message: "Account created successfully!",
-        redirectUrl
+          // Determine redirect URL based on user role
+          let redirectUrl = "/";
+          if (userRole === "athlete") {
+            // For athletes, redirect to their user ID
+            redirectUrl = `/athletes/${result.user.id}`;
+          }
+
+          res.json({ 
+            success: true, 
+            user: req.session.user,
+            message: "Account created successfully!",
+            redirectUrl
+          });
+        });
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);
@@ -1814,6 +1967,11 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
+      // Validate organizationId is a valid string format
+      if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
+        return res.status(400).json({ message: "Organization ID must be a valid string" });
+      }
+
       if (!userIsSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
         const isOrgAdmin = userRoles.includes("org_admin");
@@ -1887,6 +2045,11 @@ export function registerRoutes(app: Express) {
 
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate organizationId is a valid string format
+      if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
+        return res.status(400).json({ message: "Organization ID must be a valid string" });
       }
 
       if (!userIsSiteAdmin) {
@@ -2101,6 +2264,17 @@ export function registerRoutes(app: Express) {
         // For non-site admins, check org admin permissions
         if (!organizationId) {
           return res.status(400).json({ message: "Organization ID required for role changes" });
+        }
+
+        // Validate organizationId is a valid string format
+        if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
+          return res.status(400).json({ message: "Organization ID must be a valid string" });
+        }
+
+        // Validate organization exists
+        const org = await storage.getOrganization(organizationId);
+        if (!org) {
+          return res.status(400).json({ message: "Invalid organization ID" });
         }
 
         if (!await canManageUsers(currentUser.id, organizationId)) {
@@ -2435,7 +2609,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Import routes
-  app.post("/api/import/:type", requireAuth, upload.single('file'), async (req, res) => {
+  app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
     try {
       const { type } = req.params;
       const { createMissing, teamId } = req.body;
@@ -2751,7 +2925,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Photo OCR upload route
-  app.post("/api/import/photo", requireAuth, imageUpload.single('file'), async (req, res) => {
+  app.post("/api/import/photo", uploadLimiter, requireAuth, imageUpload.single('file'), async (req, res) => {
     try {
       const currentUser = req.session.user;
       const file = req.file;
@@ -2980,7 +3154,7 @@ export function registerRoutes(app: Express) {
       // Extract query parameters for filtering
       const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
 
-      const filters: any = {
+      const filters: MeasurementFilters = {
         playerId: playerId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
         metric: metric as string,
