@@ -169,6 +169,16 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
   });
 
   const onSubmit = (data: InsertAthlete) => {
+    // Validate birth date is required
+    if (!data.birthDate || data.birthDate.trim() === "") {
+      toast({
+        title: "Error",
+        description: "Birth date is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Filter out empty emails and ensure at least one email exists
     const filteredEmails = data.emails?.filter(email => email.trim() !== "") || [];
     if (filteredEmails.length === 0) {
@@ -187,8 +197,6 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       ...data,
       emails: filteredEmails,
       phoneNumbers: filteredPhones,
-      // Convert empty birthDate to null for database compatibility
-      birthDate: data.birthDate?.trim() === "" ? null : data.birthDate,
     };
 
     if (isEditing) {
