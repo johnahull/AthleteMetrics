@@ -113,6 +113,10 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
   const createAthleteMutation = useMutation({
     mutationFn: async (data: InsertUser) => {
       const response = await apiRequest("POST", "/api/athletes", data);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create athlete");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -139,10 +143,10 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         role: "athlete" as const,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to create athlete",
+        description: error.message || "Failed to create athlete",
         variant: "destructive",
       });
     },
@@ -151,21 +155,26 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
   const updateAthleteMutation = useMutation({
     mutationFn: async (data: InsertUser) => {
       const response = await apiRequest("PATCH", `/api/athletes/${athlete!.id}`, data);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update athlete");
+      }
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes", athlete?.id] });
       toast({
         title: "Success",
         description: "Athlete updated successfully",
       });
       onClose();
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to update athlete",
+        description: error.message || "Failed to update athlete",
         variant: "destructive",
       });
     },
@@ -183,9 +192,13 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       return;
     }
 
+    // Filter out empty phone numbers
+    const filteredPhones = data.phoneNumbers?.filter(phone => phone.trim() !== "") || [];
+
     const submissionData = {
       ...data,
       emails: filteredEmails,
+      phoneNumbers: filteredPhones,
     };
 
     if (isEditing) {
