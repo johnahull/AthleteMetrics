@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertUserSchema, Gender, SoccerPosition, type InsertUser, type User, type Team } from "@shared/schema";
+import { insertAthleteSchema, Gender, SoccerPosition, type InsertAthlete, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
 
 interface AthleteModalProps {
@@ -26,14 +26,12 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
   const queryClient = useQueryClient();
   const isEditing = !!athlete;
 
-  const form = useForm<InsertUser>({
-    resolver: zodResolver(insertUserSchema),
+  const form = useForm<InsertAthlete>({
+    resolver: zodResolver(insertAthleteSchema),
     defaultValues: {
-      username: "",
       firstName: "",
       lastName: "",
-      emails: [""],
-      password: "",
+      emails: [],
       birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
       school: "",
@@ -41,7 +39,6 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       positions: [],
       phoneNumbers: [],
       gender: undefined,
-      role: "athlete" as const,
     },
   });
 
@@ -75,11 +72,9 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
   useEffect(() => {
     if (athlete) {
       form.reset({
-        username: athlete.username,
         firstName: athlete.firstName,
         lastName: athlete.lastName,
         emails: athlete.emails || [],
-        password: "", // Don't populate password for editing
         birthDate: athlete.birthDate || "",
         graduationYear: athlete.graduationYear || undefined,
         school: athlete.school || "",
@@ -89,15 +84,12 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         ),
         phoneNumbers: athlete.phoneNumbers || [],
         gender: athlete.gender || undefined,
-        role: "athlete" as const,
       });
     } else {
       form.reset({
-        username: "",
         firstName: "",
         lastName: "",
-        emails: [""],
-        password: "",
+        emails: [],
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         school: "",
@@ -105,13 +97,12 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         positions: [],
         phoneNumbers: [],
         gender: undefined,
-        role: "athlete" as const,
       });
     }
   }, [athlete, form]);
 
   const createAthleteMutation = useMutation({
-    mutationFn: async (data: InsertUser) => {
+    mutationFn: async (data: InsertAthlete) => {
       const response = await apiRequest("POST", "/api/athletes", data);
       if (!response.ok) {
         const errorData = await response.json();
@@ -128,11 +119,9 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
       });
       onClose();
       form.reset({
-        username: "",
         firstName: "",
         lastName: "",
-        emails: [""],
-        password: "",
+        emails: [],
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
         school: "",
@@ -140,7 +129,6 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
         positions: [],
         phoneNumbers: [],
         gender: undefined,
-        role: "athlete" as const,
       });
     },
     onError: (error: Error) => {
@@ -153,7 +141,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
   });
 
   const updateAthleteMutation = useMutation({
-    mutationFn: async (data: InsertUser) => {
+    mutationFn: async (data: InsertAthlete) => {
       const response = await apiRequest("PATCH", `/api/athletes/${athlete!.id}`, data);
       if (!response.ok) {
         const errorData = await response.json();
@@ -180,7 +168,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
     },
   });
 
-  const onSubmit = (data: InsertUser) => {
+  const onSubmit = (data: InsertAthlete) => {
     // Filter out empty emails and ensure at least one email exists
     const filteredEmails = data.emails?.filter(email => email.trim() !== "") || [];
     if (filteredEmails.length === 0) {
@@ -393,7 +381,7 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
                                         ? field.onChange([...(field.value || []), team.id])
                                         : field.onChange(
                                             (field.value || []).filter(
-                                              (value) => value !== team.id
+                                              (value: string) => value !== team.id
                                             )
                                           )
                                     }}
