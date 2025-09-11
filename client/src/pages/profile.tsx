@@ -11,20 +11,22 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { updateProfileSchema, changePasswordSchema, type UpdateProfile, type ChangePassword } from "@shared/schema";
-import { User, Lock, Save } from "lucide-react";
+import { User, Lock, Save, Eye, EyeOff } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const profileForm = useForm<UpdateProfile>({
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
-      email: user?.email || "",
     },
   });
 
@@ -52,7 +54,6 @@ export default function Profile() {
       profileForm.reset({
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
-        email: updatedUser.email,
       });
     },
     onError: () => {
@@ -194,24 +195,18 @@ export default function Profile() {
                   </p>
                 </div>
 
-                <FormField
-                  control={profileForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input 
-                          {...field}
-                          type="email"
-                          disabled={updateProfileMutation.isPending}
-                          data-testid="input-profile-email"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div>
+                  <FormLabel>Email</FormLabel>
+                  <Input
+                    value={user?.email || ""}
+                    disabled
+                    className="bg-gray-50"
+                    data-testid="input-profile-email"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Primary email cannot be changed
+                  </p>
+                </div>
 
                 <Button
                   type="submit"
@@ -264,12 +259,29 @@ export default function Profile() {
                         <FormItem>
                           <FormLabel>Current Password</FormLabel>
                           <FormControl>
-                            <Input 
-                              {...field}
-                              type="password"
-                              disabled={changePasswordMutation.isPending}
-                              data-testid="input-current-password"
-                            />
+                            <div className="relative">
+                              <Input 
+                                {...field}
+                                type={showCurrentPassword ? "text" : "password"}
+                                disabled={changePasswordMutation.isPending}
+                                data-testid="input-current-password"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                disabled={changePasswordMutation.isPending}
+                                tabIndex={-1}
+                                aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                              >
+                                {showCurrentPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -283,12 +295,29 @@ export default function Profile() {
                         <FormItem>
                           <FormLabel>New Password</FormLabel>
                           <FormControl>
-                            <Input 
-                              {...field}
-                              type="password"
-                              disabled={changePasswordMutation.isPending}
-                              data-testid="input-new-password"
-                            />
+                            <div className="relative">
+                              <Input 
+                                {...field}
+                                type={showNewPassword ? "text" : "password"}
+                                disabled={changePasswordMutation.isPending}
+                                data-testid="input-new-password"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                disabled={changePasswordMutation.isPending}
+                                tabIndex={-1}
+                                aria-label={showNewPassword ? "Hide password" : "Show password"}
+                              >
+                                {showNewPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -302,12 +331,29 @@ export default function Profile() {
                         <FormItem>
                           <FormLabel>Confirm New Password</FormLabel>
                           <FormControl>
-                            <Input 
-                              {...field}
-                              type="password"
-                              disabled={changePasswordMutation.isPending}
-                              data-testid="input-confirm-password"
-                            />
+                            <div className="relative">
+                              <Input 
+                                {...field}
+                                type={showConfirmPassword ? "text" : "password"}
+                                disabled={changePasswordMutation.isPending}
+                                data-testid="input-confirm-password"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                disabled={changePasswordMutation.isPending}
+                                tabIndex={-1}
+                                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                              >
+                                {showConfirmPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>

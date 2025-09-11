@@ -11,87 +11,112 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertPlayerSchema, type InsertPlayer, type Player, type Team } from "@shared/schema";
+import { insertUserSchema, Gender, SoccerPosition, type InsertUser, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
 
-interface PlayerModalProps {
+interface AthleteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  player: (Player & { teams: Team[] }) | null;
+  athlete: (User & { teams: Team[] }) | null;
   teams: Team[];
 }
 
-export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerModalProps) {
+export default function AthleteModal({ isOpen, onClose, athlete, teams }: AthleteModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isEditing = !!player;
+  const isEditing = !!athlete;
 
-  const form = useForm<InsertPlayer>({
-    resolver: zodResolver(insertPlayerSchema),
+  const form = useForm<InsertUser>({
+    resolver: zodResolver(insertUserSchema),
     defaultValues: {
+      username: "",
       firstName: "",
       lastName: "",
       emails: [""],
+      password: "",
       birthDate: "",
       graduationYear: new Date().getFullYear() + 3,
-      teamIds: [],
       school: "",
       sports: [],
+      positions: [],
       phoneNumbers: [],
+      gender: undefined,
+      role: "athlete" as const,
     },
   });
 
-
-  const { fields: emailFields, append: appendEmail, remove: removeEmail } = useFieldArray({
+  const {
+    fields: emailFields,
+    append: appendEmail,
+    remove: removeEmail,
+  } = useFieldArray({
     control: form.control,
-    name: "emails"
+    name: "emails" as never,
   });
-
-  const { fields: phoneFields, append: appendPhone, remove: removePhone } = useFieldArray({
+  
+  const {
+    fields: phoneFields,
+    append: appendPhone,
+    remove: removePhone,
+  } = useFieldArray({
     control: form.control,
-    name: "phoneNumbers" 
+    name: "phoneNumbers" as never,
   });
-
-  const { fields: sportsFields, append: appendSport, remove: removeSport } = useFieldArray({
+  
+  const {
+    fields: sportsFields,
+    append: appendSport,
+    remove: removeSport,
+  } = useFieldArray({
     control: form.control,
-    name: "sports"
+    name: "sports" as never,
   });
 
   useEffect(() => {
-    if (player) {
+    if (athlete) {
       form.reset({
-        firstName: player.firstName,
-        lastName: player.lastName,
-        emails: player.emails || [],
-        birthDate: player.birthDate || "",
-        graduationYear: player.graduationYear || undefined,
-        teamIds: player.teams?.map(team => team.id) || [],
-        school: player.school || "",
-        sports: player.sports || [],
-        phoneNumbers: player.phoneNumbers || [],
+        username: athlete.username,
+        firstName: athlete.firstName,
+        lastName: athlete.lastName,
+        emails: athlete.emails || [],
+        password: "", // Don't populate password for editing
+        birthDate: athlete.birthDate || "",
+        graduationYear: athlete.graduationYear || undefined,
+        school: athlete.school || "",
+        sports: (athlete.sports || []).filter((s): s is "Soccer" => s === "Soccer"),
+        positions: (athlete.positions || []).filter((p): p is "F" | "M" | "D" | "GK" => 
+          ["F", "M", "D", "GK"].includes(p)
+        ),
+        phoneNumbers: athlete.phoneNumbers || [],
+        gender: athlete.gender || undefined,
+        role: "athlete" as const,
       });
     } else {
       form.reset({
+        username: "",
         firstName: "",
         lastName: "",
         emails: [""],
+        password: "",
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
-        teamIds: [],
         school: "",
         sports: [],
+        positions: [],
         phoneNumbers: [],
+        gender: undefined,
+        role: "athlete" as const,
       });
     }
-  }, [player, form]);
+  }, [athlete, form]);
 
-  const createPlayerMutation = useMutation({
-    mutationFn: async (data: InsertPlayer) => {
-      const response = await apiRequest("POST", "/api/players", data);
+  const createAthleteMutation = useMutation({
+    mutationFn: async (data: InsertUser) => {
+      const response = await apiRequest("POST", "/api/athletes", data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({
         title: "Success",
@@ -99,15 +124,19 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
       });
       onClose();
       form.reset({
+        username: "",
         firstName: "",
         lastName: "",
         emails: [""],
+        password: "",
         birthDate: "",
         graduationYear: new Date().getFullYear() + 3,
-        teamIds: [],
         school: "",
         sports: [],
+        positions: [],
         phoneNumbers: [],
+        gender: undefined,
+        role: "athlete" as const,
       });
     },
     onError: () => {
@@ -119,13 +148,13 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     },
   });
 
-  const updatePlayerMutation = useMutation({
-    mutationFn: async (data: InsertPlayer) => {
-      const response = await apiRequest("PATCH", `/api/players/${player!.id}`, data);
+  const updateAthleteMutation = useMutation({
+    mutationFn: async (data: InsertUser) => {
+      const response = await apiRequest("PATCH", `/api/athletes/${athlete!.id}`, data);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       toast({
         title: "Success",
@@ -142,7 +171,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     },
   });
 
-  const onSubmit = (data: InsertPlayer) => {
+  const onSubmit = (data: InsertUser) => {
     // Filter out empty emails and ensure at least one email exists
     const filteredEmails = data.emails?.filter(email => email.trim() !== "") || [];
     if (filteredEmails.length === 0) {
@@ -160,28 +189,13 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
     };
 
     if (isEditing) {
-      updatePlayerMutation.mutate(submissionData);
+      updateAthleteMutation.mutate(submissionData);
     } else {
-      const playerData = {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        birthDate: data.birthDate || undefined,
-        graduationYear: data.graduationYear || undefined,
-        school: data.school || undefined,
-        sports: data.sports?.filter(Boolean) || [],
-        phoneNumbers: data.phoneNumbers?.filter(Boolean) || [],
-        height: data.height || undefined,
-        weight: data.weight || undefined,
-        emails: data.emails?.filter(Boolean) || [],
-        teamIds: data.teamIds?.filter(Boolean) || []
-      };
-
-      console.log('Creating player with data:', playerData);
-      createPlayerMutation.mutate(submissionData);
+      createAthleteMutation.mutate(submissionData);
     }
   };
 
-  const isPending = createPlayerMutation.isPending || updatePlayerMutation.isPending;
+  const isPending = createAthleteMutation.isPending || updateAthleteMutation.isPending;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -214,7 +228,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         {...field} 
                         placeholder="First name"
                         disabled={isPending}
-                        data-testid="input-player-firstname"
+                        data-testid="input-athlete-firstname"
                       />
                     </FormControl>
                     <FormMessage />
@@ -235,7 +249,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         {...field} 
                         placeholder="Last name"
                         disabled={isPending}
-                        data-testid="input-player-lastname"
+                        data-testid="input-athlete-lastname"
                       />
                     </FormControl>
                     <FormMessage />
@@ -245,7 +259,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
             </div>
 
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="birthDate"
@@ -259,7 +273,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         {...field} 
                         type="date"
                         disabled={isPending}
-                        data-testid="input-player-birthdate"
+                        data-testid="input-athlete-birthdate"
                         value={field.value || ""}
                         placeholder="YYYY-MM-DD"
                         max={new Date().toISOString().split('T')[0]} // Prevent future dates
@@ -284,10 +298,37 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                         max="2035"
                         disabled={isPending}
                         onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                        data-testid="input-player-graduationyear"
+                        data-testid="input-athlete-graduationyear"
                         value={field.value || ""}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Gender</FormLabel>
+                    <Select 
+                      value={field.value || ""} 
+                      onValueChange={field.onChange}
+                      disabled={isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-athlete-gender" aria-label="Select athlete gender">
+                          <SelectValue placeholder="Select gender..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                        <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                        <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -373,7 +414,7 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                       value={field.value || ""}
                       placeholder="School name (optional)"
                       disabled={isPending}
-                      data-testid="input-player-school"
+                      data-testid="input-athlete-school"
                     />
                   </FormControl>
                   <FormMessage />
@@ -406,17 +447,6 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="Soccer">Soccer</SelectItem>
-                                <SelectItem value="Track & Field">Track & Field</SelectItem>
-                                <SelectItem value="Basketball">Basketball</SelectItem>
-                                <SelectItem value="Football">Football</SelectItem>
-                                <SelectItem value="Tennis">Tennis</SelectItem>
-                                <SelectItem value="Baseball">Baseball</SelectItem>
-                                <SelectItem value="Volleyball">Volleyball</SelectItem>
-                                <SelectItem value="Cross Country">Cross Country</SelectItem>
-                                <SelectItem value="Swimming">Swimming</SelectItem>
-                                <SelectItem value="Wrestling">Wrestling</SelectItem>
-                                <SelectItem value="Golf">Golf</SelectItem>
-                                <SelectItem value="Other">Other</SelectItem>
                               </SelectContent>
                             </Select>
                           </FormControl>
@@ -450,6 +480,52 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
               </div>
             </FormItem>
 
+            {/* Soccer Positions */}
+            {sportsFields.some((field: any) => field.value === "Soccer") && (
+              <FormItem>
+                <FormLabel className="flex items-center">
+                  <Trophy className="h-4 w-4 mr-2" />
+                  Soccer Positions
+                </FormLabel>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(SoccerPosition).map(([key, value]) => (
+                    <FormField
+                      key={key}
+                      control={form.control}
+                      name="positions"
+                      render={({ field }) => {
+                        return (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(value) || false}
+                                onCheckedChange={(checked) => {
+                                  const currentPositions = field.value || [];
+                                  if (checked) {
+                                    field.onChange([...currentPositions, value]);
+                                  } else {
+                                    field.onChange(
+                                      currentPositions.filter((pos: string) => pos !== value)
+                                    );
+                                  }
+                                }}
+                                data-testid={`checkbox-position-${value}`}
+                              />
+                            </FormControl>
+                            <FormLabel className="text-sm font-normal">
+                              {value} - {key === 'FORWARD' ? 'Forward' : 
+                                      key === 'MIDFIELDER' ? 'Midfielder' :
+                                      key === 'DEFENDER' ? 'Defender' : 'Goalkeeper'}
+                            </FormLabel>
+                          </FormItem>
+                        )
+                      }}
+                    />
+                  ))}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
 
             {/* Email Addresses */}
             <FormItem>
@@ -567,14 +643,14 @@ export default function PlayerModal({ isOpen, onClose, player, teams }: PlayerMo
                 variant="outline" 
                 onClick={onClose}
                 disabled={isPending}
-                data-testid="button-cancel-player"
+                data-testid="button-cancel-athlete"
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 disabled={isPending}
-                data-testid="button-save-player"
+                data-testid="button-save-athlete"
               >
                 {isPending ? "Saving..." : isEditing ? "Update Athlete" : "Add Athlete"}
               </Button>

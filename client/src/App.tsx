@@ -8,8 +8,8 @@ import Layout from "./components/layout";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import Teams from "./pages/teams";
-import Players from "./pages/players";
-import PlayerProfile from "./pages/player-profile";
+import Athletes from "./pages/athletes";
+import AthleteProfile from "./pages/athlete-profile";
 import DataEntry from "./pages/data-entry";
 import Analytics from "./pages/analytics";
 import Publish from "./pages/publish";
@@ -21,6 +21,9 @@ import Profile from "./pages/profile";
 import UserProfile from "./pages/user-profile";
 import OrganizationProfile from "./pages/organization-profile";
 import AcceptInvitation from "./pages/accept-invitation";
+import EnhancedLogin from "./pages/enhanced-login";
+import ForgotPassword from "./pages/forgot-password";
+import ResetPassword from "./pages/reset-password";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -29,8 +32,11 @@ function Router() {
       <Route path="/accept-invitation" component={AcceptInvitation} />
       <Route path="/register" component={AcceptInvitation} />
       <Route path="/login" component={Login} />
-      <Route path="/athletes/:id" component={PlayerProfile} />
-      <Route path="/athletes" component={Players} />
+      <Route path="/enhanced-login" component={EnhancedLogin} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/athletes/:id" component={AthleteProfile} />
+      <Route path="/athletes" component={Athletes} />
       <Route path="/organizations/:id" component={OrganizationProfile} />
       <Route path="/organizations" component={Organizations} />
       <Route path="/users/:id" component={UserProfile} />

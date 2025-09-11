@@ -6,14 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Building, UserCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface InvitationData {
   email: string;
   role: string;
   organizationId: string;
-  playerId?: string;
-  playerData?: {
+  athleteId?: string;
+  athleteData?: {
     id: string;
     firstName: string;
     lastName: string;
@@ -45,6 +45,9 @@ export default function AcceptInvitation() {
     password: '',
     confirmPassword: ''
   });
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Extract token from URL on mount
   useEffect(() => {
@@ -74,12 +77,12 @@ export default function AcceptInvitation() {
       const data = await response.json();
       setInvitation(data);
       
-      // Pre-populate form with existing player data if available
-      if (data.playerData) {
+      // Pre-populate form with existing athlete data if available
+      if (data.athleteData) {
         setFormData(prev => ({
           ...prev,
-          firstName: data.playerData.firstName,
-          lastName: data.playerData.lastName
+          firstName: data.athleteData.firstName,
+          lastName: data.athleteData.lastName
         }));
       }
     } catch (err) {
@@ -269,22 +272,22 @@ export default function AcceptInvitation() {
           </div>
 
           {/* Show which specific athlete they're signing up for */}
-          {invitation?.playerData && (
+          {invitation?.athleteData && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <UserCheck className="h-5 w-5 text-blue-600" />
                 <h3 className="font-semibold text-blue-900">Creating Account For</h3>
               </div>
               <p className="text-blue-800 font-medium">
-                {invitation.playerData?.firstName} {invitation.playerData?.lastName}
+                {invitation.athleteData?.firstName} {invitation.athleteData?.lastName}
               </p>
               <p className="text-blue-600 text-sm">
-                Player ID: #{invitation.playerData?.id?.slice(0, 8)}
+                Athlete ID: #{invitation.athleteData?.id?.slice(0, 8)}
               </p>
-              {invitation.playerData?.teams && invitation.playerData.teams.length > 0 && (
+              {invitation.athleteData?.teams && invitation.athleteData.teams.length > 0 && (
                 <div className="mt-3">
                   <p className="text-blue-700 text-sm font-medium mb-1">Teams:</p>
-                  {invitation.playerData.teams?.map((team, index) => (
+                  {invitation.athleteData.teams?.map((team, index) => (
                     <div key={team.id} className="text-blue-600 text-sm">
                       • {team.name} ({team.sport})
                     </div>
@@ -357,28 +360,60 @@ export default function AcceptInvitation() {
 
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={handleInputChange('password')}
-                required
-                minLength={6}
-                data-testid="input-password"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={handleInputChange('password')}
+                  required
+                  minLength={6}
+                  data-testid="input-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <div>
               <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={handleInputChange('confirmPassword')}
-                required
-                minLength={6}
-                data-testid="input-confirm-password"
-              />
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange('confirmPassword')}
+                  required
+                  minLength={6}
+                  data-testid="input-confirm-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {error && (

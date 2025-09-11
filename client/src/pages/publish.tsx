@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Download, RotateCcw } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { Gender } from "@shared/schema";
 import jsPDF from "jspdf";
 
 export default function Publish() {
@@ -17,11 +18,12 @@ export default function Publish() {
     sport: "",
     dateFrom: "",
     dateTo: "",
+    gender: "all",  // Default to show all genders, user can filter as needed
   });
 
-  const { data: teams } = useQuery({
+  const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
-  });
+  }) as { data: any[] };
 
   const { data: measurements } = useQuery({
     queryKey: ["/api/measurements", filters],
@@ -37,6 +39,7 @@ export default function Publish() {
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
+      if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
       
       const response = await fetch(`/api/measurements?${params}`);
       return response.json();
@@ -46,30 +49,30 @@ export default function Publish() {
 
   // Get each athlete's best performance for the selected metric
   const bestMeasurements = measurements ? (() => {
-    const playerBest = new Map();
+    const athleteBest = new Map();
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
     
     measurements.forEach((measurement: any) => {
-      const playerId = measurement.user.id;
+      const athleteId = measurement.user.id;
       const value = parseFloat(measurement.value);
       
-      if (!playerBest.has(playerId)) {
-        playerBest.set(playerId, measurement);
+      if (!athleteBest.has(athleteId)) {
+        athleteBest.set(athleteId, measurement);
       } else {
-        const current = playerBest.get(playerId);
+        const current = athleteBest.get(athleteId);
         const currentValue = parseFloat(current.value);
         
         // For time-based metrics, lower is better; for others, higher is better
         const isBetter = isTimeBased ? value < currentValue : value > currentValue;
         
         if (isBetter) {
-          playerBest.set(playerId, measurement);
+          athleteBest.set(athleteId, measurement);
         }
       }
     });
     
     // Convert to array and sort from best to worst
-    return Array.from(playerBest.values()).sort((a: any, b: any) => {
+    return Array.from(athleteBest.values()).sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);
       
@@ -92,6 +95,7 @@ export default function Publish() {
       sport: "",
       dateFrom: "",
       dateTo: "",
+      gender: "all",  // Keep default to show all genders
     });
   };
 
@@ -132,7 +136,7 @@ export default function Publish() {
     // Table headers
     pdf.setFontSize(12);
     pdf.text("Rank", 20, yPos);
-    pdf.text("Player", 40, yPos);
+    pdf.text("Athlete", 40, yPos);
     pdf.text("Team(s)", 100, yPos);
     pdf.text("Value", 140, yPos);
     pdf.text("Date", 170, yPos);
@@ -196,7 +200,7 @@ export default function Publish() {
       <Card className="bg-white">
         <CardContent className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
             {/* Metric - Required */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -312,6 +316,25 @@ export default function Publish() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Gender */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+              <Select 
+                value={filters.gender || "all"} 
+                onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}
+              >
+                <SelectTrigger data-testid="select-gender" aria-label="Filter results by gender">
+                  <SelectValue placeholder="All Genders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Genders</SelectItem>
+                  <SelectItem value={Gender.MALE}>{Gender.MALE}</SelectItem>
+                  <SelectItem value={Gender.FEMALE}>{Gender.FEMALE}</SelectItem>
+                  <SelectItem value={Gender.NOT_SPECIFIED}>{Gender.NOT_SPECIFIED}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -340,7 +363,7 @@ export default function Publish() {
                 <thead>
                   <tr className="text-left text-sm font-medium text-gray-500 border-b">
                     <th className="px-4 py-3">Rank</th>
-                    <th className="px-4 py-3">Player</th>
+                    <th className="px-4 py-3">Athlete</th>
                     <th className="px-4 py-3">Team(s)</th>
                     <th className="px-4 py-3">Sport</th>
                     <th className="px-4 py-3">Value</th>
@@ -371,7 +394,7 @@ export default function Publish() {
                       <td className="px-4 py-3 text-gray-600">
                         {measurement.user.teams && measurement.user.teams.length > 0 
                           ? measurement.user.teams.map((team: any) => team.name).join(", ")
-                          : "Independent Player"
+                          : "Independent Athlete"
                         }
                       </td>
                       <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>

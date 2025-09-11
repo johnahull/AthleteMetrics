@@ -35,9 +35,21 @@ export const users = pgTable("users", {
   graduationYear: integer("graduation_year"),
   school: text("school"),
   phoneNumbers: text("phone_numbers").array(),
-  sports: text("sports").array(), // ["Soccer", "Track & Field", "Basketball", etc.]
+  sports: text("sports").array(), // ["Soccer"] - restricted to soccer only
+  positions: text("positions").array(), // ["F", "M", "D", "GK"] for soccer positions
   height: integer("height"), // inches
   weight: integer("weight"), // pounds
+  gender: text("gender").$type<"Male" | "Female" | "Not Specified">(), // CHECK constraint in migration
+  // Enhanced Authentication fields
+  mfaEnabled: text("mfa_enabled").default("false").notNull(),
+  mfaSecret: text("mfa_secret"), // TOTP secret
+  backupCodes: text("backup_codes").array(), // Recovery codes
+  lastLoginAt: timestamp("last_login_at"),
+  loginAttempts: integer("login_attempts").default(0),
+  lockedUntil: timestamp("locked_until"),
+  isEmailVerified: text("is_email_verified").default("false").notNull(),
+  requiresPasswordChange: text("requires_password_change").default("false").notNull(),
+  passwordChangedAt: timestamp("password_changed_at"),
   // System fields
   isSiteAdmin: text("is_site_admin").default("false").notNull(),
   isActive: text("is_active").default("true").notNull(),
@@ -95,6 +107,7 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
+  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
   invitedBy: varchar("invited_by").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
@@ -169,6 +182,10 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
     fields: [invitations.invitedBy],
     references: [users.id],
   }),
+  player: one(users, {
+    fields: [invitations.playerId],
+    references: [users.id],
+  }),
 }));
 
 export const measurementsRelations = relations(measurements, ({ one }) => ({
@@ -226,8 +243,10 @@ export const insertUserSchema = createInsertSchema(users).omit({
     return !isNaN(d.getTime()) && d <= new Date();
   }, "Invalid birth date or future date"),
   teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
-  sports: z.array(z.string().min(1, "Sport cannot be empty")).optional(),
+  sports: z.array(z.enum(["Soccer"])).optional(),
+  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
+  gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
 });
 
 export const insertAthleteProfileSchema = createInsertSchema(athleteProfiles).omit({
@@ -351,6 +370,19 @@ export const TeamLevel = {
   COLLEGE: "College",
 } as const;
 
+export const Gender = {
+  MALE: "Male",
+  FEMALE: "Female",
+  NOT_SPECIFIED: "Not Specified",
+} as const;
+
+export const SoccerPosition = {
+  FORWARD: "F",
+  MIDFIELDER: "M",
+  DEFENDER: "D",
+  GOALKEEPER: "GK",
+} as const;
+
 // Organization-specific roles only
 export const UserRole = {
   ORG_ADMIN: "org_admin",
@@ -364,7 +396,7 @@ export const OrganizationRole = {
   ATHLETE: "athlete",
 } as const;
 
-// Unified athlete schema - consolidating player and athlete concepts
+// Unified athlete schema
 export type Athlete = User;
 export type InsertAthlete = z.infer<typeof insertAthleteSchema>;
 
@@ -377,14 +409,13 @@ export const insertAthleteSchema = z.object({
   graduationYear: z.coerce.number().int().min(2000).max(2040).optional(),
   school: z.string().optional(),
   phoneNumbers: z.array(z.string()).optional(),
-  sports: z.array(z.string()).optional(),
+  sports: z.array(z.enum(["Soccer"])).optional(),
+  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
   height: z.coerce.number().optional(),
   weight: z.coerce.number().optional(),
+  gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
   teamIds: z.array(z.string()).optional(),
   organizationId: z.string().optional()
 });
 
-// Legacy compatibility - maintain old exports temporarily
-export type Player = Athlete;
-export type InsertPlayer = InsertAthlete;
-export const insertPlayerSchema = insertAthleteSchema;
+// Legacy compatibility exports removed - use Athlete types instead

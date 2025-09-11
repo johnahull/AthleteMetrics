@@ -6,9 +6,9 @@ import { FileUp } from "lucide-react";
 import MeasurementForm from "@/components/measurement-form";
 
 export default function DataEntry() {
-  const { data: recentMeasurements } = useQuery({
+  const { data: recentMeasurements = [] } = useQuery({
     queryKey: ["/api/measurements"],
-  });
+  }) as { data: any[] };
 
   return (
     <div className="p-6">

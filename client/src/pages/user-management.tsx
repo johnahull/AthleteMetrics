@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck } from "lucide-react";
+import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 
@@ -92,6 +92,7 @@ export default function UserManagement() {
   const queryClient = useQueryClient();
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Get user's primary role to check access
   const { data: userOrganizations } = useQuery({
@@ -106,10 +107,10 @@ export default function UserManagement() {
   // Redirect athletes away from this management page
   useEffect(() => {
     if (!isSiteAdmin && userRole === "athlete") {
-      const playerId = user?.playerId || user?.id;
-      setLocation(`/athletes/${playerId}`);
+      const athleteId = user?.id;
+      setLocation(`/athletes/${athleteId}`);
     }
-  }, [isSiteAdmin, userRole, user?.id, user?.playerId, setLocation]);
+  }, [isSiteAdmin, userRole, user?.id, setLocation]);
 
   // Don't render management UI for athletes
   if (!isSiteAdmin && userRole === "athlete") {
@@ -760,12 +761,28 @@ export default function UserManagement() {
                                 <FormItem>
                                   <FormLabel>Password</FormLabel>
                                   <FormControl>
-                                    <Input
-                                      type="password"
-                                      placeholder="Min 12 chars, uppercase, lowercase, number, special char"
-                                      {...field}
-                                      data-testid="site-admin-password-input"
-                                    />
+                                    <div className="relative">
+                                      <Input
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Min 12 chars, uppercase, lowercase, number, special char"
+                                        {...field}
+                                        data-testid="site-admin-password-input"
+                                        className="pr-10"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        tabIndex={-1}
+                                        aria-label={showPassword ? "Hide password" : "Show password"}
+                                      >
+                                        {showPassword ? (
+                                          <EyeOff className="h-4 w-4" />
+                                        ) : (
+                                          <Eye className="h-4 w-4" />
+                                        )}
+                                      </button>
+                                    </div>
                                   </FormControl>
                                   <div className="text-xs text-gray-500 mt-1">
                                     Password must be at least 12 characters and include:

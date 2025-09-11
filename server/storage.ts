@@ -4,7 +4,7 @@ import {
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -45,7 +45,17 @@ export interface IStorage {
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
 
   // Invitations
-  createInvitation(invitation: InsertInvitation): Promise<Invitation>;
+  createInvitation(data: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    organizationId: string;
+    teamIds?: string[];
+    role: string;
+    invitedBy: string;
+    playerId?: string;
+    expiresAt: Date;
+  }): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
   updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
@@ -110,6 +120,37 @@ export interface IStorage {
     bestFly10Today?: { value: number; userName: string };
     bestVerticalToday?: { value: number; userName: string };
   }>;
+
+  // Enhanced Authentication Methods
+  findUserById(userId: string): Promise<User | null>;
+  resetLoginAttempts(userId: string): Promise<void>;
+  incrementLoginAttempts(userId: string, attempts: number): Promise<void>;
+  lockAccount(userId: string, lockUntil: Date): Promise<void>;
+  updateLastLogin(userId: string): Promise<void>;
+  createLoginSession(session: any): Promise<void>;
+  findLoginSession(token: string): Promise<any>;
+  updateSessionActivity(sessionId: string): Promise<void>;
+  revokeLoginSession(token: string): Promise<void>;
+  revokeAllUserSessions(userId: string): Promise<void>;
+  updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
+  createSecurityEvent(event: any): Promise<void>;
+  getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
+  getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]>;
+  getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]>;
+  getRecentPasswordResets(email: string, timeWindow: number): Promise<any[]>;
+  createPasswordResetToken(token: any): Promise<void>;
+  findPasswordResetToken(token: string): Promise<any>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
+  updatePasswordChangedAt(userId: string): Promise<void>;
+  createEmailVerificationToken(token: any): Promise<void>;
+  findEmailVerificationToken(token: string): Promise<any>;
+  markEmailAsVerified(userId: string, email: string): Promise<void>;
+  markEmailVerificationTokenUsed(token: string): Promise<void>;
+  getUserRole(userId: string, organizationId: string): Promise<string | null>;
+  updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
+  getUsersByOrganization(organizationId: string): Promise<any[]>;
+  getUserActivityStats(userId: string, organizationId: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -123,7 +164,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
+    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -131,7 +172,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(sql`${email} = ANY(${users.emails})`);
+    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
     return user || undefined;
   }
 
@@ -172,7 +213,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
-  async getInvitations(): Promise<any[]> {
+  async getInvitations(): Promise<Invitation[]> {
     return await db.select().from(invitations).orderBy(asc(invitations.createdAt));
   }
 
@@ -249,23 +290,15 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getUserRole(userId: string, organizationId?: string): Promise<string | null> {
-    if (organizationId) {
-      // Get role from specific organization
-      const [result] = await db.select({ role: userOrganizations.role })
-        .from(userOrganizations)
-        .where(and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
-        ));
-      return result?.role || null;
-    } else {
-      // Check if user is site admin
-      const [user] = await db.select({ isSiteAdmin: users.isSiteAdmin })
-        .from(users)
-        .where(eq(users.id, userId));
-      return user?.isSiteAdmin === "true" ? "site_admin" : null;
-    }
+  async getUserRole(userId: string, organizationId: string): Promise<string | null> {
+    // Get role from specific organization
+    const [result] = await db.select({ role: userOrganizations.role })
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+    return result?.role || null;
   }
 
   async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
@@ -366,7 +399,7 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationProfile(organizationId: string): Promise<Organization & {
     coaches: Array<{ user: User, roles: string[] }>,
-    players: (User & { teams: (Team & { organization: Organization })[] })[],
+    athletes: (User & { teams: (Team & { organization: Organization })[] })[],
     invitations: Invitation[]
   } | null> {
     const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
@@ -396,7 +429,7 @@ export class DatabaseStorage implements IStorage {
     );
 
     // Get athletes via organization filter
-    const players = await this.getAthletes({ organizationId });
+    const athletes = await this.getAthletes({ organizationId });
 
     // Get pending invitations for this organization
     let organizationInvitations: Invitation[] = [];
@@ -416,7 +449,7 @@ export class DatabaseStorage implements IStorage {
     return {
       ...organization,
       coaches,
-      players: players as any,
+      athletes: athletes as any,
       invitations: organizationInvitations
     };
   }
@@ -489,6 +522,7 @@ export class DatabaseStorage implements IStorage {
         lastName: invitations.lastName,
         organizationId: invitations.organizationId,
         teamIds: invitations.teamIds,
+        playerId: invitations.playerId,
         role: invitations.role,
         token: invitations.token,
         invitedBy: invitations.invitedBy,
@@ -692,7 +726,7 @@ export class DatabaseStorage implements IStorage {
     teamIds?: string[];
     role: string;
     invitedBy: string;
-    athleteId?: string;
+    playerId?: string;
     expiresAt: Date;
   }): Promise<Invitation> {
     const token = crypto.randomBytes(32).toString('hex');
@@ -707,7 +741,7 @@ export class DatabaseStorage implements IStorage {
       teamIds: data.teamIds || [],
       role: data.role,
       invitedBy: data.invitedBy,
-      playerId: data.athleteId, // Store athlete ID in playerId field
+      playerId: data.playerId, // Store athlete ID consistently
       token,
       expiresAt,
     }).returning();
@@ -765,7 +799,7 @@ export class DatabaseStorage implements IStorage {
     return { user };
   }
 
-  // Athletes (users with athlete role) - consolidated from getPlayers
+  // Athletes (users with athlete role) - consolidated from legacy getPlayers
 
   async getAthletes(filters?: {
     teamId?: string;
@@ -773,6 +807,7 @@ export class DatabaseStorage implements IStorage {
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
+    gender?: string;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]> {
     // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
@@ -797,6 +832,10 @@ export class DatabaseStorage implements IStorage {
         conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
       } else if (filters?.birthYearTo) {
         conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      }
+
+      if (filters?.gender && filters.gender !== "all") {
+        conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
       }
 
       const result = await db
@@ -901,78 +940,57 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getAthlete(id: string): Promise<User | undefined> {
-    return this.getUser(id);
-  }
+  // Legacy methods for backward compatibility - delegate to athlete methods
 
-  async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
-    return this.createUser({
-      ...athlete,
-      username: athlete.username || `athlete_${Date.now()}`,
-      emails: athlete.emails || [`temp_${Date.now()}@temp.local`],
-      firstName: athlete.firstName || "",
-      lastName: athlete.lastName || "",
-      password: "INVITATION_PENDING"
-    } as InsertUser);
-  }
-
-  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
-    return this.updateUser(id, athlete);
-  }
-
-  async deleteAthlete(id: string): Promise<void> {
-    return this.deleteUser(id);
-  }
-
-  async getPlayer(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
+  async getAthlete(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (!user) return undefined;
 
     const userTeams = await this.getUserTeams(user.id);
 
-    // Transform user to player format for backward compatibility
-    const player = {
+    // Transform user to athlete format for backward compatibility
+    const athlete = {
       ...user,
       fullName: `${user.firstName} ${user.lastName}`,
       birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
       teams: userTeams.map(ut => ut.team)
     };
 
-    return player;
+    return athlete;
   }
 
-  async createPlayer(player: Partial<InsertUser>): Promise<User> {
+  async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
     // Generate a temporary username for the athlete
     const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // Use primary email or generate one
-    const emails = (player.emails && player.emails.length > 0) ? player.emails : [`${username}@temp.local`];
+    const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
 
     // Create new user directly without checking for existing emails
     const [newUser] = await db.insert(users).values({
       username,
       emails, // Ensure emails array is always provided
-      firstName: player.firstName!,
-      lastName: player.lastName!,
-      birthDate: player.birthDate || null,
-      graduationYear: player.graduationYear || null,
-      school: player.school || null,
-      sports: player.sports || null,
-      phoneNumbers: player.phoneNumbers || null,
-      height: player.height || null,
-      weight: player.weight || null,
-      fullName: `${player.firstName} ${player.lastName}`,
-      birthYear: player.birthDate ? new Date(player.birthDate).getFullYear() : null,
+      firstName: athlete.firstName!,
+      lastName: athlete.lastName!,
+      birthDate: athlete.birthDate || null,
+      graduationYear: athlete.graduationYear || null,
+      school: athlete.school || null,
+      sports: athlete.sports || null,
+      phoneNumbers: athlete.phoneNumbers || null,
+      height: athlete.height || null,
+      weight: athlete.weight || null,
+      fullName: `${athlete.firstName} ${athlete.lastName}`,
+      birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: player.isActive ?? "true" // Use provided value or default to active
+      isActive: athlete.isActive ?? "true" // Use provided value or default to active
     }).returning();
 
     // Determine organization for athlete association
-    let organizationId: string | undefined = (player as any).organizationId;
+    let organizationId: string | undefined = (athlete as any).organizationId;
 
     // Add to teams if specified and determine organization from first team if not already set
-    if (player.teamIds && player.teamIds.length > 0) {
-      for (const teamId of player.teamIds) {
+    if (athlete.teamIds && athlete.teamIds.length > 0) {
+      for (const teamId of athlete.teamIds) {
         try {
           await this.addUserToTeam(newUser.id, teamId);
           console.log('Athlete added to team successfully');
@@ -997,8 +1015,8 @@ export class DatabaseStorage implements IStorage {
       console.warn(`Created athlete ${newUser.id} without organization association`);
     }
 
-    // Transform to player format for return
-    const playerResult = {
+    // Transform to athlete format for return
+    const athleteResult = {
       ...newUser,
       fullName: `${newUser.firstName} ${newUser.lastName}`,
       birthYear: newUser.birthDate ? new Date(newUser.birthDate).getFullYear() : 0,
@@ -1006,39 +1024,39 @@ export class DatabaseStorage implements IStorage {
       teams: []
     };
 
-    return playerResult;
+    return athleteResult;
   }
 
-  async updatePlayer(id: string, player: Partial<InsertUser>): Promise<User> {
-    const updateData: any = { ...player };
+  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
+    const updateData: any = { ...athlete };
 
     // Update full name if first or last name changed
     let finalFirstName: string | undefined;
     let finalLastName: string | undefined;
 
-    if (player.firstName || player.lastName) {
-      const existing = await this.getPlayer(id);
+    if (athlete.firstName || athlete.lastName) {
+      const existing = await this.getAthlete(id);
       if (existing) {
-        finalFirstName = player.firstName || existing.firstName;
-        finalLastName = player.lastName || existing.lastName;
+        finalFirstName = athlete.firstName || existing.firstName;
+        finalLastName = athlete.lastName || existing.lastName;
         updateData.fullName = `${finalFirstName} ${finalLastName}`;
       }
     }
 
     // Calculate birth year if birthDate changed
-    if (player.birthDate) {
-      updateData.birthYear = new Date(player.birthDate).getFullYear();
+    if (athlete.birthDate) {
+      updateData.birthYear = new Date(athlete.birthDate).getFullYear();
     }
 
     const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
 
     // Update teams if specified
-    if (player.teamIds !== undefined) {
-      await this.setPlayerTeams(id, player.teamIds);
+    if (athlete.teamIds !== undefined) {
+      await this.setAthleteTeams(id, athlete.teamIds);
     }
 
     // Update any existing user records if name changed
-    if ((player.firstName || player.lastName) && finalFirstName && finalLastName) {
+    if ((athlete.firstName || athlete.lastName) && finalFirstName && finalLastName) {
       // Update the user record directly by ID
       try {
         await db.update(users)
@@ -1057,7 +1075,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async deletePlayer(id: string): Promise<void> {
+  async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx) => {
       // Delete all user-team relationships
@@ -1077,7 +1095,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPlayerByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<User | undefined> {
+  async getAthleteByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<User | undefined> {
     const [user] = await db.select().from(users)
       .where(and(
         eq(users.firstName, firstName),
@@ -1094,13 +1112,13 @@ export class DatabaseStorage implements IStorage {
     } as any;
   }
 
-  // Player Teams (now using userTeams)
-  async getPlayerTeams(playerId: string): Promise<(Team & { organization: Organization })[]> {
+  // Athlete Teams (now using userTeams)
+  async getAthleteTeams(athleteId: string): Promise<(Team & { organization: Organization })[]> {
     const result = await db.select()
       .from(userTeams)
       .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(userTeams.userId, playerId));
+      .where(eq(userTeams.userId, athleteId));
 
     return result.map(({ teams: team, organizations }) => ({
       ...team,
@@ -1108,22 +1126,22 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async addPlayerToTeam(playerId: string, teamId: string): Promise<UserTeam> {
-    return await this.addUserToTeam(playerId, teamId);
+  async addAthleteToTeam(athleteId: string, teamId: string): Promise<UserTeam> {
+    return await this.addUserToTeam(athleteId, teamId);
   }
 
-  async removePlayerFromTeam(playerId: string, teamId: string): Promise<void> {
-    return await this.removeUserFromTeam(playerId, teamId);
+  async removeAthleteFromTeam(athleteId: string, teamId: string): Promise<void> {
+    return await this.removeUserFromTeam(athleteId, teamId);
   }
 
-  async setPlayerTeams(playerId: string, teamIds: string[]): Promise<void> {
+  async setAthleteTeams(athleteId: string, teamIds: string[]): Promise<void> {
     // Remove existing teams
-    await db.delete(userTeams).where(eq(userTeams.userId, playerId));
+    await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
 
     // Add new teams
     if (teamIds.length > 0) {
       await db.insert(userTeams).values(
-        teamIds.map(teamId => ({ userId: playerId, teamId }))
+        teamIds.map(teamId => ({ userId: athleteId, teamId }))
       );
     }
   }
@@ -1131,7 +1149,7 @@ export class DatabaseStorage implements IStorage {
   // Measurements
   async getMeasurements(filters?: {
     userId?: string;
-    playerId?: string; // Legacy support
+    athleteId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -1143,6 +1161,8 @@ export class DatabaseStorage implements IStorage {
     ageTo?: number;
     search?: string;
     sport?: string;
+    gender?: string;
+    position?: string;
     includeUnverified?: boolean;
   }): Promise<any[]> {
     // Optimized query with all joins to eliminate N+1
@@ -1196,8 +1216,8 @@ export class DatabaseStorage implements IStorage {
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 
     const conditions = [];
-    if (filters?.userId || filters?.playerId) {
-      const targetUserId = filters.userId || filters.playerId;
+    if (filters?.userId || filters?.athleteId) {
+      const targetUserId = filters.userId || filters.athleteId;
       if (targetUserId) {
         conditions.push(eq(measurements.userId, targetUserId));
       }
@@ -1265,6 +1285,20 @@ export class DatabaseStorage implements IStorage {
     if (filters?.sport && filters.sport !== "all") {
       filteredMeasurements = filteredMeasurements.filter(measurement =>
         measurement.user.sports?.includes(filters.sport!)
+      );
+    }
+
+    // Filter by gender if specified
+    if (filters?.gender && filters.gender !== "all") {
+      filteredMeasurements = filteredMeasurements.filter(measurement =>
+        measurement.user.gender === filters.gender
+      );
+    }
+
+    // Filter by position if specified
+    if (filters?.position && filters.position !== "all") {
+      filteredMeasurements = filteredMeasurements.filter(measurement =>
+        measurement.user.positions?.includes(filters.position!)
       );
     }
 
@@ -1358,10 +1392,10 @@ export class DatabaseStorage implements IStorage {
     bestVertical?: number;
     measurementCount: number;
   }> {
-    return this.getPlayerStats(userId);
+    return this.getAthleteStats(userId);
   }
 
-  async getPlayerStats(userId: string): Promise<{
+  async getAthleteStats(userId: string): Promise<{
     bestFly10?: number;
     bestVertical?: number;
     measurementCount: number;
@@ -1478,6 +1512,181 @@ export class DatabaseStorage implements IStorage {
       ) : undefined
     };
   }
+
+  // Enhanced Authentication Methods Implementation
+  async findUserById(userId: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user || null;
+  }
+
+  async resetLoginAttempts(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ loginAttempts: 0, lockedUntil: null })
+      .where(eq(users.id, userId));
+  }
+
+  async incrementLoginAttempts(userId: string, attempts: number): Promise<void> {
+    await db.update(users)
+      .set({ loginAttempts: attempts })
+      .where(eq(users.id, userId));
+  }
+
+  async lockAccount(userId: string, lockUntil: Date): Promise<void> {
+    await db.update(users)
+      .set({ lockedUntil: lockUntil })
+      .where(eq(users.id, userId));
+  }
+
+  async updateLastLogin(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
+  // Simplified implementations - these would need proper schema tables
+  async createLoginSession(session: any): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Creating login session:', session.userId);
+  }
+
+  async findLoginSession(token: string): Promise<any> {
+    // Would need loginSessions table implementation
+    return null;
+  }
+
+  async updateSessionActivity(sessionId: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Updating session activity:', sessionId);
+  }
+
+  async revokeLoginSession(token: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Revoking login session:', token);
+  }
+
+  async revokeAllUserSessions(userId: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Revoking all sessions for user:', userId);
+  }
+
+  async updateUserBackupCodes(userId: string, codes: string[]): Promise<void> {
+    await db.update(users)
+      .set({ backupCodes: codes })
+      .where(eq(users.id, userId));
+  }
+
+  async createSecurityEvent(event: any): Promise<void> {
+    // Would need securityEvents table implementation
+    console.log('Creating security event:', event.eventType);
+  }
+
+  async getUserSecurityEvents(userId: string, limit: number): Promise<any[]> {
+    // Would need securityEvents table implementation
+    return [];
+  }
+
+  async getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]> {
+    // Would need securityEvents table implementation
+    return [];
+  }
+
+  async getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]> {
+    // Would need emailChanges table implementation
+    return [];
+  }
+
+  async getRecentPasswordResets(email: string, timeWindow: number): Promise<any[]> {
+    // Would need passwordResets table implementation
+    return [];
+  }
+
+  async createPasswordResetToken(token: any): Promise<void> {
+    // Would need passwordResetTokens table implementation
+    console.log('Creating password reset token for user:', token.userId);
+  }
+
+  async findPasswordResetToken(token: string): Promise<any> {
+    // Would need passwordResetTokens table implementation
+    return null;
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    // Would need passwordResetTokens table implementation
+    console.log('Marking password reset token as used:', token);
+  }
+
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {
+    await db.update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, userId));
+  }
+
+  async updatePasswordChangedAt(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() }) // Using lastLoginAt as placeholder
+      .where(eq(users.id, userId));
+  }
+
+  async createEmailVerificationToken(token: any): Promise<void> {
+    // Would need emailVerificationTokens table implementation
+    console.log('Creating email verification token for user:', token.userId);
+  }
+
+  async findEmailVerificationToken(token: string): Promise<any> {
+    // Would need emailVerificationTokens table implementation
+    return null;
+  }
+
+  async markEmailAsVerified(userId: string, email: string): Promise<void> {
+    await db.update(users)
+      .set({ isEmailVerified: 'true' })
+      .where(eq(users.id, userId));
+  }
+
+  async markEmailVerificationTokenUsed(token: string): Promise<void> {
+    // Would need emailVerificationTokens table implementation
+    console.log('Marking email verification token as used:', token);
+  }
+
+
+  async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
+    try {
+      await db.update(userOrganizations)
+        .set({ role })
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getUsersByOrganization(organizationId: string): Promise<any[]> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      emails: users.emails,
+      role: userOrganizations.role
+    })
+    .from(users)
+    .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+    .where(eq(userOrganizations.organizationId, organizationId));
+    
+    return result;
+  }
+
+  async getUserActivityStats(userId: string, organizationId: string): Promise<any> {
+    // Would need proper activity tracking
+    return {
+      measurementsCreated: 0,
+      teamsManaged: 0
+    };
+  }
+
 }
 
 export const storage = new DatabaseStorage();

@@ -8,11 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import PlayerModal from "@/components/player-modal";
+import AthleteModal from "@/components/athlete-modal";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 
-export default function Players() {
+export default function Athletes() {
   const { user, organizationContext } = useAuth();
   const [location, setLocation] = useLocation();
   
@@ -29,10 +29,10 @@ export default function Players() {
   // Redirect athletes away from this management page
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
-      const playerId = user?.playerId || user?.id;
-      setLocation(`/athletes/${playerId}`);
+      const athleteId = user?.id;
+      setLocation(`/athletes/${athleteId}`);
     }
-  }, [isSiteAdmin, primaryRole, user?.id, user?.playerId, setLocation]);
+  }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
   
   // Don't render management UI for athletes
   if (!isSiteAdmin && primaryRole === "athlete") {
@@ -40,7 +40,7 @@ export default function Players() {
   }
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [editingAthlete, setEditingAthlete] = useState(null);
   const [filters, setFilters] = useState({
     teamId: "",
     birthYearFrom: "",
@@ -72,7 +72,7 @@ export default function Players() {
         : `/api/teams`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch teams');
-      return response.json() as any[];
+      return response.json();
     }
   });
 
@@ -82,7 +82,7 @@ export default function Players() {
     queryFn: async () => {
       const response = await fetch("/api/auth/me/organizations");
       if (!response.ok) throw new Error('Failed to fetch organizations');
-      return response.json() as any[];
+      return response.json();
     }
   });
 
@@ -93,12 +93,12 @@ export default function Players() {
     queryFn: async () => {
       const response = await fetch("/api/invitations/athletes");
       if (!response.ok) throw new Error('Failed to fetch invitations');
-      return response.json() as any[];
+      return response.json();
     }
   });
 
-  const { data: players = [], isLoading } = useQuery({
-    queryKey: ["/api/players", filters, organizationContext],
+  const { data: athletes = [], isLoading } = useQuery({
+    queryKey: ["/api/athletes", filters, organizationContext],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.teamId) params.append('teamId', filters.teamId);
@@ -114,18 +114,18 @@ export default function Players() {
         params.append('organizationId', userOrganizations[0].organizationId);
       }
       
-      const response = await fetch(`/api/players?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch players');
-      return response.json() as any[];
+      const response = await fetch(`/api/athletes?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch athletes');
+      return response.json();
     },
   });
 
-  const deletePlayerMutation = useMutation({
-    mutationFn: async (playerId: string) => {
-      await apiRequest("DELETE", `/api/players/${playerId}`);
+  const deleteAthleteMutation = useMutation({
+    mutationFn: async (athleteId: string) => {
+      await apiRequest("DELETE", `/api/athletes/${athleteId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       toast({
         title: "Success",
         description: "Athlete deleted successfully",
@@ -140,17 +140,17 @@ export default function Players() {
     },
   });
 
-  const handleDeletePlayer = async (playerId: string, playerName: string) => {
-    if (window.confirm(`Are you sure you want to delete "${playerName}"? This action cannot be undone.`)) {
-      deletePlayerMutation.mutate(playerId);
+  const handleDeleteAthlete = async (athleteId: string, athleteName: string) => {
+    if (window.confirm(`Are you sure you want to delete "${athleteName}"? This action cannot be undone.`)) {
+      deleteAthleteMutation.mutate(athleteId);
     }
   };
 
-  // Send player invitation mutation (sends to all emails)
-  const sendPlayerInvitationMutation = useMutation({
-    mutationFn: async ({ playerId, organizationId }: { playerId: string; organizationId: string }) => {
+  // Send athlete invitation mutation (sends to all emails)
+  const sendAthleteInvitationMutation = useMutation({
+    mutationFn: async ({ athleteId, organizationId }: { athleteId: string; organizationId: string }) => {
       const response = await apiRequest("POST", "/api/invitations", {
-        athleteId: playerId,
+        athleteId: athleteId,
         role: "athlete", 
         organizationId,
         teamIds: []
@@ -159,7 +159,7 @@ export default function Players() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       
       const emailCount = data.invitations?.length || 1;
       const athleteName = data.athlete ? `${data.athlete.firstName} ${data.athlete.lastName}` : 'athlete';
@@ -172,7 +172,7 @@ export default function Players() {
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to send player invitations",
+        description: error.message || "Failed to send athlete invitations",
         variant: "destructive",
       });
     },
@@ -219,7 +219,7 @@ export default function Players() {
     }
   };
 
-  const handleSendPlayerInvitation = (playerId: string) => {
+  const handleSendAthleteInvitation = (athleteId: string) => {
     if (!userOrgs || userOrgs.length === 0) {
       toast({
         title: "Error",
@@ -239,7 +239,7 @@ export default function Players() {
       return;
     }
     
-    sendPlayerInvitationMutation.mutate({ playerId, organizationId: orgId });
+    sendAthleteInvitationMutation.mutate({ athleteId, organizationId: orgId });
   };
 
   const handleDeleteInvitation = (invitationId: string) => {
@@ -267,7 +267,7 @@ export default function Players() {
   };
 
   const refreshData = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/players"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
     toast({
       title: "Success",
       description: "Athletes list refreshed",
@@ -312,7 +312,7 @@ export default function Players() {
           <Button 
             onClick={() => setShowAddModal(true)}
             className="bg-primary hover:bg-blue-700"
-            data-testid="button-add-player"
+            data-testid="button-add-athlete"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Athlete
@@ -506,19 +506,19 @@ export default function Players() {
         </Card>
       )}
 
-      {/* Players Table */}
+      {/* Athletes Table */}
       <Card className="bg-white">
         <CardContent className="p-0">
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">All Athletes</h3>
               <span className="text-sm text-gray-500" data-testid="athletes-count">
-                {players?.length || 0} athletes
+                {athletes?.length || 0} athletes
               </span>
             </div>
           </div>
           
-          {players?.length === 0 ? (
+          {athletes?.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <UsersRound className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes found</h3>
@@ -544,6 +544,7 @@ export default function Players() {
                     <th className="px-6 py-3">Athlete</th>
                     <th className="px-6 py-3">Team</th>
                     <th className="px-6 py-3">Birth Year</th>
+                    <th className="px-6 py-3">Gender</th>
                     <th className="px-6 py-3">School</th>
                     <th className="px-6 py-3">Sport</th>
                     <th className="px-6 py-3">Status</th>
@@ -551,46 +552,47 @@ export default function Players() {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
-                  {players?.map((player: any) => (
-                    <tr key={player.id} className="hover:bg-gray-50">
+                  {athletes?.map((athlete: any) => (
+                    <tr key={athlete.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-sm">
-                              {player.firstName.charAt(0)}{player.lastName.charAt(0)}
+                              {athlete.firstName.charAt(0)}{athlete.lastName.charAt(0)}
                             </span>
                           </div>
                           <div>
                             <button 
-                              onClick={() => setLocation(`/athletes/${player.id}`)}
+                              onClick={() => setLocation(`/athletes/${athlete.id}`)}
                               className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                             >
-                              {player.fullName}
+                              {athlete.fullName}
                             </button>
-                            <p className="text-gray-500 text-xs">ID: #{player.id.slice(0, 8)}</p>
+                            <p className="text-gray-500 text-xs">ID: #{athlete.id.slice(0, 8)}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-gray-600">
-                        {player.teams && player.teams.length > 0 
-                          ? player.teams.length > 1 
-                            ? `${player.teams[0].name} (+${player.teams.length - 1} more)`
-                            : player.teams[0].name
+                        {athlete.teams && athlete.teams.length > 0 
+                          ? athlete.teams.length > 1 
+                            ? `${athlete.teams[0].name} (+${athlete.teams.length - 1} more)`
+                            : athlete.teams[0].name
                           : "Independent"
                         }
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{player.birthYear}</td>
-                      <td className="px-6 py-4 text-gray-600">{player.school || "N/A"}</td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.birthYear}</td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.gender || "Not Specified"}</td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.school || "N/A"}</td>
                       <td className="px-6 py-4 text-gray-600">
-                        {player.sports && player.sports.length > 0 
-                          ? player.sports.length > 1 
-                            ? `${player.sports[0]} (+${player.sports.length - 1} more)`
-                            : player.sports[0]
+                        {athlete.sports && athlete.sports.length > 0 
+                          ? athlete.sports.length > 1 
+                            ? `${athlete.sports[0]} (+${athlete.sports.length - 1} more)`
+                            : athlete.sports[0]
                           : "N/A"
                         }
                       </td>
                       <td className="px-6 py-4">
-                        {(player as any).isActive ? (
+                        {(athlete as any).isActive ? (
                           <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
                             Active
                           </Badge>
@@ -605,29 +607,29 @@ export default function Players() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setLocation(`/athletes/${player.id}`)}
-                            data-testid={`button-view-player-${player.id}`}
+                            onClick={() => setLocation(`/athletes/${athlete.id}`)}
+                            data-testid={`button-view-athlete-${athlete.id}`}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setEditingPlayer(player)}
-                            data-testid={`button-edit-player-${player.id}`}
+                            onClick={() => setEditingAthlete(athlete)}
+                            data-testid={`button-edit-athlete-${athlete.id}`}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          {/* Send Player Invitation Button - sends to all emails */}
-                          {(player as any).emails && (player as any).emails.length > 0 && !athleteInvitations?.some((inv: any) => (player as any).emails.includes(inv.email)) && (
+                          {/* Send Athlete Invitation Button - sends to all emails */}
+                          {(athlete as any).emails && (athlete as any).emails.length > 0 && !athleteInvitations?.some((inv: any) => (athlete as any).emails.includes(inv.email)) && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleSendPlayerInvitation(player.id)}
+                              onClick={() => handleSendAthleteInvitation(athlete.id)}
                               className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              disabled={sendPlayerInvitationMutation.isPending}
-                              title={`Send invitations to all emails (${(player as any).emails.length} addresses)`}
-                              data-testid={`button-invite-player-${player.id}`}
+                              disabled={sendAthleteInvitationMutation.isPending}
+                              title={`Send invitations to all emails (${(athlete as any).emails.length} addresses)`}
+                              data-testid={`button-invite-athlete-${athlete.id}`}
                             >
                               <Mail className="h-4 w-4" />
                             </Button>
@@ -635,9 +637,9 @@ export default function Players() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeletePlayer(player.id, player.fullName)}
+                            onClick={() => handleDeleteAthlete(athlete.id, athlete.fullName)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            data-testid={`button-delete-player-${player.id}`}
+                            data-testid={`button-delete-athlete-${athlete.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -653,17 +655,17 @@ export default function Players() {
       </Card>
 
       {/* Modals */}
-      <PlayerModal
+      <AthleteModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        player={null}
+        athlete={null}
         teams={teams || []}
       />
 
-      <PlayerModal
-        isOpen={!!editingPlayer}
-        onClose={() => setEditingPlayer(null)}
-        player={editingPlayer}
+      <AthleteModal
+        isOpen={!!editingAthlete}
+        onClose={() => setEditingAthlete(null)}
+        athlete={editingAthlete}
         teams={teams || []}
       />
     </div>

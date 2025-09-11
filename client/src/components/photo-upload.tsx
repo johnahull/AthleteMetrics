@@ -93,7 +93,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         
         // Invalidate queries to refresh data
         queryClient.invalidateQueries({ queryKey: ['measurements'] });
-        queryClient.invalidateQueries({ queryKey: ['players'] });
+        queryClient.invalidateQueries({ queryKey: ['athletes'] });
         
         onSuccess?.();
       } else {
