@@ -62,6 +62,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       const response = await fetch('/api/import/photo', {
         method: 'POST',
         body: formData,
+        credentials: 'include',
       });
       
       if (!response.ok) {
