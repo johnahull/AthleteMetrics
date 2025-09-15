@@ -18,6 +18,10 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   level: text("level"), // "Club", "HS", "College"
   notes: text("notes"),
+  // Temporal archiving fields
+  archivedAt: timestamp("archived_at"),
+  season: text("season"), // "2024-Fall", "2025-Spring"
+  isArchived: text("is_archived").default("false").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -70,6 +74,11 @@ export const userTeams = pgTable("user_teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   teamId: varchar("team_id").notNull().references(() => teams.id),
+  // Temporal membership fields
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  leftAt: timestamp("left_at"), // NULL = currently active
+  season: text("season"), // "2024-Fall", "2025-Spring"
+  isActive: text("is_active").default("true").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -215,9 +224,12 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
 export const insertTeamSchema = createInsertSchema(teams).omit({
   id: true,
   createdAt: true,
+  archivedAt: true, // Managed by system
+  isArchived: true, // Managed by system
 }).extend({
   name: z.string().min(1, "Team name is required"),
   organizationId: z.string().optional(), // Made optional for client-side, server will provide it
+  season: z.string().optional(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -274,6 +286,22 @@ export const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Team archiving schemas
+export const archiveTeamSchema = z.object({
+  teamId: z.string().min(1, "Team ID is required"),
+  archiveDate: z.coerce.date()
+    .optional() // Defaults to now
+    .refine((date) => !date || date <= new Date(), "Archive date cannot be in the future"),
+  season: z.string().min(1, "Season is required"), // "2024-Fall Soccer"
+});
+
+export const updateTeamMembershipSchema = z.object({
+  userId: z.string().min(1, "User ID is required"),
+  teamId: z.string().min(1, "Team ID is required"),
+  leftAt: z.coerce.date().optional(),
+  season: z.string().optional(),
+});
+
 export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).omit({
   id: true,
   createdAt: true,
@@ -282,6 +310,11 @@ export const insertUserOrganizationSchema = createInsertSchema(userOrganizations
 export const insertUserTeamSchema = createInsertSchema(userTeams).omit({
   id: true,
   createdAt: true,
+  joinedAt: true, // Managed by system
+  isActive: true, // Managed by system
+}).extend({
+  season: z.string().optional(),
+  leftAt: z.coerce.date().optional(),
 });
 
 export const insertInvitationSchema = createInsertSchema(invitations).omit({
@@ -322,6 +355,8 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type ChangePassword = z.infer<typeof changePasswordSchema>;
+export type ArchiveTeam = z.infer<typeof archiveTeamSchema>;
+export type UpdateTeamMembership = z.infer<typeof updateTeamMembershipSchema>;
 
 export type InsertAthleteProfile = z.infer<typeof insertAthleteProfileSchema>;
 export type AthleteProfile = typeof athleteProfiles.$inferSelect;

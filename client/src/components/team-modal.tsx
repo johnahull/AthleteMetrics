@@ -29,6 +29,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       name: "",
       level: "",
       notes: "",
+      season: "",
       organizationId: undefined,
     },
   });
@@ -39,6 +40,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         name: team.name,
         level: team.level || "",
         notes: team.notes || "",
+        season: team.season || "",
         organizationId: team.organizationId,
       });
     } else {
@@ -46,6 +48,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         name: "",
         level: "",
         notes: "",
+        season: "",
         organizationId: undefined,
       });
     }
@@ -120,26 +123,48 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Team Name <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input 
-                      {...field} 
-                      placeholder="Enter team name"
-                      disabled={isPending}
-                      data-testid="input-team-name"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Team Name <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        placeholder="Enter team name"
+                        disabled={isPending}
+                        data-testid="input-team-name"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="season"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Season</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field}
+                        value={field.value || ""}
+                        placeholder="e.g., 2025-Spring"
+                        disabled={isPending}
+                        data-testid="input-team-season"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}

@@ -4,7 +4,7 @@ import {
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -37,6 +37,9 @@ export interface IStorage {
   createTeam(team: InsertTeam): Promise<Team>;
   updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team>;
   deleteTeam(id: string): Promise<void>;
+  archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team>;
+  unarchiveTeam(id: string): Promise<Team>;
+  updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any>;
 
   // User Management
   addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
@@ -606,6 +609,63 @@ export class DatabaseStorage implements IStorage {
     await db.delete(teams).where(eq(teams.id, id));
   }
 
+  async archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team> {
+    const [archived] = await db.update(teams)
+      .set({
+        isArchived: "true",
+        archivedAt: archiveDate,
+        season: season
+      })
+      .where(eq(teams.id, id))
+      .returning();
+    
+    // Mark all current team memberships as inactive
+    await db.update(userTeams)
+      .set({
+        isActive: "false",
+        leftAt: archiveDate,
+        season: season
+      })
+      .where(and(
+        eq(userTeams.teamId, id),
+        eq(userTeams.isActive, "true")
+      ));
+    
+    return archived;
+  }
+
+  async unarchiveTeam(id: string): Promise<Team> {
+    const [unarchived] = await db.update(teams)
+      .set({
+        isArchived: "false",
+        archivedAt: null
+      })
+      .where(eq(teams.id, id))
+      .returning();
+    
+    // Note: We don't automatically reactivate team memberships when unarchiving
+    // This is intentional - users should be explicitly re-added to teams
+    // to prevent accidentally including old measurements in current analytics
+    
+    return unarchived;
+  }
+
+  async updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any> {
+    const [updated] = await db.update(userTeams)
+      .set({
+        leftAt: membershipData.leftAt,
+        season: membershipData.season,
+        isActive: membershipData.leftAt ? "false" : "true"
+      })
+      .where(and(
+        eq(userTeams.teamId, teamId),
+        eq(userTeams.userId, userId)
+      ))
+      .returning();
+    
+    return updated;
+  }
+
   // User Management
   async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
     // Validate that role is organization-specific only
@@ -632,22 +692,50 @@ export class DatabaseStorage implements IStorage {
 
   async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
     try {
-      // Check if user is already in this team
-      const existingAssignment = await db.select()
+      // Check if user has an active membership in this team
+      const existingActiveAssignment = await db.select()
         .from(userTeams)
         .where(and(
           eq(userTeams.userId, userId),
-          eq(userTeams.teamId, teamId)
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, "true")
         ));
 
-      if (existingAssignment.length > 0) {
-        console.log('User already assigned to team');
-        return existingAssignment[0];
+      if (existingActiveAssignment.length > 0) {
+        console.log('User already has active assignment to team');
+        return existingActiveAssignment[0];
       }
 
+      // Check if user has an inactive membership that can be reactivated
+      const existingInactiveAssignment = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, "false")
+        ));
+
+      if (existingInactiveAssignment.length > 0) {
+        // Reactivate the membership
+        const [reactivated] = await db.update(userTeams)
+          .set({
+            isActive: "true",
+            leftAt: null,
+            joinedAt: new Date() // New join date
+          })
+          .where(eq(userTeams.id, existingInactiveAssignment[0].id))
+          .returning();
+        
+        console.log('User membership reactivated');
+        return reactivated;
+      }
+
+      // Create new membership
       const [userTeam] = await db.insert(userTeams).values({
         userId,
-        teamId
+        teamId,
+        joinedAt: new Date(),
+        isActive: "true"
       }).returning();
 
       console.log('User added to team successfully');
@@ -710,10 +798,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
-    await db.delete(userTeams)
+    // Mark membership as inactive instead of deleting (temporal approach)
+    await db.update(userTeams)
+      .set({
+        isActive: "false",
+        leftAt: new Date()
+      })
       .where(and(
         eq(userTeams.userId, userId),
-        eq(userTeams.teamId, teamId)
+        eq(userTeams.teamId, teamId),
+        eq(userTeams.isActive, "true")
       ));
   }
 
@@ -1209,8 +1303,24 @@ export class DatabaseStorage implements IStorage {
     })
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
-    .leftJoin(userTeams, eq(users.id, userTeams.userId))
-    .leftJoin(teams, eq(userTeams.teamId, teams.id))
+    .leftJoin(userTeams, and(
+      eq(users.id, userTeams.userId),
+      // Temporal constraints: user was on team when measurement was taken
+      lte(userTeams.joinedAt, measurements.date),
+      or(
+        isNull(userTeams.leftAt), // Still active
+        gte(userTeams.leftAt, measurements.date) // Left after measurement
+      )
+    ))
+    .leftJoin(teams, and(
+      eq(userTeams.teamId, teams.id),
+      // Only include measurements from before team was archived (if archived)
+      or(
+        eq(teams.isArchived, "false"), // Team not archived
+        isNull(teams.archivedAt), // No archive date
+        gte(teams.archivedAt, measurements.date) // Archived after measurement
+      )
+    ))
     .leftJoin(organizations, eq(teams.organizationId, organizations.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);

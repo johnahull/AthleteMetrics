@@ -8,7 +8,7 @@ import { body, validationResult } from "express-validator";
 import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
-import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations } from "@shared/schema";
+import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
@@ -925,6 +925,139 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error("Error deleting team:", error);
       res.status(500).json({ message: "Failed to delete team" });
+    }
+  });
+
+  // Team archiving endpoints
+  app.post("/api/teams/:id/archive", requireAuth, async (req, res) => {
+    try {
+      const { id: teamId } = req.params;
+      const archiveData = archiveTeamSchema.parse({ teamId, ...req.body });
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot archive teams
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot archive teams" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      // Check if team is already archived
+      if (team.isArchived === "true") {
+        return res.status(400).json({ message: "Team is already archived" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      // Archive the team
+      const archiveDate = archiveData.archiveDate || new Date();
+      const archivedTeam = await storage.archiveTeam(teamId, archiveDate, archiveData.season);
+      
+      res.json(archivedTeam);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error archiving team:", error);
+        res.status(500).json({ message: "Failed to archive team" });
+      }
+    }
+  });
+
+  app.post("/api/teams/:id/unarchive", requireAuth, async (req, res) => {
+    try {
+      const { id: teamId } = req.params;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot unarchive teams
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot unarchive teams" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      // Check if team is already active
+      if (team.isArchived !== "true") {
+        return res.status(400).json({ message: "Team is not archived" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      // Unarchive the team
+      const unarchivedTeam = await storage.unarchiveTeam(teamId);
+      
+      res.json(unarchivedTeam);
+    } catch (error) {
+      console.error("Error unarchiving team:", error);
+      res.status(500).json({ message: "Failed to unarchive team" });
+    }
+  });
+
+  app.patch("/api/teams/:teamId/members/:userId", requireAuth, async (req, res) => {
+    try {
+      const { teamId, userId } = req.params;
+      const membershipData = updateTeamMembershipSchema.parse({ teamId, userId, ...req.body });
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      // Update team membership
+      const updatedMembership = await storage.updateTeamMembership(teamId, userId, membershipData);
+      
+      res.json(updatedMembership);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else {
+        console.error("Error updating team membership:", error);
+        res.status(500).json({ message: "Failed to update team membership" });
+      }
     }
   });
 
