@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +18,8 @@ export default function MeasurementForm() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAthlete, setSelectedAthlete] = useState<any>(null);
+  const [activeTeams, setActiveTeams] = useState<any[]>([]);
+  const [showTeamOverride, setShowTeamOverride] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -117,8 +119,46 @@ export default function MeasurementForm() {
     athlete.teams?.some((team: any) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
   ) : [];
 
+  // Fetch active teams when athlete or date changes
+  const fetchActiveTeams = async (athleteId: string, date: string) => {
+    try {
+      const response = await fetch(`/api/athletes/${athleteId}/active-teams?date=${date}`);
+      if (response.ok) {
+        const teams = await response.json();
+        setActiveTeams(teams);
+        
+        // Auto-populate team if only one active team
+        if (teams.length === 1) {
+          form.setValue("teamId", teams[0].teamId);
+          form.setValue("season", teams[0].season || "");
+          setShowTeamOverride(false);
+        } else if (teams.length > 1) {
+          // Multiple teams - require manual selection
+          setShowTeamOverride(true);
+          form.setValue("teamId", "");
+          form.setValue("season", "");
+        } else {
+          // No active teams
+          setShowTeamOverride(false);
+          form.setValue("teamId", "");
+          form.setValue("season", "");
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching active teams:", error);
+    }
+  };
+
   const metric = form.watch("metric");
+  const date = form.watch("date");
   const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
+
+  // Watch for date changes and refetch active teams
+  useEffect(() => {
+    if (selectedAthlete && date) {
+      fetchActiveTeams(selectedAthlete.id, date);
+    }
+  }, [date, selectedAthlete]);
 
   const onSubmit = (data: InsertMeasurement) => {
     if (!selectedAthlete) {
@@ -193,6 +233,11 @@ export default function MeasurementForm() {
                         setSelectedAthlete(athlete);
                         setSearchTerm("");
                         form.setValue("userId", athlete.id);
+                        // Fetch active teams for the selected athlete
+                        const currentDate = form.getValues("date");
+                        if (currentDate) {
+                          fetchActiveTeams(athlete.id, currentDate);
+                        }
                       }}
                       data-testid={`option-athlete-${athlete.id}`}
                     >
@@ -354,6 +399,107 @@ export default function MeasurementForm() {
             </FormItem>
           )}
         />
+
+        {/* Team Context */}
+        {selectedAthlete && activeTeams.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-blue-900 mb-2">Team Context</h3>
+            
+            {activeTeams.length === 1 ? (
+              <div className="space-y-2">
+                <p className="text-sm text-blue-800">
+                  Auto-assigned to: <span className="font-medium">{activeTeams[0].teamName}</span>
+                  {activeTeams[0].season && <span> • {activeTeams[0].season}</span>}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowTeamOverride(!showTeamOverride)}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  {showTeamOverride ? 'Use auto-assignment' : 'Override team selection'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-blue-800">
+                  Athlete is on {activeTeams.length} teams - please select team context:
+                </p>
+                <FormField
+                  control={form.control}
+                  name="teamId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        const selectedTeam = activeTeams.find(t => t.teamId === value);
+                        if (selectedTeam) {
+                          form.setValue("season", selectedTeam.season || "");
+                        }
+                      }} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-white">
+                            <SelectValue placeholder="Select team..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {activeTeams.map((team) => (
+                            <SelectItem key={team.teamId} value={team.teamId}>
+                              {team.teamName} {team.season && `• ${team.season}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {showTeamOverride && activeTeams.length === 1 && (
+              <div className="mt-3 space-y-2">
+                <FormField
+                  control={form.control}
+                  name="teamId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Team Override</FormLabel>
+                      <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        const selectedTeam = activeTeams.find(t => t.teamId === value);
+                        if (selectedTeam) {
+                          form.setValue("season", selectedTeam.season || "");
+                        }
+                      }} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-white">
+                            <SelectValue placeholder="Select team..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {activeTeams.map((team) => (
+                            <SelectItem key={team.teamId} value={team.teamId}>
+                              {team.teamName} {team.season && `• ${team.season}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedAthlete && activeTeams.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-sm text-amber-800">
+              This athlete is not currently on any active teams. The measurement will be recorded without team context.
+            </p>
+          </div>
+        )}
 
         {/* Quick Add Athlete */}
         <div className="border-t border-gray-200 pt-6">

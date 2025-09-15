@@ -1331,6 +1331,30 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Get athlete's active teams at a specific date (for measurement form)
+  app.get("/api/athletes/:id/active-teams", requireAuth, async (req, res) => {
+    try {
+      const { id: userId } = req.params;
+      const { date } = req.query;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Use current date if not provided
+      const measurementDate = date ? new Date(date as string) : new Date();
+
+      // Get athlete's active teams at the measurement date
+      const activeTeams = await storage.getAthleteActiveTeamsAtDate(userId, measurementDate);
+
+      res.json(activeTeams);
+    } catch (error) {
+      console.error("Error fetching athlete's active teams:", error);
+      res.status(500).json({ message: "Failed to fetch active teams" });
+    }
+  });
+
   app.post("/api/measurements", createLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;

@@ -4,7 +4,7 @@ import {
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -1303,23 +1303,31 @@ export class DatabaseStorage implements IStorage {
     })
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
-    .leftJoin(userTeams, and(
-      eq(users.id, userTeams.userId),
-      // Temporal constraints: user was on team when measurement was taken
-      lte(userTeams.joinedAt, measurements.date),
-      or(
-        isNull(userTeams.leftAt), // Still active
-        gte(userTeams.leftAt, measurements.date) // Left after measurement
+    // Use direct team relationship when available, fall back to temporal logic
+    .leftJoin(teams, or(
+      // Direct team relationship (preferred)
+      eq(measurements.teamId, teams.id),
+      // Fallback: temporal logic for measurements without direct team context
+      and(
+        isNull(measurements.teamId), // No direct team context
+        exists(
+          db.select({ id: userTeams.id })
+            .from(userTeams)
+            .where(and(
+              eq(userTeams.userId, users.id),
+              eq(userTeams.teamId, teams.id),
+              lte(userTeams.joinedAt, measurements.date),
+              or(
+                isNull(userTeams.leftAt),
+                gte(userTeams.leftAt, measurements.date)
+              )
+            ))
+        )
       )
     ))
-    .leftJoin(teams, and(
-      eq(userTeams.teamId, teams.id),
-      // Only include measurements from before team was archived (if archived)
-      or(
-        eq(teams.isArchived, "false"), // Team not archived
-        isNull(teams.archivedAt), // No archive date
-        gte(teams.archivedAt, measurements.date) // Archived after measurement
-      )
+    .leftJoin(userTeams, and(
+      eq(users.id, userTeams.userId),
+      eq(userTeams.teamId, teams.id)
     ))
     .leftJoin(organizations, eq(teams.organizationId, organizations.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
@@ -1359,6 +1367,34 @@ export class DatabaseStorage implements IStorage {
     if (!filters?.includeUnverified) {
       conditions.push(eq(measurements.isVerified, "true"));
     }
+    
+    // Team filtering - use direct team relationship when available for better performance
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      conditions.push(or(
+        inArray(measurements.teamId, filters.teamIds), // Direct team relationship (preferred)
+        and(
+          isNull(measurements.teamId), // Fallback for measurements without direct team context
+          exists(
+            db.select({ id: userTeams.id })
+              .from(userTeams)
+              .where(and(
+                eq(userTeams.userId, users.id),
+                inArray(userTeams.teamId, filters.teamIds),
+                lte(userTeams.joinedAt, measurements.date),
+                or(
+                  isNull(userTeams.leftAt),
+                  gte(userTeams.leftAt, measurements.date)
+                )
+              ))
+          )
+        )
+      ));
+    }
+    
+    // Organization filtering
+    if (filters?.organizationId) {
+      conditions.push(eq(organizations.id, filters.organizationId));
+    }
 
     let finalQuery = query;
     if (conditions.length > 0) {
@@ -1376,20 +1412,8 @@ export class DatabaseStorage implements IStorage {
       )
       .orderBy(desc(measurements.date), desc(measurements.createdAt));
 
-    // Apply team/organization filters
+    // Apply remaining filters (team/org filtering now done in query for better performance)
     let filteredMeasurements = result;
-
-    if (filters?.teamIds && filters.teamIds.length > 0) {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some((team: any) => filters.teamIds!.includes(team.id))
-      );
-    }
-
-    if (filters?.organizationId) {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some((team: any) => team.organization.id === filters.organizationId)
-      );
-    }
 
     // Filter by sport if specified
     if (filters?.sport && filters.sport !== "all") {
@@ -1420,6 +1444,37 @@ export class DatabaseStorage implements IStorage {
     return measurement || undefined;
   }
 
+  async getAthleteActiveTeamsAtDate(userId: string, measurementDate: Date): Promise<Array<{
+    teamId: string;
+    teamName: string;
+    season: string | null;
+    organizationId: string;
+    organizationName: string;
+  }>> {
+    const activeTeams = await db.select({
+      teamId: teams.id,
+      teamName: teams.name,
+      season: teams.season,
+      organizationId: teams.organizationId,
+      organizationName: organizations.name,
+    })
+    .from(userTeams)
+    .innerJoin(teams, eq(userTeams.teamId, teams.id))
+    .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+    .where(and(
+      eq(userTeams.userId, userId),
+      lte(userTeams.joinedAt, measurementDate),
+      or(
+        isNull(userTeams.leftAt),
+        gte(userTeams.leftAt, measurementDate)
+      ),
+      eq(userTeams.isActive, "true"),
+      eq(teams.isArchived, "false") // Only include non-archived teams
+    ));
+
+    return activeTeams;
+  }
+
   async createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement> {
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
@@ -1439,6 +1494,35 @@ export class DatabaseStorage implements IStorage {
 
     const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
                   measurement.metric === "RSI" ? "ratio" : "in";
+
+    // Auto-populate team context if not explicitly provided
+    let teamId = measurement.teamId;
+    let season = measurement.season;
+    let teamContextAuto = "true";
+
+    if (!teamId) {
+      // Get athlete's active teams at measurement date
+      const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
+      
+      if (activeTeams.length === 1) {
+        // Single team - auto-assign
+        teamId = activeTeams[0].teamId;
+        season = activeTeams[0].season || undefined;
+        teamContextAuto = "true";
+        console.log(`Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})`);
+      } else if (activeTeams.length > 1) {
+        // Multiple teams - cannot auto-assign, will need manual selection
+        console.log(`Athlete is on ${activeTeams.length} teams - team context not auto-assigned`);
+        teamContextAuto = "false";
+      } else {
+        // No active teams - measurement without team context
+        console.log('Athlete has no active teams - measurement created without team context');
+        teamContextAuto = "false";
+      }
+    } else {
+      // Team was explicitly provided
+      teamContextAuto = "false";
+    }
 
     // Get submitter info to determine if auto-verify
     const [submitter] = await db.select().from(users).where(eq(users.id, submittedBy));
@@ -1461,7 +1545,10 @@ export class DatabaseStorage implements IStorage {
       age,
       units,
       isVerified: isCoach ? "true" : "false",
-      verifiedBy: isCoach ? submittedBy : undefined
+      verifiedBy: isCoach ? submittedBy : undefined,
+      teamId: teamId || null,
+      season: season || null,
+      teamContextAuto: teamContextAuto
     }).returning();
 
     return newMeasurement;

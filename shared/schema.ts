@@ -95,6 +95,10 @@ export const measurements = pgTable("measurements", {
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   notes: text("notes"),
+  // Team context fields - auto-populated when measurement is created
+  teamId: varchar("team_id").references(() => teams.id), // Team athlete was on when measurement was taken
+  season: text("season"), // Season designation (e.g., "2024-Fall")
+  teamContextAuto: text("team_context_auto").default("true"), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -336,12 +340,16 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   verifiedBy: true,
   isVerified: true,
   submittedBy: true, // Backend handles this automatically based on session
+  teamContextAuto: true, // Managed by system
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().min(1, "Date is required"),
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
+  // Optional team context - will be auto-populated if not provided
+  teamId: z.string().optional(),
+  season: z.string().optional(),
 });
 
 // Types
