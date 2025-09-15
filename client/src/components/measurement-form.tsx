@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,6 +40,8 @@ export default function MeasurementForm() {
       value: 0,
       flyInDistance: undefined,
       notes: "",
+      teamId: "",
+      season: "",
     },
   });
 
@@ -120,19 +122,20 @@ export default function MeasurementForm() {
   ) : [];
 
   // Fetch active teams when athlete or date changes
-  const fetchActiveTeams = async (athleteId: string, date: string) => {
+  const fetchActiveTeams = useCallback(async (athleteId: string, date: string) => {
     try {
       const response = await fetch(`/api/athletes/${athleteId}/active-teams?date=${date}`);
       if (response.ok) {
         const teams = await response.json();
-        setActiveTeams(teams);
+        const safeTeams = Array.isArray(teams) ? teams : [];
+        setActiveTeams(safeTeams);
         
         // Auto-populate team if only one active team
-        if (teams.length === 1) {
-          form.setValue("teamId", teams[0].teamId);
-          form.setValue("season", teams[0].season || "");
+        if (safeTeams.length === 1 && safeTeams[0]) {
+          form.setValue("teamId", safeTeams[0].teamId);
+          form.setValue("season", safeTeams[0].season || "");
           setShowTeamOverride(false);
-        } else if (teams.length > 1) {
+        } else if (safeTeams.length > 1) {
           // Multiple teams - require manual selection
           setShowTeamOverride(true);
           form.setValue("teamId", "");
@@ -143,11 +146,23 @@ export default function MeasurementForm() {
           form.setValue("teamId", "");
           form.setValue("season", "");
         }
+      } else {
+        console.error("Failed to fetch active teams:", response.status, response.statusText);
+        // Reset teams state on error
+        setActiveTeams([]);
+        setShowTeamOverride(false);
+        form.setValue("teamId", "");
+        form.setValue("season", "");
       }
     } catch (error) {
       console.error("Error fetching active teams:", error);
+      // Reset teams state on error
+      setActiveTeams([]);
+      setShowTeamOverride(false);
+      form.setValue("teamId", "");
+      form.setValue("season", "");
     }
-  };
+  }, [form]);
 
   const metric = form.watch("metric");
   const date = form.watch("date");
@@ -158,7 +173,7 @@ export default function MeasurementForm() {
     if (selectedAthlete && date) {
       fetchActiveTeams(selectedAthlete.id, date);
     }
-  }, [date, selectedAthlete]);
+  }, [date, selectedAthlete, fetchActiveTeams]);
 
   const onSubmit = (data: InsertMeasurement) => {
     if (!selectedAthlete) {
@@ -431,7 +446,7 @@ export default function MeasurementForm() {
                     <FormItem>
                       <Select onValueChange={(value) => {
                         field.onChange(value);
-                        const selectedTeam = activeTeams.find(t => t.teamId === value);
+                        const selectedTeam = activeTeams?.find(t => t?.teamId === value);
                         if (selectedTeam) {
                           form.setValue("season", selectedTeam.season || "");
                         }
@@ -466,7 +481,7 @@ export default function MeasurementForm() {
                       <FormLabel className="text-xs">Team Override</FormLabel>
                       <Select onValueChange={(value) => {
                         field.onChange(value);
-                        const selectedTeam = activeTeams.find(t => t.teamId === value);
+                        const selectedTeam = activeTeams?.find(t => t?.teamId === value);
                         if (selectedTeam) {
                           form.setValue("season", selectedTeam.season || "");
                         }

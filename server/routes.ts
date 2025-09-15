@@ -1342,8 +1342,15 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Use current date if not provided
-      const measurementDate = date ? new Date(date as string) : new Date();
+      // Use current date if not provided, validate date format
+      let measurementDate = new Date();
+      if (date) {
+        const parsedDate = new Date(date as string);
+        if (isNaN(parsedDate.getTime())) {
+          return res.status(400).json({ message: "Invalid date format" });
+        }
+        measurementDate = parsedDate;
+      }
 
       // Get athlete's active teams at the measurement date
       const activeTeams = await storage.getAthleteActiveTeamsAtDate(userId, measurementDate);

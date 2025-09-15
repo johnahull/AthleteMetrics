@@ -1309,7 +1309,7 @@ export class DatabaseStorage implements IStorage {
       eq(measurements.teamId, teams.id),
       // Fallback: temporal logic for measurements without direct team context
       and(
-        isNull(measurements.teamId), // No direct team context
+        or(isNull(measurements.teamId), eq(measurements.teamId, "")), // No direct team context
         exists(
           db.select({ id: userTeams.id })
             .from(userTeams)
@@ -1373,7 +1373,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(or(
         inArray(measurements.teamId, filters.teamIds), // Direct team relationship (preferred)
         and(
-          isNull(measurements.teamId), // Fallback for measurements without direct team context
+          or(isNull(measurements.teamId), eq(measurements.teamId, "")), // Fallback for measurements without direct team context
           exists(
             db.select({ id: userTeams.id })
               .from(userTeams)
@@ -1500,7 +1500,7 @@ export class DatabaseStorage implements IStorage {
     let season = measurement.season;
     let teamContextAuto = "true";
 
-    if (!teamId) {
+    if (!teamId || teamId.trim() === "") {
       // Get athlete's active teams at measurement date
       const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
       

@@ -40,7 +40,7 @@ FROM (
     tc.season
   FROM measurements m
   CROSS JOIN LATERAL get_measurement_team_context(m.user_id, m.date) tc
-  WHERE m.team_id IS NULL -- Only update measurements without team context
+  WHERE (m.team_id IS NULL OR m.team_id = '') -- Only update measurements without team context
 ) ctx
 WHERE measurements.id = ctx.measurement_id;
 
