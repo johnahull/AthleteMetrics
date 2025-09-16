@@ -42,6 +42,7 @@ BEGIN
   FROM user_teams ut
   JOIN teams t ON ut.team_id = t.id
   WHERE ut.user_id = p_user_id
+    AND ut.joined_at IS NOT NULL
     AND ut.joined_at <= p_measurement_date
     AND (ut.left_at IS NULL OR ut.left_at >= p_measurement_date)
     AND ut.is_active = 'true'

@@ -609,31 +609,51 @@ export class DatabaseStorage implements IStorage {
     await db.delete(teams).where(eq(teams.id, id));
   }
 
+  /**
+   * Archives a team and marks all current team memberships as inactive
+   * @param id Team ID to archive
+   * @param archiveDate Date when the team was archived (affects measurement context)
+   * @param season Final season designation for the team (e.g., "2024-Fall Soccer")
+   * @returns Promise<Team> The archived team object
+   * @throws Error if team not found or archive operation fails
+   */
   async archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team> {
-    const [archived] = await db.update(teams)
-      .set({
-        isArchived: "true",
-        archivedAt: archiveDate,
-        season: season
-      })
-      .where(eq(teams.id, id))
-      .returning();
-    
-    // Mark all current team memberships as inactive
-    await db.update(userTeams)
-      .set({
-        isActive: "false",
-        leftAt: archiveDate,
-        season: season
-      })
-      .where(and(
-        eq(userTeams.teamId, id),
-        eq(userTeams.isActive, "true")
-      ));
-    
-    return archived;
+    // Use transaction to ensure atomicity of archive operations
+    return await db.transaction(async (tx) => {
+      const [archived] = await tx.update(teams)
+        .set({
+          isArchived: "true",
+          archivedAt: archiveDate,
+          season: season
+        })
+        .where(eq(teams.id, id))
+        .returning();
+      
+      // Mark all current team memberships as inactive
+      await tx.update(userTeams)
+        .set({
+          isActive: "false",
+          leftAt: archiveDate,
+          season: season
+        })
+        .where(and(
+          eq(userTeams.teamId, id),
+          eq(userTeams.isActive, "true")
+        ));
+      
+      return archived;
+    });
   }
 
+  /**
+   * Unarchives a team by setting isArchived to false and clearing archivedAt
+   * Note: This does NOT automatically reactivate team memberships - 
+   * users must be explicitly re-added to prevent old measurements from 
+   * affecting current analytics
+   * @param id Team ID to unarchive
+   * @returns Promise<Team> The unarchived team object
+   * @throws Error if team not found or unarchive operation fails
+   */
   async unarchiveTeam(id: string): Promise<Team> {
     const [unarchived] = await db.update(teams)
       .set({
