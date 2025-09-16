@@ -1,18 +1,26 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Edit, Trash2, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Edit, Trash2, Users, MoreHorizontal, Archive, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
+import ArchiveTeamModal from "@/components/archive-team-modal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { useAuth } from "@/lib/auth";
+import type { Team, ArchiveTeam } from "@shared/schema";
 
 export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingTeam, setEditingTeam] = useState(null);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [archivingTeam, setArchivingTeam] = useState<Team | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,6 +69,52 @@ export default function Teams() {
     },
   });
 
+  const archiveTeamMutation = useMutation({
+    mutationFn: async (data: ArchiveTeam) => {
+      await apiRequest("POST", `/api/teams/${data.teamId}/archive`, {
+        season: data.season,
+        archiveDate: data.archiveDate
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      toast({
+        title: "Success",
+        description: "Team archived successfully",
+      });
+      setArchivingTeam(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to archive team",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unarchiveTeamMutation = useMutation({
+    mutationFn: async (teamId: string) => {
+      await apiRequest("POST", `/api/teams/${teamId}/unarchive`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      toast({
+        title: "Success",
+        description: "Team unarchived successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to unarchive team",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteTeam = async (teamId: string, teamName: string) => {
     if (window.confirm(`Are you sure you want to delete "${teamName}"? This action cannot be undone.`)) {
       deleteTeamMutation.mutate(teamId);
@@ -70,13 +124,25 @@ export default function Teams() {
   const getTeamStats = (teamId: string) => {
     // Ensure teamStats is an array before calling find
     const statsArray = Array.isArray(teamStats) ? teamStats : [];
-    return statsArray.find(stat => stat.teamId === teamId) || {
+    return statsArray.find(stat => stat?.teamId === teamId) || {
       athleteCount: 0,
       bestFly10: undefined,
       bestVertical: undefined,
       latestTest: undefined,
     };
   };
+
+  // Filter teams based on archive status
+  const safeTeams = Array.isArray(teams) ? teams : [];
+  const filteredTeams = safeTeams.filter((team: Team) => {
+    if (!team) return false; // Safety check for null/undefined teams
+    if (showArchived) {
+      return true; // Show all teams
+    }
+    return team.isArchived !== "true"; // Only show non-archived teams
+  });
+
+  const archivedTeamsCount = safeTeams.filter((team: Team) => team?.isArchived === "true").length;
 
   if (isLoading) {
     return (
@@ -97,7 +163,26 @@ export default function Teams() {
     <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Teams Management</h1>
+        <div className="flex flex-col space-y-2">
+          <h1 className="text-2xl font-semibold text-gray-900">Teams Management</h1>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-archived"
+                checked={showArchived}
+                onCheckedChange={(checked) => setShowArchived(checked === true)}
+                data-testid="checkbox-show-archived"
+              />
+              <Label htmlFor="show-archived" className="text-sm">Show archived teams</Label>
+            </div>
+            
+            {showArchived && archivedTeamsCount > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {archivedTeamsCount} archived team{archivedTeamsCount !== 1 ? 's' : ''} shown
+              </Badge>
+            )}
+          </div>
+        </div>
         <Button 
           onClick={() => setShowAddModal(true)}
           className="bg-primary hover:bg-blue-700"
@@ -110,38 +195,69 @@ export default function Teams() {
 
       {/* Teams Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {teams?.map((team: any) => {
+        {filteredTeams.map((team: Team) => {
           const stats = getTeamStats(team.id);
+          const isArchived = team.isArchived === "true";
           return (
-            <Card key={team.id} className="bg-white hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
+            <Card key={team.id} className={`bg-white hover:shadow-md transition-shadow ${isArchived ? 'opacity-60 border-amber-200' : ''}`}>
+              <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
                     <h3 className="text-lg font-semibold text-gray-900">{team.name}</h3>
-                    {team.level && (
-                      <p className="text-sm text-gray-500">{team.level}</p>
+                    {isArchived && (
+                      <Badge variant="destructive" className="text-xs">
+                        Archived
+                      </Badge>
                     )}
                   </div>
-                  <div className="flex space-x-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingTeam(team)}
-                      data-testid={`button-edit-team-${team.id}`}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteTeam(team.id, team.name)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      data-testid={`button-delete-team-${team.id}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {team.season && (
+                    <p className="text-sm text-gray-600 mt-1">{team.season}</p>
+                  )}
                 </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" data-testid={`button-team-menu-${team.id}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setEditingTeam(team)} data-testid={`menu-edit-team-${team.id}`}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Team
+                    </DropdownMenuItem>
+                    {isArchived ? (
+                      <DropdownMenuItem 
+                        onClick={() => unarchiveTeamMutation.mutate(team.id)}
+                        data-testid={`menu-unarchive-team-${team.id}`}
+                      >
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        Unarchive Team
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem 
+                        onClick={() => setArchivingTeam(team)}
+                        data-testid={`menu-archive-team-${team.id}`}
+                      >
+                        <Archive className="h-4 w-4 mr-2" />
+                        Archive Team
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => handleDeleteTeam(team.id, team.name)}
+                      className="text-red-600 focus:text-red-600"
+                      data-testid={`menu-delete-team-${team.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Team
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </CardHeader>
+              <CardContent>
+                {team.level && (
+                  <p className="text-sm text-gray-500 mb-4">{team.level}</p>
+                )}
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -190,7 +306,7 @@ export default function Teams() {
           );
         })}
 
-        {teams?.length === 0 && (
+        {filteredTeams.length === 0 && teams?.length === 0 && (
           <div className="col-span-full">
             <Card className="bg-gray-50 border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -210,6 +326,36 @@ export default function Teams() {
             </Card>
           </div>
         )}
+
+        {filteredTeams.length === 0 && teams?.length > 0 && !showArchived && (
+          <div className="col-span-full">
+            <Card className="bg-gray-50 border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Archive className="h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">All teams are archived</h3>
+                <p className="text-gray-600 text-center mb-4">
+                  Enable "Show archived teams" to view them, or add a new team.
+                </p>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setShowArchived(true)}
+                    data-testid="button-show-archived-teams"
+                  >
+                    Show Archived Teams
+                  </Button>
+                  <Button 
+                    onClick={() => setShowAddModal(true)}
+                    data-testid="button-add-new-team"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Team
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -224,6 +370,16 @@ export default function Teams() {
         onClose={() => setEditingTeam(null)}
         team={editingTeam}
       />
+
+      {archivingTeam && (
+        <ArchiveTeamModal
+          isOpen={!!archivingTeam}
+          onClose={() => setArchivingTeam(null)}
+          team={archivingTeam}
+          onConfirm={archiveTeamMutation.mutate}
+          isLoading={archiveTeamMutation.isPending}
+        />
+      )}
     </div>
   );
 }
