@@ -18,6 +18,7 @@ import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -38,6 +39,7 @@ export default function Analytics() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { organizationContext } = useAuth();
   
   // State for edit/delete functionality
   const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
@@ -46,12 +48,12 @@ export default function Analytics() {
   
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
-    birthYearFrom: "2009",
-    birthYearTo: "2009",
+    birthYearFrom: "",
+    birthYearTo: "",
     ageFrom: "",
     ageTo: "",
     metric: "",
-    dateRange: "last30",
+    dateRange: "all",
     sport: "",
     search: "",
     gender: "all",  // Default to show all genders, user can filter as needed
@@ -75,7 +77,7 @@ export default function Analytics() {
   }) as { data: any[] };
 
   const { data: measurements } = useQuery({
-    queryKey: ["/api/measurements", filters],
+    queryKey: ["/api/measurements", filters, organizationContext],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
@@ -100,6 +102,11 @@ export default function Analytics() {
       } else if (filters.dateRange === "last90") {
         const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
         params.append('dateFrom', quarterAgo.toISOString().split('T')[0]);
+      }
+
+      // Add organization context for proper filtering
+      if (organizationContext) {
+        params.append('organizationId', organizationContext);
       }
 
       const response = await fetch(`/api/measurements?${params}`);
