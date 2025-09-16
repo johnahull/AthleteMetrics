@@ -1661,6 +1661,45 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Advanced Analytics POST endpoint
+  app.post("/api/analytics/dashboard", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      const analyticsRequest = req.body;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Role-based access control for advanced analytics
+      const userRole = currentUser.role;
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      
+      // Check if the request is for coach analytics (inter/intra group analysis)
+      const isCoachAnalyticsRequest = analyticsRequest.analysisType === 'inter_group' || 
+                                    analyticsRequest.analysisType === 'intra_group';
+      
+      if (isCoachAnalyticsRequest && !userIsSiteAdmin && userRole !== 'coach' && userRole !== 'org_admin') {
+        return res.status(403).json({ 
+          message: "Access denied. Coach analytics is only available to coaches and organization administrators.",
+          userRole: userRole
+        });
+      }
+
+      // Import and instantiate the simplified analytics service
+      const { AnalyticsService } = await import("./analytics-simple");
+      const analyticsService = new AnalyticsService();
+
+      // Get analytics data
+      const analyticsData = await analyticsService.getAnalyticsData(analyticsRequest);
+      
+      res.json(analyticsData);
+    } catch (error) {
+      console.error("Error processing analytics request:", error);
+      res.status(500).json({ message: "Failed to process analytics request" });
+    }
+  });
+
   app.get("/api/analytics/teams", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;

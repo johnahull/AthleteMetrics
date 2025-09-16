@@ -12,6 +12,8 @@ import Athletes from "./pages/athletes";
 import AthleteProfile from "./pages/athlete-profile";
 import DataEntry from "./pages/data-entry";
 import Analytics from "./pages/analytics";
+import CoachAnalytics from "./pages/CoachAnalytics";
+import AthleteAnalytics from "./pages/AthleteAnalytics";
 import Publish from "./pages/publish";
 import ImportExport from "./pages/import-export";
 import AdminPage from "./pages/admin";
@@ -43,6 +45,8 @@ function Router() {
       <Route path="/user-management" component={UserManagement} />
       <Route path="/data-entry" component={DataEntry} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/coach-analytics" component={CoachAnalytics} />
+      <Route path="/athlete-analytics" component={AthleteAnalytics} />
       <Route path="/publish" component={Publish} />
       <Route path="/import-export" component={ImportExport} />
       <Route path="/admin" component={AdminPage} />

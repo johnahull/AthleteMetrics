@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,7 +40,27 @@ export default function Analytics() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { organizationContext } = useAuth();
+  const { user, organizationContext } = useAuth();
+
+  // Role-based routing: redirect coaches/org_admins to appropriate analytics page
+  useEffect(() => {
+    if (user) {
+      const userRole = (user as any)?.role;
+      const isSiteAdmin = (user as any)?.isSiteAdmin;
+      
+      // Coaches and org admins should use the coach analytics dashboard
+      if (isSiteAdmin || userRole === 'coach' || userRole === 'org_admin') {
+        setLocation('/coach-analytics');
+        return;
+      }
+      
+      // Athletes should use the athlete analytics dashboard
+      if (userRole === 'athlete') {
+        setLocation('/athlete-analytics');
+        return;
+      }
+    }
+  }, [user, setLocation]);
   
   // State for edit/delete functionality
   const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
