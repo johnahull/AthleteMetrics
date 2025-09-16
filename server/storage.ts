@@ -1356,7 +1356,6 @@ export class DatabaseStorage implements IStorage {
       eq(userTeams.teamId, teams.id)
     ))
     .leftJoin(organizations, eq(teams.organizationId, organizations.id))
-    .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 
@@ -1419,8 +1418,16 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Organization filtering - filter by user's organization membership, not team organization
+    // Use EXISTS subquery to prevent duplicates from multiple org memberships
     if (filters?.organizationId) {
-      conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
+      conditions.push(exists(
+        db.select({ id: userOrganizations.id })
+          .from(userOrganizations)
+          .where(and(
+            eq(userOrganizations.userId, users.id),
+            eq(userOrganizations.organizationId, filters.organizationId)
+          ))
+      ));
     }
 
     let finalQuery = query;
