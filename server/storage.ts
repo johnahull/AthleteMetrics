@@ -1687,8 +1687,13 @@ export class DatabaseStorage implements IStorage {
     totalAthletes: number;
     activeAthletes: number;
     totalTeams: number;
-    bestFly10Today?: { value: number; userName: string };
-    bestVerticalToday?: { value: number; userName: string };
+    bestFLY10_TIMELast30Days?: { value: number; userName: string };
+    bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
+    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_5105Last30Days?: { value: number; userName: string };
+    bestT_TESTLast30Days?: { value: number; userName: string };
+    bestDASH_40YDLast30Days?: { value: number; userName: string };
+    bestRSILast30Days?: { value: number; userName: string };
   }> {
     const athletes = await this.getAthletes({ organizationId });
     const teams = await this.getTeams(organizationId);
@@ -1701,33 +1706,49 @@ export class DatabaseStorage implements IStorage {
       athlete.isActive === "true" && athlete.password !== "INVITATION_PENDING"
     ).length;
 
+    // Get measurements from last 30 days instead of just today
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const today = new Date().toISOString().split('T')[0];
-    const todaysMeasurements = await this.getMeasurements({
-      dateFrom: today,
+    const recentMeasurements = await this.getMeasurements({
+      dateFrom: thirtyDaysAgo,
       dateTo: today,
       organizationId,
       includeUnverified: false
     });
 
-    const todaysFly10 = todaysMeasurements
-      .filter(m => m.metric === "FLY10_TIME")
-      .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
+    // Define all available metrics and whether lower is better
+    const metrics = [
+      { key: 'FLY10_TIME', lowerIsBetter: true },
+      { key: 'VERTICAL_JUMP', lowerIsBetter: false },
+      { key: 'AGILITY_505', lowerIsBetter: true },
+      { key: 'AGILITY_5105', lowerIsBetter: true },
+      { key: 'T_TEST', lowerIsBetter: true },
+      { key: 'DASH_40YD', lowerIsBetter: true },
+      { key: 'RSI', lowerIsBetter: false }
+    ];
 
-    const todaysVertical = todaysMeasurements
-      .filter(m => m.metric === "VERTICAL_JUMP")
-      .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
-
-    return {
+    // Calculate best for each metric
+    const bestMetrics: any = {
       totalAthletes,
       activeAthletes,
-      totalTeams: teams.length,
-      bestFly10Today: todaysFly10.length > 0 ? todaysFly10.reduce((best, current) =>
-        current.value < best.value ? current : best
-      ) : undefined,
-      bestVerticalToday: todaysVertical.length > 0 ? todaysVertical.reduce((best, current) =>
-        current.value > best.value ? current : best
-      ) : undefined
+      totalTeams: teams.length
     };
+
+    metrics.forEach(({ key, lowerIsBetter }) => {
+      const metricMeasurements = recentMeasurements
+        .filter(m => m.metric === key)
+        .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
+
+      if (metricMeasurements.length > 0) {
+        const bestResult = lowerIsBetter 
+          ? metricMeasurements.reduce((best, current) => current.value < best.value ? current : best)
+          : metricMeasurements.reduce((best, current) => current.value > best.value ? current : best);
+        
+        bestMetrics[`best${key}Last30Days`] = bestResult;
+      }
+    });
+
+    return bestMetrics;
   }
 
   // Enhanced Authentication Methods Implementation

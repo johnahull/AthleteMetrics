@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
-import { getMetricDisplayName, getMetricColor } from "@/lib/metrics";
+import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
@@ -117,8 +117,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* KPI Cards - Static Cards for Athletes and Teams */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card className="bg-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -154,44 +154,39 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Best Fly-10 Today</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-fly10">
-                  {stats.bestFly10Today ? formatFly10TimeWithSpeed(parseFloat(stats.bestFly10Today.value)) : "N/A"}
-                </p>
-                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-fly10-athlete">
-                  {stats.bestFly10Today?.athleteName || "No data today"}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Best Vertical Today</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-best-vertical">
-                  {stats.bestVerticalToday ? `${stats.bestVerticalToday.value}in` : "N/A"}
-                </p>
-                <p className="text-sm text-gray-500 mt-1" data-testid="stat-best-vertical-athlete">
-                  {stats.bestVerticalToday?.athleteName || "No data today"}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <ArrowUp className="h-6 w-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Performance Metrics Cards - Best from Last 30 Days */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+        {/* Dynamic metric cards for all 7 test types */}
+        {['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'].map((metric) => {
+          const bestResult = stats[`best${metric}Last30Days`];
+          const MetricIcon = getMetricIcon(metric);
+          const metricColor = getMetricColor(metric);
+          
+          return (
+            <Card key={metric} className="bg-white">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Best {getMetricDisplayName(metric)} (30d)
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metric.toLowerCase()}`}>
+                      {bestResult ? formatMetricValue(metric, parseFloat(bestResult.value)) : "N/A"}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metric.toLowerCase()}-athlete`}>
+                      {bestResult?.userName || "No data"}
+                    </p>
+                  </div>
+                  <div className={`w-12 h-12 ${metricColor.replace('text-', 'bg-').replace('800', '100')} rounded-lg flex items-center justify-center`}>
+                    <MetricIcon className={`h-6 w-6 ${metricColor.replace('bg-', 'text-').replace('100', '600')}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Charts Section */}

@@ -1,4 +1,6 @@
 // Utility functions for measurement metrics
+import { Clock, ArrowUp, Zap, Move, Timer, TrendingUp } from "lucide-react";
+import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 
 export function getMetricDisplayName(metric: string): string {
   switch (metric) {
@@ -76,5 +78,38 @@ export function getMetricUnits(metric: string): string {
       return "";
     default:
       return "";
+  }
+}
+
+export function getMetricIcon(metric: string) {
+  switch (metric) {
+    case "FLY10_TIME":
+      return Clock;
+    case "VERTICAL_JUMP":
+      return ArrowUp;
+    case "AGILITY_505":
+    case "AGILITY_5105":
+      return Zap;
+    case "T_TEST":
+      return Move;
+    case "DASH_40YD":
+      return Timer;
+    case "RSI":
+      return TrendingUp;
+    default:
+      return Clock;
+  }
+}
+
+export function formatMetricValue(metric: string, value: number): string {
+  switch (metric) {
+    case "FLY10_TIME":
+      return formatFly10TimeWithSpeed(value);
+    case "VERTICAL_JUMP":
+      return `${value}in`;
+    case "RSI":
+      return `${value}`;
+    default:
+      return `${value}s`;
   }
 }
