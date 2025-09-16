@@ -3081,8 +3081,7 @@ export function registerRoutes(app: Express) {
 
               const matchedAthlete = existingAthlete.find(p => 
                 p.firstName?.toLowerCase() === firstName.toLowerCase() && 
-                p.lastName?.toLowerCase() === lastName.toLowerCase() &&
-                (birthYear ? p.birthYear === parseInt(birthYear) : true)
+                p.lastName?.toLowerCase() === lastName.toLowerCase()
               );
 
               if (matchedAthlete) {
