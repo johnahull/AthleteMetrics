@@ -119,9 +119,15 @@ export interface IStorage {
   }>>;
   getDashboardStats(organizationId?: string): Promise<{
     totalAthletes: number;
+    activeAthletes: number;
     totalTeams: number;
-    bestFly10Today?: { value: number; userName: string };
-    bestVerticalToday?: { value: number; userName: string };
+    bestFLY10_TIMELast30Days?: { value: number; userName: string };
+    bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
+    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_5105Last30Days?: { value: number; userName: string };
+    bestT_TESTLast30Days?: { value: number; userName: string };
+    bestDASH_40YDLast30Days?: { value: number; userName: string };
+    bestRSILast30Days?: { value: number; userName: string };
   }>;
 
   // Enhanced Authentication Methods
