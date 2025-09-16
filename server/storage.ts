@@ -1035,6 +1035,7 @@ export class DatabaseStorage implements IStorage {
     });
 
     // Populate the map with team data
+    console.log(`Found ${userTeamsResults.length} team assignments for ${athleteIds.length} athletes`);
     userTeamsResults.forEach(row => {
       const userId = row.user_teams.userId;
       const team = {
@@ -1046,6 +1047,7 @@ export class DatabaseStorage implements IStorage {
         userTeamsMap.set(userId, []);
       }
       userTeamsMap.get(userId)!.push(team);
+      console.log(`Added team ${team.name} for user ${userId}`);
     });
 
     // Create final result with teams attached
