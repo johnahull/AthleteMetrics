@@ -1012,13 +1012,19 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Batch fetch all teams for all athletes in a single query
+    // Filter for active team memberships and non-archived teams
     const athleteIds = athletes.map(a => a.id);
     const userTeamsResults = await db
       .select()
       .from(userTeams)
       .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(inArray(userTeams.userId, athleteIds));
+      .where(and(
+        inArray(userTeams.userId, athleteIds),
+        eq(userTeams.isActive, "true"),
+        or(isNull(userTeams.leftAt), gte(userTeams.leftAt, new Date())),
+        eq(teams.isArchived, "false")
+      ));
 
     // Build a map of user ID to teams array
     const userTeamsMap = new Map<string, (Team & { organization: Organization })[]>();
