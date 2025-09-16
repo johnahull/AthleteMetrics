@@ -1145,6 +1145,10 @@ export function registerRoutes(app: Express) {
       console.log(`Returning ${athletesList.length} athletes`);
       console.log('Team assignments:', athletesList.map(a => `${a.teams.length} teams`).join(', '));
 
+      // Add cache-busting headers to ensure fresh data
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.json(athletesList);
     } catch (error) {
       console.error("Error fetching athletes:", error);
