@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
-import { Gender, SoccerPosition } from "@shared/schema";
+import { Gender, SoccerPosition, type Team } from "@shared/schema";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -321,7 +321,7 @@ export default function Analytics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
-                  {(teams || []).map((team: any) => (
+                  {(teams || []).filter((team: Team) => team.isArchived !== "true").map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
