@@ -350,7 +350,6 @@ export function registerRoutes(app: Express) {
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.session.user?.id || req.ip || 'unknown', // Rate limit per user ID or IP fallback
     skip: (req) => {
       // Skip rate limiting for local development
       return process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
