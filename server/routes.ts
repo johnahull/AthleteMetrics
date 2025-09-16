@@ -23,6 +23,7 @@ import { reviewQueue } from "./review-queue";
 import type { ImportResult } from "@shared/import-types";
 import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
+import { registerAllRoutes } from "./routes/index";
 
 // Session configuration
 declare module 'express-session' {
@@ -233,6 +234,9 @@ async function initializeDefaultUser() {
 
 export function registerRoutes(app: Express) {
   const server = createServer(app);
+  
+  // Register new refactored routes
+  registerAllRoutes(app);
 
 
   // Session setup with security best practices
@@ -421,6 +425,10 @@ export function registerRoutes(app: Express) {
   // Initialize default user
   initializeDefaultUser();
 
+  // ⚠️ LEGACY ROUTES - These have been refactored to new service layer
+  // Authentication routes are now handled by ./routes/auth-routes.ts
+  
+  /*
   // Authentication routes - USERNAME ONLY
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
@@ -792,7 +800,10 @@ export function registerRoutes(app: Express) {
       }
     }
   });
+  */
 
+  // ⚠️ END OF LEGACY AUTH/USER ROUTES - Now using refactored service layer
+  
   // Team routes with basic organization support
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
