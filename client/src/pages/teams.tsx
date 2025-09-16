@@ -216,7 +216,12 @@ export default function Teams() {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" data-testid={`button-team-menu-${team.id}`}>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      disabled={archiveTeamMutation.isPending || unarchiveTeamMutation.isPending}
+                      data-testid={`button-team-menu-${team.id}`}
+                    >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -228,14 +233,16 @@ export default function Teams() {
                     {isArchived ? (
                       <DropdownMenuItem 
                         onClick={() => unarchiveTeamMutation.mutate(team.id)}
+                        disabled={unarchiveTeamMutation.isPending}
                         data-testid={`menu-unarchive-team-${team.id}`}
                       >
                         <RotateCcw className="h-4 w-4 mr-2" />
-                        Unarchive Team
+                        {unarchiveTeamMutation.isPending ? "Unarchiving..." : "Unarchive Team"}
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem 
                         onClick={() => setArchivingTeam(team)}
+                        disabled={archiveTeamMutation.isPending}
                         data-testid={`menu-archive-team-${team.id}`}
                       >
                         <Archive className="h-4 w-4 mr-2" />

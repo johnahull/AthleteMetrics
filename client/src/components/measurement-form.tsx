@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,13 +13,11 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, insertAthleteSchema, Gender, type InsertMeasurement, type InsertAthlete } from "@shared/schema";
 import { Search, Save } from "lucide-react";
+import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
 
 export default function MeasurementForm() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedAthlete, setSelectedAthlete] = useState<any>(null);
-  const [activeTeams, setActiveTeams] = useState<any[]>([]);
-  const [showTeamOverride, setShowTeamOverride] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -57,6 +55,19 @@ export default function MeasurementForm() {
     },
   });
 
+  // Use consolidated state management hook
+  const {
+    selectedAthlete,
+    activeTeams,
+    showTeamOverride,
+    isLoadingTeams,
+    setSelectedAthlete,
+    setShowTeamOverride,
+    fetchActiveTeams,
+    resetTeamState,
+    cleanup
+  } = useMeasurementForm(form);
+
   const createMeasurementMutation = useMutation({
     mutationFn: async (data: InsertMeasurement) => {
       // Backend will set submittedBy automatically based on session
@@ -77,9 +88,12 @@ export default function MeasurementForm() {
         value: 0,
         flyInDistance: undefined,
         notes: "",
+        teamId: "",
+        season: "",
       });
       setSelectedAthlete(null);
       setSearchTerm("");
+      resetTeamState();
     },
     onError: (error) => {
       console.error("Measurement creation error:", error);
@@ -116,53 +130,10 @@ export default function MeasurementForm() {
     },
   });
 
-  const filteredAthletes = Array.isArray(athletes) ? athletes.filter((athlete: any) =>
+  const filteredAthletes = Array.isArray(athletes) ? (athletes as Athlete[]).filter((athlete) =>
     athlete.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    athlete.teams?.some((team: any) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    athlete.teams?.some((team) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
   ) : [];
-
-  // Fetch active teams when athlete or date changes
-  const fetchActiveTeams = useCallback(async (athleteId: string, date: string) => {
-    try {
-      const response = await fetch(`/api/athletes/${athleteId}/active-teams?date=${date}`);
-      if (response.ok) {
-        const teams = await response.json();
-        const safeTeams = Array.isArray(teams) ? teams : [];
-        setActiveTeams(safeTeams);
-        
-        // Auto-populate team if only one active team
-        if (safeTeams.length === 1 && safeTeams[0]) {
-          form.setValue("teamId", safeTeams[0].teamId);
-          form.setValue("season", safeTeams[0].season || "");
-          setShowTeamOverride(false);
-        } else if (safeTeams.length > 1) {
-          // Multiple teams - require manual selection
-          setShowTeamOverride(true);
-          form.setValue("teamId", "");
-          form.setValue("season", "");
-        } else {
-          // No active teams
-          setShowTeamOverride(false);
-          form.setValue("teamId", "");
-          form.setValue("season", "");
-        }
-      } else {
-        console.error("Failed to fetch active teams:", response.status, response.statusText);
-        // Reset teams state on error
-        setActiveTeams([]);
-        setShowTeamOverride(false);
-        form.setValue("teamId", "");
-        form.setValue("season", "");
-      }
-    } catch (error) {
-      console.error("Error fetching active teams:", error);
-      // Reset teams state on error
-      setActiveTeams([]);
-      setShowTeamOverride(false);
-      form.setValue("teamId", "");
-      form.setValue("season", "");
-    }
-  }, [form]);
 
   const metric = form.watch("metric");
   const date = form.watch("date");
@@ -174,6 +145,11 @@ export default function MeasurementForm() {
       fetchActiveTeams(selectedAthlete.id, date);
     }
   }, [date, selectedAthlete, fetchActiveTeams]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return cleanup;
+  }, [cleanup]);
 
   const onSubmit = (data: InsertMeasurement) => {
     if (!selectedAthlete) {
@@ -207,9 +183,12 @@ export default function MeasurementForm() {
       value: 0,
       flyInDistance: undefined,
       notes: "",
+      teamId: "",
+      season: "",
     });
     setSelectedAthlete(null);
     setSearchTerm("");
+    resetTeamState();
   };
 
   return (
@@ -420,7 +399,7 @@ export default function MeasurementForm() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h3 className="text-sm font-medium text-blue-900 mb-2">Team Context</h3>
             
-            {activeTeams.length === 1 ? (
+            {activeTeams.length === 1 && activeTeams[0] ? (
               <div className="space-y-2">
                 <p className="text-sm text-blue-800">
                   Auto-assigned to: <span className="font-medium">{activeTeams[0].teamName}</span>
@@ -471,7 +450,7 @@ export default function MeasurementForm() {
               </div>
             )}
 
-            {showTeamOverride && activeTeams.length === 1 && (
+            {showTeamOverride && activeTeams.length === 1 && activeTeams[0] && (
               <div className="mt-3 space-y-2">
                 <FormField
                   control={form.control}
