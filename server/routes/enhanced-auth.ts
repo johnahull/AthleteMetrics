@@ -91,6 +91,21 @@ router.post('/login', async (req: Request, res: Response) => {
     const sessionToken = await AuthSecurity.createLoginSession(user.id, ipAddress, userAgent, rememberMe);
     await AuthSecurity.recordSuccessfulLogin(user.id, ipAddress, userAgent);
 
+    // Get user's organization data first for session setup
+    let userRole = 'guest';
+    let primaryOrganizationId: string | undefined;
+    
+    if (user.isSiteAdmin === 'true') {
+      userRole = 'site_admin';
+    } else {
+      // Try to get organization role and primary org
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      if (userOrgs.length > 0) {
+        userRole = userOrgs[0].role;
+        primaryOrganizationId = userOrgs[0].organizationId;
+      }
+    }
+
     // Set session cookie
     req.session.sessionToken = sessionToken;
     req.session.user = {
@@ -99,21 +114,12 @@ router.post('/login', async (req: Request, res: Response) => {
       email: user.emails?.[0] || '',
       firstName: user.firstName,
       lastName: user.lastName,
-      role: user.isSiteAdmin === 'true' ? 'site_admin' : 'guest',
-      emailVerified: user.isEmailVerified === 'true'
+      role: userRole,
+      emailVerified: user.isEmailVerified === 'true',
+      isSiteAdmin: user.isSiteAdmin === 'true',
+      primaryOrganizationId: primaryOrganizationId,
+      athleteId: userRole === 'athlete' ? user.id : undefined
     };
-
-    // Get user's role for redirect logic
-    let userRole = 'guest';
-    if (user.isSiteAdmin === 'true') {
-      userRole = 'site_admin';
-    } else {
-      // Try to get organization role
-      const userOrgs = await storage.getUserOrganizations(user.id);
-      if (userOrgs.length > 0) {
-        userRole = userOrgs[0].role;
-      }
-    }
     
     let redirectUrl = '/dashboard';
     if (userRole === 'site_admin') redirectUrl = '/admin';
