@@ -3074,9 +3074,22 @@ export function registerRoutes(app: Express) {
                 }
               }
             } else {
-              // Match existing athlete by name and birth year
+              // Get organization context for filtering
+              let organizationId: string | undefined;
+              if (teamId) {
+                const team = await storage.getTeam(teamId);
+                organizationId = team?.organization?.id;
+              } else {
+                // Fallback to current user's primary organization
+                const currentUser = req.session.user!;
+                const userOrgs = await storage.getUserOrganizations(currentUser.id);
+                organizationId = userOrgs[0]?.organizationId;
+              }
+
+              // Match existing athlete by name within the same organization
               const existingAthlete = await storage.getAthletes({
-                search: `${firstName} ${lastName}`
+                search: `${firstName} ${lastName}`,
+                organizationId: organizationId
               });
 
               const matchedAthlete = existingAthlete.find(p => 
@@ -3151,10 +3164,26 @@ export function registerRoutes(app: Express) {
               continue;
             }
 
-            // Find athlete by name and team
+            // Get organization context for filtering
+            let organizationId: string | undefined;
+            const currentUser = req.session.user!;
+            if (teamName) {
+              // Try to find the team to get organization context
+              const teams = await storage.getTeams();
+              const team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
+              organizationId = team?.organization?.id;
+            }
+            if (!organizationId) {
+              // Fallback to current user's primary organization
+              const userOrgs = await storage.getUserOrganizations(currentUser.id);
+              organizationId = userOrgs[0]?.organizationId;
+            }
+
+            // Find athlete by name and team within organization
             // Note: gender field can be included in CSV for additional matching context
             const athletes = await storage.getAthletes({
-              search: `${firstName} ${lastName}`
+              search: `${firstName} ${lastName}`,
+              organizationId: organizationId
             });
 
             let matchedAthlete;
