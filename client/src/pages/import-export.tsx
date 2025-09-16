@@ -313,15 +313,12 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                 {importResults.warnings?.length > 0 && (
                   <div className="mt-4">
                     <h6 className="font-medium text-yellow-800 mb-2">Smart Data Placement:</h6>
-                    <div className="max-h-32 overflow-y-auto space-y-1">
-                      {importResults.warnings.slice(0, 5).map((warning: any, index: number) => (
+                    <div className="max-h-48 overflow-y-auto space-y-1 border border-yellow-200 rounded p-3 bg-yellow-50">
+                      {importResults.warnings.map((warning: any, index: number) => (
                         <p key={index} className="text-sm text-yellow-600">
                           {warning.row}: {warning.warning}
                         </p>
                       ))}
-                      {importResults.warnings.length > 5 && (
-                        <p className="text-sm text-gray-500">... and {importResults.warnings.length - 5} more warnings</p>
-                      )}
                     </div>
                   </div>
                 )}
@@ -329,15 +326,12 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                 {importResults.errors.length > 0 && (
                   <div className="mt-4">
                     <h6 className="font-medium text-red-800 mb-2">Errors:</h6>
-                    <div className="max-h-32 overflow-y-auto space-y-1">
-                      {importResults.errors.slice(0, 5).map((error: any, index: number) => (
+                    <div className="max-h-48 overflow-y-auto space-y-1 border border-red-200 rounded p-3 bg-red-50">
+                      {importResults.errors.map((error: any, index: number) => (
                         <p key={index} className="text-sm text-red-600">
                           Row {index + 1}: {error.error}
                         </p>
                       ))}
-                      {importResults.errors.length > 5 && (
-                        <p className="text-sm text-gray-500">... and {importResults.errors.length - 5} more errors</p>
-                      )}
                     </div>
                   </div>
                 )}
