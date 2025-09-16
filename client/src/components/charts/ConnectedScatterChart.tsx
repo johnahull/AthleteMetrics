@@ -132,8 +132,13 @@ export function ConnectedScatterChart({
         borderColor: 'rgba(156, 163, 175, 1)',
         borderWidth: 3,
         pointRadius: 8,
-        // pointStyle: 'crossRot', // Commented out due to type compatibility
-        showLine: false
+        pointHoverRadius: 10,
+        pointBackgroundColor: () => 'rgba(156, 163, 175, 1)',
+        pointBorderColor: 'rgba(156, 163, 175, 1)',
+        pointBorderWidth: 2,
+        showLine: false,
+        fill: false,
+        tension: 0
       });
     }
 

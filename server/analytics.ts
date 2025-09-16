@@ -69,26 +69,6 @@ export class AnalyticsService {
    * Build base SQL query with filters
    */
   private buildBaseQuery(filters: AnalyticsFilters, timeframe: TimeframeConfig) {
-    let query = db
-      .select({
-        measurementId: measurements.id,
-        athleteId: measurements.userId,
-        metric: measurements.metric,
-        value: measurements.value,
-        date: measurements.date,
-        teamId: measurements.teamId,
-        season: measurements.season,
-        athleteName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
-        teamName: teams.name,
-        birthDate: users.birthDate,
-        gender: users.gender,
-        school: users.school
-      })
-      .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id))
-      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
-      .leftJoin(teams, eq(measurements.teamId, teams.id));
-
     // Build all conditions at once to avoid multiple .where() calls
     const allConditions = [
       eq(measurements.isVerified, "true"),
@@ -125,10 +105,27 @@ export class AnalyticsService {
       allConditions.push(sql`(${sql.join(birthYearConditions, sql` OR `)})`);
     }
 
-    // Apply all conditions in a single where clause
-    query = query.where(and(...allConditions));
-
-    return query;
+    // Return the complete query with all conditions applied
+    return db
+      .select({
+        measurementId: measurements.id,
+        athleteId: measurements.userId,
+        metric: measurements.metric,
+        value: measurements.value,
+        date: measurements.date,
+        teamId: measurements.teamId,
+        season: measurements.season,
+        athleteName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        teamName: teams.name,
+        birthDate: users.birthDate,
+        gender: users.gender,
+        school: users.school
+      })
+      .from(measurements)
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(teams, eq(measurements.teamId, teams.id))
+      .where(and(...allConditions));
   }
 
   /**
