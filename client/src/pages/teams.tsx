@@ -200,18 +200,18 @@ export default function Teams() {
           const isArchived = team.isArchived === "true";
           return (
             <Card key={team.id} className={`bg-white hover:shadow-md transition-shadow ${isArchived ? 'opacity-60 border-amber-200' : ''}`}>
-              <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-gray-900">{team.name}</h3>
+              <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{team.name}</h3>
+                    {isArchived && (
+                      <Badge variant="destructive" className="text-xs">
+                        Archived
+                      </Badge>
+                    )}
+                  </div>
                   {team.season && (
-                    <Badge variant="outline" className="text-xs">
-                      {team.season}
-                    </Badge>
-                  )}
-                  {isArchived && (
-                    <Badge variant="destructive" className="text-xs">
-                      Archived
-                    </Badge>
+                    <p className="text-sm text-gray-600 mt-1">{team.season}</p>
                   )}
                 </div>
                 <DropdownMenu>
