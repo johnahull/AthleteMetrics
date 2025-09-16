@@ -944,7 +944,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Team archiving endpoints
-  app.post("/api/teams/:id/archive", archiveLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/archive", requireAuth, async (req, res) => {
     try {
       const { id: teamId } = req.params;
       const archiveData = archiveTeamSchema.parse({ teamId, ...req.body });
@@ -992,7 +992,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/teams/:id/unarchive", archiveLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/unarchive", requireAuth, async (req, res) => {
     try {
       const { id: teamId } = req.params;
       const currentUser = req.session.user;
