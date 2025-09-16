@@ -8,6 +8,13 @@ The system supports flexible player management where athletes can be assigned to
 
 ## Recent Changes
 
+### Critical Bug Fixes (September 16, 2025)
+- **Resolved Empty Measurements Display**: Fixed analytics page showing no measurements by removing overly restrictive default filters (birthYear=2009, dateRange=last30) that were filtering out most data
+- **Fixed Team Assignment Display**: Corrected athletes showing as "Independent" instead of their actual team names by ensuring proper organization context in API requests
+- **Enhanced Organization Filtering**: Added organization context to measurements API requests to ensure users only see data from their organization
+- **Improved Cache Management**: Added cache-busting headers to prevent stale data from being served, ensuring fresh data retrieval
+- **Verified Data Integrity**: Confirmed 95 measurements and 129 users exist in database with proper team assignments and organization memberships
+
 ### Performance Optimization (September 5, 2025)
 - **Resolved N+1 Query Issue**: Fixed performance bottleneck in `getAthletes()` method that was making individual database calls for each athlete's team data
 - **Implemented Batched Query Approach**: Replaced individual `getUserTeams()` calls with a single batched query using `inArray()` to fetch all athlete-team relationships at once
