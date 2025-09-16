@@ -241,7 +241,7 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                           className="text-primary focus:ring-primary"
                           data-testid="radio-match-athletes"
                         />
-                        <span className="text-sm text-gray-700">Match athletes by firstName + lastName + birthYear</span>
+                        <span className="text-sm text-gray-700">Match athletes by firstName + lastName</span>
                       </label>
                       <label className="flex items-center space-x-3">
                         <input 
