@@ -19,7 +19,6 @@ import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team } from "@shared/schema";
-import { useAuth } from "@/lib/auth";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
