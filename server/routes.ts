@@ -1289,7 +1289,7 @@ export function registerRoutes(app: Express) {
         }
 
         const filters: MeasurementFilters = {
-          playerId: currentUser.athleteId,
+          athleteId: currentUser.athleteId,
           metric: metric as string,
           dateFrom: dateFrom as string,
           dateTo: dateTo as string,
