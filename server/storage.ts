@@ -1733,11 +1733,14 @@ export class DatabaseStorage implements IStorage {
       { key: 'RSI', lowerIsBetter: false }
     ];
 
+    // Count only active (non-archived) teams
+    const activeTeams = teams.filter(team => team.isArchived !== "true");
+
     // Calculate best for each metric
     const bestMetrics: any = {
       totalAthletes,
       activeAthletes,
-      totalTeams: teams.length
+      totalTeams: activeTeams.length
     };
 
     metrics.forEach(({ key, lowerIsBetter }) => {
