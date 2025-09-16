@@ -133,3 +133,96 @@ export function getSeasonsForYear(year: number): string[] {
     `${year}-Summer`
   ];
 }
+
+/**
+ * Regular expression for validating season format
+ * Matches: YYYY-Season where Season is Fall, Spring, or Summer
+ */
+export const SEASON_FORMAT_REGEX = /^\d{4}-(Fall|Spring|Summer)$/;
+
+/**
+ * Validates a season string format
+ * @param season Season string to validate (e.g., "2024-Fall")
+ * @returns true if season format is valid
+ */
+export function validateSeasonFormat(season: string): boolean {
+  return SEASON_FORMAT_REGEX.test(season);
+}
+
+/**
+ * Parses a season string into year and season components
+ * @param season Season string to parse (e.g., "2024-Fall")
+ * @returns Object with year and season, or null if invalid
+ */
+export function parseSeasonString(season: string): { year: number; season: 'Fall' | 'Spring' | 'Summer' } | null {
+  const match = season.match(SEASON_FORMAT_REGEX);
+  if (!match) {
+    return null;
+  }
+  
+  const year = parseInt(match[0].split('-')[0], 10);
+  const seasonName = match[1] as 'Fall' | 'Spring' | 'Summer';
+  
+  return { year, season: seasonName };
+}
+
+/**
+ * Creates a season string from year and season components
+ * @param year The year
+ * @param season The season name
+ * @returns Formatted season string
+ */
+export function createSeasonString(year: number, season: 'Fall' | 'Spring' | 'Summer'): string {
+  return `${year}-${season}`;
+}
+
+/**
+ * Gets the current academic year based on a date
+ * Academic year typically runs from Fall to Summer (e.g., 2024-Fall to 2025-Summer)
+ * @param date Date to get academic year for (defaults to current date)
+ * @param config Season configuration
+ * @returns Academic year
+ */
+export function getAcademicYear(
+  date: Date = new Date(),
+  config: SeasonConfig = DEFAULT_SEASON_CONFIG
+): number {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  
+  // If we're in Fall semester, this is the start of the academic year
+  if (month >= config.fallStartMonth && month <= config.fallEndMonth) {
+    return year;
+  }
+  
+  // If we're in Spring or Summer, we're in the academic year that started last Fall
+  return year;
+}
+
+/**
+ * Normalizes season strings to ensure consistent formatting
+ * @param season Input season string (case-insensitive)
+ * @returns Normalized season string or null if invalid
+ */
+export function normalizeSeasonString(season: string): string | null {
+  // Trim whitespace and convert to proper case
+  const trimmed = season.trim();
+  
+  // Handle various formats
+  const normalized = trimmed
+    .replace(/fall/i, 'Fall')
+    .replace(/spring/i, 'Spring')
+    .replace(/summer/i, 'Summer');
+  
+  // Validate the normalized string
+  if (validateSeasonFormat(normalized)) {
+    return normalized;
+  }
+  
+  return null;
+}
+
+/**
+ * Type for valid season names
+ */
+export type SeasonName = 'Fall' | 'Spring' | 'Summer';
