@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import AthleteModal from "@/components/athlete-modal";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
+import type { Team } from "@shared/schema";
 
 export default function Athletes() {
   const { user, organizationContext } = useAuth();
@@ -333,7 +334,7 @@ export default function Athletes() {
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
                   <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
-                  {teams?.map((team: any) => (
+                  {teams?.filter((team: Team) => team.isArchived !== "true").map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
