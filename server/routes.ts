@@ -344,15 +344,16 @@ export function registerRoutes(app: Express) {
   // Rate limiting for archive/unarchive operations (more restrictive)
   const archiveLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    limit: 20, // Limit each IP to 20 archive operations per hour
+    limit: 20, // Limit each user to 20 archive operations per hour
     message: {
       error: "Too many archive operations, please try again later. Archive operations are limited to prevent abuse."
     },
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => req.session.user?.id || req.ip || 'unknown', // Rate limit per user ID or IP fallback
     skip: (req) => {
       // Skip rate limiting for local development
-      return req.ip === '127.0.0.1' || req.ip === '::1';
+      return process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
     }
   });
 
@@ -944,7 +945,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Team archiving endpoints
-  app.post("/api/teams/:id/archive", requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/archive", requireAuth, archiveLimiter, async (req, res) => {
     try {
       const { id: teamId } = req.params;
       const archiveData = archiveTeamSchema.parse({ teamId, ...req.body });
@@ -992,7 +993,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/teams/:id/unarchive", requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/unarchive", requireAuth, archiveLimiter, async (req, res) => {
     try {
       const { id: teamId } = req.params;
       const currentUser = req.session.user;
