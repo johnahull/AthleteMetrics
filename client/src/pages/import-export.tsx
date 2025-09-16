@@ -8,6 +8,7 @@ import { CloudUpload, Download, Copy, Info, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { downloadCSV } from "@/lib/csv";
 import { PhotoUpload } from "@/components/photo-upload";
+import type { Team } from "@shared/schema";
 
 export default function ImportExport() {
   const [importType, setImportType] = useState<"athletes" | "measurements">("athletes");
@@ -19,7 +20,7 @@ export default function ImportExport() {
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
-  }) as { data: any[] };
+  }) as { data: Team[] };
 
   const importMutation = useMutation({
     mutationFn: async ({ file, type, mode, teamId }: { 
@@ -264,7 +265,7 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                           <SelectValue placeholder="Select team..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {teams?.map((team) => (
+                          {teams?.filter((team) => team.isArchived !== "true").map((team) => (
                             <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                           ))}
                         </SelectContent>
