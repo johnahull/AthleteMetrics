@@ -18,6 +18,10 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   level: text("level"), // "Club", "HS", "College"
   notes: text("notes"),
+  // Temporal archiving fields
+  archivedAt: timestamp("archived_at"),
+  season: text("season"), // "2024-Fall", "2025-Spring"
+  isArchived: text("is_archived").default("false").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -70,6 +74,11 @@ export const userTeams = pgTable("user_teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   teamId: varchar("team_id").notNull().references(() => teams.id),
+  // Temporal membership fields
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  leftAt: timestamp("left_at"), // NULL = currently active
+  season: text("season"), // "2024-Fall", "2025-Spring"
+  isActive: text("is_active").default("true").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -86,6 +95,10 @@ export const measurements = pgTable("measurements", {
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   notes: text("notes"),
+  // Team context fields - auto-populated when measurement is created
+  teamId: varchar("team_id").references(() => teams.id), // Team athlete was on when measurement was taken
+  season: text("season"), // Season designation (e.g., "2024-Fall")
+  teamContextAuto: text("team_context_auto").default("true"), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -215,9 +228,12 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
 export const insertTeamSchema = createInsertSchema(teams).omit({
   id: true,
   createdAt: true,
+  archivedAt: true, // Managed by system
+  isArchived: true, // Managed by system
 }).extend({
   name: z.string().min(1, "Team name is required"),
   organizationId: z.string().optional(), // Made optional for client-side, server will provide it
+  season: z.string().optional(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -274,6 +290,47 @@ export const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Team archiving schemas
+export const archiveTeamSchema = z.object({
+  teamId: z.string().min(1, "Team ID is required"),
+  archiveDate: z.coerce.date()
+    .optional() // Defaults to now
+    .refine((date) => !date || date <= new Date(), "Archive date cannot be in the future"),
+  season: z.string().min(1, "Season is required"), // "2024-Fall Soccer"
+});
+
+export const updateTeamMembershipSchema = z.object({
+  userId: z.string().min(1, "User ID is required"),
+  teamId: z.string().min(1, "Team ID is required"),
+  leftAt: z.coerce.date().optional(),
+  season: z.string().optional(),
+  joinedAt: z.coerce.date().optional(), // For validation purposes
+}).refine((data) => {
+  // Validate that leftAt is after joinedAt when both are present
+  if (data.leftAt && data.joinedAt) {
+    return data.leftAt >= data.joinedAt;
+  }
+  return true;
+}, {
+  message: "Team membership end date must be after join date",
+  path: ["leftAt"]
+}).refine((data) => {
+  // Validate that dates are not unreasonably in the future
+  const oneYearFromNow = new Date();
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+  
+  if (data.leftAt && data.leftAt > oneYearFromNow) {
+    return false;
+  }
+  if (data.joinedAt && data.joinedAt > oneYearFromNow) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Dates cannot be more than one year in the future",
+  path: ["leftAt"]
+});
+
 export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).omit({
   id: true,
   createdAt: true,
@@ -282,6 +339,11 @@ export const insertUserOrganizationSchema = createInsertSchema(userOrganizations
 export const insertUserTeamSchema = createInsertSchema(userTeams).omit({
   id: true,
   createdAt: true,
+  joinedAt: true, // Managed by system
+  isActive: true, // Managed by system
+}).extend({
+  season: z.string().optional(),
+  leftAt: z.coerce.date().optional(),
 });
 
 export const insertInvitationSchema = createInsertSchema(invitations).omit({
@@ -303,12 +365,16 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   verifiedBy: true,
   isVerified: true,
   submittedBy: true, // Backend handles this automatically based on session
+  teamContextAuto: true, // Managed by system
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().min(1, "Date is required"),
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
+  // Optional team context - will be auto-populated if not provided
+  teamId: z.string().optional(),
+  season: z.string().optional(),
 });
 
 // Types
@@ -322,6 +388,8 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type ChangePassword = z.infer<typeof changePasswordSchema>;
+export type ArchiveTeam = z.infer<typeof archiveTeamSchema>;
+export type UpdateTeamMembership = z.infer<typeof updateTeamMembershipSchema>;
 
 export type InsertAthleteProfile = z.infer<typeof insertAthleteProfileSchema>;
 export type AthleteProfile = typeof athleteProfiles.$inferSelect;

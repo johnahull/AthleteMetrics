@@ -4,7 +4,7 @@ import {
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -37,6 +37,9 @@ export interface IStorage {
   createTeam(team: InsertTeam): Promise<Team>;
   updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team>;
   deleteTeam(id: string): Promise<void>;
+  archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team>;
+  unarchiveTeam(id: string): Promise<Team>;
+  updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any>;
 
   // User Management
   addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
@@ -606,6 +609,83 @@ export class DatabaseStorage implements IStorage {
     await db.delete(teams).where(eq(teams.id, id));
   }
 
+  /**
+   * Archives a team and marks all current team memberships as inactive
+   * @param id Team ID to archive
+   * @param archiveDate Date when the team was archived (affects measurement context)
+   * @param season Final season designation for the team (e.g., "2024-Fall Soccer")
+   * @returns Promise<Team> The archived team object
+   * @throws Error if team not found or archive operation fails
+   */
+  async archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team> {
+    // Use transaction to ensure atomicity of archive operations
+    return await db.transaction(async (tx) => {
+      const [archived] = await tx.update(teams)
+        .set({
+          isArchived: "true",
+          archivedAt: archiveDate,
+          season: season
+        })
+        .where(eq(teams.id, id))
+        .returning();
+      
+      // Mark all current team memberships as inactive
+      await tx.update(userTeams)
+        .set({
+          isActive: "false",
+          leftAt: archiveDate,
+          season: season
+        })
+        .where(and(
+          eq(userTeams.teamId, id),
+          eq(userTeams.isActive, "true")
+        ));
+      
+      return archived;
+    });
+  }
+
+  /**
+   * Unarchives a team by setting isArchived to false and clearing archivedAt
+   * Note: This does NOT automatically reactivate team memberships - 
+   * users must be explicitly re-added to prevent old measurements from 
+   * affecting current analytics
+   * @param id Team ID to unarchive
+   * @returns Promise<Team> The unarchived team object
+   * @throws Error if team not found or unarchive operation fails
+   */
+  async unarchiveTeam(id: string): Promise<Team> {
+    const [unarchived] = await db.update(teams)
+      .set({
+        isArchived: "false",
+        archivedAt: null
+      })
+      .where(eq(teams.id, id))
+      .returning();
+    
+    // Note: We don't automatically reactivate team memberships when unarchiving
+    // This is intentional - users should be explicitly re-added to teams
+    // to prevent accidentally including old measurements in current analytics
+    
+    return unarchived;
+  }
+
+  async updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any> {
+    const [updated] = await db.update(userTeams)
+      .set({
+        leftAt: membershipData.leftAt,
+        season: membershipData.season,
+        isActive: membershipData.leftAt ? "false" : "true"
+      })
+      .where(and(
+        eq(userTeams.teamId, teamId),
+        eq(userTeams.userId, userId)
+      ))
+      .returning();
+    
+    return updated;
+  }
+
   // User Management
   async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
     // Validate that role is organization-specific only
@@ -632,22 +712,50 @@ export class DatabaseStorage implements IStorage {
 
   async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
     try {
-      // Check if user is already in this team
-      const existingAssignment = await db.select()
+      // Check if user has an active membership in this team
+      const existingActiveAssignment = await db.select()
         .from(userTeams)
         .where(and(
           eq(userTeams.userId, userId),
-          eq(userTeams.teamId, teamId)
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, "true")
         ));
 
-      if (existingAssignment.length > 0) {
-        console.log('User already assigned to team');
-        return existingAssignment[0];
+      if (existingActiveAssignment.length > 0) {
+        console.log('User already has active assignment to team');
+        return existingActiveAssignment[0];
       }
 
+      // Check if user has an inactive membership that can be reactivated
+      const existingInactiveAssignment = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, "false")
+        ));
+
+      if (existingInactiveAssignment.length > 0) {
+        // Reactivate the membership
+        const [reactivated] = await db.update(userTeams)
+          .set({
+            isActive: "true",
+            leftAt: null,
+            joinedAt: new Date() // New join date
+          })
+          .where(eq(userTeams.id, existingInactiveAssignment[0].id))
+          .returning();
+        
+        console.log('User membership reactivated');
+        return reactivated;
+      }
+
+      // Create new membership
       const [userTeam] = await db.insert(userTeams).values({
         userId,
-        teamId
+        teamId,
+        joinedAt: new Date(),
+        isActive: "true"
       }).returning();
 
       console.log('User added to team successfully');
@@ -710,10 +818,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
-    await db.delete(userTeams)
+    // Mark membership as inactive instead of deleting (temporal approach)
+    await db.update(userTeams)
+      .set({
+        isActive: "false",
+        leftAt: new Date()
+      })
       .where(and(
         eq(userTeams.userId, userId),
-        eq(userTeams.teamId, teamId)
+        eq(userTeams.teamId, teamId),
+        eq(userTeams.isActive, "true")
       ));
   }
 
@@ -1209,8 +1323,32 @@ export class DatabaseStorage implements IStorage {
     })
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
-    .leftJoin(userTeams, eq(users.id, userTeams.userId))
-    .leftJoin(teams, eq(userTeams.teamId, teams.id))
+    // Use direct team relationship when available, fall back to temporal logic
+    .leftJoin(teams, or(
+      // Direct team relationship (preferred)
+      eq(measurements.teamId, teams.id),
+      // Fallback: temporal logic for measurements without direct team context
+      and(
+        or(isNull(measurements.teamId), eq(measurements.teamId, "")), // No direct team context
+        exists(
+          db.select({ id: userTeams.id })
+            .from(userTeams)
+            .where(and(
+              eq(userTeams.userId, users.id),
+              eq(userTeams.teamId, teams.id),
+              lte(userTeams.joinedAt, measurements.date),
+              or(
+                isNull(userTeams.leftAt),
+                gte(userTeams.leftAt, measurements.date)
+              )
+            ))
+        )
+      )
+    ))
+    .leftJoin(userTeams, and(
+      eq(users.id, userTeams.userId),
+      eq(userTeams.teamId, teams.id)
+    ))
     .leftJoin(organizations, eq(teams.organizationId, organizations.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
@@ -1249,6 +1387,34 @@ export class DatabaseStorage implements IStorage {
     if (!filters?.includeUnverified) {
       conditions.push(eq(measurements.isVerified, "true"));
     }
+    
+    // Team filtering - use direct team relationship when available for better performance
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      conditions.push(or(
+        inArray(measurements.teamId, filters.teamIds), // Direct team relationship (preferred)
+        and(
+          or(isNull(measurements.teamId), eq(measurements.teamId, "")), // Fallback for measurements without direct team context
+          exists(
+            db.select({ id: userTeams.id })
+              .from(userTeams)
+              .where(and(
+                eq(userTeams.userId, users.id),
+                inArray(userTeams.teamId, filters.teamIds),
+                lte(userTeams.joinedAt, measurements.date),
+                or(
+                  isNull(userTeams.leftAt),
+                  gte(userTeams.leftAt, measurements.date)
+                )
+              ))
+          )
+        )
+      ));
+    }
+    
+    // Organization filtering
+    if (filters?.organizationId) {
+      conditions.push(eq(organizations.id, filters.organizationId));
+    }
 
     let finalQuery = query;
     if (conditions.length > 0) {
@@ -1266,20 +1432,8 @@ export class DatabaseStorage implements IStorage {
       )
       .orderBy(desc(measurements.date), desc(measurements.createdAt));
 
-    // Apply team/organization filters
+    // Apply remaining filters (team/org filtering now done in query for better performance)
     let filteredMeasurements = result;
-
-    if (filters?.teamIds && filters.teamIds.length > 0) {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some((team: any) => filters.teamIds!.includes(team.id))
-      );
-    }
-
-    if (filters?.organizationId) {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
-        measurement.user.teams.some((team: any) => team.organization.id === filters.organizationId)
-      );
-    }
 
     // Filter by sport if specified
     if (filters?.sport && filters.sport !== "all") {
@@ -1310,6 +1464,37 @@ export class DatabaseStorage implements IStorage {
     return measurement || undefined;
   }
 
+  async getAthleteActiveTeamsAtDate(userId: string, measurementDate: Date): Promise<Array<{
+    teamId: string;
+    teamName: string;
+    season: string | null;
+    organizationId: string;
+    organizationName: string;
+  }>> {
+    const activeTeams = await db.select({
+      teamId: teams.id,
+      teamName: teams.name,
+      season: teams.season,
+      organizationId: teams.organizationId,
+      organizationName: organizations.name,
+    })
+    .from(userTeams)
+    .innerJoin(teams, eq(userTeams.teamId, teams.id))
+    .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+    .where(and(
+      eq(userTeams.userId, userId),
+      lte(userTeams.joinedAt, measurementDate),
+      or(
+        isNull(userTeams.leftAt),
+        gte(userTeams.leftAt, measurementDate)
+      ),
+      eq(userTeams.isActive, "true"),
+      eq(teams.isArchived, "false") // Only include non-archived teams
+    ));
+
+    return activeTeams;
+  }
+
   async createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement> {
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
@@ -1329,6 +1514,35 @@ export class DatabaseStorage implements IStorage {
 
     const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
                   measurement.metric === "RSI" ? "ratio" : "in";
+
+    // Auto-populate team context if not explicitly provided
+    let teamId = measurement.teamId;
+    let season = measurement.season;
+    let teamContextAuto = "true";
+
+    if (!teamId || teamId.trim() === "") {
+      // Get athlete's active teams at measurement date
+      const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
+      
+      if (activeTeams.length === 1) {
+        // Single team - auto-assign
+        teamId = activeTeams[0].teamId;
+        season = activeTeams[0].season || undefined;
+        teamContextAuto = "true";
+        console.log(`Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})`);
+      } else if (activeTeams.length > 1) {
+        // Multiple teams - cannot auto-assign, will need manual selection
+        console.log(`Athlete is on ${activeTeams.length} teams - team context not auto-assigned`);
+        teamContextAuto = "false";
+      } else {
+        // No active teams - measurement without team context
+        console.log('Athlete has no active teams - measurement created without team context');
+        teamContextAuto = "false";
+      }
+    } else {
+      // Team was explicitly provided
+      teamContextAuto = "false";
+    }
 
     // Get submitter info to determine if auto-verify
     const [submitter] = await db.select().from(users).where(eq(users.id, submittedBy));
@@ -1351,7 +1565,10 @@ export class DatabaseStorage implements IStorage {
       age,
       units,
       isVerified: isCoach ? "true" : "false",
-      verifiedBy: isCoach ? submittedBy : undefined
+      verifiedBy: isCoach ? submittedBy : undefined,
+      teamId: teamId || null,
+      season: season || null,
+      teamContextAuto: teamContextAuto
     }).returning();
 
     return newMeasurement;
