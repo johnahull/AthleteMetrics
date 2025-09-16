@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { archiveTeamSchema, type ArchiveTeam, type Team } from "@shared/schema";
+import { getCurrentSeason } from "@shared/season-utils";
 import { AlertTriangle } from "lucide-react";
 
 interface ArchiveTeamModalProps {
@@ -16,21 +17,6 @@ interface ArchiveTeamModalProps {
   isLoading?: boolean;
 }
 
-// Helper function to get current season
-function getCurrentSeason(): string {
-  const now = new Date();
-  const month = now.getMonth() + 1; // JavaScript months are 0-indexed
-  const year = now.getFullYear();
-  
-  // Determine season based on month
-  if (month >= 8 && month <= 12) {
-    return `${year}-Fall`;
-  } else if (month >= 1 && month <= 5) {
-    return `${year}-Spring`;
-  } else {
-    return `${year}-Summer`;
-  }
-}
 
 export default function ArchiveTeamModal({ 
   team, 

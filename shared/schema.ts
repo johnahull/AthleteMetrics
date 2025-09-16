@@ -304,6 +304,31 @@ export const updateTeamMembershipSchema = z.object({
   teamId: z.string().min(1, "Team ID is required"),
   leftAt: z.coerce.date().optional(),
   season: z.string().optional(),
+  joinedAt: z.coerce.date().optional(), // For validation purposes
+}).refine((data) => {
+  // Validate that leftAt is after joinedAt when both are present
+  if (data.leftAt && data.joinedAt) {
+    return data.leftAt >= data.joinedAt;
+  }
+  return true;
+}, {
+  message: "Team membership end date must be after join date",
+  path: ["leftAt"]
+}).refine((data) => {
+  // Validate that dates are not unreasonably in the future
+  const oneYearFromNow = new Date();
+  oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+  
+  if (data.leftAt && data.leftAt > oneYearFromNow) {
+    return false;
+  }
+  if (data.joinedAt && data.joinedAt > oneYearFromNow) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Dates cannot be more than one year in the future",
+  path: ["leftAt"]
 });
 
 export const insertUserOrganizationSchema = createInsertSchema(userOrganizations).omit({
