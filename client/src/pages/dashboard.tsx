@@ -17,8 +17,13 @@ export default function Dashboard() {
   const isSiteAdmin = user?.isSiteAdmin || false;
 
   const { data: dashboardStats, isLoading, error } = useQuery({
-    queryKey: ["/api/analytics/dashboard", organizationContext],
+    queryKey: ["/api/analytics/dashboard", organizationContext, user?.isSiteAdmin],
     queryFn: async () => {
+      // For site admins, always require an organizationId parameter
+      if (isSiteAdmin && !organizationContext) {
+        throw new Error("Please select an organization to view dashboard statistics");
+      }
+      
       const url = organizationContext
         ? `/api/analytics/dashboard?organizationId=${organizationContext}`
         : `/api/analytics/dashboard`;
@@ -26,11 +31,15 @@ export default function Dashboard() {
         credentials: 'include' // Ensure cookies are sent for authentication
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
-    enabled: !!user // Only run query when user is authenticated
+    enabled: !!user && (
+      // For site admins: require organization context
+      isSiteAdmin ? !!organizationContext : true
+    )
   });
 
   const { data: recentMeasurements } = useQuery({
@@ -43,11 +52,15 @@ export default function Dashboard() {
         credentials: 'include'
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
-    enabled: !!user
+    enabled: !!user && (
+      // For site admins: require organization context
+      isSiteAdmin ? !!organizationContext : true
+    )
   });
 
   // Get organization name for context indicator
@@ -75,11 +88,15 @@ export default function Dashboard() {
         credentials: 'include'
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
-    enabled: !!user
+    enabled: !!user && (
+      // For site admins: require organization context
+      isSiteAdmin ? !!organizationContext : true
+    )
   });
 
   // Debug logging (MUST be before any early returns)
@@ -135,6 +152,25 @@ export default function Dashboard() {
 
   return (
     <div className="p-6">
+      {/* Site Admin Organization Selection Required */}
+      {isSiteAdmin && !organizationContext && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">Organization Required</h3>
+              <p className="mt-1 text-sm text-blue-700">
+                Please select an organization from the top navigation to view dashboard statistics.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error Display */}
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
