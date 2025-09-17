@@ -181,14 +181,14 @@ export function CoachAnalytics() {
         const athletes = organizationProfile.users || [];
         console.log('Raw users from organization:', athletes.length);
         
-        // Log all athletes first to understand the data structure
+        // Log all users first to understand the data structure
         athletes.forEach((athlete: any) => {
-          console.log('Athlete:', athlete.firstName, athlete.lastName, 'Role:', athlete.role);
+          console.log('User:', athlete.user?.firstName, athlete.user?.lastName, 'Role:', athlete.role);
         });
         
-        // Temporarily show ALL users to debug
-        const filteredAthletes = athletes; // Remove filtering temporarily
-        console.log('Showing all users (no role filtering):', filteredAthletes.length);
+        // Filter to show only athletes (users with 'athlete' role)
+        const filteredAthletes = athletes.filter((athlete: any) => athlete.role === 'athlete');
+        console.log('Filtered athletes only:', filteredAthletes.length, 'out of', athletes.length, 'total users');
         
         setAvailableAthletes(filteredAthletes.map((athlete: any) => ({
           id: athlete.user.id,
