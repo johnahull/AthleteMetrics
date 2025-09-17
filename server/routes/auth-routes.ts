@@ -35,6 +35,9 @@ export function registerAuthRoutes(app: Express) {
 
       const user = result.user!;
 
+      // Determine user's actual role and organization context
+      const roleContext = await authService.determineUserRoleAndContext(user);
+      
       // Set session
       req.session.user = {
         id: user.id,
@@ -42,7 +45,7 @@ export function registerAuthRoutes(app: Express) {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.emails?.[0] || user.username + '@temp.local',
-        role: "athlete", // Default role, will be determined by organization context
+        role: roleContext.role,
         isSiteAdmin: user.isSiteAdmin === "true"
       };
 
