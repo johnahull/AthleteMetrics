@@ -3,16 +3,16 @@
  * Tests API security, validation, and rate limiting
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 
 // Mock the main app
 const mockApp = {
-  get: jest.fn(),
-  post: jest.fn(),
-  use: jest.fn(),
-  listen: jest.fn(),
+  get: vi.fn(),
+  post: vi.fn(),
+  use: vi.fn(),
+  listen: vi.fn(),
 } as unknown as Express;
 
 describe('Analytics Endpoints', () => {
@@ -252,7 +252,7 @@ describe('Analytics Endpoints', () => {
   describe('Error Handling', () => {
     it('should handle database errors gracefully', async () => {
       // Simulate database error
-      jest.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Make request that would trigger database error
       const response = await request(mockApp)

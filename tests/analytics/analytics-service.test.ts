@@ -3,22 +3,22 @@
  * Tests statistical calculations and data aggregation logic
  */
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AnalyticsService } from '../../server/analytics';
 import type { AnalyticsRequest } from '@shared/analytics-types';
 
 // Mock the database
-jest.mock('../../server/db', () => ({
+vi.mock('../../server/db', () => ({
   db: {
-    select: jest.fn().mockReturnThis(),
-    from: jest.fn().mockReturnThis(),
-    innerJoin: jest.fn().mockReturnThis(),
-    leftJoin: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    groupBy: jest.fn().mockReturnThis(),
-    orderBy: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    execute: jest.fn(),
+    select: vi.fn().mockReturnThis(),
+    from: vi.fn().mockReturnThis(),
+    innerJoin: vi.fn().mockReturnThis(),
+    leftJoin: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    groupBy: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    execute: vi.fn(),
   },
 }));
 
@@ -27,7 +27,7 @@ describe('AnalyticsService', () => {
 
   beforeEach(() => {
     analyticsService = new AnalyticsService();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Statistical Calculations', () => {

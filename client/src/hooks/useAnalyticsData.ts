@@ -188,8 +188,11 @@ function recalculateStatistics(
     const sum = values.reduce((acc, val) => acc + val, 0);
     const mean = sum / values.length;
     
-    // Calculate variance and standard deviation
-    const variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length;
+    // Calculate variance and standard deviation using Bessel's correction (n-1)
+    // For sample variance, divide by n-1 instead of n for better statistical accuracy
+    const variance = values.length > 1 
+      ? values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (values.length - 1)
+      : 0;
     const standardDeviation = Math.sqrt(variance);
 
     // Calculate percentiles

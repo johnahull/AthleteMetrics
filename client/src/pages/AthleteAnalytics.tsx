@@ -11,6 +11,7 @@ import { Download, RefreshCw, Trophy, TrendingUp, Target } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 import type {
   AnalyticsFilters as FilterType,
@@ -185,7 +186,8 @@ export function AthleteAnalytics() {
   }, [analyticsData, user, metrics]);
 
   return (
-    <div className="space-y-6 p-6">
+    <ErrorBoundary>
+      <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -479,6 +481,7 @@ export function AthleteAnalytics() {
         </Card>
       )}
     </div>
+    </ErrorBoundary>
   );
 }
 
