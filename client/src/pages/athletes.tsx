@@ -15,11 +15,11 @@ import { useAuth } from "@/lib/auth";
 import type { Team } from "@shared/schema";
 
 export default function Athletes() {
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations } = useAuth();
   const [location, setLocation] = useLocation();
   
   // Get user's primary role to check access
-  const { data: userOrganizations } = useQuery({
+  const { data: userOrganizationsData } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
@@ -37,7 +37,7 @@ export default function Athletes() {
   const effectiveOrganizationId = getEffectiveOrganizationId();
   
   // Use session role as primary source, fallback to organization role, then 'athlete'
-  const primaryRole = user?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
+  const primaryRole = user?.role || (Array.isArray(userOrganizationsData) && userOrganizationsData.length > 0 ? userOrganizationsData[0]?.role : 'athlete');
   const isSiteAdmin = user?.isSiteAdmin || false;
   
   // Redirect athletes away from this management page
