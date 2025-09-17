@@ -345,7 +345,7 @@ export default function Athletes() {
                   <SelectValue placeholder="All Teams" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="">All Teams</SelectItem>
                   <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
                   {teams?.filter((team: Team) => team.isArchived !== "true").map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
@@ -404,7 +404,7 @@ export default function Athletes() {
                 <div className="flex space-x-2">
                   {filters.teamId && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                      Team: {teams?.find((t: any) => t.id === filters.teamId)?.name}
+                      Team: {filters.teamId === 'none' ? 'Independent Athletes' : teams?.find((t: any) => t.id === filters.teamId)?.name}
                     </span>
                   )}
                   {filters.birthYearFrom && (

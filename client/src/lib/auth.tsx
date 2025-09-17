@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { EnhancedUser, ImpersonationStatus } from './types/user';
+import { EnhancedUser, ImpersonationStatus, UserOrganization } from './types/user';
 
 interface AuthContextType {
   user: EnhancedUser | null;
   isLoading: boolean;
   organizationContext: string | null;
+  userOrganizations: UserOrganization[] | null;
   setOrganizationContext: (orgId: string | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
   logout: () => void;
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<EnhancedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [organizationContext, setOrganizationContext] = useState<string | null>(null);
+  const [userOrganizations, setUserOrganizations] = useState<UserOrganization[] | null>(null);
   const [impersonationStatus, setImpersonationStatus] = useState<ImpersonationStatus | null>(null);
   const [, setLocation] = useLocation();
 
@@ -32,7 +34,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user && user.isSiteAdmin) {
       checkImpersonationStatus();
     }
+    if (user && !user.isSiteAdmin) {
+      fetchUserOrganizations();
+    }
   }, [user]);
+
+  const fetchUserOrganizations = async () => {
+    try {
+      const response = await fetch('/api/auth/me/organizations', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUserOrganizations(data);
+      } else {
+        setUserOrganizations(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user organizations:', error);
+      setUserOrganizations(null);
+    }
+  };
 
   const checkAuth = async () => {
     try {
@@ -161,26 +183,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { 
+      await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       });
       setUser(null);
+      setUserOrganizations(null);
+      setOrganizationContext(null);
+      setImpersonationStatus(null);
       setLocation('/login');
     } catch (error) {
       console.error('Logout failed:', error);
       setUser(null);
+      setUserOrganizations(null);
+      setOrganizationContext(null);
+      setImpersonationStatus(null);
       setLocation('/login');
     }
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      login, 
-      logout, 
-      isLoading, 
-      organizationContext, 
+    <AuthContext.Provider value={{
+      user,
+      login,
+      logout,
+      isLoading,
+      organizationContext,
+      userOrganizations,
       setOrganizationContext,
       impersonationStatus,
       startImpersonation,
