@@ -148,35 +148,14 @@ export function AnalyticsFilters({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        {/* Analysis Type Selection */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Analysis Type</Label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['individual', 'intra_group', 'inter_group'] as const).map((type) => (
-              <Button
-                key={type}
-                variant={analysisType === type ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => onAnalysisTypeChange(type)}
-                className="justify-start"
-              >
-                {type === 'individual' ? 'Individual' :
-                 type === 'intra_group' ? 'Intra-Group' : 'Inter-Group'}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Metrics Selection */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Metrics</Label>
-          
+      <CardContent>
+        {/* Main filters in horizontal layout */}
+        <div className="flex flex-wrap gap-6 items-end">
           {/* Primary Metric */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Primary Metric</Label>
+          <div className="min-w-48">
+            <Label className="text-sm font-medium">Primary Metric</Label>
             <Select value={metrics.primary} onValueChange={(value) => handleMetricChange('primary', value)}>
-              <SelectTrigger>
+              <SelectTrigger className="mt-2">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -189,141 +168,153 @@ export function AnalyticsFilters({
             </Select>
           </div>
 
-          {/* Additional Metrics */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              Additional Metrics (up to 5)
-            </Label>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(METRIC_CONFIG).map(([key, config]) => (
-                <div key={key} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`metric-${key}`}
-                    checked={metrics.additional.includes(key)}
-                    onCheckedChange={(checked) => 
-                      handleMetricChange('additional', key)
-                    }
-                    disabled={
-                      key === metrics.primary || 
-                      (!metrics.additional.includes(key) && metrics.additional.length >= 5)
-                    }
-                  />
-                  <Label
-                    htmlFor={`metric-${key}`}
-                    className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {config.label}
-                  </Label>
-                </div>
-              ))}
+          {/* Timeframe Type */}
+          <div className="min-w-36">
+            <Label className="text-sm font-medium">Data Type</Label>
+            <div className="grid grid-cols-2 gap-1 mt-2">
+              <Button
+                variant={timeframe.type === 'best' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleTimeframeChange({ type: 'best' })}
+                className="text-xs"
+              >
+                Best
+              </Button>
+              <Button
+                variant={timeframe.type === 'trends' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleTimeframeChange({ type: 'trends' })}
+                className="text-xs"
+              >
+                Trends
+              </Button>
             </div>
-            
-            {/* Selected Additional Metrics */}
-            {metrics.additional.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {metrics.additional.map((metric) => (
-                  <Badge key={metric} variant="secondary" className="text-xs">
-                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto p-0 ml-1"
-                      onClick={() => handleMetricChange('additional', metric)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Timeframe Configuration */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Timeframe</Label>
-          
-          {/* Analysis Type */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant={timeframe.type === 'best' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => handleTimeframeChange({ type: 'best' })}
-            >
-              Best Values
-            </Button>
-            <Button
-              variant={timeframe.type === 'trends' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => handleTimeframeChange({ type: 'trends' })}
-            >
-              Trends
-            </Button>
           </div>
 
           {/* Time Period */}
-          <Select
-            value={timeframe.period}
-            onValueChange={(value) => handleTimeframeChange({ 
-              period: value as TimeframeConfig['period'] 
-            })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all_time">All Time</SelectItem>
-              <SelectItem value="this_year">This Year</SelectItem>
-              <SelectItem value="last_90_days">Last 90 Days</SelectItem>
-              <SelectItem value="last_30_days">Last 30 Days</SelectItem>
-              <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-              <SelectItem value="custom">Custom Range</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="min-w-40">
+            <Label className="text-sm font-medium">Period</Label>
+            <Select
+              value={timeframe.period}
+              onValueChange={(value) => handleTimeframeChange({ 
+                period: value as TimeframeConfig['period'] 
+              })}
+            >
+              <SelectTrigger className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all_time">All Time</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+                <SelectItem value="last_90_days">Last 90 Days</SelectItem>
+                <SelectItem value="last_30_days">Last 30 Days</SelectItem>
+                <SelectItem value="last_7_days">Last 7 Days</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Custom Date Range */}
           {timeframe.period === 'custom' && (
-            <div className="grid grid-cols-2 gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {customDateRange.from ? format(customDateRange.from, "MMM d, yyyy") : "From"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={customDateRange.from}
-                    onSelect={(date) => setCustomDateRange(prev => ({ ...prev, from: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+            <div className="flex gap-2">
+              <div>
+                <Label className="text-sm font-medium">From</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="justify-start text-left font-normal mt-2 w-36">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {customDateRange.from ? format(customDateRange.from, "MMM d") : "From"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={customDateRange.from}
+                      onSelect={(date) => setCustomDateRange(prev => ({ ...prev, from: date }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
 
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {customDateRange.to ? format(customDateRange.to, "MMM d, yyyy") : "To"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={customDateRange.to}
-                    onSelect={(date) => setCustomDateRange(prev => ({ ...prev, to: date }))}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <div>
+                <Label className="text-sm font-medium">To</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="justify-start text-left font-normal mt-2 w-36">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {customDateRange.to ? format(customDateRange.to, "MMM d") : "To"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={customDateRange.to}
+                      onSelect={(date) => setCustomDateRange(prev => ({ ...prev, to: date }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Expandable Filters */}
+        {/* Additional Metrics - shown horizontally when expanded */}
+        {metrics.additional.length > 0 && (
+          <div className="mt-4 pt-4 border-t">
+            <Label className="text-sm font-medium">Additional Metrics</Label>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {metrics.additional.map((metric) => (
+                <Badge key={metric} variant="secondary" className="text-xs">
+                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0 ml-1"
+                    onClick={() => handleMetricChange('additional', metric)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Expandable section for additional metrics and advanced filters */}
         {isExpanded && (
-          <>
+          <div className="mt-6 pt-6 border-t space-y-6">
+            {/* Additional Metrics Selection */}
+            <div>
+              <Label className="text-sm font-medium mb-3 block">
+                Add More Metrics (up to 5 total)
+              </Label>
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                {Object.entries(METRIC_CONFIG).map(([key, config]) => (
+                  <div key={key} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`metric-${key}`}
+                      checked={metrics.additional.includes(key)}
+                      onCheckedChange={(checked) => 
+                        handleMetricChange('additional', key)
+                      }
+                      disabled={
+                        key === metrics.primary || 
+                        (!metrics.additional.includes(key) && metrics.additional.length >= 5)
+                      }
+                    />
+                    <Label
+                      htmlFor={`metric-${key}`}
+                      className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {config.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Team Selection */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">Teams</Label>
@@ -417,7 +408,7 @@ export function AnalyticsFilters({
                 </div>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* Applied Filters Summary */}
