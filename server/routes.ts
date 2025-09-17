@@ -235,11 +235,7 @@ async function initializeDefaultUser() {
 export function registerRoutes(app: Express) {
   const server = createServer(app);
   
-  // Register new refactored routes
-  registerAllRoutes(app);
-
-
-  // Session setup with security best practices
+  // Session setup with security best practices - MUST BE BEFORE ROUTES
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret) {
     console.error("SECURITY: SESSION_SECRET environment variable must be set");
@@ -262,6 +258,9 @@ export function registerRoutes(app: Express) {
       sameSite: 'strict' // CSRF protection
     }
   }));
+
+  // Register new refactored routes - AFTER session middleware
+  registerAllRoutes(app);
 
   // Security headers middleware
   app.use(helmet({
