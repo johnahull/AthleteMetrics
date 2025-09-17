@@ -16,18 +16,6 @@ export default function Dashboard() {
   const userRole = user?.role || 'athlete';
   const isSiteAdmin = user?.isSiteAdmin || false;
 
-  // Redirect athletes away from organization dashboard
-  useEffect(() => {
-    if (!isSiteAdmin && userRole === "athlete") {
-      setLocation(`/athletes/${user?.id}`);
-    }
-  }, [isSiteAdmin, userRole, user?.id, setLocation]);
-
-  // Don't render dashboard for athletes
-  if (!isSiteAdmin && userRole === "athlete") {
-    return null;
-  }
-
   const { data: dashboardStats, isLoading, error } = useQuery({
     queryKey: ["/api/analytics/dashboard", organizationContext],
     queryFn: async () => {
@@ -94,6 +82,24 @@ export default function Dashboard() {
     enabled: !!user
   });
 
+  // Debug logging (MUST be before any early returns)
+  useEffect(() => {
+    console.log('Dashboard Debug Info:', {
+      user,
+      userRole,
+      organizationContext,
+      dashboardStats,
+      error
+    });
+  }, [user, userRole, organizationContext, dashboardStats, error]);
+
+  // Redirect athletes away from organization dashboard (MUST be before any early returns)
+  useEffect(() => {
+    if (!isSiteAdmin && userRole === "athlete") {
+      setLocation(`/athletes/${user?.id}`);
+    }
+  }, [isSiteAdmin, userRole, user?.id, setLocation]);
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -109,16 +115,10 @@ export default function Dashboard() {
     );
   }
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Dashboard Debug Info:', {
-      user,
-      userRole,
-      organizationContext,
-      dashboardStats,
-      error
-    });
-  }, [user, userRole, organizationContext, dashboardStats, error]);
+  // Don't render dashboard for athletes (after all hooks are called)
+  if (!isSiteAdmin && userRole === "athlete") {
+    return null;
+  }
 
   // Show error state if dashboard stats failed to load
   if (error) {
