@@ -114,9 +114,15 @@ export function CoachAnalytics() {
 
     try {
       setIsLoadingAthletes(true);
+      const organizationId = (user as any).organizationId;
       
+      // Load organization profile with users (much more efficient than /api/users)
+      const [teamsResponse, organizationResponse] = await Promise.all([
+        fetch('/api/teams'),
+        fetch(`/api/organizations/${organizationId}/profile`)
+      ]);
+
       // Load teams
-      const teamsResponse = await fetch('/api/teams');
       if (teamsResponse.ok) {
         const teams = await teamsResponse.json();
         setAvailableTeams(teams.map((team: any) => ({
@@ -125,12 +131,13 @@ export function CoachAnalytics() {
         })));
       }
 
-      // Load athletes
-      const athletesResponse = await fetch('/api/users');
-      if (athletesResponse.ok) {
-        const athletes = await athletesResponse.json();
+      // Load athletes from organization profile
+      if (organizationResponse.ok) {
+        const organizationProfile = await organizationResponse.json();
+        const athletes = organizationProfile.users || [];
+        
         setAvailableAthletes(athletes
-          .filter((athlete: any) => athlete.organizationId === (user as any).organizationId)
+          .filter((athlete: any) => athlete.role === 'athlete' || !athlete.role) // Filter for athletes only
           .map((athlete: any) => ({
             id: athlete.id,
             name: `${athlete.firstName} ${athlete.lastName}`,
