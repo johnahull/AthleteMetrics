@@ -8,6 +8,13 @@ The system supports flexible player management where athletes can be assigned to
 
 ## Recent Changes
 
+### Authentication and Data Access Fixes (September 17, 2025)
+- **Resolved Session Organization Context Issue**: Fixed critical authentication bug where `primaryOrganizationId` was missing from user sessions, causing teams and athletes pages to show empty data
+- **Fixed Login Route**: Added proper `primaryOrganizationId` field to session during login to ensure organization context is maintained
+- **Fixed Impersonation Route**: Enhanced target user role determination and organization context for proper impersonation functionality
+- **Fixed Team Distribution Display**: Removed hardcoded `.slice(0, 5)` limitation in dashboard Team Distribution section to display all teams instead of just the first 5
+- **Verified Data Access**: Confirmed coaches can now properly access teams, athletes, and measurements within their organization scope
+
 ### Critical Bug Fixes (September 16, 2025)
 - **Resolved Empty Measurements Display**: Fixed analytics page showing no measurements by removing overly restrictive default filters (birthYear=2009, dateRange=last30) that were filtering out most data
 - **Fixed Team Assignment Display**: Corrected athletes showing as "Independent" instead of their actual team names by ensuring proper organization context in API requests
