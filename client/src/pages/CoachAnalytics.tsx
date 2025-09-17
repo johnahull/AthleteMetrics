@@ -347,27 +347,28 @@ export function CoachAnalytics() {
         </CardContent>
       </Card>
 
-      {/* Main Analytics Interface */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Filters Panel */}
-        <div className="lg:col-span-1">
-          <AnalyticsFilters
-            filters={filters}
-            metrics={metrics}
-            timeframe={timeframe}
-            analysisType={analysisType}
-            availableTeams={availableTeams}
-            availableAthletes={availableAthletes}
-            onFiltersChange={setFilters}
-            onMetricsChange={setMetrics}
-            onTimeframeChange={setTimeframe}
-            onAnalysisTypeChange={setAnalysisType}
-            onReset={handleFiltersReset}
-          />
+      {/* Analytics Filters - Full Width */}
+      <AnalyticsFilters
+        filters={filters}
+        metrics={metrics}
+        timeframe={timeframe}
+        analysisType={analysisType}
+        availableTeams={availableTeams}
+        availableAthletes={availableAthletes}
+        onFiltersChange={setFilters}
+        onMetricsChange={setMetrics}
+        onTimeframeChange={setTimeframe}
+        onAnalysisTypeChange={setAnalysisType}
+        onReset={handleFiltersReset}
+      />
 
+      {/* Chart Controls and Display */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Chart Controls Sidebar */}
+        <div className="lg:col-span-1">
           {/* Chart Type Selection */}
           {analyticsData && (
-            <Card className="mt-4">
+            <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Chart Type</CardTitle>
               </CardHeader>
@@ -415,7 +416,7 @@ export function CoachAnalytics() {
         </div>
 
         {/* Chart Display */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-3">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
