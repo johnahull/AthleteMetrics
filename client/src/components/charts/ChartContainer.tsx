@@ -14,6 +14,26 @@ import type {
   MultiMetricData 
 } from '@shared/analytics-types';
 
+// Union type for all possible chart data types
+type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
+
+// Type guards for specific chart data types
+function isTrendData(data: ChartDataType): data is TrendData[] {
+  return data !== null && Array.isArray(data) && data.length > 0 && 'data' in data[0];
+}
+
+function isMultiMetricData(data: ChartDataType): data is MultiMetricData[] {
+  return data !== null && Array.isArray(data) && data.length > 0 && 'metrics' in data[0];
+}
+
+function isChartDataPoints(data: ChartDataType): data is ChartDataPoint[] {
+  return data !== null && Array.isArray(data) && (data.length === 0 || 'value' in data[0]);
+}
+
+function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | TrendData[] | MultiMetricData[] {
+  return data !== null && Array.isArray(data);
+}
+
 // Import chart components
 import { BoxPlotChart } from './BoxPlotChart';
 import { DistributionChart } from './DistributionChart';
@@ -214,12 +234,18 @@ export function ChartContainer({
       <CardContent>
         <div className="w-full" style={{ minHeight: '300px' }}>
           <ErrorBoundary>
-            <ChartComponent
-              data={chartData as any}
-              config={chartConfig}
-              statistics={statistics}
-              highlightAthlete={highlightAthlete}
-            />
+            {isValidChartData(chartData) ? (
+              <ChartComponent
+                data={chartData as any}
+                config={chartConfig}
+                statistics={statistics}
+                highlightAthlete={highlightAthlete}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                No data available to display
+              </div>
+            )}
           </ErrorBoundary>
         </div>
       </CardContent>

@@ -37,20 +37,53 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error for monitoring
-    console.error('Chart Error Boundary caught an error:', error, errorInfo);
+    // Categorize error for better handling
+    const errorCategory = this.categorizeError(error);
     
     // Call optional error handler
     this.props.onError?.(error, errorInfo);
     
-    // Categorize error for better handling
-    const errorCategory = this.categorizeError(error);
-    
-    // In production, you might want to send this to an error reporting service
+    // Log error using proper logging service
+    this.logError(error, errorInfo, errorCategory);
+  }
+
+  private logError(error: Error, errorInfo: ErrorInfo, category: string) {
+    const logData = {
+      message: error.message,
+      stack: error.stack,
+      category,
+      componentStack: errorInfo.componentStack,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      url: window.location.href
+    };
+
     if (process.env.NODE_ENV === 'production') {
-      // Example: Sentry.captureException(error, { 
-      //   extra: { ...errorInfo, category: errorCategory } 
-      // });
+      // In production, send to error monitoring service
+      // Example: Sentry.captureException(error, { extra: logData });
+      
+      // For now, use structured logging that can be picked up by log aggregators
+      try {
+        fetch('/api/errors', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(logData)
+        }).catch(() => {
+          // Fallback to console if API fails
+          console.error('Chart Error Boundary:', logData);
+        });
+      } catch {
+        // Ultimate fallback
+        console.error('Chart Error Boundary:', logData);
+      }
+    } else {
+      // Development: detailed console logging
+      console.group('🚨 Chart Error Boundary');
+      console.error('Error:', error);
+      console.error('Category:', category);
+      console.error('Component Stack:', errorInfo.componentStack);
+      console.error('Additional Info:', logData);
+      console.groupEnd();
     }
   }
 
