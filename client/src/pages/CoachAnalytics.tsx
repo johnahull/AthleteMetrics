@@ -26,7 +26,7 @@ import type {
 import { useAuth } from '@/lib/auth';
 
 export function CoachAnalytics() {
-  const { user } = useAuth();
+  const { user, organizationContext } = useAuth();
 
   // Role-based access control - only coaches and org admins
   if (!user) {
@@ -65,7 +65,7 @@ export function CoachAnalytics() {
   const [analysisType, setAnalysisType] = useState<AnalysisType>('individual');
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
   const [filters, setFilters] = useState<FilterType>({
-    organizationId: (user as any)?.organizationId || ''
+    organizationId: ''
   });
   const [metrics, setMetrics] = useState<MetricSelection>({
     primary: 'FLY10_TIME',
@@ -87,17 +87,25 @@ export function CoachAnalytics() {
   // Chart configuration
   const [selectedChartType, setSelectedChartType] = useState<ChartType>('box_plot');
 
-  // Load initial data
+  // Load initial data and update organizationId in filters
   useEffect(() => {
+    console.log('User object in coach analytics:', user);
+    console.log('Organization context:', organizationContext);
+    
+    // Update filters with organization context when available
+    if (organizationContext && filters.organizationId !== organizationContext) {
+      setFilters(prev => ({ ...prev, organizationId: organizationContext }));
+    }
+    
     loadInitialData();
-  }, [user]);
+  }, [user, organizationContext]);
 
   // Auto-refresh when key parameters change
   useEffect(() => {
-    if ((user as any)?.organizationId) {
+    if (organizationContext) {
       fetchAnalyticsData();
     }
-  }, [analysisType, filters, metrics, timeframe, selectedAthleteId]);
+  }, [analysisType, filters, metrics, timeframe, selectedAthleteId, organizationContext]);
 
   // Update chart type recommendation when analysis parameters change
   useEffect(() => {
@@ -110,50 +118,65 @@ export function CoachAnalytics() {
   }, [analysisType, metrics, timeframe]);
 
   const loadInitialData = async () => {
-    if (!(user as any)?.organizationId) return;
+    if (!organizationContext) {
+      console.log('No organization context found, skipping athlete load');
+      setIsLoadingAthletes(false);
+      return;
+    }
 
     try {
       setIsLoadingAthletes(true);
-      const organizationId = (user as any).organizationId;
+      console.log('Loading athletes for organization:', organizationContext);
       
       // Load organization profile with users (much more efficient than /api/users)
       const [teamsResponse, organizationResponse] = await Promise.all([
         fetch('/api/teams'),
-        fetch(`/api/organizations/${organizationId}/profile`)
+        fetch(`/api/organizations/${organizationContext}/profile`)
       ]);
+
+      console.log('Teams response status:', teamsResponse.status);
+      console.log('Organization response status:', organizationResponse.status);
 
       // Load teams
       if (teamsResponse.ok) {
         const teams = await teamsResponse.json();
+        console.log('Teams loaded:', teams.length);
         setAvailableTeams(teams.map((team: any) => ({
           id: team.id,
           name: team.name
         })));
+      } else {
+        console.error('Teams request failed:', teamsResponse.status, await teamsResponse.text());
       }
 
       // Load athletes from organization profile
       if (organizationResponse.ok) {
         const organizationProfile = await organizationResponse.json();
+        console.log('Organization profile loaded:', organizationProfile);
         const athletes = organizationProfile.users || [];
+        console.log('Raw users from organization:', athletes.length);
         
-        setAvailableAthletes(athletes
-          .filter((athlete: any) => athlete.role === 'athlete' || !athlete.role) // Filter for athletes only
-          .map((athlete: any) => ({
-            id: athlete.id,
-            name: `${athlete.firstName} ${athlete.lastName}`,
-            teamName: athlete.teamName
-          }))
-        );
+        const filteredAthletes = athletes.filter((athlete: any) => athlete.role === 'athlete' || !athlete.role);
+        console.log('Filtered athletes:', filteredAthletes.length);
+        
+        setAvailableAthletes(filteredAthletes.map((athlete: any) => ({
+          id: athlete.id,
+          name: `${athlete.firstName} ${athlete.lastName}`,
+          teamName: athlete.teamName
+        })));
+      } else {
+        console.error('Organization request failed:', organizationResponse.status, await organizationResponse.text());
       }
     } catch (err) {
       console.error('Failed to load initial data:', err);
     } finally {
       setIsLoadingAthletes(false);
+      console.log('Finished loading athletes');
     }
   };
 
   const fetchAnalyticsData = async () => {
-    if (!(user as any)?.organizationId) return;
+    if (!organizationContext) return;
 
     setIsLoading(true);
     setError(null);
@@ -161,7 +184,7 @@ export function CoachAnalytics() {
     try {
       const request: AnalyticsRequest = {
         analysisType,
-        filters: { ...filters, organizationId: (user as any).organizationId },
+        filters: { ...filters, organizationId: organizationContext },
         metrics,
         timeframe,
         athleteId: analysisType === 'individual' ? selectedAthleteId : undefined
@@ -190,11 +213,11 @@ export function CoachAnalytics() {
   };
 
   const handleFiltersReset = useCallback(() => {
-    setFilters({ organizationId: (user as any)?.organizationId || '' });
+    setFilters({ organizationId: organizationContext || '' });
     setMetrics({ primary: 'FLY10_TIME', additional: [] });
     setTimeframe({ type: 'best', period: 'all_time' });
     setSelectedAthleteId('');
-  }, [user]);
+  }, [organizationContext]);
 
   const handleExport = useCallback(async () => {
     // TODO: Implement export functionality
