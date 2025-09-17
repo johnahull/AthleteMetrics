@@ -2,7 +2,7 @@
  * Simplified Analytics Service for initial testing
  */
 
-import { eq, and, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, userOrganizations, teams } from "@shared/schema";
 import type {
@@ -71,6 +71,19 @@ export class AnalyticsService {
         whereConditions.push(inArray(measurements.teamId, request.filters.teams));
       }
 
+      // Add gender filtering if specified
+      if (request.filters.genders && request.filters.genders.length > 0) {
+        whereConditions.push(inArray(users.gender, request.filters.genders));
+      }
+
+      // Add birth year filtering if specified
+      if (request.filters.birthYears && request.filters.birthYears.length > 0) {
+        const birthYearConditions = request.filters.birthYears.map(year =>
+          sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${year}`
+        );
+        whereConditions.push(sql`(${sql.join(birthYearConditions, sql` OR `)})`);
+      }
+
       // Add date range filtering if specified
       if (startDate) {
         whereConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
@@ -88,15 +101,17 @@ export class AnalyticsService {
           value: measurements.value,
           date: measurements.date,
           teamId: measurements.teamId,
-          athleteName: users.firstName,
-          teamName: teams.name
+          athleteName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+          teamName: teams.name,
+          gender: users.gender,
+          birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
         })
         .from(measurements)
         .innerJoin(users, eq(measurements.userId, users.id))
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
-        .limit(100);
+        .limit(5000);
 
       console.log('📊 Query results:', {
         totalRows: data.length,

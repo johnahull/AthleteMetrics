@@ -181,7 +181,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
+    // Use JSON search for emails array to avoid SQL token issues with @ symbol
+    const [user] = await db.select().from(users).where(
+      sql`json_extract(${users.emails}, '$[0]') = ${email} OR json_extract(${users.emails}, '$[1]') = ${email} OR json_extract(${users.emails}, '$[2]') = ${email}`
+    );
     return user || undefined;
   }
 

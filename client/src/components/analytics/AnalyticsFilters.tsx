@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, X, Filter, RotateCcw } from 'lucide-react';
+import { CalendarIcon, X, Filter, RotateCcw, AlertTriangle, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import type { 
   AnalyticsFilters as FilterType,
@@ -52,6 +53,7 @@ export function AnalyticsFilters({
     from?: Date;
     to?: Date;
   }>({});
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   // Handle filter updates
   const updateFilter = useCallback(<K extends keyof FilterType>(
@@ -103,8 +105,72 @@ export function AnalyticsFilters({
   // Reset all filters
   const handleReset = useCallback(() => {
     setCustomDateRange({});
+    setValidationErrors([]);
     onReset();
   }, [onReset]);
+
+  // Validation logic
+  const validateFilters = useCallback(() => {
+    const errors: string[] = [];
+
+    // Birth year range validation
+    const fromYear = filters.birthYearFrom;
+    const toYear = filters.birthYearTo;
+    if (fromYear && toYear && fromYear > toYear) {
+      errors.push('Birth year "From" must be less than or equal to "To"');
+    }
+    if (fromYear && fromYear > new Date().getFullYear()) {
+      errors.push('Birth year "From" cannot be in the future');
+    }
+    if (toYear && toYear > new Date().getFullYear()) {
+      errors.push('Birth year "To" cannot be in the future');
+    }
+
+    // Custom date range validation
+    if (timeframe.period === 'custom') {
+      if (!customDateRange.from && !customDateRange.to) {
+        errors.push('Custom date range requires at least one date to be selected');
+      }
+      if (customDateRange.from && customDateRange.to && customDateRange.from > customDateRange.to) {
+        errors.push('Start date must be before end date');
+      }
+      if (customDateRange.from && customDateRange.from > new Date()) {
+        errors.push('Start date cannot be in the future');
+      }
+      if (customDateRange.to && customDateRange.to > new Date()) {
+        errors.push('End date cannot be in the future');
+      }
+    }
+
+    // Team and athlete selection validation
+    if (analysisType === 'individual' && !availableAthletes.length) {
+      errors.push('No athletes available for individual analysis');
+    }
+
+    // Metric combination validation
+    if (metrics.additional.length > 5) {
+      errors.push('Maximum of 5 additional metrics allowed');
+    }
+
+    // Data availability warning (not an error, but useful feedback)
+    const totalFilters = [
+      filters.teams?.length || 0,
+      filters.genders?.length || 0,
+      filters.birthYears?.length || 0
+    ].reduce((sum, count) => sum + count, 0);
+
+    if (totalFilters > 10) {
+      errors.push('Warning: Very specific filters may result in limited data');
+    }
+
+    setValidationErrors(errors);
+    return errors.length === 0;
+  }, [filters, timeframe, customDateRange, analysisType, availableAthletes, metrics]);
+
+  // Run validation when filters change
+  useEffect(() => {
+    validateFilters();
+  }, [validateFilters]);
 
   // Get active filter count
   const activeFilterCount = Object.entries(filters).reduce((count, [key, value]) => {
@@ -149,6 +215,28 @@ export function AnalyticsFilters({
       </CardHeader>
 
       <CardContent>
+        {/* Validation Feedback */}
+        {validationErrors.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {validationErrors.map((error, index) => (
+              <Alert
+                key={index}
+                variant={error.startsWith('Warning:') ? 'default' : 'destructive'}
+                className="py-2"
+              >
+                {error.startsWith('Warning:') ? (
+                  <Info className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                <AlertDescription className="text-sm">
+                  {error}
+                </AlertDescription>
+              </Alert>
+            ))}
+          </div>
+        )}
+
         {/* Main filters in horizontal layout */}
         <div className="flex flex-wrap gap-6 items-end">
           {/* Primary Metric */}
@@ -371,16 +459,38 @@ export function AnalyticsFilters({
                     placeholder="2000"
                     min="1950"
                     max="2020"
+                    value={filters.birthYearFrom || ''}
+                    className={
+                      validationErrors.some(error =>
+                        error.includes('Birth year "From"') ||
+                        (error.includes('Birth year') && error.includes('less than'))
+                      ) ? 'border-red-500 focus:border-red-500' : ''
+                    }
                     onChange={(e) => {
-                      const year = parseInt(e.target.value);
-                      if (!isNaN(year)) {
-                        const currentYears = filters.birthYears || [];
-                        const maxYear = Math.max(...currentYears, year);
+                      const fromYear = parseInt(e.target.value) || undefined;
+                      const toYear = filters.birthYearTo;
+
+                      // Update the from year
+                      updateFilter('birthYearFrom', fromYear);
+
+                      // Create range if both from and to are set
+                      if (fromYear && toYear && fromYear <= toYear) {
                         const range = [];
-                        for (let y = year; y <= maxYear; y++) {
+                        for (let y = fromYear; y <= toYear; y++) {
                           range.push(y);
                         }
                         updateFilter('birthYears', range);
+                      } else if (fromYear && !toYear) {
+                        // If only from is set, include all years from that year onwards (up to current year)
+                        const currentYear = new Date().getFullYear();
+                        const range = [];
+                        for (let y = fromYear; y <= currentYear; y++) {
+                          range.push(y);
+                        }
+                        updateFilter('birthYears', range);
+                      } else {
+                        // Clear birth years if invalid range
+                        updateFilter('birthYears', []);
                       }
                     }}
                   />
@@ -392,16 +502,37 @@ export function AnalyticsFilters({
                     placeholder="2020"
                     min="1950"
                     max="2020"
+                    value={filters.birthYearTo || ''}
+                    className={
+                      validationErrors.some(error =>
+                        error.includes('Birth year "To"') ||
+                        (error.includes('Birth year') && error.includes('less than'))
+                      ) ? 'border-red-500 focus:border-red-500' : ''
+                    }
                     onChange={(e) => {
-                      const year = parseInt(e.target.value);
-                      if (!isNaN(year)) {
-                        const currentYears = filters.birthYears || [];
-                        const minYear = Math.min(...currentYears, year);
+                      const toYear = parseInt(e.target.value) || undefined;
+                      const fromYear = filters.birthYearFrom;
+
+                      // Update the to year
+                      updateFilter('birthYearTo', toYear);
+
+                      // Create range if both from and to are set
+                      if (fromYear && toYear && fromYear <= toYear) {
                         const range = [];
-                        for (let y = minYear; y <= year; y++) {
+                        for (let y = fromYear; y <= toYear; y++) {
                           range.push(y);
                         }
                         updateFilter('birthYears', range);
+                      } else if (!fromYear && toYear) {
+                        // If only to is set, include all years up to that year (from 1950)
+                        const range = [];
+                        for (let y = 1950; y <= toYear; y++) {
+                          range.push(y);
+                        }
+                        updateFilter('birthYears', range);
+                      } else {
+                        // Clear birth years if invalid range
+                        updateFilter('birthYears', []);
                       }
                     }}
                   />

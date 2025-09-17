@@ -12,6 +12,8 @@ export type TimePeriod = 'this_year' | 'last_7_days' | 'last_30_days' | 'last_90
 export interface GroupingDimensions {
   teams?: string[];
   birthYears?: number[];
+  birthYearFrom?: number;
+  birthYearTo?: number;
   ages?: number[];
   genders?: ('Male' | 'Female' | 'Not Specified')[];
   sports?: string[];
