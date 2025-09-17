@@ -28,15 +28,21 @@ export default function Dashboard() {
     return null;
   }
 
-  const { data: dashboardStats, isLoading } = useQuery({
+  const { data: dashboardStats, isLoading, error } = useQuery({
     queryKey: ["/api/analytics/dashboard", organizationContext],
     queryFn: async () => {
       const url = organizationContext
         ? `/api/analytics/dashboard?organizationId=${organizationContext}`
         : `/api/analytics/dashboard`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        credentials: 'include' // Ensure cookies are sent for authentication
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       return response.json();
-    }
+    },
+    enabled: !!user // Only run query when user is authenticated
   });
 
   const { data: recentMeasurements } = useQuery({
@@ -45,17 +51,28 @@ export default function Dashboard() {
       const url = organizationContext
         ? `/api/measurements?organizationId=${organizationContext}`
         : `/api/measurements`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       return response.json();
-    }
+    },
+    enabled: !!user
   });
 
   // Get organization name for context indicator
   const { data: currentOrganization } = useQuery({
     queryKey: [`/api/organizations/${organizationContext}`],
-    enabled: !!organizationContext,
+    enabled: !!organizationContext && !!user,
     queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organizationContext}`);
+      const response = await fetch(`/api/organizations/${organizationContext}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       return response.json();
     }
   });
@@ -66,9 +83,15 @@ export default function Dashboard() {
       const url = organizationContext
         ? `/api/analytics/teams?organizationId=${organizationContext}`
         : `/api/analytics/teams`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
       return response.json();
-    }
+    },
+    enabled: !!user
   });
 
   if (isLoading) {
@@ -86,6 +109,22 @@ export default function Dashboard() {
     );
   }
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('Dashboard Debug Info:', {
+      user,
+      userRole,
+      organizationContext,
+      dashboardStats,
+      error
+    });
+  }, [user, userRole, organizationContext, dashboardStats, error]);
+
+  // Show error state if dashboard stats failed to load
+  if (error) {
+    console.error('Dashboard stats error:', error);
+  }
+
   const stats = (dashboardStats as any) || {
     totalAthletes: 0,
     activeAthletes: 0,
@@ -96,6 +135,25 @@ export default function Dashboard() {
 
   return (
     <div className="p-6">
+      {/* Error Display */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Dashboard Data Error</h3>
+              <p className="mt-1 text-sm text-red-700">
+                Failed to load dashboard statistics: {error.message}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
@@ -278,6 +336,13 @@ export default function Dashboard() {
                     <td className="py-3 text-gray-600">{measurement.date}</td>
                   </tr>
                 ))}
+                {(!recentMeasurements || !Array.isArray(recentMeasurements) || recentMeasurements.length === 0) && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-gray-500">
+                      No recent measurements found
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
