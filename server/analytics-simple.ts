@@ -2,9 +2,9 @@
  * Simplified Analytics Service for initial testing
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { measurements, users, userOrganizations } from "@shared/schema";
+import { measurements, users, userOrganizations, teams } from "@shared/schema";
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -24,15 +24,21 @@ export class AnalyticsService {
           value: measurements.value,
           date: measurements.date,
           teamId: measurements.teamId,
-          athleteName: users.firstName
+          athleteName: users.firstName,
+          teamName: teams.name
         })
         .from(measurements)
         .innerJoin(users, eq(measurements.userId, users.id))
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(
           and(
             eq(measurements.isVerified, "true"),
-            eq(userOrganizations.organizationId, request.filters.organizationId)
+            eq(userOrganizations.organizationId, request.filters.organizationId),
+            // Add team filtering if teams are specified
+            request.filters.teams && request.filters.teams.length > 0
+              ? inArray(measurements.teamId, request.filters.teams)
+              : undefined
           )
         )
         .limit(100);
@@ -44,7 +50,7 @@ export class AnalyticsService {
         value: parseFloat(row.value) || 0,
         date: new Date(row.date),
         metric: row.metric,
-        teamName: 'Unknown Team'
+        teamName: row.teamName || 'No Team'
       }));
 
       // Basic statistics calculation
