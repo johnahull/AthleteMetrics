@@ -39,7 +39,9 @@ export class AnalyticsService {
           break;
         case 'all_time':
         default:
-          // No date filtering for all time
+          // Set earliest date to January 1, 2023 for all time
+          startDate = new Date('2023-01-01');
+          endDate = now;
           break;
       }
 
@@ -59,7 +61,7 @@ export class AnalyticsService {
       if (startDate) {
         whereConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
       }
-      if (endDate && request.timeframe.period !== 'all_time') {
+      if (endDate) {
         whereConditions.push(lte(measurements.date, endDate.toISOString().split('T')[0]));
       }
 
