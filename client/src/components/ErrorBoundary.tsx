@@ -43,9 +43,52 @@ export class ErrorBoundary extends Component<Props, State> {
     // Call optional error handler
     this.props.onError?.(error, errorInfo);
     
+    // Categorize error for better handling
+    const errorCategory = this.categorizeError(error);
+    
     // In production, you might want to send this to an error reporting service
     if (process.env.NODE_ENV === 'production') {
-      // Example: Sentry.captureException(error, { extra: errorInfo });
+      // Example: Sentry.captureException(error, { 
+      //   extra: { ...errorInfo, category: errorCategory } 
+      // });
+    }
+  }
+
+  private categorizeError(error: Error): 'network' | 'data' | 'rendering' | 'chart' | 'unknown' {
+    const message = error.message.toLowerCase();
+    const stack = error.stack?.toLowerCase() || '';
+
+    if (message.includes('network') || message.includes('fetch') || message.includes('timeout')) {
+      return 'network';
+    }
+
+    if (message.includes('canvas') || message.includes('chart') || stack.includes('chart.js')) {
+      return 'chart';
+    }
+
+    if (message.includes('data') || message.includes('null') || message.includes('undefined')) {
+      return 'data';
+    }
+
+    if (stack.includes('react') || message.includes('render')) {
+      return 'rendering';
+    }
+
+    return 'unknown';
+  }
+
+  private getErrorMessage(category: 'network' | 'data' | 'rendering' | 'chart' | 'unknown'): string {
+    switch (category) {
+      case 'network':
+        return 'Unable to load chart data. Please check your connection and try again.';
+      case 'data':
+        return 'There was a problem with the chart data. Please refresh and try again.';
+      case 'chart':
+        return 'Chart rendering failed. This may be due to incompatible data format.';
+      case 'rendering':
+        return 'Component rendering error. Please refresh the page.';
+      default:
+        return 'Something went wrong while rendering this chart.';
     }
   }
 
@@ -64,7 +107,10 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
-      // Default error UI
+      // Default error UI with categorized messaging
+      const errorCategory = this.state.error ? this.categorizeError(this.state.error) : 'unknown';
+      const userFriendlyMessage = this.getErrorMessage(errorCategory);
+
       return (
         <Alert variant="destructive" className="m-4">
           <AlertTriangle className="h-4 w-4" />
@@ -72,10 +118,10 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="flex-1">
               <p className="font-medium">Chart Error</p>
               <p className="text-sm text-muted-foreground">
-                Something went wrong while rendering this chart. 
+                {userFriendlyMessage}
                 {process.env.NODE_ENV === 'development' && this.state.error && (
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-xs">Error Details</summary>
+                    <summary className="cursor-pointer text-xs">Error Details (Category: {errorCategory})</summary>
                     <pre className="mt-1 text-xs whitespace-pre-wrap">
                       {this.state.error.toString()}
                     </pre>

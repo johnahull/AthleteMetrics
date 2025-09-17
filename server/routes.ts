@@ -1629,13 +1629,19 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Rate limiting for analytics endpoints
+  // Rate limiting for analytics endpoints - configurable via environment variables
   const analyticsLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 50, // Limit each IP to 50 analytics requests per windowMs
-    message: { message: "Too many analytics requests, please try again later." },
+    windowMs: parseInt(process.env.ANALYTICS_RATE_WINDOW_MS || '900000'), // Default: 15 minutes
+    limit: parseInt(process.env.ANALYTICS_RATE_LIMIT || '50'), // Default: 50 requests per window
+    message: { 
+      message: process.env.ANALYTICS_RATE_LIMIT_MESSAGE || "Too many analytics requests, please try again later." 
+    },
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    skip: (req) => {
+      // Skip rate limiting for site admins in development
+      return process.env.NODE_ENV === 'development' && req.session.user?.role === 'site_admin';
+    }
   });
 
   // Keep existing analytics routes
@@ -1725,7 +1731,7 @@ export function registerRoutes(app: Express) {
       }
 
       // Import and instantiate the analytics service
-      const { AnalyticsService } = await import("./analytics");
+      const { AnalyticsService } = await import("./analytics-simple");
       const analyticsService = new AnalyticsService();
 
       // Get analytics data

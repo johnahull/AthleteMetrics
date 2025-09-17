@@ -70,7 +70,7 @@ export function AthleteAnalytics() {
 
   const { 
     data: analyticsData, 
-    chartData,
+    chartData: hookChartData,
     isLoading, 
     isError,
     error,
@@ -395,7 +395,7 @@ export function AthleteAnalytics() {
       <div>
         {error && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{error?.message || String(error)}</AlertDescription>
           </Alert>
         )}
 
