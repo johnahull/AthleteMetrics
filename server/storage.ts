@@ -1678,6 +1678,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const teams = await this.getTeams(organizationId);
+    console.log(`getTeamStats: Found ${teams.length} teams for org ${organizationId}:`, teams.map(t => t.name));
 
     const teamStats = await Promise.all(
       teams.map(async (team) => {
