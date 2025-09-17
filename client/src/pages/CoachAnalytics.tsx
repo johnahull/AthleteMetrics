@@ -191,8 +191,8 @@ export function CoachAnalytics() {
         console.log('Showing all users (no role filtering):', filteredAthletes.length);
         
         setAvailableAthletes(filteredAthletes.map((athlete: any) => ({
-          id: athlete.id,
-          name: `${athlete.firstName} ${athlete.lastName}`,
+          id: athlete.user.id,
+          name: `${athlete.user.firstName} ${athlete.user.lastName}`,
           teamName: athlete.teamName
         })));
       } else {
