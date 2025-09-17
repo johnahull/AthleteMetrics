@@ -96,3 +96,11 @@ Key schema features:
 - `ADMIN_USER` - Admin username (defaults to "admin")
 - `ADMIN_PASS` - Admin password (defaults to "password")
 - `SESSION_SECRET` - Session encryption key
+
+### Optional Environment Variables
+#### Analytics Rate Limiting
+- `ANALYTICS_RATE_WINDOW_MS` - Rate limiting window in milliseconds (default: 900000 / 15 minutes)
+- `ANALYTICS_RATE_LIMIT` - Maximum requests per window (default: 50)
+- `ANALYTICS_RATE_LIMIT_MESSAGE` - Custom rate limit message (default: "Too many analytics requests, please try again later.")
+
+Note: Rate limiting is automatically skipped for site admins in development mode.

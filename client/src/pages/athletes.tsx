@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,6 +49,9 @@ export default function Athletes() {
     birthYearTo: "",
     search: "",
   });
+
+  // Debounce search to avoid excessive API calls
+  const debouncedSearch = useDebounce(filters.search, 300);
 
   // Check for URL parameters on load
   useEffect(() => {
@@ -99,13 +103,13 @@ export default function Athletes() {
   });
 
   const { data: athletes = [], isLoading } = useQuery({
-    queryKey: ["/api/athletes", filters, organizationContext],
+    queryKey: ["/api/athletes", { ...filters, search: debouncedSearch }, organizationContext],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.teamId) params.append('teamId', filters.teamId);
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
-      if (filters.search) params.append('search', filters.search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       
       // Always include organization context for proper filtering
       if (organizationContext) {

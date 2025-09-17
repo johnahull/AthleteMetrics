@@ -10,7 +10,8 @@ import {
   UsersRound, 
   PlusCircle, 
   FileCheck, 
-  FileText 
+  FileText,
+  TrendingUp
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -33,6 +34,7 @@ const NAVIGATION_CONFIGS = {
       { name: "Athletes", href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
       { name: "Analytics", href: "/analytics", icon: BarChart3 },
+      { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Publish", href: "/publish", icon: FileCheck },
       { name: "Import/Export", href: "/import-export", icon: FileText }
     ]
@@ -43,6 +45,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Publish", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "My Organization", href: "/organizations", icon: Building2 }
@@ -53,6 +56,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Publish", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText }
   ],

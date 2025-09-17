@@ -18,8 +18,12 @@ import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAc
 import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
+import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "./athlete-matching";
+import { reviewQueue } from "./review-queue";
+import type { ImportResult } from "@shared/import-types";
 import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
+import { registerAllRoutes } from "./routes/index";
 
 // Session configuration
 declare module 'express-session' {
@@ -230,6 +234,9 @@ async function initializeDefaultUser() {
 
 export function registerRoutes(app: Express) {
   const server = createServer(app);
+  
+  // Register new refactored routes
+  registerAllRoutes(app);
 
 
   // Session setup with security best practices
@@ -418,6 +425,10 @@ export function registerRoutes(app: Express) {
   // Initialize default user
   initializeDefaultUser();
 
+  // ⚠️ LEGACY ROUTES - These have been refactored to new service layer
+  // Authentication routes are now handled by ./routes/auth-routes.ts
+  
+  /*
   // Authentication routes - USERNAME ONLY
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
@@ -789,7 +800,10 @@ export function registerRoutes(app: Express) {
       }
     }
   });
+  */
 
+  // ⚠️ END OF LEGACY AUTH/USER ROUTES - Now using refactored service layer
+  
   // Team routes with basic organization support
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
@@ -1615,8 +1629,23 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for analytics endpoints - configurable via environment variables
+  const analyticsLimiter = rateLimit({
+    windowMs: parseInt(process.env.ANALYTICS_RATE_WINDOW_MS || '900000'), // Default: 15 minutes
+    limit: parseInt(process.env.ANALYTICS_RATE_LIMIT || '50'), // Default: 50 requests per window
+    message: { 
+      message: process.env.ANALYTICS_RATE_LIMIT_MESSAGE || "Too many analytics requests, please try again later." 
+    },
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: (req) => {
+      // Skip rate limiting for site admins in development
+      return process.env.NODE_ENV === 'development' && req.session.user?.role === 'site_admin';
+    }
+  });
+
   // Keep existing analytics routes
-  app.get("/api/analytics/dashboard", requireAuth, async (req, res) => {
+  app.get("/api/analytics/dashboard", analyticsLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       const requestedOrgId = req.query.organizationId as string;
@@ -1661,7 +1690,61 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/analytics/teams", requireAuth, async (req, res) => {
+  // Advanced Analytics POST endpoint
+  app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      const analyticsRequest = req.body;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Input validation for analytics request
+      if (!analyticsRequest.filters?.organizationId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+
+      if (!analyticsRequest.metrics?.primary) {
+        return res.status(400).json({ message: "Primary metric is required" });
+      }
+
+      // Validate metric names against allowed metrics
+      const allowedMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+      if (!allowedMetrics.includes(analyticsRequest.metrics.primary)) {
+        return res.status(400).json({ message: "Invalid primary metric" });
+      }
+
+      // Role-based access control for advanced analytics
+      const userRole = currentUser.role;
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      
+      // Check if the request is for coach analytics (inter/intra group analysis)
+      const isCoachAnalyticsRequest = analyticsRequest.analysisType === 'inter_group' || 
+                                    analyticsRequest.analysisType === 'intra_group';
+      
+      if (isCoachAnalyticsRequest && !userIsSiteAdmin && userRole !== 'coach' && userRole !== 'org_admin') {
+        return res.status(403).json({ 
+          message: "Access denied. Coach analytics is only available to coaches and organization administrators.",
+          userRole: userRole
+        });
+      }
+
+      // Import and instantiate the analytics service
+      const { AnalyticsService } = await import("./analytics-simple");
+      const analyticsService = new AnalyticsService();
+
+      // Get analytics data
+      const analyticsData = await analyticsService.getAnalyticsData(analyticsRequest);
+      
+      res.json(analyticsData);
+    } catch (error) {
+      console.error("Error processing analytics request:", error);
+      res.status(500).json({ message: "Failed to process analytics request" });
+    }
+  });
+
+  app.get("/api/analytics/teams", analyticsLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       const requestedOrgId = req.query.organizationId as string;
@@ -3183,64 +3266,89 @@ export function registerRoutes(app: Express) {
               organizationId = userOrgs[0]?.organizationId;
             }
 
-            // Find athlete by name and team within organization
-            // Note: gender field can be included in CSV for additional matching context
+            // Use simplified athlete matching system with organization filtering
             const athletes = await storage.getAthletes({
               search: `${firstName} ${lastName}`,
               organizationId: organizationId
             });
 
+            // Build matching criteria
+            const matchingCriteria: MatchingCriteria = {
+              firstName,
+              lastName,
+              teamName
+            };
+
+            // Find best match using advanced matching algorithm
+            const matchResult: MatchResult = findBestAthleteMatch(matchingCriteria, athletes);
+
             let matchedAthlete;
-            if (teamName) {
-              // Clean up team name for comparison
-              const cleanTeamName = teamName.toLowerCase().trim();
-              
-              // Match by firstName + lastName + team
-              matchedAthlete = (athletes as any[]).find((p: any) => 
-                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
-                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
-                p.teams?.some((team: any) => team.name?.toLowerCase().trim() === cleanTeamName)
-              );
-
-              // If no exact match, try partial team name matching
-              if (!matchedAthlete) {
-                matchedAthlete = (athletes as any[]).find((p: any) => 
-                  p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
-                  p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim() &&
-                  p.teams?.some((team: any) => {
-                    const teamNameClean = team.name?.toLowerCase().trim();
-                    return teamNameClean?.includes(cleanTeamName) || cleanTeamName.includes(teamNameClean);
-                  })
-                );
-              }
-            } else {
-              // Fallback to just name matching if no team specified
-              matchedAthlete = athletes.find(p => 
-                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
-                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
-              );
-            }
-
-            if (!matchedAthlete) {
-              // Add debugging information to error message
-              const nameMatches = (athletes as any[]).filter((p: any) => 
-                p.firstName?.toLowerCase().trim() === firstName.toLowerCase().trim() && 
-                p.lastName?.toLowerCase().trim() === lastName.toLowerCase().trim()
-              );
-              
-              let errorMsg;
+            if (matchResult.type === 'none') {
+              // No suitable match found
+              let errorMsg = `No matching athlete found for ${firstName} ${lastName}`;
               if (teamName) {
-                if (nameMatches.length > 0) {
-                  const availableTeams = nameMatches.flatMap((p: any) => p.teams?.map((t: any) => t.name) || []).join(', ');
-                  errorMsg = `Athlete ${firstName} ${lastName} not found in team "${teamName}". Available teams: ${availableTeams}`;
-                } else {
-                  errorMsg = `Athlete ${firstName} ${lastName} not found in team "${teamName}"`;
-                }
-              } else {
-                errorMsg = `Athlete ${firstName} ${lastName} not found`;
+                errorMsg += ` in team "${teamName}"`;
               }
+              
+              // Suggest alternatives if available
+              if (matchResult.alternatives && matchResult.alternatives.length > 0) {
+                const suggestions = matchResult.alternatives
+                  .slice(0, 2)
+                  .map(alt => `${alt.firstName} ${alt.lastName} (${alt.matchReason})`)
+                  .join(', ');
+                errorMsg += `. Similar athletes found: ${suggestions}`;
+              }
+              
               errors.push({ row: rowNum, error: errorMsg });
               continue;
+            }
+
+            // Handle review queue for low-confidence matches
+            if (matchResult.requiresManualReview || matchResult.confidence < 75) {
+              // Add to review queue instead of processing immediately
+              const reviewItem = reviewQueue.addItem({
+                type: 'measurement',
+                originalData: row,
+                matchingCriteria,
+                suggestedMatch: matchResult.candidate ? {
+                  id: matchResult.candidate.id,
+                  firstName: matchResult.candidate.firstName,
+                  lastName: matchResult.candidate.lastName,
+                  confidence: matchResult.confidence,
+                  reason: matchResult.candidate.matchReason
+                } : undefined,
+                alternatives: matchResult.alternatives?.map(alt => ({
+                  id: alt.id,
+                  firstName: alt.firstName,
+                  lastName: alt.lastName,
+                  confidence: alt.matchScore,
+                  reason: alt.matchReason
+                })),
+                createdBy: req.session.user!.id
+              });
+
+              results.push({
+                action: 'pending_review',
+                reviewItem: {
+                  id: reviewItem.id,
+                  reason: `Low confidence match (${matchResult.confidence}%) requires manual review`
+                }
+              });
+              continue;
+            }
+
+            matchedAthlete = matchResult.candidate;
+
+            if (!matchedAthlete) {
+              errors.push({ row: rowNum, error: `No valid athlete match found for ${firstName} ${lastName}` });
+              continue;
+            }
+
+            // Add warning for medium-confidence matches that were auto-approved
+            if (matchResult.confidence < 90) {
+              const warningMsg = `${firstName} ${lastName} matched to ${matchedAthlete.firstName} ${matchedAthlete.lastName} ` +
+                `(confidence: ${matchResult.confidence}%, reason: ${matchedAthlete.matchReason})`;
+              warnings.push(warningMsg);
             }
 
             const measurementData = {
@@ -3274,6 +3382,8 @@ export function registerRoutes(app: Express) {
         }
       }
 
+      const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
+
       res.json({
         type,
         totalRows,
@@ -3281,14 +3391,116 @@ export function registerRoutes(app: Express) {
         errors,
         warnings,
         summary: {
-          successful: results.length,
+          successful: results.filter(r => r.action === 'created' || r.action === 'matched').length,
           failed: errors.length,
-          warnings: warnings.length
+          warnings: warnings.length,
+          pendingReview: pendingReviewCount
         }
-      });
+      } as ImportResult);
     } catch (error) {
       console.error('Import error:', error);
       res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Review Queue endpoints
+  app.get("/api/import/review-queue", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get organization context for filtering (if needed)
+      const organizationId = (currentUser as any)?.organizationId || '';
+      
+      const queue = reviewQueue.getPendingItems(organizationId);
+      res.json(queue);
+    } catch (error) {
+      console.error('Review queue error:', error);
+      res.status(500).json({ message: "Failed to fetch review queue", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.post("/api/import/review-decision", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { itemId, action, selectedAthleteId, notes } = req.body;
+      
+      if (!itemId || !action) {
+        return res.status(400).json({ message: "Item ID and action are required" });
+      }
+
+      // Validate action parameter
+      if (!['approve', 'reject', 'select_alternative'].includes(action)) {
+        return res.status(400).json({ message: "Invalid action. Must be 'approve', 'reject', or 'select_alternative'" });
+      }
+
+      if (action === 'select_alternative' && !selectedAthleteId) {
+        return res.status(400).json({ message: "Selected athlete ID is required for select_alternative action" });
+      }
+
+      const decision = {
+        itemId,
+        action,
+        selectedAthleteId,
+        notes
+      };
+
+      const updatedItem = reviewQueue.processDecision(decision, currentUser.id);
+      
+      if (!updatedItem) {
+        return res.status(404).json({ message: "Review item not found" });
+      }
+
+      // If approved, process the measurement
+      if (updatedItem.status === 'approved') {
+        try {
+          const originalData = updatedItem.originalData;
+          const athleteId = selectedAthleteId || updatedItem.suggestedMatch?.id;
+          
+          if (athleteId && updatedItem.type === 'measurement') {
+            const measurementData = {
+              userId: athleteId,
+              date: originalData.date,
+              age: originalData.age && !isNaN(parseInt(originalData.age)) ? parseInt(originalData.age) : undefined,
+              metric: originalData.metric,
+              value: parseFloat(originalData.value),
+              units: originalData.units || (originalData.metric === 'FLY10_TIME' ? 's' : originalData.metric === 'VERTICAL_JUMP' ? 'in' : ''),
+              flyInDistance: originalData.flyInDistance && !isNaN(parseInt(originalData.flyInDistance)) ? parseInt(originalData.flyInDistance) : undefined,
+              notes: originalData.notes || `Approved from review queue by ${currentUser.firstName} ${currentUser.lastName}`,
+              isVerified: "false"
+            };
+
+            const measurement = await storage.createMeasurement(measurementData, currentUser.id);
+            
+            res.json({
+              success: true,
+              item: updatedItem,
+              measurement: {
+                id: measurement.id,
+                metric: measurement.metric,
+                value: measurement.value,
+                date: measurement.date
+              }
+            });
+          } else {
+            res.json({ success: true, item: updatedItem });
+          }
+        } catch (error) {
+          console.error('Error processing approved measurement:', error);
+          res.status(500).json({ message: "Failed to process approved measurement", error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      } else {
+        res.json({ success: true, item: updatedItem });
+      }
+    } catch (error) {
+      console.error('Review decision error:', error);
+      res.status(500).json({ message: "Failed to process review decision", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
