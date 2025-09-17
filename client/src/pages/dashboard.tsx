@@ -1,6 +1,6 @@
+import React, { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
@@ -95,8 +95,8 @@ export default function Dashboard() {
 
   // Redirect athletes away from organization dashboard (MUST be before any early returns)
   useEffect(() => {
-    if (!isSiteAdmin && userRole === "athlete") {
-      setLocation(`/athletes/${user?.id}`);
+    if (!isSiteAdmin && userRole === "athlete" && user?.id) {
+      setLocation(`/athletes/${user.id}`);
     }
   }, [isSiteAdmin, userRole, user?.id, setLocation]);
 
@@ -147,7 +147,7 @@ export default function Dashboard() {
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">Dashboard Data Error</h3>
               <p className="mt-1 text-sm text-red-700">
-                Failed to load dashboard statistics: {error.message}
+                Failed to load dashboard statistics: {error?.message || 'Unknown error'}
               </p>
             </div>
           </div>
