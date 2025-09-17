@@ -15,17 +15,29 @@ import { useAuth } from "@/lib/auth";
 import type { Team } from "@shared/schema";
 
 export default function Athletes() {
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations } = useAuth();
   const [location, setLocation] = useLocation();
   
+  // Get effective organization ID - same pattern as dashboard and other pages
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
+  
   // Get user's primary role to check access
-  const { data: userOrganizations } = useQuery({
+  const { data: userOrganizationsData } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
   
   // Use session role as primary source, fallback to organization role, then 'athlete'
-  const primaryRole = user?.role || (Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0]?.role : 'athlete');
+  const primaryRole = user?.role || (Array.isArray(userOrganizationsData) && userOrganizationsData.length > 0 ? userOrganizationsData[0]?.role : 'athlete');
   const isSiteAdmin = user?.isSiteAdmin || false;
   
   // Redirect athletes away from this management page
@@ -70,10 +82,10 @@ export default function Athletes() {
   const queryClient = useQueryClient();
 
   const { data: teams = [] } = useQuery({
-    queryKey: ["/api/teams", organizationContext],
+    queryKey: ["/api/teams", effectiveOrganizationId],
     queryFn: async () => {
-      const url = organizationContext 
-        ? `/api/teams?organizationId=${organizationContext}`
+      const url = effectiveOrganizationId 
+        ? `/api/teams?organizationId=${effectiveOrganizationId}`
         : `/api/teams`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch teams');
@@ -103,7 +115,7 @@ export default function Athletes() {
   });
 
   const { data: athletes = [], isLoading } = useQuery({
-    queryKey: ["/api/athletes", { ...filters, search: debouncedSearch }, organizationContext],
+    queryKey: ["/api/athletes", { ...filters, search: debouncedSearch }, effectiveOrganizationId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.teamId) params.append('teamId', filters.teamId);
@@ -112,11 +124,8 @@ export default function Athletes() {
       if (debouncedSearch) params.append('search', debouncedSearch);
       
       // Always include organization context for proper filtering
-      if (organizationContext) {
-        params.append('organizationId', organizationContext);
-      } else if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
-        // For non-site-admins without explicit org context, use their primary organization
-        params.append('organizationId', userOrganizations[0].organizationId);
+      if (effectiveOrganizationId) {
+        params.append('organizationId', effectiveOrganizationId);
       }
       
       const response = await fetch(`/api/athletes?${params}`);
