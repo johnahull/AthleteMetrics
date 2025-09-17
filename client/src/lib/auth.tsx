@@ -42,12 +42,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         setUser(data.user);
+        
+        // Auto-set organization context for non-site-admin users
+        if (data.user && !data.user.isSiteAdmin) {
+          try {
+            const orgResponse = await fetch('/api/auth/me/organizations', {
+              credentials: 'include'
+            });
+            if (orgResponse.ok) {
+              const organizations = await orgResponse.json();
+              if (organizations && organizations.length > 0) {
+                // Set the first organization as the default context
+                setOrganizationContext(organizations[0].organizationId);
+              }
+            }
+          } catch (orgError) {
+            console.error('Failed to fetch user organizations:', orgError);
+          }
+        }
       } else {
         setUser(null);
+        setOrganizationContext(null);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
       setUser(null);
+      setOrganizationContext(null);
     } finally {
       setIsLoading(false);
     }
