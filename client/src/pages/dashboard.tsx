@@ -293,14 +293,16 @@ export default function Dashboard() {
               <h3 className="text-lg font-semibold text-gray-900">Team Distribution</h3>
             </div>
             <div className="space-y-4">
-              {Array.isArray(teamStats) && teamStats.slice(0, 5).map((team: any, index: number) => (
+              {Array.isArray(teamStats) && teamStats.map((team: any, index: number) => (
                 <div key={team.teamId} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className={`w-3 h-3 rounded-full ${
                       index === 0 ? 'bg-blue-500' :
                       index === 1 ? 'bg-green-500' :
                       index === 2 ? 'bg-yellow-500' :
-                      index === 3 ? 'bg-purple-500' : 'bg-gray-500'
+                      index === 3 ? 'bg-purple-500' :
+                      index === 4 ? 'bg-red-500' :
+                      index === 5 ? 'bg-indigo-500' : 'bg-gray-500'
                     }`}></div>
                     <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
                   </div>

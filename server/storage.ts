@@ -1678,7 +1678,6 @@ export class DatabaseStorage implements IStorage {
     }
 
     const teams = await this.getTeams(organizationId);
-    console.log(`getTeamStats: Found ${teams.length} teams for org ${organizationId}:`, teams.map(t => t.name));
 
     const teamStats = await Promise.all(
       teams.map(async (team) => {
@@ -1699,7 +1698,7 @@ export class DatabaseStorage implements IStorage {
 
         const latestMeasurement = measurements[0]; // Already ordered by date desc
 
-        const teamStat = {
+        return {
           teamId: team.id,
           teamName: team.name,
           organizationName: team.organization.name,
@@ -1708,12 +1707,9 @@ export class DatabaseStorage implements IStorage {
           bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
           latestTest: latestMeasurement ? latestMeasurement.date : undefined
         };
-        console.log(`Team stat for ${team.name}:`, teamStat);
-        return teamStat;
       })
     );
 
-    console.log(`getTeamStats: Returning ${teamStats.length} team stats:`, teamStats.map(ts => `${ts.teamName} (${ts.athleteCount} athletes)`));
     return teamStats;
   }
 
