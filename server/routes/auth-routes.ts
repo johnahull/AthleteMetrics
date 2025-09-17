@@ -46,7 +46,8 @@ export function registerAuthRoutes(app: Express) {
         lastName: user.lastName,
         email: user.emails?.[0] || user.username + '@temp.local',
         role: roleContext.role,
-        isSiteAdmin: user.isSiteAdmin === "true"
+        isSiteAdmin: user.isSiteAdmin === "true",
+        primaryOrganizationId: roleContext.primaryOrganizationId
       };
 
       // Get user organizations for context
