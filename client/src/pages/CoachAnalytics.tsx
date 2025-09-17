@@ -81,6 +81,7 @@ export function CoachAnalytics() {
   const [availableTeams, setAvailableTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [availableAthletes, setAvailableAthletes] = useState<Array<{ id: string; name: string; teamName?: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingAthletes, setIsLoadingAthletes] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Chart configuration
@@ -112,6 +113,8 @@ export function CoachAnalytics() {
     if (!(user as any)?.organizationId) return;
 
     try {
+      setIsLoadingAthletes(true);
+      
       // Load teams
       const teamsResponse = await fetch('/api/teams');
       if (teamsResponse.ok) {
@@ -137,6 +140,8 @@ export function CoachAnalytics() {
       }
     } catch (err) {
       console.error('Failed to load initial data:', err);
+    } finally {
+      setIsLoadingAthletes(false);
     }
   };
 
@@ -304,23 +309,47 @@ export function CoachAnalytics() {
                   </p>
                 </div>
                 
-                {availableAthletes.length > 0 && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Select Athlete</label>
-                    <Select value={selectedAthleteId} onValueChange={setSelectedAthleteId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose an athlete to analyze" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableAthletes.map((athlete) => (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Athlete *</label>
+                  <Select value={selectedAthleteId} onValueChange={setSelectedAthleteId} disabled={isLoadingAthletes}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        isLoadingAthletes 
+                          ? "Loading athletes..." 
+                          : availableAthletes.length === 0 
+                            ? "No athletes available"
+                            : "Choose an athlete to analyze"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isLoadingAthletes ? (
+                        <SelectItem value="" disabled>
+                          Loading...
+                        </SelectItem>
+                      ) : availableAthletes.length === 0 ? (
+                        <SelectItem value="" disabled>
+                          No athletes available
+                        </SelectItem>
+                      ) : (
+                        availableAthletes.map((athlete) => (
                           <SelectItem key={athlete.id} value={athlete.id}>
                             {athlete.name} {athlete.teamName && `(${athlete.teamName})`}
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {!isLoadingAthletes && availableAthletes.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No athletes found for your organization. Check that athletes are properly assigned to your organization.
+                    </p>
+                  )}
+                  {!isLoadingAthletes && !selectedAthleteId && availableAthletes.length > 0 && (
+                    <p className="text-xs text-orange-600">
+                      Please select an athlete to view individual analysis.
+                    </p>
+                  )}
+                </div>
               </div>
             </TabsContent>
 
