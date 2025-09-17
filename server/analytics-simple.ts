@@ -58,10 +58,12 @@ export class AnalyticsService {
       }, {} as Record<string, number[]>);
 
       for (const [metric, values] of Object.entries(metricGroups)) {
+        if (values.length === 0) continue; // Skip empty arrays
+        
         const sorted = [...values].sort((a, b) => a - b);
         const count = values.length;
         const sum = values.reduce((a, b) => a + b, 0);
-        const mean = sum / count;
+        const mean = count > 0 ? sum / count : 0;
         const median = sorted[Math.floor(count / 2)];
 
         statistics[metric] = {

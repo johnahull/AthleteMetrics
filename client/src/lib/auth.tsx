@@ -1,26 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-
-interface User {
-  id: string;
-  username?: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  role: string;
-  isSiteAdmin?: boolean;
-  athleteId?: string;
-}
-
-interface ImpersonationStatus {
-  isImpersonating: boolean;
-  originalUser?: User;
-  targetUser?: User;
-  startTime?: string;
-}
+import { EnhancedUser, ImpersonationStatus } from './types/user';
 
 interface AuthContextType {
-  user: User | null;
+  user: EnhancedUser | null;
   isLoading: boolean;
   organizationContext: string | null;
   setOrganizationContext: (orgId: string | null) => void;
@@ -35,7 +18,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<EnhancedUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [organizationContext, setOrganizationContext] = useState<string | null>(null);
   const [impersonationStatus, setImpersonationStatus] = useState<ImpersonationStatus | null>(null);

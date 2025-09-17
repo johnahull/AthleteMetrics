@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ErrorBoundary } from '../ErrorBoundary';
 import type { 
   ChartDataPoint, 
   ChartConfiguration, 
@@ -13,16 +14,36 @@ import type {
   MultiMetricData 
 } from '@shared/analytics-types';
 
-// Import chart components
-import { BoxPlotChart } from './BoxPlotChart';
-import { DistributionChart } from './DistributionChart';
-import { BarChart } from './BarChart';
-import { LineChart } from './LineChart';
-import { ScatterPlotChart } from './ScatterPlotChart';
-import { RadarChart } from './RadarChart';
-import { SwarmChart } from './SwarmChart';
-import { ConnectedScatterChart } from './ConnectedScatterChart';
-import { MultiLineChart } from './MultiLineChart';
+// Union type for all possible chart data types
+type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
+
+// Type guards for specific chart data types
+function isTrendData(data: ChartDataType): data is TrendData[] {
+  return data !== null && Array.isArray(data) && data.length > 0 && 'data' in data[0];
+}
+
+function isMultiMetricData(data: ChartDataType): data is MultiMetricData[] {
+  return data !== null && Array.isArray(data) && data.length > 0 && 'metrics' in data[0];
+}
+
+function isChartDataPoints(data: ChartDataType): data is ChartDataPoint[] {
+  return data !== null && Array.isArray(data) && (data.length === 0 || 'value' in data[0]);
+}
+
+function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | TrendData[] | MultiMetricData[] {
+  return data !== null && Array.isArray(data);
+}
+
+// Lazy load chart components to reduce bundle size
+const BoxPlotChart = React.lazy(() => import('./BoxPlotChart').then(m => ({ default: m.BoxPlotChart })));
+const DistributionChart = React.lazy(() => import('./DistributionChart').then(m => ({ default: m.DistributionChart })));
+const BarChart = React.lazy(() => import('./BarChart').then(m => ({ default: m.BarChart })));
+const LineChart = React.lazy(() => import('./LineChart').then(m => ({ default: m.LineChart })));
+const ScatterPlotChart = React.lazy(() => import('./ScatterPlotChart').then(m => ({ default: m.ScatterPlotChart })));
+const RadarChart = React.lazy(() => import('./RadarChart').then(m => ({ default: m.RadarChart })));
+const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default: m.SwarmChart })));
+const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
+const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 
 interface ChartContainerProps {
   title: string;
@@ -212,12 +233,27 @@ export function ChartContainer({
       </CardHeader>
       <CardContent>
         <div className="w-full" style={{ minHeight: '300px' }}>
-          <ChartComponent
-            data={chartData as any}
-            config={chartConfig}
-            statistics={statistics}
-            highlightAthlete={highlightAthlete}
-          />
+          <ErrorBoundary>
+            {isValidChartData(chartData) ? (
+              <React.Suspense fallback={
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-muted-foreground">Loading chart...</span>
+                </div>
+              }>
+                <ChartComponent
+                  data={chartData as any}
+                  config={chartConfig}
+                  statistics={statistics}
+                  highlightAthlete={highlightAthlete}
+                />
+              </React.Suspense>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                No data available to display
+              </div>
+            )}
+          </ErrorBoundary>
         </div>
       </CardContent>
     </Card>

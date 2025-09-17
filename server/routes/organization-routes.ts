@@ -6,7 +6,7 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import "../types/session"; // Ensure session types are loaded
+// Session types are loaded globally
 
 const organizationService = new OrganizationService();
 

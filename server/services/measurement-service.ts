@@ -42,7 +42,7 @@ export class MeasurementService extends BaseService {
     try {
       // Get user's accessible organizations
       const userOrgs = await this.getUserOrganizations(requestingUserId);
-      const requestingUser = await this.storage.getUserById(requestingUserId);
+      const requestingUser = await this.storage.getUser(requestingUserId);
       
       // Site admins can see all measurements
       if (requestingUser?.isSiteAdmin === "true") {
@@ -52,9 +52,10 @@ export class MeasurementService extends BaseService {
       // Filter by user's organizations if not specified
       if (!filters.organizationId) {
         const accessibleOrgIds = userOrgs.map(org => org.organizationId);
+        // For now, use the first accessible organization if multiple exist
         return await this.storage.getMeasurements({
           ...filters,
-          organizationIds: accessibleOrgIds
+          organizationId: accessibleOrgIds[0]
         });
       }
 
@@ -86,7 +87,7 @@ export class MeasurementService extends BaseService {
       const validatedData = insertMeasurementSchema.parse(measurementData);
 
       // Validate athlete access
-      const athlete = await this.storage.getUserById(validatedData.userId);
+      const athlete = await this.storage.getUser(validatedData.userId);
       if (!athlete) {
         throw new Error("Athlete not found");
       }
@@ -99,7 +100,7 @@ export class MeasurementService extends BaseService {
         requestingUserOrgs.some(userOrg => userOrg.organizationId === athleteOrg.organizationId)
       );
 
-      const requestingUser = await this.storage.getUserById(requestingUserId);
+      const requestingUser = await this.storage.getUser(requestingUserId);
       if (!hasSharedOrg && requestingUser?.isSiteAdmin !== "true") {
         throw new Error("Unauthorized: Cannot create measurements for athletes outside your organizations");
       }
@@ -150,7 +151,7 @@ export class MeasurementService extends BaseService {
 
           // Get organization context for filtering
           let organizationId: string | undefined;
-          const currentUser = await this.storage.getUserById(requestingUserId);
+          const currentUser = await this.storage.getUser(requestingUserId);
           
           if (teamName) {
             // Try to find the team to get organization context
@@ -250,11 +251,18 @@ export class MeasurementService extends BaseService {
             warnings.push(warningMsg);
           }
 
+          // Validate metric type
+          const validMetrics = ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"];
+          if (!validMetrics.includes(metric)) {
+            errors.push({ row: rowNum, error: `Invalid metric "${metric}". Must be one of: ${validMetrics.join(', ')}` });
+            continue;
+          }
+
           const measurementData = {
             userId: matchedAthlete.id,
             date,
             age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
-            metric,
+            metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI",
             value: parseFloat(value),
             units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : ''),
             notes: notes || undefined,
@@ -310,13 +318,13 @@ export class MeasurementService extends BaseService {
   ): Promise<Measurement> {
     try {
       // Get existing measurement
-      const existingMeasurement = await this.storage.getMeasurementById(measurementId);
+      const existingMeasurement = await this.storage.getMeasurement(measurementId);
       if (!existingMeasurement) {
         throw new Error("Measurement not found");
       }
 
       // Validate athlete access
-      const athlete = await this.storage.getUserById(existingMeasurement.userId);
+      const athlete = await this.storage.getUser(existingMeasurement.userId);
       if (!athlete) {
         throw new Error("Athlete not found");
       }
@@ -329,7 +337,7 @@ export class MeasurementService extends BaseService {
         requestingUserOrgs.some(userOrg => userOrg.organizationId === athleteOrg.organizationId)
       );
 
-      const requestingUser = await this.storage.getUserById(requestingUserId);
+      const requestingUser = await this.storage.getUser(requestingUserId);
       if (!hasSharedOrg && requestingUser?.isSiteAdmin !== "true") {
         throw new Error("Unauthorized: Cannot update measurements for athletes outside your organizations");
       }
@@ -346,7 +354,7 @@ export class MeasurementService extends BaseService {
   async deleteMeasurement(measurementId: string, requestingUserId: string): Promise<void> {
     try {
       // Get existing measurement
-      const existingMeasurement = await this.storage.getMeasurementById(measurementId);
+      const existingMeasurement = await this.storage.getMeasurement(measurementId);
       if (!existingMeasurement) {
         throw new Error("Measurement not found");
       }
@@ -359,7 +367,7 @@ export class MeasurementService extends BaseService {
         requestingUserOrgs.some(userOrg => userOrg.organizationId === athleteOrg.organizationId)
       );
 
-      const requestingUser = await this.storage.getUserById(requestingUserId);
+      const requestingUser = await this.storage.getUser(requestingUserId);
       if (!hasSharedOrg && requestingUser?.isSiteAdmin !== "true") {
         throw new Error("Unauthorized: Cannot delete measurements for athletes outside your organizations");
       }
@@ -379,20 +387,24 @@ export class MeasurementService extends BaseService {
   ): Promise<Measurement> {
     try {
       // Get existing measurement
-      const existingMeasurement = await this.storage.getMeasurementById(measurementId);
+      const existingMeasurement = await this.storage.getMeasurement(measurementId);
       if (!existingMeasurement) {
         throw new Error("Measurement not found");
       }
 
       // Only coaches and admins can verify measurements
-      const requestingUser = await this.storage.getUserById(requestingUserId);
+      const requestingUser = await this.storage.getUser(requestingUserId);
       if (!requestingUser) {
         throw new Error("User not found");
       }
 
-      const canVerify = requestingUser.isSiteAdmin === "true" || 
-                       requestingUser.role === 'coach' || 
-                       requestingUser.role === 'org_admin';
+      // Get user's organization roles to check permissions
+      const userOrgs = await this.getUserOrganizations(requestingUserId);
+      const hasCoachOrAdminRole = userOrgs.some(org => 
+        org.role === 'coach' || org.role === 'org_admin'
+      );
+
+      const canVerify = requestingUser.isSiteAdmin === "true" || hasCoachOrAdminRole;
 
       if (!canVerify) {
         throw new Error("Unauthorized: Only coaches and administrators can verify measurements");

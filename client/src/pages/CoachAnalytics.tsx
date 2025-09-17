@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 import type {
   AnalysisType,
@@ -185,7 +186,7 @@ export function CoachAnalytics() {
 
   const handleExport = useCallback(async () => {
     // TODO: Implement export functionality
-    console.log('Export analytics data', analyticsData);
+    // Export analytics data functionality
   }, [analyticsData]);
 
   // Chart data based on current selection
@@ -236,6 +237,7 @@ export function CoachAnalytics() {
   }, [analysisType, selectedChartType, metrics, timeframe, selectedAthleteId, availableAthletes]);
 
   return (
+    <ErrorBoundary>
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -468,6 +470,7 @@ export function CoachAnalytics() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
 

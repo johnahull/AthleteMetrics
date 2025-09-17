@@ -15,6 +15,15 @@ import { insertMeasurementSchema, insertAthleteSchema, Gender, type InsertMeasur
 import { Search, Save } from "lucide-react";
 import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
 
+// Type guards for safer runtime checking
+function hasTeamsProperty(athlete: any): athlete is Athlete & { teams: Array<{ id: string; name: string }> } {
+  return athlete && Array.isArray(athlete.teams);
+}
+
+function hasBirthYearProperty(athlete: any): athlete is Athlete & { birthYear: number } {
+  return athlete && typeof athlete.birthYear === 'number';
+}
+
 export default function MeasurementForm() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -237,7 +246,15 @@ export default function MeasurementForm() {
                     >
                       <div>
                         <p className="font-medium">{athlete.fullName}</p>
-                        <p className="text-sm text-gray-500">{(athlete as any).teams?.map((t: any) => t.name).join(', ')} • {(athlete as any).birthYear}</p>
+                        <p className="text-sm text-gray-500">
+                          {hasTeamsProperty(athlete) 
+                            ? athlete.teams.map(t => t.name).join(', ') 
+                            : 'No teams'
+                          } • {hasBirthYearProperty(athlete) 
+                            ? athlete.birthYear 
+                            : 'Unknown year'
+                          }
+                        </p>
                       </div>
                     </button>
                   ))}
