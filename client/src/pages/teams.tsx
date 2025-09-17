@@ -24,13 +24,25 @@ export default function Teams() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { organizationContext } = useAuth();
+  const { organizationContext, userOrganizations, user } = useAuth();
+
+  // Get effective organization ID - same pattern as dashboard and CoachAnalytics
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
 
   const { data: teams, isLoading } = useQuery({
-    queryKey: ["/api/teams", organizationContext],
+    queryKey: ["/api/teams", effectiveOrganizationId],
     queryFn: async () => {
-      const url = organizationContext 
-        ? `/api/teams?organizationId=${organizationContext}`
+      const url = effectiveOrganizationId 
+        ? `/api/teams?organizationId=${effectiveOrganizationId}`
         : `/api/teams`;
       const response = await fetch(url);
       return response.json();
@@ -38,10 +50,10 @@ export default function Teams() {
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams", organizationContext],
+    queryKey: ["/api/analytics/teams", effectiveOrganizationId],
     queryFn: async () => {
-      const url = organizationContext 
-        ? `/api/analytics/teams?organizationId=${organizationContext}`
+      const url = effectiveOrganizationId 
+        ? `/api/analytics/teams?organizationId=${effectiveOrganizationId}`
         : `/api/analytics/teams`;
       const response = await fetch(url);
       return response.json();
