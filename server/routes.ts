@@ -1629,8 +1629,17 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for analytics endpoints
+  const analyticsLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 50, // Limit each IP to 50 analytics requests per windowMs
+    message: { message: "Too many analytics requests, please try again later." },
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+  });
+
   // Keep existing analytics routes
-  app.get("/api/analytics/dashboard", requireAuth, async (req, res) => {
+  app.get("/api/analytics/dashboard", analyticsLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       const requestedOrgId = req.query.organizationId as string;
@@ -1676,13 +1685,28 @@ export function registerRoutes(app: Express) {
   });
 
   // Advanced Analytics POST endpoint
-  app.post("/api/analytics/dashboard", requireAuth, async (req, res) => {
+  app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       const analyticsRequest = req.body;
 
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Input validation for analytics request
+      if (!analyticsRequest.filters?.organizationId) {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+
+      if (!analyticsRequest.metrics?.primary) {
+        return res.status(400).json({ message: "Primary metric is required" });
+      }
+
+      // Validate metric names against allowed metrics
+      const allowedMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+      if (!allowedMetrics.includes(analyticsRequest.metrics.primary)) {
+        return res.status(400).json({ message: "Invalid primary metric" });
       }
 
       // Role-based access control for advanced analytics
@@ -1700,8 +1724,8 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Import and instantiate the simplified analytics service
-      const { AnalyticsService } = await import("./analytics-simple");
+      // Import and instantiate the analytics service
+      const { AnalyticsService } = await import("./analytics");
       const analyticsService = new AnalyticsService();
 
       // Get analytics data
@@ -1714,7 +1738,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/analytics/teams", requireAuth, async (req, res) => {
+  app.get("/api/analytics/teams", analyticsLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       const requestedOrgId = req.query.organizationId as string;

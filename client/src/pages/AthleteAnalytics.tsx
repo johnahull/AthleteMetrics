@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { createAnalyticsContext, hasOrgAccess } from '../lib/types/user';
+import { useAnalyticsData, useAnalyticsCacheWarming } from '../hooks/useAnalyticsData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,13 +32,16 @@ export function AthleteAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
-  // Athletes can only view their own analytics
-  const userRole = (user as any)?.role;
+  // Create proper analytics context
+  const analyticsContext = useMemo(() => 
+    createAnalyticsContext(user, user?.currentOrganization?.id), 
+    [user]
+  );
   
   // Core state
   const [activeView, setActiveView] = useState<'progress' | 'comparison' | 'goals'>('progress');
   const [filters, setFilters] = useState<FilterType>({
-    organizationId: (user as any)?.organizationId || '',
+    organizationId: analyticsContext?.organizationId || '',
     athleteIds: user?.id ? [user.id] : []
   });
   const [metrics, setMetrics] = useState<MetricSelection>({
@@ -48,23 +53,41 @@ export function AthleteAnalytics() {
     period: 'last_90_days'
   });
 
-  // Data and UI state
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   // Chart configuration
   const [selectedChartType, setSelectedChartType] = useState<ChartType>('line_chart');
 
-  // Auto-refresh when key parameters change
-  useEffect(() => {
-    if (user?.id && (user as any)?.organizationId) {
-      fetchAnalyticsData();
-    }
-  }, [user, metrics, timeframe, activeView]);
+  // Optimized analytics data fetching with caching
+  const analyticsRequest = useMemo(() => ({
+    analysisType: activeView === 'comparison' ? 'inter_group' as const : 'individual' as const,
+    filters: {
+      organizationId: analyticsContext?.organizationId || '',
+      athleteIds: analyticsContext?.userId ? [analyticsContext.userId] : []
+    },
+    metrics,
+    timeframe,
+    athleteId: analyticsContext?.userId
+  }), [activeView, analyticsContext, metrics, timeframe]);
+
+  const { 
+    data: analyticsData, 
+    chartData,
+    isLoading, 
+    isError,
+    error,
+    refetch 
+  } = useAnalyticsData({
+    request: analyticsRequest,
+    enabled: !!analyticsContext?.userId && !!analyticsContext?.organizationId
+  });
+
+  // Cache warming for better UX
+  const { warmCache } = useAnalyticsCacheWarming(
+    analyticsContext?.organizationId || '',
+    analyticsContext?.userId
+  );
 
   // Update chart type recommendation when analysis parameters change
-  useEffect(() => {
+  useMemo(() => {
     const analysisType = activeView === 'comparison' ? 'inter_group' : 'individual';
     const recommended = getRecommendedChartType(
       analysisType,
@@ -74,46 +97,12 @@ export function AthleteAnalytics() {
     setSelectedChartType(recommended);
   }, [activeView, metrics, timeframe]);
 
-  const fetchAnalyticsData = async () => {
-    if (!user?.id || !(user as any)?.organizationId) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const request: AnalyticsRequest = {
-        analysisType: activeView === 'comparison' ? 'inter_group' : 'individual',
-        filters: { 
-          ...filters, 
-          organizationId: (user as any).organizationId,
-          athleteIds: [user.id]
-        },
-        metrics,
-        timeframe,
-        athleteId: user.id
-      };
-
-      const response = await fetch('/api/analytics/dashboard', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(request)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Analytics request failed: ${response.statusText}`);
-      }
-
-      const data: AnalyticsResponse = await response.json();
-      setAnalyticsData(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
-      setAnalyticsData(null);
-    } finally {
-      setIsLoading(false);
+  // Initialize cache warming on component mount
+  React.useEffect(() => {
+    if (analyticsContext?.organizationId && analyticsContext?.userId) {
+      warmCache();
     }
-  };
+  }, [analyticsContext?.organizationId, analyticsContext?.userId, warmCache]);
 
   const handleMetricsChange = useCallback((newMetrics: MetricSelection) => {
     setMetrics(newMetrics);
@@ -125,7 +114,7 @@ export function AthleteAnalytics() {
 
   const handleExport = useCallback(async () => {
     // TODO: Implement export functionality
-    console.log('Export athlete analytics data', analyticsData);
+    // Export analytics data functionality
   }, [analyticsData]);
 
   // Chart data based on current selection
@@ -190,7 +179,8 @@ export function AthleteAnalytics() {
       personalBests: personalBests.length,
       recentImprovement: primaryTrend && primaryTrend.data.length > 1 ? 
         primaryTrend.data[primaryTrend.data.length - 1].value - primaryTrend.data[0].value : 0,
-      groupPercentile: userStats ? Math.round((userStats.mean / userStats.max) * 100) : 50
+      groupPercentile: userStats && userStats.max > 0 ? 
+        Math.round((userStats.mean / userStats.max) * 100) : 50
     };
   }, [analyticsData, user, metrics]);
 
@@ -208,7 +198,7 @@ export function AthleteAnalytics() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={fetchAnalyticsData}
+            onClick={() => refetch()}
             disabled={isLoading}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
@@ -276,7 +266,7 @@ export function AthleteAnalytics() {
           <CardTitle>Analysis View</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)}>
+          <Tabs value={activeView} onValueChange={(value) => setActiveView(value as 'progress' | 'comparison' | 'goals')}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="progress" className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />

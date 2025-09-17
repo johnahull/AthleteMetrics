@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ErrorBoundary } from '../ErrorBoundary';
 import type { 
   ChartDataPoint, 
   ChartConfiguration, 
@@ -212,12 +213,14 @@ export function ChartContainer({
       </CardHeader>
       <CardContent>
         <div className="w-full" style={{ minHeight: '300px' }}>
-          <ChartComponent
-            data={chartData as any}
-            config={chartConfig}
-            statistics={statistics}
-            highlightAthlete={highlightAthlete}
-          />
+          <ErrorBoundary>
+            <ChartComponent
+              data={chartData as any}
+              config={chartConfig}
+              statistics={statistics}
+              highlightAthlete={highlightAthlete}
+            />
+          </ErrorBoundary>
         </div>
       </CardContent>
     </Card>

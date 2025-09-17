@@ -185,7 +185,7 @@ export function CoachAnalytics() {
 
   const handleExport = useCallback(async () => {
     // TODO: Implement export functionality
-    console.log('Export analytics data', analyticsData);
+    // Export analytics data functionality
   }, [analyticsData]);
 
   // Chart data based on current selection
