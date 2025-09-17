@@ -37,13 +37,15 @@ interface BoxPlotChartProps {
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
+  showAllPoints?: boolean; // Option to show all data points (swarm style)
 }
 
-export function BoxPlotChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export function BoxPlotChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete,
+  showAllPoints = false
 }: BoxPlotChartProps) {
   const chartRef = useRef<any>(null);
 
@@ -116,7 +118,7 @@ export function BoxPlotChart({
         const lowerWhisker = Math.max(stats.min, stats.percentiles.p25 - 1.5 * iqr);
         const upperWhisker = Math.min(stats.max, stats.percentiles.p75 + 1.5 * iqr);
 
-        // Lower whisker
+        // Lower whisker (enhanced visibility)
         datasets.push({
           label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
           data: [
@@ -125,13 +127,13 @@ export function BoxPlotChart({
           ],
           backgroundColor: 'rgba(59, 130, 246, 1)',
           borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
+          borderWidth: 3, // Increased from 2
           pointRadius: 0,
           showLine: true,
           order: 4
         });
 
-        // Upper whisker
+        // Upper whisker (enhanced visibility)
         datasets.push({
           label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
           data: [
@@ -140,25 +142,25 @@ export function BoxPlotChart({
           ],
           backgroundColor: 'rgba(59, 130, 246, 1)',
           borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
+          borderWidth: 3, // Increased from 2
           pointRadius: 0,
           showLine: true,
           order: 4
         });
 
-        // Whisker caps
+        // Whisker caps (enhanced visibility)
         datasets.push({
           label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Whisker Caps`,
           data: [
-            { x: xPos - 0.1, y: lowerWhisker },
-            { x: xPos + 0.1, y: lowerWhisker },
-            { x: xPos - 0.1, y: upperWhisker },
-            { x: xPos + 0.1, y: upperWhisker }
+            { x: xPos - 0.15, y: lowerWhisker }, // Wider caps
+            { x: xPos + 0.15, y: lowerWhisker },
+            { x: xPos - 0.15, y: upperWhisker },
+            { x: xPos + 0.15, y: upperWhisker }
           ],
           backgroundColor: 'rgba(59, 130, 246, 1)',
           borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 2,
-          pointRadius: 0,
+          borderWidth: 3, // Increased from 2
+          pointRadius: 2, // Small points for cap ends
           showLine: false,
           order: 4
         });
@@ -169,17 +171,68 @@ export function BoxPlotChart({
           v > stats.percentiles.p75 + 1.5 * iqr
         );
 
-        if (outliers.length > 0) {
-          datasets.push({
-            label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
-            data: outliers.map(value => ({ x: xPos, y: value })),
-            backgroundColor: 'rgba(239, 68, 68, 0.6)',
-            borderColor: 'rgba(239, 68, 68, 1)',
-            borderWidth: 1,
-            pointRadius: 4,
-            showLine: false,
-            order: 1
-          });
+        if (showAllPoints) {
+          // Show all data points with jitter to avoid overlap
+          const allPoints = data
+            .filter(d => d.metric === metric)
+            .map((point, pointIndex) => {
+              const jitterRange = 0.25;
+              const jitter = (Math.random() - 0.5) * jitterRange;
+              const isOutlier = outliers.includes(point.value);
+
+              return {
+                x: xPos + jitter,
+                y: point.value,
+                athleteId: point.athleteId,
+                athleteName: point.athleteName,
+                teamName: point.teamName,
+                isOutlier
+              };
+            });
+
+          // Regular data points (non-outliers)
+          const regularPoints = allPoints.filter(p => !p.isOutlier);
+          if (regularPoints.length > 0) {
+            datasets.push({
+              label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Data Points`,
+              data: regularPoints,
+              backgroundColor: 'rgba(59, 130, 246, 0.4)',
+              borderColor: 'rgba(59, 130, 246, 0.7)',
+              borderWidth: 1,
+              pointRadius: 3,
+              showLine: false,
+              order: 5
+            });
+          }
+
+          // Outlier points (if any)
+          const outlierPoints = allPoints.filter(p => p.isOutlier);
+          if (outlierPoints.length > 0) {
+            datasets.push({
+              label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
+              data: outlierPoints,
+              backgroundColor: 'rgba(239, 68, 68, 0.6)',
+              borderColor: 'rgba(239, 68, 68, 1)',
+              borderWidth: 1,
+              pointRadius: 4,
+              showLine: false,
+              order: 1
+            });
+          }
+        } else {
+          // Original behavior - only show outliers
+          if (outliers.length > 0) {
+            datasets.push({
+              label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
+              data: outliers.map(value => ({ x: xPos, y: value })),
+              backgroundColor: 'rgba(239, 68, 68, 0.6)',
+              borderColor: 'rgba(239, 68, 68, 1)',
+              borderWidth: 1,
+              pointRadius: 4,
+              showLine: false,
+              order: 1
+            });
+          }
         }
 
         // Highlight specific athlete if provided
@@ -211,7 +264,7 @@ export function BoxPlotChart({
       ),
       datasets
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, showAllPoints]);
 
   // Chart options
   const options: ChartOptions<'scatter'> = {
@@ -234,24 +287,59 @@ export function BoxPlotChart({
         callbacks: {
           title: (context) => {
             const point = context[0];
+            const rawData = context[0].raw as any;
+
+            // Check if this is an individual data point with athlete info
+            if (rawData && rawData.athleteName) {
+              return rawData.athleteName;
+            }
+
             return `${point.dataset.label}`;
           },
           label: (context) => {
             const metric = Object.keys(statistics || {})[context.parsed.x];
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-            return `Value: ${context.parsed.y}${unit}`;
+            const rawData = context.raw as any;
+
+            // Enhanced label for individual athlete points
+            if (rawData && rawData.athleteName) {
+              return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}: ${context.parsed.y.toFixed(2)}${unit}`;
+            }
+
+            return `Value: ${context.parsed.y.toFixed(2)}${unit}`;
           },
           afterLabel: (context) => {
             const metric = Object.keys(statistics || {})[context.parsed.x];
             const stats = statistics?.[metric];
-            if (stats) {
-              return [
-                `Mean: ${stats.mean.toFixed(2)}`,
-                `Median: ${stats.median.toFixed(2)}`,
-                `Std Dev: ${stats.std.toFixed(2)}`
-              ];
+            const rawData = context.raw as any;
+            const result = [];
+
+            // Add team info for individual athlete points
+            if (rawData && rawData.athleteName) {
+              result.push(`Team: ${rawData.teamName || 'Independent'}`);
+
+              // Add percentile information
+              if (stats) {
+                const allValues = data
+                  .filter(d => d.metric === metric)
+                  .map(d => d.value)
+                  .sort((a, b) => a - b);
+                const rank = allValues.filter(v => v < context.parsed.y).length;
+                const percentile = (rank / allValues.length) * 100;
+                result.push(`Percentile: ${percentile.toFixed(0)}%`);
+              }
             }
-            return [];
+
+            // Add statistical summary for all points
+            if (stats) {
+              result.push(
+                `Mean: ${stats.mean.toFixed(2)}${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || ''}`,
+                `Median: ${stats.median.toFixed(2)}${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || ''}`,
+                `Std Dev: ${stats.std.toFixed(2)}${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || ''}`
+              );
+            }
+
+            return result;
           }
         }
       },
@@ -260,11 +348,12 @@ export function BoxPlotChart({
         position: 'top' as const,
         labels: {
           filter: (item) => {
-            // Only show main labels, hide box components
+            // Only show main labels, hide box components and internal data point labels
             return !item.text.includes('Box') &&
                    !item.text.includes('Median') &&
                    !item.text.includes('Whisker') &&
-                   !item.text.includes('Caps');
+                   !item.text.includes('Caps') &&
+                   !item.text.includes('Data Points'); // Hide generic data points from legend
           }
         }
       }

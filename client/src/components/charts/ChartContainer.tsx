@@ -246,6 +246,7 @@ export function ChartContainer({
                   config={chartConfig}
                   statistics={statistics}
                   highlightAthlete={highlightAthlete}
+                  showAllPoints={chartType === 'box_swarm_combo'}
                 />
               </React.Suspense>
             ) : (
