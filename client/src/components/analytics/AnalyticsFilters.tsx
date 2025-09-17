@@ -368,7 +368,7 @@ export function AnalyticsFilters({
                   <Label className="text-xs text-muted-foreground">From</Label>
                   <Input
                     type="number"
-                    placeholder="1990"
+                    placeholder="2000"
                     min="1950"
                     max="2020"
                     onChange={(e) => {
@@ -389,7 +389,7 @@ export function AnalyticsFilters({
                   <Label className="text-xs text-muted-foreground">To</Label>
                   <Input
                     type="number"
-                    placeholder="2010"
+                    placeholder="2020"
                     min="1950"
                     max="2020"
                     onChange={(e) => {
