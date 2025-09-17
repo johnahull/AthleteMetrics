@@ -76,6 +76,45 @@ export class AuthService extends BaseService {
   }
 
   /**
+   * Determine user's primary role and organization context
+   */
+  async determineUserRoleAndContext(user: any) {
+    try {
+      // Check if user is site admin first
+      if (user.isSiteAdmin === "true") {
+        return {
+          role: "site_admin",
+          primaryOrganizationId: undefined
+        };
+      }
+
+      // Get user's organization memberships
+      const organizations = await this.getUserOrganizations(user.id);
+      
+      if (organizations.length === 0) {
+        return {
+          role: "athlete", // Default for users with no organization memberships
+          primaryOrganizationId: undefined
+        };
+      }
+
+      // Use the first organization as primary (could be enhanced to use a "primary" flag)
+      const primaryOrg = organizations[0];
+      
+      return {
+        role: primaryOrg.role, // This should be "coach", "org_admin", or "athlete"
+        primaryOrganizationId: primaryOrg.organizationId
+      };
+    } catch (error) {
+      console.error("AuthService.determineUserRoleAndContext:", error);
+      return {
+        role: "athlete", // Safe fallback
+        primaryOrganizationId: undefined
+      };
+    }
+  }
+
+  /**
    * Start impersonation session for admins
    */
   async startImpersonation(adminUserId: string, targetUserId: string): Promise<User> {
