@@ -4,7 +4,7 @@ import {
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -573,8 +573,18 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .orderBy(asc(teams.name));
 
+    // Build conditions array to exclude archived teams
+    const conditions = [];
+    
     if (organizationId) {
-      query = query.where(eq(teams.organizationId, organizationId)) as any;
+      conditions.push(eq(teams.organizationId, organizationId));
+    }
+    
+    // Always exclude archived teams
+    conditions.push(ne(teams.isArchived, "true"));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
     }
 
     const result: any[] = await query;
