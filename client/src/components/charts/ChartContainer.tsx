@@ -232,7 +232,7 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="w-full" style={{ minHeight: '300px' }}>
+        <div className="w-full" style={{ height: '400px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense fallback={
