@@ -210,13 +210,19 @@ function recalculateStatistics(
       count: values.length,
       mean,
       median: getPercentile(50),
-      standardDeviation,
       min: sortedValues[0],
       max: sortedValues[sortedValues.length - 1],
-      percentile25: getPercentile(25),
-      percentile75: getPercentile(75),
-      percentile90: getPercentile(90),
-      percentile95: getPercentile(95)
+      std: standardDeviation,
+      variance,
+      percentiles: {
+        p5: getPercentile(5),
+        p10: getPercentile(10),
+        p25: getPercentile(25),
+        p50: getPercentile(50),
+        p75: getPercentile(75),
+        p90: getPercentile(90),
+        p95: getPercentile(95)
+      }
     };
   });
 

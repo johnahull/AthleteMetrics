@@ -7,7 +7,7 @@ import rateLimit from "express-rate-limit";
 import { body } from "express-validator";
 import { UserService } from "../services/user-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import "../types/session"; // Ensure session types are loaded
+// Session types are loaded globally
 
 const userService = new UserService();
 

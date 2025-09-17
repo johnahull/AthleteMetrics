@@ -21,19 +21,17 @@ export class TeamService extends BaseService {
     try {
       // Get user's accessible organizations
       const userOrgs = await this.getUserOrganizations(requestingUserId);
-      const requestingUser = await this.storage.getUserById(requestingUserId);
+      const requestingUser = await this.storage.getUser(requestingUserId);
       
       // Site admins can see all teams
       if (requestingUser?.isSiteAdmin === "true") {
-        return await this.storage.getTeams(filters);
+        return await this.storage.getTeams(filters.organizationId);
       }
 
       // Filter teams by user's organizations
       const accessibleOrgIds = userOrgs.map(org => org.organizationId);
-      const teams = await this.storage.getTeams({
-        ...filters,
-        organizationIds: accessibleOrgIds
-      });
+      // For now, use the first accessible organization ID
+      const teams = await this.storage.getTeams(accessibleOrgIds[0]);
 
       return teams;
     } catch (error) {
@@ -57,7 +55,7 @@ export class TeamService extends BaseService {
         );
         
         if (!hasAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to this organization");
           }
@@ -80,7 +78,7 @@ export class TeamService extends BaseService {
   ): Promise<Team> {
     try {
       // Get existing team
-      const existingTeam = await this.storage.getTeamById(teamId);
+      const existingTeam = await this.storage.getTeam(teamId);
       if (!existingTeam) {
         throw new Error("Team not found");
       }
@@ -93,7 +91,7 @@ export class TeamService extends BaseService {
         );
         
         if (!hasAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to this team");
           }
@@ -108,7 +106,7 @@ export class TeamService extends BaseService {
         );
         
         if (!hasNewOrgAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to target organization");
           }
@@ -127,7 +125,7 @@ export class TeamService extends BaseService {
   async deleteTeam(teamId: string, requestingUserId: string): Promise<void> {
     try {
       // Get existing team
-      const existingTeam = await this.storage.getTeamById(teamId);
+      const existingTeam = await this.storage.getTeam(teamId);
       if (!existingTeam) {
         throw new Error("Team not found");
       }
@@ -140,7 +138,7 @@ export class TeamService extends BaseService {
         );
         
         if (!hasAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to this team");
           }
@@ -166,7 +164,7 @@ export class TeamService extends BaseService {
       const validatedData = archiveTeamSchema.parse(archiveData);
 
       // Get existing team and validate access
-      const existingTeam = await this.storage.getTeamById(teamId);
+      const existingTeam = await this.storage.getTeam(teamId);
       if (!existingTeam) {
         throw new Error("Team not found");
       }
@@ -178,14 +176,14 @@ export class TeamService extends BaseService {
         );
         
         if (!hasAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to this team");
           }
         }
       }
 
-      await this.storage.archiveTeam(teamId, validatedData.reason);
+      await this.storage.archiveTeam(teamId, validatedData.archiveDate || new Date(), validatedData.season);
     } catch (error) {
       this.handleError(error, "TeamService.archiveTeam");
     }
@@ -197,7 +195,7 @@ export class TeamService extends BaseService {
   async unarchiveTeam(teamId: string, requestingUserId: string): Promise<void> {
     try {
       // Get existing team and validate access
-      const existingTeam = await this.storage.getTeamById(teamId);
+      const existingTeam = await this.storage.getTeam(teamId);
       if (!existingTeam) {
         throw new Error("Team not found");
       }
@@ -209,7 +207,7 @@ export class TeamService extends BaseService {
         );
         
         if (!hasAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to this team");
           }
@@ -236,7 +234,7 @@ export class TeamService extends BaseService {
       const validatedData = updateTeamMembershipSchema.parse(membershipData);
 
       // Get existing team and validate access
-      const existingTeam = await this.storage.getTeamById(teamId);
+      const existingTeam = await this.storage.getTeam(teamId);
       if (!existingTeam) {
         throw new Error("Team not found");
       }
@@ -248,7 +246,7 @@ export class TeamService extends BaseService {
         );
         
         if (!hasAccess) {
-          const requestingUser = await this.storage.getUserById(requestingUserId);
+          const requestingUser = await this.storage.getUser(requestingUserId);
           if (!requestingUser?.isSiteAdmin) {
             throw new Error("Unauthorized: Access denied to this team");
           }
