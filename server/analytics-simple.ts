@@ -11,6 +11,66 @@ import type {
   ChartDataPoint,
   StatisticalSummary
 } from "@shared/analytics-types";
+import { METRIC_CONFIG } from "@shared/analytics-types";
+
+/**
+ * Filters data to best measurements per athlete (for 'best' data type)
+ */
+function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint[] {
+  const grouped = data.reduce((acc, point) => {
+    const key = `${point.athleteId}-${point.metric}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(point);
+    return acc;
+  }, {} as Record<string, ChartDataPoint[]>);
+
+  return Object.values(grouped).map(athleteMetricData => {
+    const metric = athleteMetricData[0].metric;
+    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+
+    if (metricConfig?.lowerIsBetter) {
+      // Find minimum value (best time)
+      return athleteMetricData.reduce((best, current) =>
+        current.value < best.value ? current : best
+      );
+    } else {
+      // Find maximum value (best performance)
+      return athleteMetricData.reduce((best, current) =>
+        current.value > best.value ? current : best
+      );
+    }
+  });
+}
+
+/**
+ * Filters data to best measurements per athlete per date (for 'trends' data type)
+ */
+function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDataPoint[] {
+  const grouped = data.reduce((acc, point) => {
+    const dateStr = point.date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const key = `${point.athleteId}-${point.metric}-${dateStr}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(point);
+    return acc;
+  }, {} as Record<string, ChartDataPoint[]>);
+
+  return Object.values(grouped).map(athleteMetricDateData => {
+    const metric = athleteMetricDateData[0].metric;
+    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+
+    if (metricConfig?.lowerIsBetter) {
+      // Find minimum value (best time) for this date
+      return athleteMetricDateData.reduce((best, current) =>
+        current.value < best.value ? current : best
+      );
+    } else {
+      // Find maximum value (best performance) for this date
+      return athleteMetricDateData.reduce((best, current) =>
+        current.value > best.value ? current : best
+      );
+    }
+  });
+}
 
 export class AnalyticsService {
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
@@ -151,7 +211,7 @@ export class AnalyticsService {
       });
 
       // Transform to chart data format
-      const chartData: ChartDataPoint[] = data.map(row => ({
+      let chartData: ChartDataPoint[] = data.map(row => ({
         athleteId: row.athleteId,
         athleteName: row.athleteName || 'Unknown',
         value: parseFloat(row.value) || 0,
@@ -159,6 +219,19 @@ export class AnalyticsService {
         metric: row.metric,
         teamName: row.teamName || 'No Team'
       }));
+
+      // Apply filtering based on timeframe type
+      if (request.timeframe.type === 'best') {
+        console.log('📊 Filtering to best measurements per athlete');
+        const originalCount = chartData.length;
+        chartData = filterToBestMeasurements(chartData);
+        console.log(`📊 Filtered from ${originalCount} to ${chartData.length} measurements (best per athlete)`);
+      } else if (request.timeframe.type === 'trends') {
+        console.log('📈 Filtering to best measurements per athlete per date');
+        const originalCount = chartData.length;
+        chartData = filterToBestMeasurementsPerDate(chartData);
+        console.log(`📈 Filtered from ${originalCount} to ${chartData.length} measurements (best per athlete per date)`);
+      }
 
       // Basic statistics calculation
       const statistics: Record<string, StatisticalSummary> = {};
