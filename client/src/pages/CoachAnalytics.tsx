@@ -322,20 +322,16 @@ export function CoachAnalytics() {
                       } />
                     </SelectTrigger>
                     <SelectContent>
-                      {isLoadingAthletes ? (
-                        <SelectItem value="" disabled>
-                          Loading...
-                        </SelectItem>
-                      ) : availableAthletes.length === 0 ? (
-                        <SelectItem value="" disabled>
-                          No athletes available
-                        </SelectItem>
-                      ) : (
+                      {availableAthletes.length > 0 ? (
                         availableAthletes.map((athlete) => (
                           <SelectItem key={athlete.id} value={athlete.id}>
                             {athlete.name} {athlete.teamName && `(${athlete.teamName})`}
                           </SelectItem>
                         ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          {isLoadingAthletes ? "Loading athletes..." : "No athletes available"}
+                        </div>
                       )}
                     </SelectContent>
                   </Select>
