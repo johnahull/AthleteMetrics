@@ -271,7 +271,7 @@ export function getRecommendedChartType(
   
   if (analysisType === 'individual') {
     if (metricCount === 1) {
-      return timeframeType === 'best' ? 'box_plot' : 'line_chart';
+      return timeframeType === 'best' ? 'box_swarm_combo' : 'line_chart';
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
