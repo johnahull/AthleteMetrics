@@ -15,6 +15,14 @@ import type {
 export class AnalyticsService {
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
+      console.log('🔍 Analytics request received:', {
+        analysisType: request.analysisType,
+        metrics: request.metrics,
+        timeframe: request.timeframe,
+        teams: request.filters.teams,
+        organizationId: request.filters.organizationId
+      });
+
       // Calculate date range based on timeframe
       const now = new Date();
       let startDate: Date | undefined;
@@ -44,6 +52,12 @@ export class AnalyticsService {
           endDate = now;
           break;
       }
+
+      console.log('📅 Calculated date range:', { 
+        startDate: startDate?.toISOString(), 
+        endDate: endDate.toISOString(),
+        period: request.timeframe.period 
+      });
 
       // Build where conditions
       const whereConditions = [
@@ -83,6 +97,16 @@ export class AnalyticsService {
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
         .limit(100);
+
+      console.log('📊 Query results:', {
+        totalRows: data.length,
+        uniqueAthletes: new Set(data.map(row => row.athleteId)).size,
+        metrics: [...new Set(data.map(row => row.metric))],
+        dateRange: data.length > 0 ? {
+          earliest: data.reduce((min, row) => row.date < min ? row.date : min, data[0].date),
+          latest: data.reduce((max, row) => row.date > max ? row.date : max, data[0].date)
+        } : null
+      });
 
       // Transform to chart data format
       const chartData: ChartDataPoint[] = data.map(row => ({
