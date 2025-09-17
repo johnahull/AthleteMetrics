@@ -39,7 +39,13 @@ export default function Analytics() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user, organizationContext, userOrganizations } = useAuth();
+  const { user, organizationContext } = useAuth();
+
+  // Get user organizations for non-site-admin users
+  const { data: userOrganizations } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
 
   // Get effective organization ID - same pattern as dashboard and other pages
   const getEffectiveOrganizationId = () => {
