@@ -9,23 +9,35 @@ import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue 
 import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations } = useAuth();
   const [, setLocation] = useLocation();
 
   // Use role from user session data
   const userRole = user?.role || 'athlete';
   const isSiteAdmin = user?.isSiteAdmin || false;
 
+  // Get effective organization ID - same pattern as CoachAnalytics
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
+
   const { data: dashboardStats, isLoading, error } = useQuery({
-    queryKey: ["/api/analytics/dashboard", organizationContext, user?.isSiteAdmin],
+    queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, user?.isSiteAdmin],
     queryFn: async () => {
       // For site admins, always require an organizationId parameter
-      if (isSiteAdmin && !organizationContext) {
+      if (isSiteAdmin && !effectiveOrganizationId) {
         throw new Error("Please select an organization to view dashboard statistics");
       }
       
-      const url = organizationContext
-        ? `/api/analytics/dashboard?organizationId=${organizationContext}`
+      const url = effectiveOrganizationId
+        ? `/api/analytics/dashboard?organizationId=${effectiveOrganizationId}`
         : `/api/analytics/dashboard`;
       const response = await fetch(url, {
         credentials: 'include' // Ensure cookies are sent for authentication
@@ -38,15 +50,15 @@ export default function Dashboard() {
     },
     enabled: !!user && (
       // For site admins: require organization context
-      isSiteAdmin ? !!organizationContext : true
+      isSiteAdmin ? !!effectiveOrganizationId : true
     )
   });
 
   const { data: recentMeasurements } = useQuery({
-    queryKey: ["/api/measurements", organizationContext],
+    queryKey: ["/api/measurements", effectiveOrganizationId],
     queryFn: async () => {
-      const url = organizationContext
-        ? `/api/measurements?organizationId=${organizationContext}`
+      const url = effectiveOrganizationId
+        ? `/api/measurements?organizationId=${effectiveOrganizationId}`
         : `/api/measurements`;
       const response = await fetch(url, {
         credentials: 'include'
@@ -59,16 +71,16 @@ export default function Dashboard() {
     },
     enabled: !!user && (
       // For site admins: require organization context
-      isSiteAdmin ? !!organizationContext : true
+      isSiteAdmin ? !!effectiveOrganizationId : true
     )
   });
 
   // Get organization name for context indicator
   const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${organizationContext}`],
-    enabled: !!organizationContext && !!user,
+    queryKey: [`/api/organizations/${effectiveOrganizationId}`],
+    enabled: !!effectiveOrganizationId && !!user,
     queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organizationContext}`, {
+      const response = await fetch(`/api/organizations/${effectiveOrganizationId}`, {
         credentials: 'include'
       });
       if (!response.ok) {
@@ -79,10 +91,10 @@ export default function Dashboard() {
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams", organizationContext],
+    queryKey: ["/api/analytics/teams", effectiveOrganizationId],
     queryFn: async () => {
-      const url = organizationContext
-        ? `/api/analytics/teams?organizationId=${organizationContext}`
+      const url = effectiveOrganizationId
+        ? `/api/analytics/teams?organizationId=${effectiveOrganizationId}`
         : `/api/analytics/teams`;
       const response = await fetch(url, {
         credentials: 'include'
@@ -95,7 +107,7 @@ export default function Dashboard() {
     },
     enabled: !!user && (
       // For site admins: require organization context
-      isSiteAdmin ? !!organizationContext : true
+      isSiteAdmin ? !!effectiveOrganizationId : true
     )
   });
 
@@ -105,10 +117,11 @@ export default function Dashboard() {
       user,
       userRole,
       organizationContext,
+      effectiveOrganizationId,
       dashboardStats,
       error
     });
-  }, [user, userRole, organizationContext, dashboardStats, error]);
+  }, [user, userRole, organizationContext, effectiveOrganizationId, dashboardStats, error]);
 
   // Redirect athletes away from organization dashboard (MUST be before any early returns)
   useEffect(() => {
@@ -153,7 +166,7 @@ export default function Dashboard() {
   return (
     <div className="p-6">
       {/* Site Admin Organization Selection Required */}
-      {isSiteAdmin && !organizationContext && (
+      {isSiteAdmin && !effectiveOrganizationId && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -196,13 +209,13 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
             <p className="text-gray-600 mt-1">
-              {organizationContext && currentOrganization
+              {effectiveOrganizationId && currentOrganization
                 ? `${currentOrganization.name} - Performance overview`
                 : "Track athlete performance and team analytics"
               }
             </p>
           </div>
-          {organizationContext && currentOrganization && (
+          {effectiveOrganizationId && currentOrganization && (
             <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg">
               <p className="text-sm font-medium text-blue-900">Organization View</p>
               <p className="text-xs text-blue-700">{currentOrganization.name}</p>
