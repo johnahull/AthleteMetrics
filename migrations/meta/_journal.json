@@ -1,13 +1,1 @@
-{
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1757955999248,
-      "tag": "0000_greedy_leech",
-      "breakpoints": true
-    }
-  ]
-}
+{"version":"7","dialect":"sqlite","entries":[]}

@@ -164,7 +164,6 @@ export function BoxPlotChart({
         });
 
         // Individual points for outliers
-        const iqr = stats.percentiles.p75 - stats.percentiles.p25;
         const outliers = values.filter(v =>
           v < stats.percentiles.p25 - 1.5 * iqr ||
           v > stats.percentiles.p75 + 1.5 * iqr

@@ -181,10 +181,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    // Use JSON search for emails array to avoid SQL token issues with @ symbol
-    const [user] = await db.select().from(users).where(
-      sql`json_extract(${users.emails}, '$[0]') = ${email} OR json_extract(${users.emails}, '$[1]') = ${email} OR json_extract(${users.emails}, '$[2]') = ${email}`
-    );
+    // Use database-agnostic JSON search for emails array to avoid SQL token issues with @ symbol
+    const DATABASE_URL = process.env.DATABASE_URL || '';
+    const isPostgreSQL = DATABASE_URL.startsWith('postgresql:') || DATABASE_URL.startsWith('postgres:') || DATABASE_URL.includes('neon.tech');
+
+    let whereCondition;
+    if (isPostgreSQL) {
+      // PostgreSQL array syntax - use ANY to check if email exists in array
+      whereCondition = sql`${email} = ANY(${users.emails})`;
+    } else {
+      // SQLite JSON syntax
+      whereCondition = sql`json_extract(${users.emails}, '$[0]') = ${email} OR json_extract(${users.emails}, '$[1]') = ${email} OR json_extract(${users.emails}, '$[2]') = ${email}`;
+    }
+
+    const [user] = await db.select().from(users).where(whereCondition);
     return user || undefined;
   }
 

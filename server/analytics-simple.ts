@@ -2,9 +2,9 @@
  * Simplified Analytics Service for initial testing
  */
 
-import { eq, and, inArray, gte, lte, sql } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, sql, exists } from "drizzle-orm";
 import { db } from "./db";
-import { measurements, users, userOrganizations, teams } from "@shared/schema";
+import { measurements, users, userOrganizations, teams, userTeams } from "@shared/schema";
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -19,8 +19,12 @@ export class AnalyticsService {
         analysisType: request.analysisType,
         metrics: request.metrics,
         timeframe: request.timeframe,
-        teams: request.filters.teams,
-        organizationId: request.filters.organizationId
+        filters: {
+          teams: request.filters.teams,
+          genders: request.filters.genders,
+          birthYears: request.filters.birthYears,
+          organizationId: request.filters.organizationId
+        }
       });
 
       // Calculate date range based on timeframe
@@ -66,9 +70,23 @@ export class AnalyticsService {
         eq(measurements.metric, request.metrics.primary),
       ];
 
-      // Add team filtering if specified
+      // Add team filtering if specified - filter by athlete team membership
       if (request.filters.teams && request.filters.teams.length > 0) {
-        whereConditions.push(inArray(measurements.teamId, request.filters.teams));
+        console.log('🏀 Team filtering requested for teams:', request.filters.teams);
+        // Filter to only include measurements from athletes who belong to the selected teams
+        // This narrows down the comparison group, regardless of individual athlete being analyzed
+        whereConditions.push(
+          exists(
+            db.select().from(userTeams)
+              .where(
+                and(
+                  eq(userTeams.userId, users.id),
+                  inArray(userTeams.teamId, request.filters.teams),
+                  eq(userTeams.isActive, "true")
+                )
+              )
+          )
+        );
       }
 
       // Add gender filtering if specified
@@ -92,7 +110,7 @@ export class AnalyticsService {
         whereConditions.push(lte(measurements.date, endDate.toISOString().split('T')[0]));
       }
 
-      // Query to get basic data for now
+      // Query to get basic data
       const data = await db
         .select({
           measurementId: measurements.id,
@@ -117,10 +135,19 @@ export class AnalyticsService {
         totalRows: data.length,
         uniqueAthletes: new Set(data.map(row => row.athleteId)).size,
         metrics: [...new Set(data.map(row => row.metric))],
+        teams: [...new Set(data.map(row => row.teamName).filter(Boolean))],
+        teamIds: [...new Set(data.map(row => row.teamId).filter(Boolean))],
         dateRange: data.length > 0 ? {
           earliest: data.reduce((min, row) => row.date < min ? row.date : min, data[0].date),
           latest: data.reduce((max, row) => row.date > max ? row.date : max, data[0].date)
-        } : null
+        } : null,
+        sampleRows: data.slice(0, 3).map(row => ({
+          athlete: row.athleteName,
+          teamId: row.teamId,
+          teamName: row.teamName,
+          metric: row.metric,
+          value: row.value
+        }))
       });
 
       // Transform to chart data format
