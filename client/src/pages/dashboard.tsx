@@ -110,7 +110,7 @@ export default function Dashboard() {
   }
 
   // Debug logging
-  React.useEffect(() => {
+  useEffect(() => {
     console.log('Dashboard Debug Info:', {
       user,
       userRole,
