@@ -2,7 +2,7 @@
  * Simplified Analytics Service for initial testing
  */
 
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, gte, lte } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, userOrganizations, teams } from "@shared/schema";
 import type {
@@ -15,7 +15,55 @@ import type {
 export class AnalyticsService {
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
-      // Simple query to get basic data for now
+      // Calculate date range based on timeframe
+      const now = new Date();
+      let startDate: Date | undefined;
+      let endDate: Date = now;
+
+      switch (request.timeframe.period) {
+        case 'last_7_days':
+          startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+          break;
+        case 'last_30_days':
+          startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+          break;
+        case 'last_90_days':
+          startDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
+          break;
+        case 'this_year':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        case 'custom':
+          if (request.timeframe.startDate) startDate = new Date(request.timeframe.startDate);
+          if (request.timeframe.endDate) endDate = new Date(request.timeframe.endDate);
+          break;
+        case 'all_time':
+        default:
+          // No date filtering for all time
+          break;
+      }
+
+      // Build where conditions
+      const whereConditions = [
+        eq(measurements.isVerified, "true"),
+        eq(userOrganizations.organizationId, request.filters.organizationId),
+        eq(measurements.metric, request.metrics.primary),
+      ];
+
+      // Add team filtering if specified
+      if (request.filters.teams && request.filters.teams.length > 0) {
+        whereConditions.push(inArray(measurements.teamId, request.filters.teams));
+      }
+
+      // Add date range filtering if specified
+      if (startDate) {
+        whereConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
+      }
+      if (endDate && request.timeframe.period !== 'all_time') {
+        whereConditions.push(lte(measurements.date, endDate.toISOString().split('T')[0]));
+      }
+
+      // Query to get basic data for now
       const data = await db
         .select({
           measurementId: measurements.id,
@@ -31,16 +79,7 @@ export class AnalyticsService {
         .innerJoin(users, eq(measurements.userId, users.id))
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
-        .where(
-          and(
-            eq(measurements.isVerified, "true"),
-            eq(userOrganizations.organizationId, request.filters.organizationId),
-            // Add team filtering if teams are specified
-            request.filters.teams && request.filters.teams.length > 0
-              ? inArray(measurements.teamId, request.filters.teams)
-              : undefined
-          )
-        )
+        .where(and(...whereConditions))
         .limit(100);
 
       // Transform to chart data format
@@ -102,8 +141,12 @@ export class AnalyticsService {
           totalAthletes: new Set(chartData.map(d => d.athleteId)).size,
           totalMeasurements: chartData.length,
           dateRange: {
-            start: new Date(),
-            end: new Date()
+            start: chartData.length > 0 
+              ? new Date(Math.min(...chartData.map(d => d.date.getTime())))
+              : startDate || new Date(),
+            end: chartData.length > 0 
+              ? new Date(Math.max(...chartData.map(d => d.date.getTime())))
+              : endDate || new Date()
           },
           appliedFilters: request.filters,
           recommendedCharts: ['box_plot', 'distribution', 'bar_chart'] as any
