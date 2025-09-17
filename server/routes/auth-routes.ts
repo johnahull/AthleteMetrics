@@ -126,6 +126,9 @@ export function registerAuthRoutes(app: Express) {
       
       const targetUser = await authService.startImpersonation(req.session.user.id, targetUserId);
 
+      // Determine target user's actual role and organization context
+      const targetRoleContext = await authService.determineUserRoleAndContext(targetUser);
+
       // Store original user for stopping impersonation
       if (!req.session.originalUser) {
         req.session.originalUser = req.session.user;
@@ -138,8 +141,9 @@ export function registerAuthRoutes(app: Express) {
         firstName: targetUser.firstName,
         lastName: targetUser.lastName,
         email: targetUser.emails?.[0] || targetUser.username + '@temp.local',
-        role: "athlete", // Default role, will be determined by organization context
-        isSiteAdmin: targetUser.isSiteAdmin === "true"
+        role: targetRoleContext.role,
+        isSiteAdmin: targetUser.isSiteAdmin === "true",
+        primaryOrganizationId: targetRoleContext.primaryOrganizationId
       };
 
       req.session.isImpersonating = true;
