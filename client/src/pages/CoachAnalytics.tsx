@@ -493,7 +493,7 @@ export function CoachAnalytics() {
                 <div className="flex justify-between">
                   <span>Date Range:</span>
                   <span className="text-xs text-muted-foreground">
-                    {analyticsData.meta.dateRange.start.toLocaleDateString()} - {analyticsData.meta.dateRange.end.toLocaleDateString()}
+                    {new Date(analyticsData.meta.dateRange.start).toLocaleDateString()} - {new Date(analyticsData.meta.dateRange.end).toLocaleDateString()}
                   </span>
                 </div>
               </CardContent>
