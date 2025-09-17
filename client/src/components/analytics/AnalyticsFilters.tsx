@@ -284,8 +284,8 @@ export function AnalyticsFilters({
             <Label className="text-sm font-medium">Period</Label>
             <Select
               value={timeframe.period}
-              onValueChange={(value) => handleTimeframeChange({ 
-                period: value as TimeframeConfig['period'] 
+              onValueChange={(value) => handleTimeframeChange({
+                period: value as TimeframeConfig['period']
               })}
             >
               <SelectTrigger className="mt-2">
