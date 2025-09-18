@@ -330,9 +330,15 @@ export function TimeSeriesBoxSwarmChart({
           },
           ticks: {
             stepSize: 1,
-            callback: function(value: any, index: number) {
-              const dateLabels = (chartData as any).labels;
-              return dateLabels[Math.round(value)] || '';
+            min: 0,
+            max: selectedDates.length - 1,
+            callback: function(value: any) {
+              // Only show labels at integer positions where box plots are located
+              if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
+                const dateLabels = (chartData as any).labels;
+                return dateLabels[value] || '';
+              }
+              return '';
             }
           },
           min: -0.5,
