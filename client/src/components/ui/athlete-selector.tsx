@@ -49,14 +49,25 @@ export function AthleteSelector({
 
   // Normalize athlete data to handle both name and fullName properties
   const normalizedAthletes = useMemo(() => {
-    return athletes.map(athlete => ({
-      ...athlete,
-      displayName: athlete.fullName || athlete.name || 'Unknown',
-      teamInfo: showTeamInfo ? (
-        athlete.teamName ||
-        (athlete.teams && athlete.teams.length > 0 ? athlete.teams.map(t => t.name).join(', ') : 'No team')
-      ) : undefined
-    }));
+    return athletes.map(athlete => {
+      // Extract team information more robustly
+      let teamInfo = undefined;
+      if (showTeamInfo) {
+        if (athlete.teamName && athlete.teamName !== '') {
+          teamInfo = athlete.teamName;
+        } else if (athlete.teams && athlete.teams.length > 0) {
+          teamInfo = athlete.teams.map(t => t.name).join(', ');
+        } else {
+          teamInfo = 'No team';
+        }
+      }
+
+      return {
+        ...athlete,
+        displayName: athlete.fullName || athlete.name || 'Unknown',
+        teamInfo
+      };
+    });
   }, [athletes, showTeamInfo]);
 
   // Filter and sort athletes
@@ -78,13 +89,14 @@ export function AthleteSelector({
       'name'
     ).map(a => normalizedAthletes.find(na => na.id === a.id)!);
 
-    // Limit initial items if no search term
-    if (!searchTerm.trim()) {
-      return sorted.slice(0, maxInitialItems);
+    // Return all sorted athletes without limiting initial display
+    // Only limit search results to prevent performance issues with very large datasets
+    if (searchTerm.trim()) {
+      return sorted.slice(0, 100); // Limit search results to 100
     }
 
-    return sorted.slice(0, 50); // Limit search results to 50
-  }, [normalizedAthletes, searchTerm, maxInitialItems]);
+    return sorted; // Show all athletes when no search term
+  }, [normalizedAthletes, searchTerm]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -257,11 +269,6 @@ export function AthleteSelector({
             </div>
           ) : (
             <>
-              {!searchTerm.trim() && filteredAthletes.length === maxInitialItems && (
-                <div className="px-4 py-2 text-xs text-muted-foreground bg-muted/50 border-b">
-                  Showing first {maxInitialItems} athletes. Type to search all.
-                </div>
-              )}
               {filteredAthletes.map((athlete, index) => (
                 <button
                   key={athlete.id}
