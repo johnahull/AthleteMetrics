@@ -14,6 +14,7 @@ import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
 import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
+import { DateSelector } from '@/components/ui/date-selector';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 import type {
@@ -43,7 +44,8 @@ function formatChartTypeName(chartType: string): string {
     'radar_chart': 'Radar Chart',
     'swarm_plot': 'Swarm Plot',
     'connected_scatter': 'Connected Scatter',
-    'multi_line': 'Multi Line'
+    'multi_line': 'Multi Line',
+    'time_series_box_swarm': 'Time-Series Box + Swarm'
   };
 
   return chartTypeNames[chartType] || chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -120,6 +122,9 @@ export function CoachAnalytics() {
 
   // Enhanced athlete selection for multi-athlete line charts
   const [selectedAthleteIds, setSelectedAthleteIds] = useState<string[]>([]);
+
+  // Date selection for time-series box+swarm charts
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
 
   // Get effective organization ID (organizationContext or user's primary organization)
   const getEffectiveOrganizationId = () => {
@@ -614,6 +619,17 @@ export function CoachAnalytics() {
               />
             )}
 
+            {/* Date Selector for Time-Series Box+Swarm Charts */}
+            {analysisType !== 'individual' && selectedChartType === 'time_series_box_swarm' && analyticsData.trends && analyticsData.trends.length > 0 && (
+              <DateSelector
+                data={analyticsData.trends}
+                selectedDates={selectedDates}
+                onSelectionChange={setSelectedDates}
+                maxSelection={10}
+                className="mb-4"
+              />
+            )}
+
             <ChartContainer
               title={chartConfig.title}
               subtitle={chartConfig.subtitle}
@@ -626,6 +642,8 @@ export function CoachAnalytics() {
               highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
               selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
               onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
+              selectedDates={selectedChartType === 'time_series_box_swarm' ? selectedDates : undefined}
+              metric={selectedChartType === 'time_series_box_swarm' ? metrics.primary : undefined}
               onExport={handleExport}
             />
           </>

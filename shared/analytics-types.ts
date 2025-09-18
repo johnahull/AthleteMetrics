@@ -101,7 +101,7 @@ export interface TrendData {
 }
 
 // Chart configuration types
-export type ChartType = 
+export type ChartType =
   | 'box_plot'
   | 'distribution'
   | 'bar_chart'
@@ -111,7 +111,8 @@ export type ChartType =
   | 'swarm_plot'
   | 'connected_scatter'
   | 'multi_line'
-  | 'box_swarm_combo';
+  | 'box_swarm_combo'
+  | 'time_series_box_swarm';
 
 export interface ChartConfiguration {
   type: ChartType;
