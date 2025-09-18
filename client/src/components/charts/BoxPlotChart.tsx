@@ -148,22 +148,6 @@ export function BoxPlotChart({
           order: 4
         });
 
-        // Whisker caps (enhanced visibility)
-        datasets.push({
-          label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Whisker Caps`,
-          data: [
-            { x: xPos - 0.15, y: lowerWhisker }, // Wider caps
-            { x: xPos + 0.15, y: lowerWhisker },
-            { x: xPos - 0.15, y: upperWhisker },
-            { x: xPos + 0.15, y: upperWhisker }
-          ],
-          backgroundColor: 'rgba(59, 130, 246, 1)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 3, // Increased from 2
-          pointRadius: 2, // Small points for cap ends
-          showLine: false,
-          order: 4
-        });
 
         // Individual points for outliers
         const outliers = values.filter(v =>
@@ -352,7 +336,6 @@ export function BoxPlotChart({
             return !item.text.includes('Box') &&
                    !item.text.includes('Median') &&
                    !item.text.includes('Whisker') &&
-                   !item.text.includes('Caps') &&
                    !item.text.includes('Data Points'); // Hide generic data points from legend
           }
         }

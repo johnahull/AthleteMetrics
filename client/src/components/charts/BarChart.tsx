@@ -49,15 +49,12 @@ export function BarChart({
     
     if (!primaryMetric) return null;
 
-    // Get best value per athlete for the primary metric
-    const athleteData = data
-      .filter(d => d.metric === primaryMetric)
-      .reduce((acc, point) => {
-        if (!acc[point.athleteId] || point.value > acc[point.athleteId].value) {
-          acc[point.athleteId] = point;
-        }
-        return acc;
-      }, {} as Record<string, ChartDataPoint>);
+    // Use the filtered data as-is (backend already provides best measurements per athlete)
+    const metricData = data.filter(d => d.metric === primaryMetric);
+    const athleteData = metricData.reduce((acc, point) => {
+      acc[point.athleteId] = point;
+      return acc;
+    }, {} as Record<string, ChartDataPoint>);
 
     const athletes = Object.values(athleteData)
       .sort((a, b) => b.value - a.value) // Sort by best performance
