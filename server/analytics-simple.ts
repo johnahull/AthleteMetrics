@@ -40,7 +40,7 @@ export class AnalyticsService {
         if (timeframeType === 'best') {
           baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart');
         } else {
-          baseCharts.push('line_chart', 'bar_chart', 'distribution');
+          baseCharts.push('line_chart');
         }
       } else if (metricCount === 2) {
         if (timeframeType === 'best') {
