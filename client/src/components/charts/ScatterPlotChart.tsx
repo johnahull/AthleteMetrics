@@ -9,6 +9,7 @@ import {
   Legend,
   ChartOptions
 } from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import { Scatter } from 'react-chartjs-2';
 import type {
   ChartDataPoint,
@@ -24,7 +25,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  annotationPlugin
 );
 
 // Regression calculation helper function
@@ -56,6 +58,48 @@ function calculateRegression(points: any[]) {
   return { slope, intercept, rSquared };
 }
 
+// Performance-aware quadrant labels helper function
+function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
+  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
+  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
+
+  const xLabel = xConfig?.label || xMetric;
+  const yLabel = yConfig?.label || yMetric;
+
+  // Determine performance terminology
+  const xGoodTerm = xConfig?.lowerIsBetter ? 'Fast' : 'Strong';
+  const xPoorTerm = xConfig?.lowerIsBetter ? 'Slow' : 'Weak';
+  const yGoodTerm = yConfig?.lowerIsBetter ? 'Fast' : 'Strong';
+  const yPoorTerm = yConfig?.lowerIsBetter ? 'Slow' : 'Weak';
+
+  return {
+    topRight: {
+      // Good Y, Good/Bad X (depending on if X is lower-is-better)
+      label: xConfig?.lowerIsBetter ? `${xPoorTerm}-${yGoodTerm}` : `${xGoodTerm}-${yGoodTerm}`,
+      description: `Above avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'above avg' : 'above avg'} ${xLabel}`,
+      color: xConfig?.lowerIsBetter ? 'yellow' : 'green'
+    },
+    topLeft: {
+      // Good Y, Bad/Good X (depending on if X is lower-is-better)
+      label: xConfig?.lowerIsBetter ? `${xGoodTerm}-${yGoodTerm}` : `${xPoorTerm}-${yGoodTerm}`,
+      description: `Above avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'below avg' : 'below avg'} ${xLabel}`,
+      color: xConfig?.lowerIsBetter ? 'green' : 'yellow'
+    },
+    bottomRight: {
+      // Bad Y, Good/Bad X (depending on if X is lower-is-better)
+      label: xConfig?.lowerIsBetter ? `${xPoorTerm}-${yPoorTerm}` : `${xGoodTerm}-${yPoorTerm}`,
+      description: `Below avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'above avg' : 'above avg'} ${xLabel}`,
+      color: xConfig?.lowerIsBetter ? 'red' : 'orange'
+    },
+    bottomLeft: {
+      // Bad Y, Bad/Good X (depending on if X is lower-is-better)
+      label: xConfig?.lowerIsBetter ? `${xGoodTerm}-${yPoorTerm}` : `${xPoorTerm}-${yPoorTerm}`,
+      description: `Below avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'below avg' : 'below avg'} ${xLabel}`,
+      color: xConfig?.lowerIsBetter ? 'orange' : 'red'
+    }
+  };
+}
+
 interface ScatterPlotChartProps {
   data: ChartDataPoint[];
   config: ChartConfiguration;
@@ -70,6 +114,7 @@ export function ScatterPlotChart({
   highlightAthlete
 }: ScatterPlotChartProps) {
   const [showRegressionLine, setShowRegressionLine] = useState(true);
+  const [showQuadrants, setShowQuadrants] = useState(true);
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -207,7 +252,7 @@ export function ScatterPlotChart({
       points: scatterPoints,
       regression
     } as any;
-  }, [data, statistics, highlightAthlete, showRegressionLine]);
+  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
 
   // Calculate correlation coefficient
   const correlation = useMemo(() => {
@@ -266,7 +311,99 @@ export function ScatterPlotChart({
       legend: {
         display: config.showLegend,
         position: 'top' as const
-      }
+      },
+      annotation: showQuadrants && statistics && scatterData ? {
+        annotations: (() => {
+          const xMean = statistics[scatterData.xMetric]?.mean || 0;
+          const yMean = statistics[scatterData.yMetric]?.mean || 0;
+          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+
+          // Calculate chart bounds for full background coverage
+          const xValues = scatterData.points.map((p: any) => p.x);
+          const yValues = scatterData.points.map((p: any) => p.y);
+          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
+          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
+          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
+          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
+
+          const colorMap = {
+            green: 'rgba(16, 185, 129, 0.1)',
+            yellow: 'rgba(245, 158, 11, 0.1)',
+            orange: 'rgba(251, 146, 60, 0.1)',
+            red: 'rgba(239, 68, 68, 0.1)'
+          };
+
+          return {
+            // Top Right Quadrant
+            topRight: {
+              type: 'box' as const,
+              xMin: xMean,
+              xMax: xMax,
+              yMin: yMean,
+              yMax: yMax,
+              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Top Left Quadrant
+            topLeft: {
+              type: 'box' as const,
+              xMin: xMin,
+              xMax: xMean,
+              yMin: yMean,
+              yMax: yMax,
+              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Bottom Right Quadrant
+            bottomRight: {
+              type: 'box' as const,
+              xMin: xMean,
+              xMax: xMax,
+              yMin: yMin,
+              yMax: yMean,
+              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Bottom Left Quadrant
+            bottomLeft: {
+              type: 'box' as const,
+              xMin: xMin,
+              xMax: xMean,
+              yMin: yMin,
+              yMax: yMean,
+              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Average lines
+            xAverageLine: {
+              type: 'line' as const,
+              xMin: xMean,
+              xMax: xMean,
+              yMin: yMin,
+              yMax: yMax,
+              borderColor: 'rgba(107, 114, 128, 0.5)',
+              borderWidth: 1,
+              borderDash: [3, 3],
+              z: 1
+            },
+            yAverageLine: {
+              type: 'line' as const,
+              xMin: xMin,
+              xMax: xMax,
+              yMin: yMean,
+              yMax: yMean,
+              borderColor: 'rgba(107, 114, 128, 0.5)',
+              borderWidth: 1,
+              borderDash: [3, 3],
+              z: 1
+            }
+          };
+        })()
+      } : undefined
     },
     scales: {
       x: {
@@ -317,7 +454,7 @@ export function ScatterPlotChart({
       {/* Controls and Analysis */}
       <div className="mt-4 space-y-4">
         {/* Toggle Controls */}
-        <div className="flex items-center justify-center space-x-4">
+        <div className="flex items-center justify-center space-x-6">
           <label className="flex items-center space-x-2 text-sm">
             <input
               type="checkbox"
@@ -326,6 +463,16 @@ export function ScatterPlotChart({
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span>Show Trend Line</span>
+          </label>
+
+          <label className="flex items-center space-x-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showQuadrants}
+              onChange={(e) => setShowQuadrants(e.target.checked)}
+              className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+            />
+            <span>Show Quadrants</span>
           </label>
         </div>
 
@@ -384,13 +531,14 @@ export function ScatterPlotChart({
         )}
 
         {/* Performance Quadrants Analysis */}
-        {statistics && scatterData.xMetric && scatterData.yMetric && (
+        {showQuadrants && statistics && scatterData.xMetric && scatterData.yMetric && (
           <div className="mt-4 bg-gray-50 rounded-lg p-3">
             <div className="text-sm font-medium text-center mb-2">Performance Quadrants</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               {(() => {
                 const xMean = statistics[scatterData.xMetric]?.mean || 0;
                 const yMean = statistics[scatterData.yMetric]?.mean || 0;
+                const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
                 const quadrants = {
                   topRight: scatterData.points.filter((p: any) => p.x >= xMean && p.y >= yMean).length,
@@ -399,23 +547,34 @@ export function ScatterPlotChart({
                   bottomLeft: scatterData.points.filter((p: any) => p.x < xMean && p.y < yMean).length
                 };
 
+                const colorClasses = {
+                  green: 'bg-green-100 text-green-800',
+                  yellow: 'bg-yellow-100 text-yellow-800',
+                  orange: 'bg-orange-100 text-orange-800',
+                  red: 'bg-red-100 text-red-800'
+                };
+
                 return (
                   <>
-                    <div className="bg-green-100 p-2 rounded text-center">
-                      <div className="font-medium text-green-800">High-High</div>
-                      <div className="text-green-600">{quadrants.topRight} athletes</div>
+                    <div className={`${colorClasses[labels.topRight.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
+                      <div className="font-medium">{labels.topRight.label}</div>
+                      <div className="text-xs opacity-75">{labels.topRight.description}</div>
+                      <div className="font-semibold">{quadrants.topRight} athletes</div>
                     </div>
-                    <div className="bg-yellow-100 p-2 rounded text-center">
-                      <div className="font-medium text-yellow-800">Low-High</div>
-                      <div className="text-yellow-600">{quadrants.topLeft} athletes</div>
+                    <div className={`${colorClasses[labels.topLeft.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
+                      <div className="font-medium">{labels.topLeft.label}</div>
+                      <div className="text-xs opacity-75">{labels.topLeft.description}</div>
+                      <div className="font-semibold">{quadrants.topLeft} athletes</div>
                     </div>
-                    <div className="bg-orange-100 p-2 rounded text-center">
-                      <div className="font-medium text-orange-800">High-Low</div>
-                      <div className="text-orange-600">{quadrants.bottomRight} athletes</div>
+                    <div className={`${colorClasses[labels.bottomRight.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
+                      <div className="font-medium">{labels.bottomRight.label}</div>
+                      <div className="text-xs opacity-75">{labels.bottomRight.description}</div>
+                      <div className="font-semibold">{quadrants.bottomRight} athletes</div>
                     </div>
-                    <div className="bg-red-100 p-2 rounded text-center">
-                      <div className="font-medium text-red-800">Low-Low</div>
-                      <div className="text-red-600">{quadrants.bottomLeft} athletes</div>
+                    <div className={`${colorClasses[labels.bottomLeft.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
+                      <div className="font-medium">{labels.bottomLeft.label}</div>
+                      <div className="text-xs opacity-75">{labels.bottomLeft.description}</div>
+                      <div className="font-semibold">{quadrants.bottomLeft} athletes</div>
                     </div>
                   </>
                 );
