@@ -264,9 +264,9 @@ export function TimeSeriesBoxSwarmChart({
             label: athleteData.athleteName,
             data: [{ x: dateOffset + jitter, y: athleteData.value }],
             type: 'scatter',
-            backgroundColor: color,
-            borderColor: athleteData.isPersonalBest ? 'gold' : color,
-            borderWidth: athleteData.isPersonalBest ? 3 : 1,
+            backgroundColor: athleteData.isPersonalBest ? 'gold' : color,
+            borderColor: 'transparent',
+            borderWidth: 0,
             pointRadius: 6,
             order: 0
           });
@@ -409,7 +409,7 @@ export function TimeSeriesBoxSwarmChart({
             <span>Athlete Performance</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full border-2 border-yellow-500 bg-blue-500"></div>
+            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
             <span>Personal Best</span>
           </div>
           <div className="flex items-center gap-2">
