@@ -7,9 +7,10 @@ import {
   Title,
   Tooltip,
   Legend,
-  ChartOptions
+  ChartOptions,
+  Filler
 } from 'chart.js';
-import annotationPlugin from 'chartjs-plugin-annotation';
+import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Scatter } from 'react-chartjs-2';
 import type {
   ChartDataPoint,
@@ -26,7 +27,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  annotationPlugin
+  Filler
 );
 
 // Regression calculation helper function
@@ -311,99 +312,7 @@ export function ScatterPlotChart({
       legend: {
         display: config.showLegend,
         position: 'top' as const
-      },
-      annotation: showQuadrants && statistics && scatterData ? {
-        annotations: (() => {
-          const xMean = statistics[scatterData.xMetric]?.mean || 0;
-          const yMean = statistics[scatterData.yMetric]?.mean || 0;
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
-
-          // Calculate chart bounds for full background coverage
-          const xValues = scatterData.points.map((p: any) => p.x);
-          const yValues = scatterData.points.map((p: any) => p.y);
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
-
-          const colorMap = {
-            green: 'rgba(16, 185, 129, 0.1)',
-            yellow: 'rgba(245, 158, 11, 0.1)',
-            orange: 'rgba(251, 146, 60, 0.1)',
-            red: 'rgba(239, 68, 68, 0.1)'
-          };
-
-          return {
-            // Top Right Quadrant
-            topRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Top Left Quadrant
-            topLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Right Quadrant
-            bottomRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Left Quadrant
-            bottomLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Average lines
-            xAverageLine: {
-              type: 'line' as const,
-              xMin: xMean,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMax,
-              borderColor: 'rgba(107, 114, 128, 0.5)',
-              borderWidth: 1,
-              borderDash: [3, 3],
-              z: 1
-            },
-            yAverageLine: {
-              type: 'line' as const,
-              xMin: xMin,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMean,
-              borderColor: 'rgba(107, 114, 128, 0.5)',
-              borderWidth: 1,
-              borderDash: [3, 3],
-              z: 1
-            }
-          };
-        })()
-      } : undefined
+      }
     },
     scales: {
       x: {
