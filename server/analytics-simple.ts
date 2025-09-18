@@ -91,13 +91,14 @@ export class AnalyticsService {
           groups[point.athleteId] = {
             athleteId: point.athleteId,
             athleteName: point.athleteName,
+            teamName: point.teamName,
             points: []
           };
         }
         groups[point.athleteId].points.push(point);
       }
       return groups;
-    }, {} as Record<string, { athleteId: string; athleteName: string; points: ChartDataPoint[] }>);
+    }, {} as Record<string, { athleteId: string; athleteName: string; teamName?: string; points: ChartDataPoint[] }>);
 
     // Early return if no athletes have data for this metric
     if (Object.keys(athleteGroups).length === 0) {
@@ -134,6 +135,7 @@ export class AnalyticsService {
           athleteId: group.athleteId,
           athleteName: group.athleteName,
           metric: metric,
+          teamName: group.teamName,
           data: []
         };
       }
@@ -178,6 +180,7 @@ export class AnalyticsService {
         athleteId: group.athleteId,
         athleteName: group.athleteName,
         metric: metric,
+        teamName: group.teamName,
         data: trendDataPoints
       };
     });
