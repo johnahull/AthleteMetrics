@@ -7,11 +7,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Download, RefreshCw, Users, User, BarChart3, Search } from 'lucide-react';
+import { Download, RefreshCw, Users, User, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
+import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 import type {
@@ -26,7 +27,6 @@ import type {
 } from '@shared/analytics-types';
 
 import { useAuth } from '@/lib/auth';
-import { sortAthletesByLastName, filterAthletesByName } from '@/lib/utils/names';
 import { isSiteAdmin, hasRole, type EnhancedUser } from '@/lib/types/user';
 
 // Helper function to format chart type names for display
@@ -92,7 +92,6 @@ export function CoachAnalytics() {
   // Core state
   const [analysisType, setAnalysisType] = useState<AnalysisType>('individual');
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
-  const [athleteSearchTerm, setAthleteSearchTerm] = useState<string>('');
   const [selectedAthlete, setSelectedAthlete] = useState<{id: string, name: string, teamName?: string} | null>(null);
   const [filters, setFilters] = useState<FilterType>({
     organizationId: ''
@@ -229,19 +228,11 @@ export function CoachAnalytics() {
     }
   };
 
-  // Filtered and sorted athletes for search dropdown
-  const filteredAthletes = useMemo(() => {
-    if (!availableAthletes.length) return [];
-
-    // First filter by search term
-    const filtered = filterAthletesByName(availableAthletes, athleteSearchTerm, 'name');
-
-    // Then sort by last name
-    const sorted = sortAthletesByLastName(filtered, 'name');
-
-    // Limit results for performance
-    return sorted.slice(0, 15);
-  }, [availableAthletes, athleteSearchTerm]);
+  // Prepare athletes array for AthleteSelector component
+  const athletesForSelector = availableAthletes.map(athlete => ({
+    ...athlete,
+    fullName: athlete.name || 'Unknown' // Map 'name' to 'fullName' and ensure it's never undefined
+  }));
 
   const fetchAnalyticsData = async () => {
     if (!effectiveOrganizationId) return;
@@ -285,7 +276,6 @@ export function CoachAnalytics() {
     setMetrics({ primary: 'FLY10_TIME', additional: [] });
     setTimeframe({ type: 'best', period: 'all_time' });
     setSelectedAthleteId('');
-    setAthleteSearchTerm('');
     setSelectedAthlete(null);
   }, [effectiveOrganizationId]);
 
@@ -411,52 +401,31 @@ export function CoachAnalytics() {
                 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Athlete *</label>
-                  <div className="relative">
-                    <Input
-                      placeholder={
-                        isLoadingAthletes
-                          ? "Loading athletes..."
-                          : availableAthletes.length === 0
-                            ? "No athletes available"
-                            : "Search and select athlete..."
-                      }
-                      value={selectedAthlete ? selectedAthlete.name : athleteSearchTerm}
-                      onChange={(e) => {
-                        setAthleteSearchTerm(e.target.value);
-                        if (selectedAthlete && e.target.value !== selectedAthlete.name) {
-                          setSelectedAthlete(null);
-                          setSelectedAthleteId('');
-                        }
-                      }}
-                      disabled={isLoadingAthletes}
-                      className="pl-10"
-                    />
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-
-                    {athleteSearchTerm && !selectedAthlete && filteredAthletes.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredAthletes.map((athlete) => (
-                          <button
-                            key={athlete.id}
-                            type="button"
-                            className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
-                            onClick={() => {
-                              setSelectedAthlete(athlete);
-                              setAthleteSearchTerm('');
-                              setSelectedAthleteId(athlete.id);
-                            }}
-                          >
-                            <div>
-                              <p className="font-medium">{athlete.name}</p>
-                              {athlete.teamName && (
-                                <p className="text-sm text-gray-500">{athlete.teamName}</p>
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <AthleteSelector
+                    athletes={athletesForSelector}
+                    selectedAthlete={selectedAthlete ? {
+                      ...selectedAthlete,
+                      fullName: selectedAthlete.name
+                    } : null}
+                    onSelect={(athlete) => {
+                      setSelectedAthlete(athlete ? {
+                        id: athlete.id,
+                        name: athlete.fullName || athlete.name || 'Unknown',
+                        teamName: athlete.teamName
+                      } : null);
+                      setSelectedAthleteId(athlete?.id || '');
+                    }}
+                    placeholder={
+                      isLoadingAthletes
+                        ? "Loading athletes..."
+                        : availableAthletes.length === 0
+                          ? "No athletes available"
+                          : "Select athlete..."
+                    }
+                    searchPlaceholder="Search athletes by name or team..."
+                    showTeamInfo={true}
+                    disabled={isLoadingAthletes}
+                  />
 
                   {!isLoadingAthletes && availableAthletes.length === 0 && (
                     <p className="text-xs text-muted-foreground">
@@ -466,11 +435,6 @@ export function CoachAnalytics() {
                   {!isLoadingAthletes && !selectedAthleteId && availableAthletes.length > 0 && (
                     <p className="text-xs text-orange-600">
                       Please select an athlete to view individual analysis.
-                    </p>
-                  )}
-                  {athleteSearchTerm && !selectedAthlete && filteredAthletes.length === 0 && availableAthletes.length > 0 && (
-                    <p className="text-xs text-gray-500">
-                      No athletes found matching "{athleteSearchTerm}". Try a different search term.
                     </p>
                   )}
                 </div>
