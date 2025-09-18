@@ -44,7 +44,7 @@ export class AnalyticsService {
         }
       } else if (metricCount === 2) {
         if (timeframeType === 'best') {
-          baseCharts.push('scatter_plot', 'radar_chart');
+          baseCharts.push('scatter_plot');
         } else {
           baseCharts.push('connected_scatter', 'multi_line');
         }
@@ -219,11 +219,17 @@ export class AnalyticsService {
         period: request.timeframe.period 
       });
 
+      // Build list of all metrics to query
+      const allMetrics = [request.metrics.primary];
+      if (request.metrics.additional && request.metrics.additional.length > 0) {
+        allMetrics.push(...request.metrics.additional);
+      }
+
       // Build where conditions
       const whereConditions = [
         eq(measurements.isVerified, "true"),
         eq(userOrganizations.organizationId, request.filters.organizationId),
-        eq(measurements.metric, request.metrics.primary),
+        inArray(measurements.metric, allMetrics),
       ];
 
       // Add team filtering if specified - filter by athlete team membership
