@@ -19,6 +19,7 @@ import type {
   MetricSelection,
   ChartType
 } from "@shared/analytics-types";
+import { METRIC_CONFIG } from "@shared/analytics-types";
 
 export class AnalyticsService {
   /**
@@ -293,7 +294,12 @@ export class AnalyticsService {
       for (const metric of allMetrics) {
         const metricPoints = points.filter(p => p.metric === metric);
         if (metricPoints.length > 0) {
-          athleteMetrics[metric] = Math.max(...metricPoints.map(p => p.value));
+          const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+          const values = metricPoints.map(p => p.value);
+
+          athleteMetrics[metric] = metricConfig?.lowerIsBetter
+            ? Math.min(...values)
+            : Math.max(...values);
           
           // Calculate percentile rank within group
           const allMetricValues = data
@@ -444,32 +450,59 @@ export class AnalyticsService {
 
   private getBestPerAthleteMetric(results: any[]): any[] {
     const bestResults: Record<string, any> = {};
-    
+
     for (const result of results) {
       const key = `${result.athleteId}|${result.metric}`;
-      if (!bestResults[key] || result.value > bestResults[key].value) {
+      const metricConfig = METRIC_CONFIG[result.metric as keyof typeof METRIC_CONFIG];
+
+      if (!bestResults[key]) {
         bestResults[key] = result;
+      } else {
+        const isBetter = metricConfig?.lowerIsBetter
+          ? result.value < bestResults[key].value
+          : result.value > bestResults[key].value;
+
+        if (isBetter) {
+          bestResults[key] = result;
+        }
       }
     }
-    
+
     return Object.values(bestResults);
   }
 
   private getBestPerDay(points: ChartDataPoint[]): ChartDataPoint[] {
     const dailyBests: Record<string, ChartDataPoint> = {};
-    
+
     for (const point of points) {
       const dateKey = point.date.toISOString().split('T')[0];
-      if (!dailyBests[dateKey] || point.value > dailyBests[dateKey].value) {
+      const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
+
+      if (!dailyBests[dateKey]) {
         dailyBests[dateKey] = point;
+      } else {
+        const isBetter = metricConfig?.lowerIsBetter
+          ? point.value < dailyBests[dateKey].value
+          : point.value > dailyBests[dateKey].value;
+
+        if (isBetter) {
+          dailyBests[dateKey] = point;
+        }
       }
     }
-    
+
     return Object.values(dailyBests);
   }
 
   private isPersonalBest(point: ChartDataPoint, allPoints: ChartDataPoint[]): boolean {
-    return point.value === Math.max(...allPoints.map(p => p.value));
+    const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
+    const allValues = allPoints.map(p => p.value);
+
+    if (metricConfig?.lowerIsBetter) {
+      return point.value === Math.min(...allValues);
+    } else {
+      return point.value === Math.max(...allValues);
+    }
   }
 
   private getRecommendedCharts(data: ChartDataPoint[], filters: AnalyticsFilters): ChartType[] {

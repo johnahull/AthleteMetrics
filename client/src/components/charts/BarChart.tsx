@@ -56,8 +56,16 @@ export function BarChart({
       return acc;
     }, {} as Record<string, ChartDataPoint>);
 
+    const firstMetric = data[0]?.metric;
+    const metricConfig = firstMetric ? METRIC_CONFIG[firstMetric as keyof typeof METRIC_CONFIG] : null;
+
     const athletes = Object.values(athleteData)
-      .sort((a, b) => b.value - a.value) // Sort by best performance
+      .sort((a, b) => {
+        // Sort by best performance (consider lowerIsBetter)
+        return metricConfig?.lowerIsBetter
+          ? a.value - b.value // Lower is better (ascending)
+          : b.value - a.value; // Higher is better (descending)
+      })
       .slice(0, 20); // Show top 20
 
     const labels = athletes.map(athlete => athlete.athleteName);
