@@ -290,7 +290,7 @@ export class AnalyticsService {
               : endDate || new Date()
           },
           appliedFilters: request.filters,
-          recommendedCharts: ['box_plot', 'distribution', 'bar_chart'] as any
+          recommendedCharts: ['box_swarm_combo', 'distribution', 'bar_chart'] as any
         }
       };
     } catch (error) {

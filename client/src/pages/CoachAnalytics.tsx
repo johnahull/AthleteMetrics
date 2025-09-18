@@ -92,7 +92,7 @@ export function CoachAnalytics() {
   const [error, setError] = useState<string | null>(null);
 
   // Chart configuration
-  const [selectedChartType, setSelectedChartType] = useState<ChartType>('box_plot');
+  const [selectedChartType, setSelectedChartType] = useState<ChartType>('box_swarm_combo');
 
   // Get effective organization ID (organizationContext or user's primary organization)
   const getEffectiveOrganizationId = () => {
