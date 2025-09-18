@@ -33,7 +33,6 @@ export class AnalyticsService {
     metricCount: number,
     timeframeType: string
   ): string[] {
-    console.log('🔍 Chart recommendation params:', { analysisType, metricCount, timeframeType });
     const baseCharts = [];
 
     if (analysisType === 'individual') {
@@ -71,7 +70,6 @@ export class AnalyticsService {
       }
     }
 
-    console.log('📊 Returning chart types:', baseCharts);
     return baseCharts;
   }
 
