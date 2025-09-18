@@ -106,14 +106,19 @@ export function TimeSeriesBoxSwarmChart({
     });
 
     const datasets: any[] = [];
+    const dateLabels = sortedDates.map(dateStr => {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
 
-    // Create box plot datasets for each date
+    // Create box plot and swarm plot datasets for each date
     sortedDates.forEach((dateStr, dateIndex) => {
       const dateData = dateDataMap.get(dateStr) || [];
       if (dateData.length === 0) return;
 
       const values = dateData.map(d => d.value);
       values.sort((a, b) => a - b);
+      const dateLabel = dateLabels[dateIndex];
 
       if (values.length > 0) {
         // Calculate box plot statistics
@@ -126,61 +131,120 @@ export function TimeSeriesBoxSwarmChart({
         const q1 = values[q1Index];
         const median = values[medianIndex];
         const q3 = values[q3Index];
+        const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
 
-        // Box plot as line segments
-        const boxData = [
-          // Box outline
-          { x: dateIndex, y: q1 },
-          { x: dateIndex, y: q3 },
-          { x: dateIndex, y: q3 },
-          { x: dateIndex, y: q1 },
-          { x: dateIndex, y: q1 },
-          // Median line
-          { x: dateIndex - 0.2, y: median },
-          { x: dateIndex + 0.2, y: median },
-          // Whiskers
-          { x: dateIndex, y: min },
-          { x: dateIndex, y: q1 },
-          { x: dateIndex, y: q3 },
-          { x: dateIndex, y: max }
-        ];
+        // Box plot components as separate line datasets
 
+        // 1. Box rectangle (Q1 to Q3)
         datasets.push({
-          label: `Box Plot - ${new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-          data: boxData,
+          label: `Box-${dateIndex}`,
+          data: [
+            { x: dateLabel, y: q1 },
+            { x: dateLabel, y: q3 },
+            { x: dateLabel, y: q3 },
+            { x: dateLabel, y: q1 },
+            { x: dateLabel, y: q1 }
+          ],
           type: 'line',
           borderColor: 'rgba(75, 85, 99, 0.8)',
-          backgroundColor: 'transparent',
+          backgroundColor: 'rgba(75, 85, 99, 0.1)',
+          borderWidth: 2,
           pointRadius: 0,
-          showLine: false,
+          showLine: true,
+          fill: true,
+          order: 2,
+          tension: 0
+        });
+
+        // 2. Median line
+        datasets.push({
+          label: `Median-${dateIndex}`,
+          data: [
+            { x: dateLabel, y: median },
+            { x: dateLabel, y: median }
+          ],
+          type: 'line',
+          borderColor: 'rgba(75, 85, 99, 1)',
+          backgroundColor: 'transparent',
+          borderWidth: 3,
+          pointRadius: 0,
+          showLine: true,
           order: 1
         });
 
-        // Swarm plot - individual athlete points
+        // 3. Mean line
+        datasets.push({
+          label: `Mean-${dateIndex}`,
+          data: [
+            { x: dateLabel, y: mean },
+            { x: dateLabel, y: mean }
+          ],
+          type: 'line',
+          borderColor: 'rgba(239, 68, 68, 1)',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          showLine: true,
+          order: 1
+        });
+
+        // 4. Whiskers (min to Q1, Q3 to max)
+        datasets.push({
+          label: `Whiskers-${dateIndex}`,
+          data: [
+            { x: dateLabel, y: min },
+            { x: dateLabel, y: q1 },
+            { x: dateLabel, y: q3 },
+            { x: dateLabel, y: max }
+          ],
+          type: 'line',
+          borderColor: 'rgba(75, 85, 99, 0.6)',
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          pointRadius: 0,
+          showLine: false,
+          order: 2
+        });
+
+        // 5. Whisker caps
+        const capWidth = 0.1;
+        datasets.push({
+          label: `WhiskerCaps-${dateIndex}`,
+          data: [
+            { x: dateLabel, y: min },
+            { x: dateLabel, y: max }
+          ],
+          type: 'scatter',
+          borderColor: 'rgba(75, 85, 99, 0.8)',
+          backgroundColor: 'rgba(75, 85, 99, 0.8)',
+          pointStyle: 'line',
+          pointRadius: 8,
+          pointBorderWidth: 2,
+          order: 2
+        });
+
+        // 6. Swarm plot - individual athlete points
         dateData.forEach((athleteData) => {
           const jitter = (Math.random() - 0.5) * 0.3; // Small horizontal jitter for visibility
           const color = athleteColorMap.get(athleteData.athleteId) || 'rgba(75, 85, 99, 0.8)';
 
           datasets.push({
             label: athleteData.athleteName,
-            data: [{ x: dateIndex + jitter, y: athleteData.value }],
+            data: [{ x: dateLabel, y: athleteData.value }],
             type: 'scatter',
             backgroundColor: color,
             borderColor: athleteData.isPersonalBest ? 'gold' : color,
             borderWidth: athleteData.isPersonalBest ? 3 : 1,
             pointRadius: 6,
-            order: 0,
-            showLine: false
+            order: 0
           });
         });
       }
     });
 
     return {
-      labels: sortedDates.map(dateStr => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }),
+      labels: dateLabels,
       datasets
     };
   }, [data, selectedDates, metric]);
@@ -202,6 +266,15 @@ export function TimeSeriesBoxSwarmChart({
           display: false // Too many athletes for useful legend
         },
         tooltip: {
+          filter: (tooltipItem: any) => {
+            // Only show tooltips for athlete points, not box plot components
+            return tooltipItem.dataset.type === 'scatter' &&
+                   !tooltipItem.dataset.label.includes('-') &&
+                   !tooltipItem.dataset.label.includes('Box') &&
+                   !tooltipItem.dataset.label.includes('Median') &&
+                   !tooltipItem.dataset.label.includes('Mean') &&
+                   !tooltipItem.dataset.label.includes('Whiskers');
+          },
           callbacks: {
             label: (context: any) => {
               const datasetLabel = context.dataset.label;
@@ -220,7 +293,13 @@ export function TimeSeriesBoxSwarmChart({
           },
           grid: {
             display: false
-          }
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 0
+          },
+          // Add padding to prevent edge rendering
+          offset: true
         },
         y: {
           type: 'linear' as const,
@@ -230,7 +309,9 @@ export function TimeSeriesBoxSwarmChart({
           },
           grid: {
             color: 'rgba(75, 85, 99, 0.1)'
-          }
+          },
+          // Add padding to y-axis to prevent edge rendering
+          grace: '5%'
         }
       },
       interaction: {
@@ -239,6 +320,15 @@ export function TimeSeriesBoxSwarmChart({
       },
       animation: {
         duration: 750
+      },
+      // Add layout padding to prevent edge rendering
+      layout: {
+        padding: {
+          left: 10,
+          right: 10,
+          top: 10,
+          bottom: 10
+        }
       }
     };
   }, [config, metric]);
@@ -269,7 +359,7 @@ export function TimeSeriesBoxSwarmChart({
     <div className="w-full h-full">
       <Chart
         ref={chartRef}
-        type="scatter"
+        type="line"
         data={chartData}
         options={chartOptions}
       />
@@ -286,8 +376,20 @@ export function TimeSeriesBoxSwarmChart({
             <span>Personal Best</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-0.5 bg-gray-600"></div>
-            <span>Box Plot (Q1, Median, Q3, Min/Max)</span>
+            <div className="w-4 h-3 border border-gray-600 bg-gray-100"></div>
+            <span>Box Plot (Q1-Q3)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-0.5 bg-gray-800"></div>
+            <span>Median</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-0.5 bg-red-500" style={{ borderTop: '1px dashed' }}></div>
+            <span>Mean</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-0.5 bg-gray-500"></div>
+            <span>Whiskers (Min/Max)</span>
           </div>
         </div>
       </div>
