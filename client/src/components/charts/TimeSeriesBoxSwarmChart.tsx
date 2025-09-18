@@ -330,8 +330,6 @@ export function TimeSeriesBoxSwarmChart({
           },
           ticks: {
             stepSize: 1,
-            min: 0,
-            max: selectedDates.length - 1,
             callback: function(value: any) {
               // Only show labels at integer positions where box plots are located
               if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
