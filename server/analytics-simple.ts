@@ -12,69 +12,25 @@ import type {
   StatisticalSummary
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
+import {
+  calculateStatistics,
+  filterToBestMeasurements,
+  filterToBestMeasurementsPerDate,
+  calculateDateRange,
+  formatDateForDatabase,
+  validateAnalyticsFilters
+} from "@shared/analytics-utils";
 
-/**
- * Filters data to best measurements per athlete (for 'best' data type)
- */
-function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint[] {
-  const grouped = data.reduce((acc, point) => {
-    const key = `${point.athleteId}-${point.metric}`;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(point);
-    return acc;
-  }, {} as Record<string, ChartDataPoint[]>);
-
-  return Object.values(grouped).map(athleteMetricData => {
-    const metric = athleteMetricData[0].metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-
-    if (metricConfig?.lowerIsBetter) {
-      // Find minimum value (best time)
-      return athleteMetricData.reduce((best, current) =>
-        current.value < best.value ? current : best
-      );
-    } else {
-      // Find maximum value (best performance)
-      return athleteMetricData.reduce((best, current) =>
-        current.value > best.value ? current : best
-      );
-    }
-  });
-}
-
-/**
- * Filters data to best measurements per athlete per date (for 'trends' data type)
- */
-function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDataPoint[] {
-  const grouped = data.reduce((acc, point) => {
-    const dateStr = point.date.toISOString().split('T')[0]; // YYYY-MM-DD
-    const key = `${point.athleteId}-${point.metric}-${dateStr}`;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(point);
-    return acc;
-  }, {} as Record<string, ChartDataPoint[]>);
-
-  return Object.values(grouped).map(athleteMetricDateData => {
-    const metric = athleteMetricDateData[0].metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-
-    if (metricConfig?.lowerIsBetter) {
-      // Find minimum value (best time) for this date
-      return athleteMetricDateData.reduce((best, current) =>
-        current.value < best.value ? current : best
-      );
-    } else {
-      // Find maximum value (best performance) for this date
-      return athleteMetricDateData.reduce((best, current) =>
-        current.value > best.value ? current : best
-      );
-    }
-  });
-}
 
 export class AnalyticsService {
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
+      // Validate request
+      const validation = validateAnalyticsFilters(request.filters);
+      if (!validation.isValid) {
+        throw new Error(`Invalid filters: ${validation.errors.join(', ')}`);
+      }
+
       console.log('🔍 Analytics request received:', {
         analysisType: request.analysisType,
         metrics: request.metrics,
@@ -87,35 +43,12 @@ export class AnalyticsService {
         }
       });
 
-      // Calculate date range based on timeframe
-      const now = new Date();
-      let startDate: Date | undefined;
-      let endDate: Date = now;
-
-      switch (request.timeframe.period) {
-        case 'last_7_days':
-          startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-          break;
-        case 'last_30_days':
-          startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-          break;
-        case 'last_90_days':
-          startDate = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-          break;
-        case 'this_year':
-          startDate = new Date(now.getFullYear(), 0, 1);
-          break;
-        case 'custom':
-          if (request.timeframe.startDate) startDate = new Date(request.timeframe.startDate);
-          if (request.timeframe.endDate) endDate = new Date(request.timeframe.endDate);
-          break;
-        case 'all_time':
-        default:
-          // Set earliest date to January 1, 2023 for all time
-          startDate = new Date('2023-01-01');
-          endDate = now;
-          break;
-      }
+      // Calculate date range using utility function
+      const { startDate, endDate } = calculateDateRange(
+        request.timeframe.period,
+        request.timeframe.startDate,
+        request.timeframe.endDate
+      );
 
       console.log('📅 Calculated date range:', { 
         startDate: startDate?.toISOString(), 
@@ -164,11 +97,9 @@ export class AnalyticsService {
 
       // Add date range filtering if specified
       if (startDate) {
-        whereConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
+        whereConditions.push(gte(measurements.date, formatDateForDatabase(startDate)));
       }
-      if (endDate) {
-        whereConditions.push(lte(measurements.date, endDate.toISOString().split('T')[0]));
-      }
+      whereConditions.push(lte(measurements.date, formatDateForDatabase(endDate)));
 
       // Query to get basic data
       const data = await db
@@ -189,7 +120,7 @@ export class AnalyticsService {
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
-        .limit(5000);
+        .limit(10000); // Increased limit with proper safeguards
 
       console.log('📊 Query results:', {
         totalRows: data.length,
@@ -233,7 +164,7 @@ export class AnalyticsService {
         console.log(`📈 Filtered from ${originalCount} to ${chartData.length} measurements (best per athlete per date)`);
       }
 
-      // Basic statistics calculation
+      // Robust statistics calculation using utility functions
       const statistics: Record<string, StatisticalSummary> = {};
       const metricGroups = chartData.reduce((groups, point) => {
         if (!groups[point.metric]) {
@@ -244,32 +175,7 @@ export class AnalyticsService {
       }, {} as Record<string, number[]>);
 
       for (const [metric, values] of Object.entries(metricGroups)) {
-        if (values.length === 0) continue; // Skip empty arrays
-        
-        const sorted = [...values].sort((a, b) => a - b);
-        const count = values.length;
-        const sum = values.reduce((a, b) => a + b, 0);
-        const mean = count > 0 ? sum / count : 0;
-        const median = sorted[Math.floor(count / 2)];
-
-        statistics[metric] = {
-          count,
-          mean,
-          median,
-          min: Math.min(...values),
-          max: Math.max(...values),
-          std: Math.sqrt(values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count),
-          variance: 0,
-          percentiles: {
-            p5: sorted[Math.floor(count * 0.05)],
-            p10: sorted[Math.floor(count * 0.1)],
-            p25: sorted[Math.floor(count * 0.25)],
-            p50: median,
-            p75: sorted[Math.floor(count * 0.75)],
-            p90: sorted[Math.floor(count * 0.9)],
-            p95: sorted[Math.floor(count * 0.95)]
-          }
-        };
+        statistics[metric] = calculateStatistics(values);
       }
 
       return {

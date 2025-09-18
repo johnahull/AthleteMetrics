@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { isSiteAdmin, hasRole, type EnhancedUser } from "@/lib/types/user";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,17 +57,17 @@ export default function Analytics() {
   // Role-based routing: redirect coaches/org_admins to appropriate analytics page
   useEffect(() => {
     if (user) {
-      const userRole = (user as any)?.role;
-      const isSiteAdmin = (user as any)?.isSiteAdmin;
-      
+      const userRole = user?.role;
+      const isUserSiteAdmin = isSiteAdmin(user);
+
       // Coaches and org admins should use the coach analytics dashboard
-      if (isSiteAdmin || userRole === 'coach' || userRole === 'org_admin') {
+      if (isUserSiteAdmin || hasRole(user as EnhancedUser, 'coach') || hasRole(user as EnhancedUser, 'org_admin')) {
         setLocation('/coach-analytics');
         return;
       }
       
       // Athletes should use the athlete analytics dashboard
-      if (userRole === 'athlete') {
+      if (hasRole(user as EnhancedUser, 'athlete')) {
         setLocation('/athlete-analytics');
         return;
       }

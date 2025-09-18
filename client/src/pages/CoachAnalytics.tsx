@@ -27,6 +27,7 @@ import type {
 
 import { useAuth } from '@/lib/auth';
 import { sortAthletesByLastName, filterAthletesByName } from '@/lib/utils/names';
+import { isSiteAdmin, hasRole, type EnhancedUser } from '@/lib/types/user';
 
 // Helper function to format chart type names for display
 function formatChartTypeName(chartType: string): string {
@@ -60,10 +61,10 @@ export function CoachAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
-  const userRole = (user as any)?.role;
-  const isSiteAdmin = (user as any)?.isSiteAdmin;
-  
-  if (!isSiteAdmin && userRole !== 'coach' && userRole !== 'org_admin') {
+  const userRole = user?.role;
+  const isUserSiteAdmin = isSiteAdmin(user);
+
+  if (!isUserSiteAdmin && !hasRole(user as EnhancedUser, 'coach') && !hasRole(user as EnhancedUser, 'org_admin')) {
     return (
       <div className="p-6">
         <div className="max-w-md mx-auto mt-20 text-center">
