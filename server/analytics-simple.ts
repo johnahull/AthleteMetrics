@@ -62,7 +62,7 @@ export class AnalyticsService {
           // For intra-group analysis with 1 metric and best timeframe, use same charts as individual
           baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart');
         } else {
-          baseCharts.push('line_chart');
+          baseCharts.push('time_series_box_swarm', 'line_chart');
         }
       } else if (metricCount === 2) {
         baseCharts.push('scatter_plot', 'connected_scatter');
