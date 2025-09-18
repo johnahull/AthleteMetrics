@@ -25,6 +25,7 @@ import type {
   ChartType,
   ChartDataPoint
 } from '@shared/analytics-types';
+import { METRIC_CONFIG } from '@shared/analytics-types';
 
 import { useAuth } from '@/lib/auth';
 import { isSiteAdmin, hasRole, type EnhancedUser } from '@/lib/types/user';
@@ -475,113 +476,154 @@ export function CoachAnalytics() {
         onReset={handleFiltersReset}
       />
 
-      {/* Chart Controls and Display */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Chart Controls Sidebar */}
-        <div className="lg:col-span-1">
+      {/* Chart Controls Bar - Horizontal Layout */}
+      {analyticsData && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {/* Chart Type Selection */}
-          {analyticsData && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Chart Type</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select value={selectedChartType} onValueChange={(value) => setSelectedChartType(value as ChartType)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {analyticsData.meta.recommendedCharts.map((chartType) => (
-                      <SelectItem key={chartType} value={chartType}>
-                        {formatChartTypeName(chartType)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Chart Type</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Select value={selectedChartType} onValueChange={(value) => setSelectedChartType(value as ChartType)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {analyticsData.meta.recommendedCharts.map((chartType) => (
+                    <SelectItem key={chartType} value={chartType}>
+                      {formatChartTypeName(chartType)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
 
           {/* Data Summary */}
-          {analyticsData && (
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="text-sm">Data Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Athletes:</span>
-                  <Badge variant="secondary">{analyticsData.meta.totalAthletes}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Measurements:</span>
-                  <Badge variant="secondary">{analyticsData.meta.totalMeasurements}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Date Range:</span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(analyticsData.meta.dateRange.start).toLocaleDateString()} - {new Date(analyticsData.meta.dateRange.end).toLocaleDateString()}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Data Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span>Athletes:</span>
+                <Badge variant="secondary" className="text-xs">{analyticsData.meta.totalAthletes}</Badge>
+              </div>
+              <div className="flex justify-between">
+                <span>Measurements:</span>
+                <Badge variant="secondary" className="text-xs">{analyticsData.meta.totalMeasurements}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Export Actions */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Export</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-2">
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={!analyticsData || isLoading}
+                  className="h-7 text-xs"
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  CSV Data
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Stats */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Quick Stats</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-1 text-sm">
+              {analyticsData.statistics[metrics.primary] && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Average:</span>
+                    <span className="font-mono text-xs">
+                      {analyticsData.statistics[metrics.primary].mean.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Best:</span>
+                    <span className="font-mono text-xs">
+                      {(() => {
+                        const stats = analyticsData.statistics[metrics.primary];
+                        const metricConfig = METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG];
+                        const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+                        const bestValue = lowerIsBetter ? stats.min : stats.max;
+                        return bestValue.toFixed(2);
+                      })()}
+                    </span>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
+      )}
 
-        {/* Chart Display */}
-        <div className="lg:col-span-3">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+      {/* Chart Display - Full Width */}
+      <div className="w-full">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          {isLoading && (
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-6 w-48" />
-                <Skeleton className="h-4 w-32" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-96 w-full" />
-              </CardContent>
-            </Card>
-          )}
+        {isLoading && (
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-96 w-full" />
+            </CardContent>
+          </Card>
+        )}
 
-          {!isLoading && !error && analyticsData && chartData && (
-            <ChartContainer
-              title={chartConfig.title}
-              subtitle={chartConfig.subtitle}
-              chartType={selectedChartType}
-              data={chartData as ChartDataPoint[]}
-              trends={analyticsData.trends}
-              multiMetric={analyticsData.multiMetric}
-              statistics={analyticsData.statistics}
-              config={chartConfig}
-              highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
-              onExport={handleExport}
-            />
-          )}
+        {!isLoading && !error && analyticsData && chartData && (
+          <ChartContainer
+            title={chartConfig.title}
+            subtitle={chartConfig.subtitle}
+            chartType={selectedChartType}
+            data={chartData as ChartDataPoint[]}
+            trends={analyticsData.trends}
+            multiMetric={analyticsData.multiMetric}
+            statistics={analyticsData.statistics}
+            config={chartConfig}
+            highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
+            onExport={handleExport}
+          />
+        )}
 
-          {!isLoading && !error && !analyticsData && (
-            <Card>
-              <CardContent className="flex items-center justify-center h-96">
-                <div className="text-center">
-                  <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No Data Available</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Configure your analysis parameters and filters to view analytics data.
+        {!isLoading && !error && !analyticsData && (
+          <Card>
+            <CardContent className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Data Available</h3>
+                <p className="text-muted-foreground mb-4">
+                  Configure your analysis parameters and filters to view analytics data.
+                </p>
+                {analysisType === 'individual' && !selectedAthleteId && (
+                  <p className="text-sm text-muted-foreground">
+                    Please select an athlete for individual analysis.
                   </p>
-                  {analysisType === 'individual' && !selectedAthleteId && (
-                    <p className="text-sm text-muted-foreground">
-                      Please select an athlete for individual analysis.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
     </ErrorBoundary>
