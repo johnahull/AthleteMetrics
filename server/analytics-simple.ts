@@ -26,6 +26,54 @@ import {
 
 export class AnalyticsService {
   /**
+   * Get recommended chart types based on analysis parameters
+   */
+  private getRecommendedChartTypes(
+    analysisType: string,
+    metricCount: number,
+    timeframeType: string
+  ): string[] {
+    const baseCharts = [];
+
+    if (analysisType === 'individual') {
+      if (metricCount === 1) {
+        if (timeframeType === 'best') {
+          baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart');
+        } else {
+          baseCharts.push('line_chart', 'bar_chart', 'distribution');
+        }
+      } else if (metricCount === 2) {
+        if (timeframeType === 'best') {
+          baseCharts.push('scatter_plot', 'radar_chart');
+        } else {
+          baseCharts.push('connected_scatter', 'multi_line');
+        }
+      } else {
+        if (timeframeType === 'best') {
+          baseCharts.push('radar_chart', 'bar_chart');
+        } else {
+          baseCharts.push('multi_line', 'radar_chart');
+        }
+      }
+    } else {
+      // Group analysis
+      if (metricCount === 1) {
+        if (timeframeType === 'best') {
+          baseCharts.push('distribution', 'box_plot', 'bar_chart');
+        } else {
+          baseCharts.push('multi_line', 'line_chart');
+        }
+      } else if (metricCount === 2) {
+        baseCharts.push('scatter_plot', 'connected_scatter');
+      } else {
+        baseCharts.push('radar_chart', 'multi_line');
+      }
+    }
+
+    return baseCharts;
+  }
+
+  /**
    * Generate trends data from filtered chart data points
    */
   private generateTrendsData(chartData: ChartDataPoint[], metric: string): TrendData[] {
@@ -279,6 +327,16 @@ export class AnalyticsService {
         ? this.generateTrendsData(chartData, request.metrics.primary)
         : [];
 
+      // Calculate total metric count (primary + additional)
+      const metricCount = 1 + (request.metrics.additional?.length || 0);
+
+      // Generate dynamic chart recommendations
+      const recommendedCharts = this.getRecommendedChartTypes(
+        request.analysisType,
+        metricCount,
+        request.timeframe.type
+      );
+
       return {
         data: chartData,
         trends,
@@ -297,7 +355,7 @@ export class AnalyticsService {
               : endDate || new Date()
           },
           appliedFilters: request.filters,
-          recommendedCharts: ['box_swarm_combo', 'distribution', 'bar_chart'] as any
+          recommendedCharts: recommendedCharts as any
         }
       };
     } catch (error) {
