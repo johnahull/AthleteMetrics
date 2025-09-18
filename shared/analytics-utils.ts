@@ -163,7 +163,8 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
   if (data.length === 0) return [];
 
   const grouped = data.reduce((acc, point) => {
-    const dateStr = point.date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const date = point.date instanceof Date ? point.date : new Date(point.date);
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
     const key = `${point.athleteId}-${point.metric}-${dateStr}`;
     if (!acc[key]) acc[key] = [];
     acc[key].push(point);

@@ -83,9 +83,11 @@ export function ConnectedScatterChart({
       // Create connected points by matching dates
       const connectedPoints = xData
         .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => 
-            y.date.toISOString().split('T')[0] === xPoint.date.toISOString().split('T')[0]
-          );
+          const yPoint = yData.find((y: any) => {
+            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+          });
           
           return yPoint ? {
             x: xPoint.value,
