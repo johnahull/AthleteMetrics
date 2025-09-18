@@ -57,6 +57,8 @@ interface ChartContainerProps {
   isLoading?: boolean;
   error?: string;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
   onExport?: () => void;
   onFullscreen?: () => void;
   className?: string;
@@ -74,6 +76,8 @@ export function ChartContainer({
   isLoading = false,
   error,
   highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
   onExport,
   onFullscreen,
   className
@@ -246,6 +250,8 @@ export function ChartContainer({
                   config={chartConfig}
                   statistics={statistics}
                   highlightAthlete={highlightAthlete}
+                  selectedAthleteIds={selectedAthleteIds}
+                  onAthleteSelectionChange={onAthleteSelectionChange}
                   showAllPoints={chartType === 'box_swarm_combo'}
                 />
               </React.Suspense>
@@ -279,7 +285,7 @@ export function getRecommendedChartType(
     }
   } else {
     if (metricCount === 1) {
-      return timeframeType === 'best' ? 'distribution' : 'multi_line';
+      return timeframeType === 'best' ? 'distribution' : 'line_chart';
     } else if (metricCount === 2) {
       return 'scatter_plot';
     } else {

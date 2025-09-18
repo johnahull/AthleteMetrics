@@ -97,6 +97,7 @@ export interface TrendData {
   athleteName: string;
   metric: string;
   data: TrendDataPoint[];
+  teamName?: string;
 }
 
 // Chart configuration types

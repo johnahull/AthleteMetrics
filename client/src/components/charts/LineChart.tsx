@@ -36,36 +36,87 @@ interface LineChartProps {
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  maxAthletes?: number;
 }
 
 export function LineChart({
   data,
   config,
   statistics,
-  highlightAthlete
+  highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
+  maxAthletes = 10
 }: LineChartProps) {
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
   const [showGroupAverage, setShowGroupAverage] = useState(true);
 
-  // Initialize athlete toggles when data changes
+  // Smart default selection for athletes when not controlled by parent
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+
+  // Use external selection if provided, otherwise use internal state
+  const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
+  const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
+
+  // Get all available athletes sorted by performance
   const allAthletes = useMemo(() => {
     if (!data || data.length === 0) return [];
-    return data.slice(0, 9).map((trend, index) => ({
+
+    // Sort athletes by performance for smart defaults
+    const metric = data[0]?.metric;
+    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+
+    const sortedData = [...data].sort((a, b) => {
+      const aValues = a.data.map(point => point.value);
+      const bValues = b.data.map(point => point.value);
+      const aBest = lowerIsBetter ? Math.min(...aValues) : Math.max(...aValues);
+      const bBest = lowerIsBetter ? Math.min(...bValues) : Math.max(...bValues);
+
+      return lowerIsBetter ? aBest - bBest : bBest - aBest;
+    });
+
+    return sortedData.map((trend, index) => ({
       id: trend.athleteId,
       name: trend.athleteName,
       color: index
     }));
   }, [data]);
 
-  // Initialize toggles with all athletes enabled by default
+  // Initialize smart default selection when data changes and no external selection
+  React.useEffect(() => {
+    if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0) {
+      // Auto-select top performers up to maxAthletes
+      const defaultIds = allAthletes.slice(0, Math.min(maxAthletes, allAthletes.length)).map(a => a.id);
+      setInternalSelectedIds(defaultIds);
+    }
+  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
+
+  // Get athletes that should be displayed (either selected or first N for backwards compatibility)
+  const displayedAthletes = useMemo(() => {
+    if (effectiveSelectedIds.length > 0) {
+      // Use selected athletes in selection order
+      return effectiveSelectedIds.map((id, index) => {
+        const athlete = allAthletes.find(a => a.id === id);
+        return athlete ? { ...athlete, color: index } : null;
+      }).filter(Boolean) as Array<{ id: string; name: string; color: number }>;
+    } else {
+      // Fallback to first N athletes for backwards compatibility
+      return allAthletes.slice(0, maxAthletes);
+    }
+  }, [allAthletes, effectiveSelectedIds, maxAthletes]);
+
+  // Initialize toggles with displayed athletes enabled by default
   React.useEffect(() => {
     const initialToggles: Record<string, boolean> = {};
-    allAthletes.forEach(athlete => {
+    displayedAthletes.forEach(athlete => {
       initialToggles[athlete.id] = true;
     });
     setAthleteToggles(initialToggles);
-  }, [allAthletes]);
+  }, [displayedAthletes]);
 
   // Transform trend data for line chart
   const lineData = useMemo(() => {
@@ -74,7 +125,10 @@ export function LineChart({
     // Filter based on highlighted athlete or toggle states
     const trendsToShow = highlightAthlete
       ? data.filter(trend => trend.athleteId === highlightAthlete)
-      : data.slice(0, 9).filter(trend => athleteToggles[trend.athleteId]);
+      : data.filter(trend =>
+          displayedAthletes.some(a => a.id === trend.athleteId) &&
+          athleteToggles[trend.athleteId]
+        );
 
     if (trendsToShow.length === 0) return null;
 
@@ -105,7 +159,8 @@ export function LineChart({
       'rgba(236, 72, 153, 1)',    // Pink
       'rgba(20, 184, 166, 1)',    // Teal
       'rgba(251, 146, 60, 1)',    // Orange
-      'rgba(124, 58, 237, 1)'     // Violet
+      'rgba(124, 58, 237, 1)',    // Violet
+      'rgba(34, 197, 94, 1)'      // Emerald - 10th color
     ];
 
     const datasets = trendsToShow.map((trend) => {
@@ -118,9 +173,9 @@ export function LineChart({
         return point ? point.value : null;
       });
 
-      // Find original athlete index for consistent color mapping
-      const originalIndex = data?.slice(0, 9).findIndex(d => d.athleteId === trend.athleteId) ?? 0;
-      const color = colors[originalIndex % colors.length];
+      // Find displayed athlete index for consistent color mapping
+      const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId) ?? 0;
+      const color = colors[displayedIndex % colors.length];
       const isHighlighted = trend.athleteId === highlightAthlete;
 
       return {
@@ -320,7 +375,7 @@ export function LineChart({
 
   const selectAllAthletes = () => {
     const allEnabled: Record<string, boolean> = {};
-    allAthletes.forEach(athlete => {
+    displayedAthletes.forEach(athlete => {
       allEnabled[athlete.id] = true;
     });
     setAthleteToggles(allEnabled);
@@ -328,7 +383,7 @@ export function LineChart({
 
   const clearAllAthletes = () => {
     const allDisabled: Record<string, boolean> = {};
-    allAthletes.forEach(athlete => {
+    displayedAthletes.forEach(athlete => {
       allDisabled[athlete.id] = false;
     });
     setAthleteToggles(allDisabled);
@@ -351,14 +406,14 @@ export function LineChart({
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-900">
-              Athletes ({visibleAthleteCount} of {allAthletes.length} visible)
+              Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
             </h3>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={selectAllAthletes}
-                disabled={visibleAthleteCount === allAthletes.length}
+                disabled={visibleAthleteCount === displayedAthletes.length}
               >
                 Select All
               </Button>
@@ -374,8 +429,8 @@ export function LineChart({
           </div>
 
           {/* Athletes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mb-3">
-            {allAthletes.map(athlete => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
+            {displayedAthletes.map(athlete => {
               const colors = [
                 'rgba(59, 130, 246, 1)',    // Blue
                 'rgba(16, 185, 129, 1)',    // Green
@@ -385,7 +440,8 @@ export function LineChart({
                 'rgba(236, 72, 153, 1)',    // Pink
                 'rgba(20, 184, 166, 1)',    // Teal
                 'rgba(251, 146, 60, 1)',    // Orange
-                'rgba(124, 58, 237, 1)'     // Violet
+                'rgba(124, 58, 237, 1)',    // Violet
+                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
               ];
               const athleteColor = colors[athlete.color % colors.length];
 

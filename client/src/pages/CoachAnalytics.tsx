@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
 import { AthleteSelector } from '@/components/ui/athlete-selector';
+import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 import type {
@@ -116,6 +117,9 @@ export function CoachAnalytics() {
 
   // Chart configuration
   const [selectedChartType, setSelectedChartType] = useState<ChartType>('box_swarm_combo');
+
+  // Enhanced athlete selection for multi-athlete line charts
+  const [selectedAthleteIds, setSelectedAthleteIds] = useState<string[]>([]);
 
   // Get effective organization ID (organizationContext or user's primary organization)
   const getEffectiveOrganizationId = () => {
@@ -597,18 +601,34 @@ export function CoachAnalytics() {
         )}
 
         {!isLoading && !error && analyticsData && chartData && (
-          <ChartContainer
-            title={chartConfig.title}
-            subtitle={chartConfig.subtitle}
-            chartType={selectedChartType}
-            data={chartData as ChartDataPoint[]}
-            trends={analyticsData.trends}
-            multiMetric={analyticsData.multiMetric}
-            statistics={analyticsData.statistics}
-            config={chartConfig}
-            highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
-            onExport={handleExport}
-          />
+          <>
+            {/* Enhanced Athlete Selector for Multi-Athlete Line Charts */}
+            {analysisType === 'intra_group' && selectedChartType === 'line_chart' && analyticsData.trends && analyticsData.trends.length > 0 && (
+              <AthleteSelectionEnhanced
+                data={analyticsData.trends}
+                selectedAthleteIds={selectedAthleteIds}
+                onSelectionChange={setSelectedAthleteIds}
+                maxSelection={10}
+                metric={metrics.primary}
+                className="mb-4"
+              />
+            )}
+
+            <ChartContainer
+              title={chartConfig.title}
+              subtitle={chartConfig.subtitle}
+              chartType={selectedChartType}
+              data={chartData as ChartDataPoint[]}
+              trends={analyticsData.trends}
+              multiMetric={analyticsData.multiMetric}
+              statistics={analyticsData.statistics}
+              config={chartConfig}
+              highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
+              selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
+              onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
+              onExport={handleExport}
+            />
+          </>
         )}
 
         {!isLoading && !error && !analyticsData && (
