@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -10,10 +10,10 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Scatter } from 'react-chartjs-2';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
+  StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
@@ -27,6 +27,35 @@ ChartJS.register(
   Legend
 );
 
+// Regression calculation helper function
+function calculateRegression(points: any[]) {
+  if (points.length < 2) return null;
+
+  const n = points.length;
+  const sumX = points.reduce((sum, p) => sum + p.x, 0);
+  const sumY = points.reduce((sum, p) => sum + p.y, 0);
+  const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
+  const sumX2 = points.reduce((sum, p) => sum + p.x * p.x, 0);
+  const sumY2 = points.reduce((sum, p) => sum + p.y * p.y, 0);
+
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Calculate R-squared
+  const meanY = sumY / n;
+  const ssTotal = points.reduce((sum, p) => sum + Math.pow(p.y - meanY, 2), 0);
+  const ssResidual = points.reduce((sum, p) => {
+    const predicted = slope * p.x + intercept;
+    return sum + Math.pow(p.y - predicted, 2);
+  }, 0);
+  const rSquared = ssTotal === 0 ? 0 : 1 - (ssResidual / ssTotal);
+
+  return { slope, intercept, rSquared };
+}
+
 interface ScatterPlotChartProps {
   data: ChartDataPoint[];
   config: ChartConfiguration;
@@ -34,12 +63,13 @@ interface ScatterPlotChartProps {
   highlightAthlete?: string;
 }
 
-export function ScatterPlotChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export function ScatterPlotChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete
 }: ScatterPlotChartProps) {
+  const [showRegressionLine, setShowRegressionLine] = useState(true);
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -133,6 +163,34 @@ export function ScatterPlotChart({
       });
     }
 
+    // Calculate regression line
+    const regression = calculateRegression(scatterPoints);
+
+    // Add regression line if enabled and we have enough points
+    if (showRegressionLine && regression && scatterPoints.length >= 2) {
+      const xValues = scatterPoints.map(p => p.x);
+      const minX = Math.min(...xValues);
+      const maxX = Math.max(...xValues);
+
+      datasets.push({
+        label: 'Trend Line',
+        type: 'line' as const,
+        data: [
+          { x: minX, y: regression.slope * minX + regression.intercept },
+          { x: maxX, y: regression.slope * maxX + regression.intercept }
+        ],
+        borderColor: 'rgba(107, 114, 128, 0.8)',
+        backgroundColor: 'rgba(107, 114, 128, 0.1)',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        showLine: true,
+        tension: 0
+      });
+    }
+
     const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
@@ -146,9 +204,10 @@ export function ScatterPlotChart({
       yUnit,
       xLabel,
       yLabel,
-      points: scatterPoints
+      points: scatterPoints,
+      regression
     } as any;
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, showRegressionLine]);
 
   // Calculate correlation coefficient
   const correlation = useMemo(() => {
@@ -254,35 +313,117 @@ export function ScatterPlotChart({
   return (
     <div className="w-full h-full">
       <Scatter data={scatterData} options={options} />
-      
-      {/* Correlation analysis */}
-      {correlation !== null && (
-        <div className="mt-4 flex items-center justify-center space-x-8 text-sm">
-          <div className="text-center">
-            <div className="font-medium">Correlation</div>
-            <div className={`text-lg font-bold ${
-              Math.abs(correlation) > 0.7 ? 'text-green-600' :
-              Math.abs(correlation) > 0.4 ? 'text-yellow-600' : 'text-gray-600'
-            }`}>
-              r = {correlation.toFixed(3)}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="font-medium">Relationship</div>
-            <div className="text-muted-foreground">
-              {Math.abs(correlation) > 0.7 ? 'Strong' :
-               Math.abs(correlation) > 0.4 ? 'Moderate' : 'Weak'}
-              {correlation > 0 ? ' Positive' : ' Negative'}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="font-medium">Sample Size</div>
-            <div className="text-muted-foreground">
-              n = {scatterData.points.length}
-            </div>
-          </div>
+
+      {/* Controls and Analysis */}
+      <div className="mt-4 space-y-4">
+        {/* Toggle Controls */}
+        <div className="flex items-center justify-center space-x-4">
+          <label className="flex items-center space-x-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showRegressionLine}
+              onChange={(e) => setShowRegressionLine(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span>Show Trend Line</span>
+          </label>
         </div>
-      )}
+
+        {/* Statistical Analysis */}
+        {correlation !== null && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="text-center">
+              <div className="font-medium">Correlation</div>
+              <div className={`text-lg font-bold ${
+                Math.abs(correlation) > 0.7 ? 'text-green-600' :
+                Math.abs(correlation) > 0.4 ? 'text-yellow-600' : 'text-gray-600'
+              }`}>
+                r = {correlation.toFixed(3)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {Math.abs(correlation) > 0.7 ? 'Strong' :
+                 Math.abs(correlation) > 0.4 ? 'Moderate' : 'Weak'}
+                {correlation > 0 ? ' Positive' : ' Negative'}
+              </div>
+            </div>
+
+            {scatterData.regression && (
+              <div className="text-center">
+                <div className="font-medium">R-Squared</div>
+                <div className="text-lg font-bold text-blue-600">
+                  R² = {scatterData.regression.rSquared.toFixed(3)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {(scatterData.regression.rSquared * 100).toFixed(1)}% explained
+                </div>
+              </div>
+            )}
+
+            {scatterData.regression && (
+              <div className="text-center">
+                <div className="font-medium">Trend</div>
+                <div className="text-lg font-bold text-purple-600">
+                  {scatterData.regression.slope > 0 ? '↗️' : '↘️'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Slope: {scatterData.regression.slope.toFixed(3)}
+                </div>
+              </div>
+            )}
+
+            <div className="text-center">
+              <div className="font-medium">Sample Size</div>
+              <div className="text-lg font-bold text-gray-600">
+                n = {scatterData.points.length}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Athletes
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Performance Quadrants Analysis */}
+        {statistics && scatterData.xMetric && scatterData.yMetric && (
+          <div className="mt-4 bg-gray-50 rounded-lg p-3">
+            <div className="text-sm font-medium text-center mb-2">Performance Quadrants</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {(() => {
+                const xMean = statistics[scatterData.xMetric]?.mean || 0;
+                const yMean = statistics[scatterData.yMetric]?.mean || 0;
+
+                const quadrants = {
+                  topRight: scatterData.points.filter((p: any) => p.x >= xMean && p.y >= yMean).length,
+                  topLeft: scatterData.points.filter((p: any) => p.x < xMean && p.y >= yMean).length,
+                  bottomRight: scatterData.points.filter((p: any) => p.x >= xMean && p.y < yMean).length,
+                  bottomLeft: scatterData.points.filter((p: any) => p.x < xMean && p.y < yMean).length
+                };
+
+                return (
+                  <>
+                    <div className="bg-green-100 p-2 rounded text-center">
+                      <div className="font-medium text-green-800">High-High</div>
+                      <div className="text-green-600">{quadrants.topRight} athletes</div>
+                    </div>
+                    <div className="bg-yellow-100 p-2 rounded text-center">
+                      <div className="font-medium text-yellow-800">Low-High</div>
+                      <div className="text-yellow-600">{quadrants.topLeft} athletes</div>
+                    </div>
+                    <div className="bg-orange-100 p-2 rounded text-center">
+                      <div className="font-medium text-orange-800">High-Low</div>
+                      <div className="text-orange-600">{quadrants.bottomRight} athletes</div>
+                    </div>
+                    <div className="bg-red-100 p-2 rounded text-center">
+                      <div className="font-medium text-red-800">Low-Low</div>
+                      <div className="text-red-600">{quadrants.bottomLeft} athletes</div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
