@@ -26,6 +26,24 @@ import type {
 
 import { useAuth } from '@/lib/auth';
 
+// Helper function to format chart type names for display
+function formatChartTypeName(chartType: string): string {
+  const chartTypeNames: Record<string, string> = {
+    'box_swarm_combo': 'Box + Swarm',
+    'box_plot': 'Box Plot',
+    'distribution': 'Distribution',
+    'bar_chart': 'Bar Chart',
+    'line_chart': 'Line Chart',
+    'scatter_plot': 'Scatter Plot',
+    'radar_chart': 'Radar Chart',
+    'swarm_plot': 'Swarm Plot',
+    'connected_scatter': 'Connected Scatter',
+    'multi_line': 'Multi Line'
+  };
+
+  return chartTypeNames[chartType] || chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 export function CoachAnalytics() {
   const { user, organizationContext } = useAuth();
 
@@ -466,7 +484,7 @@ export function CoachAnalytics() {
                   <SelectContent>
                     {analyticsData.meta.recommendedCharts.map((chartType) => (
                       <SelectItem key={chartType} value={chartType}>
-                        {chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {formatChartTypeName(chartType)}
                       </SelectItem>
                     ))}
                   </SelectContent>
