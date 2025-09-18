@@ -72,14 +72,24 @@ export function BarChart({
     const firstMetric = data[0]?.metric;
     const metricConfig = firstMetric ? METRIC_CONFIG[firstMetric as keyof typeof METRIC_CONFIG] : null;
 
-    const athletes = Object.values(athleteData)
+    const sortedAthletes = Object.values(athleteData)
       .sort((a, b) => {
         // Sort by best performance (consider lowerIsBetter)
         return metricConfig?.lowerIsBetter
           ? a.value - b.value // Lower is better (ascending)
           : b.value - a.value; // Higher is better (descending)
-      })
-      .slice(0, 20); // Show top 20
+      });
+
+    // Start with top 25 athletes
+    let athletes = sortedAthletes.slice(0, 25);
+
+    // If highlightAthlete exists and not in top 25, include them
+    if (highlightAthlete && !athletes.find(a => a.athleteId === highlightAthlete)) {
+      const highlightedAthlete = sortedAthletes.find(a => a.athleteId === highlightAthlete);
+      if (highlightedAthlete) {
+        athletes = athletes.slice(0, 24).concat(highlightedAthlete);
+      }
+    }
 
     const labels = athletes.map(athlete => athlete.athleteName);
     const values = athletes.map(athlete => athlete.value);
@@ -228,7 +238,7 @@ export function BarChart({
             {(barData.datasets[0].data.reduce((a, b) => a + b, 0) / barData.datasets[0].data.length).toFixed(2)}{barData.unit}
           </div>
           <div className="text-xs text-muted-foreground">
-            Top {barData.athletes.length} athletes
+            Top 25 athletes
           </div>
         </div>
         
