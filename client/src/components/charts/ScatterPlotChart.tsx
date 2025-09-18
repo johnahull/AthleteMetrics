@@ -590,25 +590,27 @@ export function ScatterPlotChart({
 
                 return (
                   <>
-                    <div className={`${colorClasses[labels.topRight.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
-                      <div className="font-medium">{labels.topRight.label}</div>
-                      <div className="text-xs opacity-75">{labels.topRight.description}</div>
-                      <div className="font-semibold">{quadrants.topRight} athletes</div>
-                    </div>
+                    {/* Top row: topLeft, topRight */}
                     <div className={`${colorClasses[labels.topLeft.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
                       <div className="font-medium">{labels.topLeft.label}</div>
                       <div className="text-xs opacity-75">{labels.topLeft.description}</div>
                       <div className="font-semibold">{quadrants.topLeft} athletes</div>
                     </div>
-                    <div className={`${colorClasses[labels.bottomRight.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
-                      <div className="font-medium">{labels.bottomRight.label}</div>
-                      <div className="text-xs opacity-75">{labels.bottomRight.description}</div>
-                      <div className="font-semibold">{quadrants.bottomRight} athletes</div>
+                    <div className={`${colorClasses[labels.topRight.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
+                      <div className="font-medium">{labels.topRight.label}</div>
+                      <div className="text-xs opacity-75">{labels.topRight.description}</div>
+                      <div className="font-semibold">{quadrants.topRight} athletes</div>
                     </div>
+                    {/* Bottom row: bottomLeft, bottomRight */}
                     <div className={`${colorClasses[labels.bottomLeft.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
                       <div className="font-medium">{labels.bottomLeft.label}</div>
                       <div className="text-xs opacity-75">{labels.bottomLeft.description}</div>
                       <div className="font-semibold">{quadrants.bottomLeft} athletes</div>
+                    </div>
+                    <div className={`${colorClasses[labels.bottomRight.color as keyof typeof colorClasses]} p-2 rounded text-center`}>
+                      <div className="font-medium">{labels.bottomRight.label}</div>
+                      <div className="text-xs opacity-75">{labels.bottomRight.description}</div>
+                      <div className="font-semibold">{quadrants.bottomRight} athletes</div>
                     </div>
                   </>
                 );
