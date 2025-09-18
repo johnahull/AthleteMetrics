@@ -57,7 +57,8 @@ export function LineChart({
     const allDates = new Set<string>();
     trendsToShow.forEach(trend => {
       trend.data.forEach(point => {
-        allDates.add(point.date.toISOString().split('T')[0]);
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        allDates.add(date.toISOString().split('T')[0]);
       });
     });
 

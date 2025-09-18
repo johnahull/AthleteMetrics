@@ -146,7 +146,7 @@ export class AnalyticsService {
         }
 
         return {
-          date: point.date,
+          date: point.date instanceof Date ? point.date : new Date(point.date),
           value: point.value,
           isPersonalBest,
           groupAverage: groupStats.mean,
