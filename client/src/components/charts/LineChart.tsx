@@ -82,9 +82,10 @@ export function LineChart({
     const datasets = trendsToShow.map((trend, index) => {
       // Create data points for each date
       const trendData = sortedDates.map(dateStr => {
-        const point = trend.data.find(p => 
-          p.date.toISOString().split('T')[0] === dateStr
-        );
+        const point = trend.data.find(p => {
+          const pointDate = p.date instanceof Date ? p.date : new Date(p.date);
+          return pointDate.toISOString().split('T')[0] === dateStr;
+        });
         return point ? point.value : null;
       });
 
@@ -165,9 +166,10 @@ export function LineChart({
       
       const bestPoint = trend.data.find(point => point.isPersonalBest);
       if (bestPoint) {
-        const pointIndex = lineData.sortedDates.findIndex(dateStr => 
-          bestPoint.date.toISOString().split('T')[0] === dateStr
-        );
+        const pointIndex = lineData.sortedDates.findIndex(dateStr => {
+          const bestPointDate = bestPoint.date instanceof Date ? bestPoint.date : new Date(bestPoint.date);
+          return bestPointDate.toISOString().split('T')[0] === dateStr;
+        });
         
         if (pointIndex >= 0) {
           bests.push({
@@ -288,7 +290,10 @@ export function LineChart({
               {personalBests[0].value.toFixed(2)}{lineData.unit}
             </div>
             <div className="text-xs text-muted-foreground">
-              {personalBests[0].date.toLocaleDateString()}
+              {(() => {
+                const date = personalBests[0].date instanceof Date ? personalBests[0].date : new Date(personalBests[0].date);
+                return date.toLocaleDateString();
+              })()}
             </div>
           </div>
           
