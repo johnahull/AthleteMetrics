@@ -104,9 +104,23 @@ export class AnalyticsService {
       return [];
     }
 
-    // Calculate group statistics for comparison
-    const allValues = chartData.filter(p => p.metric === metric).map(p => p.value);
-    const groupStats = calculateStatistics(allValues);
+    // Calculate per-date group averages for comparison
+    const dateGroupedData = chartData
+      .filter(p => p.metric === metric)
+      .reduce((acc, point) => {
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        const dateStr = date.toISOString().split('T')[0];
+        if (!acc[dateStr]) acc[dateStr] = [];
+        acc[dateStr].push(point.value);
+        return acc;
+      }, {} as Record<string, number[]>);
+
+    // Calculate average and median for each date
+    const perDateStats = Object.entries(dateGroupedData).reduce((acc, [dateStr, values]) => {
+      const stats = calculateStatistics(values);
+      acc[dateStr] = stats;
+      return acc;
+    }, {} as Record<string, { mean: number; median: number }>);
 
     // Convert to TrendData format
     const trends: TrendData[] = Object.values(athleteGroups).map(group => {
@@ -145,12 +159,17 @@ export class AnalyticsService {
           }
         }
 
+        // Get per-date group statistics
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        const dateStr = date.toISOString().split('T')[0];
+        const dateStats = perDateStats[dateStr];
+
         return {
-          date: point.date instanceof Date ? point.date : new Date(point.date),
+          date,
           value: point.value,
           isPersonalBest,
-          groupAverage: groupStats.mean,
-          groupMedian: groupStats.median
+          groupAverage: dateStats?.mean || 0,
+          groupMedian: dateStats?.median || 0
         };
       });
 

@@ -111,9 +111,19 @@ export function LineChart({
 
     // Add group average line if available
     if (trendsToShow.length > 0 && trendsToShow[0].data[0]?.groupAverage !== undefined) {
-      const groupAverageData = sortedDates.map(() => {
-        // Use first trend's group average (should be same for all)
-        return trendsToShow[0].data[0]?.groupAverage || null;
+      const groupAverageData = sortedDates.map(dateStr => {
+        // Find the group average for this specific date from any athlete's data
+        // Since group average is per-date, we can use any athlete that has data for this date
+        for (const trend of trendsToShow) {
+          const point = trend.data.find(p => {
+            const pointDate = p.date instanceof Date ? p.date : new Date(p.date);
+            return pointDate.toISOString().split('T')[0] === dateStr;
+          });
+          if (point && point.groupAverage !== undefined) {
+            return point.groupAverage;
+          }
+        }
+        return null;
       });
 
       datasets.push({
