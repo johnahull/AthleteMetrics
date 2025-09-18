@@ -383,7 +383,7 @@ export function CoachAnalytics() {
               </TabsTrigger>
               <TabsTrigger value="intra_group" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Intra-Group Comparison
+                Multi-Athlete
               </TabsTrigger>
               <TabsTrigger value="inter_group" className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
@@ -445,9 +445,9 @@ export function CoachAnalytics() {
 
             <TabsContent value="intra_group" className="mt-4">
               <div className="p-4 bg-green-50 rounded-lg">
-                <h3 className="font-medium text-green-900">Intra-Group Comparison</h3>
+                <h3 className="font-medium text-green-900">Multi-Athlete Analysis</h3>
                 <p className="text-sm text-green-700 mt-1">
-                  Compare athletes within the same group (team, age group, gender, etc.) to identify 
+                  Compare multiple athletes within the same group (team, age group, gender, etc.) to identify
                   top performers, outliers, and distribution patterns.
                 </p>
               </div>
