@@ -151,6 +151,11 @@ export function CoachAnalytics() {
   // Auto-refresh when key parameters change
   useEffect(() => {
     if (effectiveOrganizationId) {
+      // For individual analysis, only fetch data if an athlete is selected
+      if (analysisType === 'individual' && !selectedAthleteId) {
+        setAnalyticsData(null);
+        return;
+      }
       fetchAnalyticsData();
     }
   }, [analysisType, filters, metrics, timeframe, selectedAthleteId, effectiveOrganizationId]);
@@ -477,7 +482,7 @@ export function CoachAnalytics() {
       />
 
       {/* Chart Controls Bar - Horizontal Layout */}
-      {analyticsData && (
+      {analyticsData && (analysisType !== 'individual' || selectedAthleteId) && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {/* Chart Type Selection */}
           <Card>
