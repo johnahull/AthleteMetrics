@@ -133,17 +133,19 @@ export function TimeSeriesBoxSwarmChart({
         const q3 = values[q3Index];
         const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
 
-        // Box plot components as separate line datasets
+        // Box plot components using numeric x-coordinates for proper rendering
+        const dateOffset = dateIndex; // Use numeric position
+        const boxWidth = 0.3; // Width of box plot elements
 
-        // 1. Box rectangle (Q1 to Q3)
+        // 1. Box rectangle (Q1 to Q3) - drawn as rectangle outline
         datasets.push({
           label: `Box-${dateIndex}`,
           data: [
-            { x: dateLabel, y: q1 },
-            { x: dateLabel, y: q3 },
-            { x: dateLabel, y: q3 },
-            { x: dateLabel, y: q1 },
-            { x: dateLabel, y: q1 }
+            { x: dateOffset - boxWidth/2, y: q1 },
+            { x: dateOffset + boxWidth/2, y: q1 },
+            { x: dateOffset + boxWidth/2, y: q3 },
+            { x: dateOffset - boxWidth/2, y: q3 },
+            { x: dateOffset - boxWidth/2, y: q1 }
           ],
           type: 'line',
           borderColor: 'rgba(75, 85, 99, 0.8)',
@@ -156,12 +158,12 @@ export function TimeSeriesBoxSwarmChart({
           tension: 0
         });
 
-        // 2. Median line
+        // 2. Median line (horizontal line across box)
         datasets.push({
           label: `Median-${dateIndex}`,
           data: [
-            { x: dateLabel, y: median },
-            { x: dateLabel, y: median }
+            { x: dateOffset - boxWidth/2, y: median },
+            { x: dateOffset + boxWidth/2, y: median }
           ],
           type: 'line',
           borderColor: 'rgba(75, 85, 99, 1)',
@@ -172,12 +174,12 @@ export function TimeSeriesBoxSwarmChart({
           order: 1
         });
 
-        // 3. Mean line
+        // 3. Mean line (horizontal dashed line across box)
         datasets.push({
           label: `Mean-${dateIndex}`,
           data: [
-            { x: dateLabel, y: mean },
-            { x: dateLabel, y: mean }
+            { x: dateOffset - boxWidth/2, y: mean },
+            { x: dateOffset + boxWidth/2, y: mean }
           ],
           type: 'line',
           borderColor: 'rgba(239, 68, 68, 1)',
@@ -189,49 +191,78 @@ export function TimeSeriesBoxSwarmChart({
           order: 1
         });
 
-        // 4. Whiskers (min to Q1, Q3 to max)
+        // 4. Lower whisker (min to Q1)
         datasets.push({
-          label: `Whiskers-${dateIndex}`,
+          label: `LowerWhisker-${dateIndex}`,
           data: [
-            { x: dateLabel, y: min },
-            { x: dateLabel, y: q1 },
-            { x: dateLabel, y: q3 },
-            { x: dateLabel, y: max }
+            { x: dateOffset, y: min },
+            { x: dateOffset, y: q1 }
           ],
           type: 'line',
           borderColor: 'rgba(75, 85, 99, 0.6)',
           backgroundColor: 'transparent',
-          borderWidth: 1,
+          borderWidth: 2,
           pointRadius: 0,
-          showLine: false,
+          showLine: true,
           order: 2
         });
 
-        // 5. Whisker caps
-        const capWidth = 0.1;
+        // 5. Upper whisker (Q3 to max)
         datasets.push({
-          label: `WhiskerCaps-${dateIndex}`,
+          label: `UpperWhisker-${dateIndex}`,
           data: [
-            { x: dateLabel, y: min },
-            { x: dateLabel, y: max }
+            { x: dateOffset, y: q3 },
+            { x: dateOffset, y: max }
           ],
-          type: 'scatter',
-          borderColor: 'rgba(75, 85, 99, 0.8)',
-          backgroundColor: 'rgba(75, 85, 99, 0.8)',
-          pointStyle: 'line',
-          pointRadius: 8,
-          pointBorderWidth: 2,
+          type: 'line',
+          borderColor: 'rgba(75, 85, 99, 0.6)',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          showLine: true,
           order: 2
         });
 
-        // 6. Swarm plot - individual athlete points
+        // 6. Whisker caps (horizontal lines at min and max)
+        const capWidth = boxWidth * 0.5;
+        datasets.push({
+          label: `MinCap-${dateIndex}`,
+          data: [
+            { x: dateOffset - capWidth/2, y: min },
+            { x: dateOffset + capWidth/2, y: min }
+          ],
+          type: 'line',
+          borderColor: 'rgba(75, 85, 99, 0.8)',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          showLine: true,
+          order: 2
+        });
+
+        datasets.push({
+          label: `MaxCap-${dateIndex}`,
+          data: [
+            { x: dateOffset - capWidth/2, y: max },
+            { x: dateOffset + capWidth/2, y: max }
+          ],
+          type: 'line',
+          borderColor: 'rgba(75, 85, 99, 0.8)',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 0,
+          showLine: true,
+          order: 2
+        });
+
+        // 7. Swarm plot - individual athlete points
         dateData.forEach((athleteData) => {
           const jitter = (Math.random() - 0.5) * 0.3; // Small horizontal jitter for visibility
           const color = athleteColorMap.get(athleteData.athleteId) || 'rgba(75, 85, 99, 0.8)';
 
           datasets.push({
             label: athleteData.athleteName,
-            data: [{ x: dateLabel, y: athleteData.value }],
+            data: [{ x: dateOffset + jitter, y: athleteData.value }],
             type: 'scatter',
             backgroundColor: color,
             borderColor: athleteData.isPersonalBest ? 'gold' : color,
@@ -268,12 +299,15 @@ export function TimeSeriesBoxSwarmChart({
         tooltip: {
           filter: (tooltipItem: any) => {
             // Only show tooltips for athlete points, not box plot components
+            const label = tooltipItem.dataset.label || '';
             return tooltipItem.dataset.type === 'scatter' &&
-                   !tooltipItem.dataset.label.includes('-') &&
-                   !tooltipItem.dataset.label.includes('Box') &&
-                   !tooltipItem.dataset.label.includes('Median') &&
-                   !tooltipItem.dataset.label.includes('Mean') &&
-                   !tooltipItem.dataset.label.includes('Whiskers');
+                   !label.includes('Box-') &&
+                   !label.includes('Median-') &&
+                   !label.includes('Mean-') &&
+                   !label.includes('LowerWhisker-') &&
+                   !label.includes('UpperWhisker-') &&
+                   !label.includes('MinCap-') &&
+                   !label.includes('MaxCap-');
           },
           callbacks: {
             label: (context: any) => {
@@ -286,7 +320,7 @@ export function TimeSeriesBoxSwarmChart({
       },
       scales: {
         x: {
-          type: 'category' as const,
+          type: 'linear' as const,
           title: {
             display: true,
             text: 'Measurement Date'
@@ -295,11 +329,14 @@ export function TimeSeriesBoxSwarmChart({
             display: false
           },
           ticks: {
-            maxRotation: 45,
-            minRotation: 0
+            stepSize: 1,
+            callback: function(value: any, index: number) {
+              const dateLabels = (chartData as any).labels;
+              return dateLabels[Math.round(value)] || '';
+            }
           },
-          // Add padding to prevent edge rendering
-          offset: true
+          min: -0.5,
+          max: selectedDates.length - 0.5
         },
         y: {
           type: 'linear' as const,
