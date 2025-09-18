@@ -20,10 +20,19 @@ import type {
   AnalyticsRequest,
   AnalyticsResponse,
   ChartType,
-  ChartDataPoint
+  ChartDataPoint,
+  StatisticalSummary
 } from '@shared/analytics-types';
+import { METRIC_CONFIG } from '@shared/analytics-types';
 
 import { useAuth } from '@/lib/auth';
+
+// Helper function to get the best performance value based on metric type
+function getBestPerformanceValue(metric: string, stats: StatisticalSummary): number {
+  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  // For time-based metrics (lower is better), use min. For performance metrics (higher is better), use max.
+  return metricConfig?.lowerIsBetter ? stats.min : stats.max;
+}
 
 // Helper function to format chart type names for display
 function formatChartTypeName(chartType: string): string {
@@ -473,7 +482,7 @@ export function AthleteAnalytics() {
               <div className="text-center">
                 <div className="font-medium">Personal Best</div>
                 <div className="text-lg font-bold text-green-600">
-                  {analyticsData.statistics[metrics.primary].max.toFixed(2)}
+                  {getBestPerformanceValue(metrics.primary, analyticsData.statistics[metrics.primary]).toFixed(2)}
                 </div>
               </div>
               <div className="text-center">

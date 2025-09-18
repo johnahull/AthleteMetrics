@@ -10,12 +10,25 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
+  StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+
+// Helper function to get the best performance value based on metric type
+function getBestPerformanceValue(metric: string, values: number[]): number {
+  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  // For time-based metrics (lower is better), use min. For performance metrics (higher is better), use max.
+  return metricConfig?.lowerIsBetter ? Math.min(...values) : Math.max(...values);
+}
+
+// Helper function to get the best performing athlete based on metric type
+function getBestPerformingAthlete(metric: string, athletes: any[], values: number[]) {
+  const bestValue = getBestPerformanceValue(metric, values);
+  return athletes.find(a => a.value === bestValue);
+}
 
 // Register Chart.js components
 ChartJS.register(
@@ -202,12 +215,10 @@ export function BarChart({
         <div>
           <div className="font-medium">Best Performance</div>
           <div className="text-lg font-bold text-green-600">
-            {Math.max(...barData.datasets[0].data).toFixed(2)}{barData.unit}
+            {getBestPerformanceValue(barData.primaryMetric, barData.datasets[0].data).toFixed(2)}{barData.unit}
           </div>
           <div className="text-xs text-muted-foreground">
-            {barData.athletes.find(a => 
-              a.value === Math.max(...barData.datasets[0].data)
-            )?.athleteName}
+            {getBestPerformingAthlete(barData.primaryMetric, barData.athletes, barData.datasets[0].data)?.athleteName}
           </div>
         </div>
         
