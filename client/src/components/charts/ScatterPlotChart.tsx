@@ -75,30 +75,61 @@ function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
   const yGoodTerm = yConfig?.lowerIsBetter ? 'Fast' : 'Strong';
   const yPoorTerm = yConfig?.lowerIsBetter ? 'Slow' : 'Weak';
 
+  // Helper function to determine performance quality and color
+  const getQuadrantInfo = (xIsGood: boolean, yIsGood: boolean, xTerm: string, yTerm: string, xDesc: string, yDesc: string) => {
+    const label = `${xTerm}-${yTerm}`;
+    const description = `${yDesc} ${yLabel}, ${xDesc} ${xLabel}`;
+
+    // Color based on overall performance quality
+    if (xIsGood && yIsGood) return { label, description, color: 'green' };  // Best performance
+    if (xIsGood || yIsGood) return { label, description, color: 'yellow' }; // Mixed performance
+    return { label, description, color: 'red' }; // Poor performance
+  };
+
   return {
     topRight: {
-      // Good Y, Good/Bad X (depending on if X is lower-is-better)
-      label: xConfig?.lowerIsBetter ? `${xPoorTerm}-${yGoodTerm}` : `${xGoodTerm}-${yGoodTerm}`,
-      description: `Above avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'above avg' : 'above avg'} ${xLabel}`,
-      color: xConfig?.lowerIsBetter ? 'yellow' : 'green'
+      // Above average Y, above average X
+      ...getQuadrantInfo(
+        !xConfig?.lowerIsBetter, // X is good if higher is better OR bad if lower is better (above avg)
+        !yConfig?.lowerIsBetter, // Y is good if higher is better OR bad if lower is better (above avg)
+        xConfig?.lowerIsBetter ? xPoorTerm : xGoodTerm,
+        yConfig?.lowerIsBetter ? yPoorTerm : yGoodTerm,
+        'above avg',
+        'above avg'
+      )
     },
     topLeft: {
-      // Good Y, Bad/Good X (depending on if X is lower-is-better)
-      label: xConfig?.lowerIsBetter ? `${xGoodTerm}-${yGoodTerm}` : `${xPoorTerm}-${yGoodTerm}`,
-      description: `Above avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'below avg' : 'below avg'} ${xLabel}`,
-      color: xConfig?.lowerIsBetter ? 'green' : 'yellow'
+      // Above average Y, below average X
+      ...getQuadrantInfo(
+        xConfig?.lowerIsBetter, // X is good if lower is better OR bad if higher is better (below avg)
+        !yConfig?.lowerIsBetter, // Y is good if higher is better OR bad if lower is better (above avg)
+        xConfig?.lowerIsBetter ? xGoodTerm : xPoorTerm,
+        yConfig?.lowerIsBetter ? yPoorTerm : yGoodTerm,
+        'below avg',
+        'above avg'
+      )
     },
     bottomRight: {
-      // Bad Y, Good/Bad X (depending on if X is lower-is-better)
-      label: xConfig?.lowerIsBetter ? `${xPoorTerm}-${yPoorTerm}` : `${xGoodTerm}-${yPoorTerm}`,
-      description: `Below avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'above avg' : 'above avg'} ${xLabel}`,
-      color: xConfig?.lowerIsBetter ? 'red' : 'orange'
+      // Below average Y, above average X
+      ...getQuadrantInfo(
+        !xConfig?.lowerIsBetter, // X is good if higher is better OR bad if lower is better (above avg)
+        yConfig?.lowerIsBetter, // Y is good if lower is better OR bad if higher is better (below avg)
+        xConfig?.lowerIsBetter ? xPoorTerm : xGoodTerm,
+        yConfig?.lowerIsBetter ? yGoodTerm : yPoorTerm,
+        'above avg',
+        'below avg'
+      )
     },
     bottomLeft: {
-      // Bad Y, Bad/Good X (depending on if X is lower-is-better)
-      label: xConfig?.lowerIsBetter ? `${xGoodTerm}-${yPoorTerm}` : `${xPoorTerm}-${yPoorTerm}`,
-      description: `Below avg ${yLabel}, ${xConfig?.lowerIsBetter ? 'below avg' : 'below avg'} ${xLabel}`,
-      color: xConfig?.lowerIsBetter ? 'orange' : 'red'
+      // Below average Y, below average X
+      ...getQuadrantInfo(
+        xConfig?.lowerIsBetter, // X is good if lower is better OR bad if higher is better (below avg)
+        yConfig?.lowerIsBetter, // Y is good if lower is better OR bad if higher is better (below avg)
+        xConfig?.lowerIsBetter ? xGoodTerm : xPoorTerm,
+        yConfig?.lowerIsBetter ? yGoodTerm : yPoorTerm,
+        'below avg',
+        'below avg'
+      )
     }
   };
 }
