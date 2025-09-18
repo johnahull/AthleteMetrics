@@ -311,7 +311,7 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   intra_group: {
     '1': {
       best: ['distribution', 'bar_chart', 'box_swarm_combo'],
-      trends: ['multi_line']
+      trends: ['time_series_box_swarm', 'multi_line']
     },
     '2': {
       best: ['scatter_plot'],
@@ -325,7 +325,7 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   inter_group: {
     '1': {
       best: ['box_swarm_combo', 'distribution'],
-      trends: ['multi_line']
+      trends: ['time_series_box_swarm', 'multi_line']
     },
     '2': {
       best: ['scatter_plot'],
