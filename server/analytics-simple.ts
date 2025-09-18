@@ -9,7 +9,9 @@ import type {
   AnalyticsRequest,
   AnalyticsResponse,
   ChartDataPoint,
-  StatisticalSummary
+  StatisticalSummary,
+  TrendData,
+  TrendDataPoint
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import {
@@ -23,6 +25,100 @@ import {
 
 
 export class AnalyticsService {
+  /**
+   * Generate trends data from filtered chart data points
+   */
+  private generateTrendsData(chartData: ChartDataPoint[], metric: string): TrendData[] {
+    // Early return if no data
+    if (!chartData || chartData.length === 0) {
+      console.log('📈 No chart data available for trends generation');
+      return [];
+    }
+
+    // Group chart data by athlete
+    const athleteGroups = chartData.reduce((groups, point) => {
+      if (point.metric === metric) {
+        if (!groups[point.athleteId]) {
+          groups[point.athleteId] = {
+            athleteId: point.athleteId,
+            athleteName: point.athleteName,
+            points: []
+          };
+        }
+        groups[point.athleteId].points.push(point);
+      }
+      return groups;
+    }, {} as Record<string, { athleteId: string; athleteName: string; points: ChartDataPoint[] }>);
+
+    // Early return if no athletes have data for this metric
+    if (Object.keys(athleteGroups).length === 0) {
+      console.log(`📈 No data found for metric: ${metric}`);
+      return [];
+    }
+
+    // Calculate group statistics for comparison
+    const allValues = chartData.filter(p => p.metric === metric).map(p => p.value);
+    const groupStats = calculateStatistics(allValues);
+
+    // Convert to TrendData format
+    const trends: TrendData[] = Object.values(athleteGroups).map(group => {
+      // Sort points by date
+      const sortedPoints = group.points.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+      // Early return if no points for this athlete
+      if (sortedPoints.length === 0) {
+        return {
+          athleteId: group.athleteId,
+          athleteName: group.athleteName,
+          metric: metric,
+          data: []
+        };
+      }
+
+      // Track personal bests for this athlete
+      let personalBest = sortedPoints[0].value;
+      const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+      const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+
+      const trendDataPoints: TrendDataPoint[] = sortedPoints.map((point, index) => {
+        // First point is always a personal best, then check subsequent points
+        let isPersonalBest = index === 0;
+        if (index > 0) {
+          if (lowerIsBetter) {
+            if (point.value < personalBest) {
+              personalBest = point.value;
+              isPersonalBest = true;
+            }
+          } else {
+            if (point.value > personalBest) {
+              personalBest = point.value;
+              isPersonalBest = true;
+            }
+          }
+        }
+
+        return {
+          date: point.date,
+          value: point.value,
+          isPersonalBest,
+          groupAverage: groupStats.mean,
+          groupMedian: groupStats.median
+        };
+      });
+
+      return {
+        athleteId: group.athleteId,
+        athleteName: group.athleteName,
+        metric: metric,
+        data: trendDataPoints
+      };
+    });
+
+    console.log(`📈 Generated ${trends.length} trend series for ${trends.reduce((sum, t) => sum + t.data.length, 0)} data points`);
+
+    return trends;
+  }
+
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
       // Validate request
@@ -178,9 +274,14 @@ export class AnalyticsService {
         statistics[metric] = calculateStatistics(values);
       }
 
+      // Generate trends data if timeframe type is trends
+      const trends = request.timeframe.type === 'trends'
+        ? this.generateTrendsData(chartData, request.metrics.primary)
+        : [];
+
       return {
         data: chartData,
-        trends: [],
+        trends,
         multiMetric: [],
         statistics,
         groupings: {},
@@ -188,10 +289,10 @@ export class AnalyticsService {
           totalAthletes: new Set(chartData.map(d => d.athleteId)).size,
           totalMeasurements: chartData.length,
           dateRange: {
-            start: chartData.length > 0 
+            start: chartData.length > 0
               ? new Date(Math.min(...chartData.map(d => d.date.getTime())))
               : startDate || new Date(),
-            end: chartData.length > 0 
+            end: chartData.length > 0
               ? new Date(Math.max(...chartData.map(d => d.date.getTime())))
               : endDate || new Date()
           },
