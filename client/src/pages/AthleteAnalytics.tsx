@@ -20,10 +20,32 @@ import type {
   AnalyticsRequest,
   AnalyticsResponse,
   ChartType,
-  ChartDataPoint
+  ChartDataPoint,
+  StatisticalSummary
 } from '@shared/analytics-types';
+import { METRIC_CONFIG } from '@shared/analytics-types';
+import { getBestPerformanceValue } from '@shared/analytics-utils';
 
 import { useAuth } from '@/lib/auth';
+
+
+// Helper function to format chart type names for display
+function formatChartTypeName(chartType: string): string {
+  const chartTypeNames: Record<string, string> = {
+    'box_swarm_combo': 'Box + Swarm',
+    'box_plot': 'Box Plot',
+    'distribution': 'Distribution',
+    'bar_chart': 'Bar Chart',
+    'line_chart': 'Line Chart',
+    'scatter_plot': 'Scatter Plot',
+    'radar_chart': 'Radar Chart',
+    'swarm_plot': 'Swarm Plot',
+    'connected_scatter': 'Connected Scatter',
+    'multi_line': 'Multi Line'
+  };
+
+  return chartTypeNames[chartType] || chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
 
 export function AthleteAnalytics() {
   const { user } = useAuth();
@@ -164,24 +186,24 @@ export function AthleteAnalytics() {
     };
   }, [activeView, selectedChartType, metrics]);
 
-  // Calculate personal insights
+  // Calculate personal insights with proper null checking
   const personalInsights = useMemo(() => {
     if (!analyticsData || !user?.id) return null;
 
     const userTrends = analyticsData.trends?.filter(trend => trend.athleteId === user.id) || [];
     const userStats = analyticsData.statistics[metrics.primary];
-    
-    if (!userStats || userTrends.length === 0) return null;
+
+    if (!userStats || userStats.count === 0) return null;
 
     const primaryTrend = userTrends.find(trend => trend.metric === metrics.primary);
     const personalBests = primaryTrend?.data.filter(point => point.isPersonalBest) || [];
-    
+
     return {
       personalBests: personalBests.length,
-      recentImprovement: primaryTrend && primaryTrend.data.length > 1 ? 
+      recentImprovement: primaryTrend && primaryTrend.data.length > 1 ?
         primaryTrend.data[primaryTrend.data.length - 1].value - primaryTrend.data[0].value : 0,
-      groupPercentile: userStats && userStats.max > 0 ? 
-        Math.round((userStats.mean / userStats.max) * 100) : 50
+      groupPercentile: userStats.count > 1 ?
+        Math.round(((getBestPerformanceValue(metrics.primary, userStats) - userStats.min) / (userStats.max - userStats.min)) * 100) : 50
     };
   }, [analyticsData, user, metrics]);
 
@@ -383,7 +405,7 @@ export function AthleteAnalytics() {
                 <SelectContent>
                   {analyticsData.meta.recommendedCharts.map((chartType) => (
                     <SelectItem key={chartType} value={chartType}>
-                      {chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      {formatChartTypeName(chartType)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -455,7 +477,7 @@ export function AthleteAnalytics() {
               <div className="text-center">
                 <div className="font-medium">Personal Best</div>
                 <div className="text-lg font-bold text-green-600">
-                  {analyticsData.statistics[metrics.primary].max.toFixed(2)}
+                  {getBestPerformanceValue(metrics.primary, analyticsData.statistics[metrics.primary]).toFixed(2)}
                 </div>
               </div>
               <div className="text-center">

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2, Clock, CalendarDays } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
 import AthleteModal from "@/components/athlete-modal";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
@@ -50,6 +50,9 @@ export default function AthleteProfile() {
   const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // State for measurements display toggle (recent vs all)
+  const [showAllMeasurements, setShowAllMeasurements] = useState(false);
   
   // Edit form
   const editForm = useForm<z.infer<typeof editMeasurementSchema>>({
@@ -218,6 +221,15 @@ export default function AthleteProfile() {
     return measurements
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 10);
+  };
+
+  const getMeasurementsToDisplay = () => {
+    if (showAllMeasurements) {
+      return measurements
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    } else {
+      return getRecentMeasurements();
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -409,7 +421,29 @@ export default function AthleteProfile() {
       {/* Recent Measurements */}
       <Card className="bg-white">
         <CardHeader>
-          <CardTitle>Recent Measurements</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>{showAllMeasurements ? 'All Measurements' : 'Recent Measurements'}</CardTitle>
+            <div className="flex rounded-md border border-input bg-background">
+              <Button
+                variant={!showAllMeasurements ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setShowAllMeasurements(false)}
+                className="h-8 px-3 text-sm rounded-r-none border-0"
+              >
+                <Clock className="h-4 w-4 mr-1" />
+                Recent
+              </Button>
+              <Button
+                variant={showAllMeasurements ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setShowAllMeasurements(true)}
+                className="h-8 px-3 text-sm rounded-l-none border-0"
+              >
+                <CalendarDays className="h-4 w-4 mr-1" />
+                All
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {measurements.length === 0 ? (
@@ -434,7 +468,7 @@ export default function AthleteProfile() {
                   </tr>
                 </thead>
                 <tbody>
-                  {getRecentMeasurements().map((measurement: any) => (
+                  {getMeasurementsToDisplay().map((measurement: any) => (
                     <tr key={measurement.id} className="border-b border-gray-100">
                       <td className="py-3 px-4 text-sm text-gray-900">
                         {formatDate(measurement.date)}

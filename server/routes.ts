@@ -1669,7 +1669,12 @@ export function registerRoutes(app: Express) {
         // Org admins and coaches see their organization stats only
         organizationId = currentUser.primaryOrganizationId;
         if (!organizationId) {
-          return res.status(400).json({ message: "User not associated with any organization" });
+          // Fallback to user's first organization from userOrganizations
+          const userOrgs = await storage.getUserOrganizations(currentUser.id);
+          organizationId = userOrgs[0]?.organizationId;
+          if (!organizationId) {
+            return res.status(400).json({ message: "User not associated with any organization" });
+          }
         }
 
         // Validate user has access to requested organization if different from primary

@@ -12,6 +12,8 @@ export type TimePeriod = 'this_year' | 'last_7_days' | 'last_30_days' | 'last_90
 export interface GroupingDimensions {
   teams?: string[];
   birthYears?: number[];
+  birthYearFrom?: number;
+  birthYearTo?: number;
   ages?: number[];
   genders?: ('Male' | 'Female' | 'Not Specified')[];
   sports?: string[];
@@ -292,7 +294,7 @@ export interface AnalyticsEndpoints {
 export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string, ChartType[]>>> = {
   individual: {
     '1': {
-      best: ['box_plot', 'distribution'],
+      best: ['box_swarm_combo', 'distribution'],
       trends: ['line_chart']
     },
     '2': {
@@ -320,7 +322,7 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   },
   inter_group: {
     '1': {
-      best: ['box_plot', 'distribution'],
+      best: ['box_swarm_combo', 'distribution'],
       trends: ['multi_line']
     },
     '2': {

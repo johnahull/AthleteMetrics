@@ -232,7 +232,7 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="w-full" style={{ minHeight: '300px' }}>
+        <div className="w-full" style={{ height: '400px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense fallback={
@@ -246,6 +246,7 @@ export function ChartContainer({
                   config={chartConfig}
                   statistics={statistics}
                   highlightAthlete={highlightAthlete}
+                  showAllPoints={chartType === 'box_swarm_combo'}
                 />
               </React.Suspense>
             ) : (
@@ -270,7 +271,7 @@ export function getRecommendedChartType(
   
   if (analysisType === 'individual') {
     if (metricCount === 1) {
-      return timeframeType === 'best' ? 'box_plot' : 'line_chart';
+      return timeframeType === 'best' ? 'box_swarm_combo' : 'line_chart';
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {

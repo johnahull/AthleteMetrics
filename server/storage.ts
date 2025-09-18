@@ -181,7 +181,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
+    // Use PostgreSQL array search with ANY operator
+    const [user] = await db.select().from(users).where(
+      sql`${email} = ANY(${users.emails})`
+    );
     return user || undefined;
   }
 

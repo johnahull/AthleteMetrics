@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, insertAthleteSchema, Gender, type InsertMeasurement, type InsertAthlete, type Team } from "@shared/schema";
 import { Search, Save } from "lucide-react";
 import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
+import { sortAthletesByLastName } from "@/lib/utils/names";
 
 // Type guards for safer runtime checking
 function hasTeamsProperty(athlete: any): athlete is Athlete & { teams: Array<{ id: string; name: string }> } {
@@ -139,10 +140,16 @@ export default function MeasurementForm() {
     },
   });
 
-  const filteredAthletes = Array.isArray(athletes) ? (athletes as Athlete[]).filter((athlete) =>
-    athlete.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    athlete.teams?.some((team) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  ) : [];
+  const filteredAthletes = Array.isArray(athletes) ? (() => {
+    // First filter by search term
+    const filtered = (athletes as Athlete[]).filter((athlete) =>
+      athlete.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      athlete.teams?.some((team) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+
+    // Then sort by last name using fullName property
+    return sortAthletesByLastName(filtered, 'fullName');
+  })() : [];
 
   const metric = form.watch("metric");
   const date = form.watch("date");

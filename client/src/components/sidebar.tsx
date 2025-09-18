@@ -33,7 +33,6 @@ const NAVIGATION_CONFIGS = {
       { name: "Teams", href: "/teams", icon: Users },
       { name: "Athletes", href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-      { name: "Analytics", href: "/analytics", icon: BarChart3 },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Publish", href: "/publish", icon: FileCheck },
       { name: "Import/Export", href: "/import-export", icon: FileText }
@@ -44,7 +43,6 @@ const NAVIGATION_CONFIGS = {
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-    { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Publish", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
@@ -55,7 +53,6 @@ const NAVIGATION_CONFIGS = {
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-    { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Publish", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText }

@@ -49,7 +49,7 @@ export function ScatterPlotChart({
 
     const [xMetric, yMetric] = metrics;
 
-    // Group data by athlete to get best values
+    // Group data by athlete (backend already provides best measurements per athlete)
     const athleteData = data.reduce((acc, point) => {
       if (!acc[point.athleteId]) {
         acc[point.athleteId] = {
@@ -59,13 +59,10 @@ export function ScatterPlotChart({
           metrics: {}
         };
       }
-      
-      // Store best value for each metric
-      if (!acc[point.athleteId].metrics[point.metric] || 
-          point.value > acc[point.athleteId].metrics[point.metric]) {
-        acc[point.athleteId].metrics[point.metric] = point.value;
-      }
-      
+
+      // Store the filtered value for each metric (should be only one per athlete per metric)
+      acc[point.athleteId].metrics[point.metric] = point.value;
+
       return acc;
     }, {} as Record<string, any>);
 

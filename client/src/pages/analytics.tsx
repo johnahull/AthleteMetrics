@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { isSiteAdmin, hasRole, type EnhancedUser } from "@/lib/types/user";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,22 +40,34 @@ export default function Analytics() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations } = useAuth();
+
+  // Get effective organization ID - same pattern as dashboard and other pages
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
 
   // Role-based routing: redirect coaches/org_admins to appropriate analytics page
   useEffect(() => {
     if (user) {
-      const userRole = (user as any)?.role;
-      const isSiteAdmin = (user as any)?.isSiteAdmin;
-      
+      const userRole = user?.role;
+      const isUserSiteAdmin = isSiteAdmin(user);
+
       // Coaches and org admins should use the coach analytics dashboard
-      if (isSiteAdmin || userRole === 'coach' || userRole === 'org_admin') {
+      if (isUserSiteAdmin || hasRole(user as EnhancedUser, 'coach') || hasRole(user as EnhancedUser, 'org_admin')) {
         setLocation('/coach-analytics');
         return;
       }
       
       // Athletes should use the athlete analytics dashboard
-      if (userRole === 'athlete') {
+      if (hasRole(user as EnhancedUser, 'athlete')) {
         setLocation('/athlete-analytics');
         return;
       }
@@ -93,11 +106,18 @@ export default function Analytics() {
   });
 
   const { data: teams = [] } = useQuery({
-    queryKey: ["/api/teams"],
+    queryKey: ["/api/teams", effectiveOrganizationId],
+    queryFn: async () => {
+      const url = effectiveOrganizationId 
+        ? `/api/teams?organizationId=${effectiveOrganizationId}`
+        : `/api/teams`;
+      const response = await fetch(url);
+      return response.json();
+    }
   }) as { data: any[] };
 
   const { data: measurements } = useQuery({
-    queryKey: ["/api/measurements", filters, organizationContext],
+    queryKey: ["/api/measurements", filters, effectiveOrganizationId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
@@ -125,8 +145,8 @@ export default function Analytics() {
       }
 
       // Add organization context for proper filtering
-      if (organizationContext) {
-        params.append('organizationId', organizationContext);
+      if (effectiveOrganizationId) {
+        params.append('organizationId', effectiveOrganizationId);
       }
 
       const response = await fetch(`/api/measurements?${params}`);
