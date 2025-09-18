@@ -313,7 +313,7 @@ export function CoachAnalytics() {
         subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
         break;
       case 'intra_group':
-        title = 'Intra-Group Comparison';
+        title = 'Multi-Athlete Analysis';
         subtitle = `Comparing athletes within selected groups - ${metrics.primary}`;
         break;
       case 'inter_group':
