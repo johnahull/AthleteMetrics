@@ -108,7 +108,7 @@ export function CoachAnalytics() {
   // Data and UI state
   const [analyticsData, setAnalyticsData] = useState<AnalyticsResponse | null>(null);
   const [availableTeams, setAvailableTeams] = useState<Array<{ id: string; name: string }>>([]);
-  const [availableAthletes, setAvailableAthletes] = useState<Array<{ id: string; name: string; teamName?: string }>>([]);
+  const [availableAthletes, setAvailableAthletes] = useState<Array<{ id: string; name: string; teamName?: string; teams?: Array<{ id: string; name: string }> }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingAthletes, setIsLoadingAthletes] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,29 +196,25 @@ export function CoachAnalytics() {
         console.error('Teams request failed:', teamsResponse.status, await teamsResponse.text());
       }
 
-      // Load athletes from organization profile
-      if (organizationResponse.ok) {
-        const organizationProfile = await organizationResponse.json();
-        console.log('Organization profile loaded:', organizationProfile);
-        const athletes = organizationProfile.users || [];
-        console.log('Raw users from organization:', athletes.length);
-        
-        // Log all users first to understand the data structure
-        athletes.forEach((athlete: any) => {
-          console.log('User:', athlete.user?.firstName, athlete.user?.lastName, 'Role:', athlete.role);
-        });
-        
-        // Filter to show only athletes (users with 'athlete' role)
-        const filteredAthletes = athletes.filter((athlete: any) => athlete.role === 'athlete');
-        console.log('Filtered athletes only:', filteredAthletes.length, 'out of', athletes.length, 'total users');
-        
-        setAvailableAthletes(filteredAthletes.map((athlete: any) => ({
-          id: athlete.user.id,
-          name: `${athlete.user.firstName} ${athlete.user.lastName}`,
-          teamName: athlete.teamName
+      // Load athletes using the athletes API endpoint which includes proper team information
+      const athletesResponse = await fetch(`/api/athletes?organizationId=${effectiveOrganizationId}`, {
+        credentials: 'include'
+      });
+
+      if (athletesResponse.ok) {
+        const athletes = await athletesResponse.json();
+        console.log('Athletes loaded from API:', athletes.length);
+
+        setAvailableAthletes(athletes.map((athlete: any) => ({
+          id: athlete.id,
+          name: athlete.name,
+          teamName: athlete.teams && athlete.teams.length > 0
+            ? athlete.teams.map((t: any) => t.name).join(', ')
+            : undefined,
+          teams: athlete.teams || []
         })));
       } else {
-        console.error('Organization request failed:', organizationResponse.status, await organizationResponse.text());
+        console.error('Athletes request failed:', athletesResponse.status, await athletesResponse.text());
       }
     } catch (err) {
       console.error('Failed to load initial data:', err);

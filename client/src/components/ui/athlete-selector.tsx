@@ -53,7 +53,7 @@ export function AthleteSelector({
       // Extract team information more robustly
       let teamInfo = undefined;
       if (showTeamInfo) {
-        if (athlete.teamName && athlete.teamName !== '') {
+        if (athlete.teamName && athlete.teamName !== '' && athlete.teamName.trim() !== '') {
           teamInfo = athlete.teamName;
         } else if (athlete.teams && athlete.teams.length > 0) {
           teamInfo = athlete.teams.map(t => t.name).join(', ');
