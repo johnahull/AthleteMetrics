@@ -285,6 +285,13 @@ export function TimeSeriesBoxSwarmChart({
     const unit = metricConfig?.unit || '';
     const metricLabel = metricConfig?.label || metric;
 
+    // Create date labels inside chartOptions to avoid closure issues
+    const sortedDates = [...selectedDates].sort();
+    const currentDateLabels = sortedDates.map(dateStr => {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -333,8 +340,7 @@ export function TimeSeriesBoxSwarmChart({
             callback: function(value: any) {
               // Only show labels at integer positions where box plots are located
               if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
-                const dateLabels = (chartData as any).labels;
-                return dateLabels[value] || '';
+                return currentDateLabels[value] || '';
               }
               return '';
             }
