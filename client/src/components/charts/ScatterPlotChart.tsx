@@ -8,6 +8,7 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
+  ScatterController,
   Filler
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
@@ -30,6 +31,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
+  ScatterController,
   Filler,
   annotationPlugin
 );
