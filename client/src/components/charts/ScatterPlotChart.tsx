@@ -572,15 +572,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     }
   };
 
-  if (!scatterData) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No data available for scatter plot
-      </div>
-    );
-  }
-
-  // Generate quadrant legend data
+  // Generate quadrant legend data (must be before early return to avoid hooks violation)
   const quadrantLegend = useMemo(() => {
     if (!scatterData || !showQuadrants) return null;
 
@@ -619,6 +611,14 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       }
     ];
   }, [scatterData, showQuadrants]);
+
+  if (!scatterData) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        No data available for scatter plot
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full space-y-4">
