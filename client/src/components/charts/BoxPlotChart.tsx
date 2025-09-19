@@ -45,7 +45,7 @@ interface BoxPlotChartProps {
   showAthleteNames?: boolean; // Option to show athlete names next to points
 }
 
-export function BoxPlotChart({
+export const BoxPlotChart = React.memo(function BoxPlotChart({
   data,
   config,
   statistics,
@@ -60,12 +60,6 @@ export function BoxPlotChart({
   const boxPlotData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    console.log('🔍 BoxPlotChart starting analysis:', {
-      dataLength: data.length,
-      dataPoints: data.slice(0, 3),
-      serverStatistics: statistics,
-      hasStatistics: !!statistics
-    });
 
     // Group data by metric
     const metricGroups = data.reduce((groups, point) => {
@@ -80,17 +74,6 @@ export function BoxPlotChart({
       return groups;
     }, {} as Record<string, number[]>);
 
-    console.log('🔍 BoxPlotChart metricGroups:', metricGroups);
-
-    // Debug the actual values in metricGroups
-    Object.entries(metricGroups).forEach(([metric, values]) => {
-      console.log(`🔍 Client metricGroups[${metric}]:`, {
-        valueCount: values.length,
-        sampleValues: values.slice(0, 5),
-        valueTypes: values.slice(0, 5).map(v => typeof v),
-        allValuesValid: values.every(v => typeof v === 'number' && !isNaN(v) && isFinite(v))
-      });
-    });
 
     const datasets: any[] = [];
     const labels = Object.keys(metricGroups);
@@ -100,22 +83,10 @@ export function BoxPlotChart({
       const values = metricGroups[metric].sort((a, b) => a - b);
       let stats = statistics?.[metric];
 
-      console.log(`🔍 Processing metric: ${metric}, values: ${values.length}, stats:`, stats);
-
       // Check if server stats are valid - simple check for valid mean value
       const hasValidStats = stats && stats.count > 0 && typeof stats.mean === 'number' && !isNaN(stats.mean);
 
-      console.log(`📊 Stats validation for ${metric}:`, {
-        hasStats: !!stats,
-        count: stats?.count,
-        mean: stats?.mean,
-        meanType: typeof stats?.mean,
-        isValidMean: stats?.mean ? !isNaN(stats.mean) : false,
-        hasValidStats
-      });
-
       if (!hasValidStats && values.length > 0) {
-        console.log(`⚠️ Server stats invalid for ${metric}, calculating client-side statistics`);
         // Calculate statistics on client side as fallback
         // Convert to numbers first to handle string values
         const numericValues = values.map(v => typeof v === 'string' ? parseFloat(v) : v).filter(v => !isNaN(v));
@@ -123,17 +94,6 @@ export function BoxPlotChart({
         const count = sortedValues.length;
         const sum = sortedValues.reduce((acc, val) => acc + val, 0);
         const mean = sum / count;
-
-        console.log(`🔧 Client-side calculation for ${metric}:`, {
-          rawValues: values.slice(0, 5),
-          rawValueTypes: values.slice(0, 5).map(v => typeof v),
-          numericValues: numericValues.slice(0, 5),
-          sortedValues: sortedValues.slice(0, 5),
-          originalCount: values.length,
-          validCount: count,
-          sum,
-          mean
-        });
         const min = Math.min(...sortedValues);
         const max = Math.max(...sortedValues);
 
@@ -165,17 +125,9 @@ export function BoxPlotChart({
             p95: getPercentile(95)
           }
         };
-        console.log(`✅ Client-calculated stats for ${metric}:`, stats);
       }
 
       if (stats && values.length > 0) {
-        console.log(`✅ Creating box plot for ${metric}:`, {
-          p25: stats.percentiles.p25,
-          p50: stats.percentiles.p50,
-          p75: stats.percentiles.p75,
-          min: stats.min,
-          max: stats.max
-        });
         const boxWidth = 0.4;
         const xPos = index;
 
@@ -356,13 +308,8 @@ export function BoxPlotChart({
             });
           }
         }
-      } else {
-        console.log(`❌ No stats or empty values for metric: ${metric}, stats:`, stats, 'values:', values.length);
       }
     });
-
-    console.log('📊 Final BoxPlotChart datasets:', datasets.length, 'datasets created');
-    console.log('📊 Dataset labels:', datasets.map(d => d.label));
 
     return {
       labels: labels.map(metric =>
@@ -459,11 +406,11 @@ export function BoxPlotChart({
               }
             });
 
-            // Advanced collision detection and resolution
-            const resolvedPositions = resolveLabelCollisions(labelPositions, chartArea);
+            // Simple and efficient collision resolution
+            const resolvedPositions = resolveLabelsEfficiently(labelPositions, chartArea);
 
-            // Helper function for sophisticated label collision resolution
-            function resolveLabelCollisions(
+            // Efficient O(n log n) label collision resolution
+            function resolveLabelsEfficiently(
               labels: Array<{
                 x: number;
                 y: number;
@@ -475,125 +422,46 @@ export function BoxPlotChart({
               }>,
               chartBounds: { left: number; top: number; right: number; bottom: number }
             ) {
-              const resolved = labels.map(label => ({ ...label }));
+              if (labels.length === 0) return [];
+
               const padding = 6;
               const textHeight = 12;
-              const maxIterations = 20;
-              let iteration = 0;
 
-              // Priority-based processing: labels closer to their original position get priority
-              resolved.sort((a, b) => {
-                const distA = Math.sqrt(Math.pow(a.x - a.originalX, 2) + Math.pow(a.y - a.originalY, 2));
-                const distB = Math.sqrt(Math.pow(b.x - b.originalX, 2) + Math.pow(b.y - b.originalY, 2));
-                return distA - distB;
-              });
+              // Sort labels by Y position for easier vertical spacing
+              const sorted = [...labels].sort((a, b) => a.y - b.y);
+              const resolved = [];
 
-              while (iteration < maxIterations) {
-                let hasCollisions = false;
+              for (let i = 0; i < sorted.length; i++) {
+                const label = { ...sorted[i] };
 
-                for (let i = 0; i < resolved.length; i++) {
-                  for (let j = i + 1; j < resolved.length; j++) {
-                    const labelA = resolved[i];
-                    const labelB = resolved[j];
+                // Check against already placed labels
+                let hasCollision = false;
+                for (const placed of resolved) {
+                  const overlapsX = label.x < placed.x + placed.width + padding &&
+                                   placed.x < label.x + label.width + padding;
+                  const overlapsY = Math.abs(label.y - placed.y) < textHeight + padding;
 
-                    // Check for collision with expanded bounds
-                    const overlapsX = labelA.x < labelB.x + labelB.width + padding &&
-                                     labelB.x < labelA.x + labelA.width + padding;
-                    const overlapsY = Math.abs(labelA.y - labelB.y) < textHeight + padding;
-
-                    if (overlapsX && overlapsY) {
-                      hasCollisions = true;
-
-                      // Try multiple positioning strategies for labelB
-                      const strategies = [
-                        // Strategy 1: Move down
-                        { x: labelB.x, y: labelA.y + textHeight + padding },
-                        // Strategy 2: Move up
-                        { x: labelB.x, y: labelA.y - textHeight - padding },
-                        // Strategy 3: Move right
-                        { x: labelA.x + labelA.width + padding, y: labelB.y },
-                        // Strategy 4: Move left
-                        { x: labelA.x - labelB.width - padding, y: labelB.y },
-                        // Strategy 5: Move diagonally down-right
-                        { x: labelA.x + labelA.width + padding, y: labelA.y + textHeight + padding },
-                        // Strategy 6: Move diagonally up-right
-                        { x: labelA.x + labelA.width + padding, y: labelA.y - textHeight - padding },
-                        // Strategy 7: Move further right
-                        { x: labelB.originalX + 25, y: labelB.originalY },
-                        // Strategy 8: Move further left
-                        { x: labelB.originalX - labelB.width - 15, y: labelB.originalY }
-                      ];
-
-                      // Find the best valid strategy
-                      let bestStrategy = null;
-                      let bestScore = Infinity;
-
-                      for (const strategy of strategies) {
-                        // Check if strategy is within chart bounds
-                        if (strategy.x >= chartBounds.left &&
-                            strategy.x + labelB.width <= chartBounds.right - 5 &&
-                            strategy.y >= chartBounds.top + 6 &&
-                            strategy.y <= chartBounds.bottom - 6) {
-
-                          // Check if this position conflicts with other labels
-                          let conflicts = false;
-                          for (let k = 0; k < resolved.length; k++) {
-                            if (k === j) continue; // Skip self
-
-                            const other = resolved[k];
-                            const wouldOverlapX = strategy.x < other.x + other.width + padding &&
-                                                 other.x < strategy.x + labelB.width + padding;
-                            const wouldOverlapY = Math.abs(strategy.y - other.y) < textHeight + padding;
-
-                            if (wouldOverlapX && wouldOverlapY) {
-                              conflicts = true;
-                              break;
-                            }
-                          }
-
-                          if (!conflicts) {
-                            // Calculate score based on distance from original position
-                            const distance = Math.sqrt(
-                              Math.pow(strategy.x - labelB.originalX, 2) +
-                              Math.pow(strategy.y - labelB.originalY, 2)
-                            );
-
-                            if (distance < bestScore) {
-                              bestScore = distance;
-                              bestStrategy = strategy;
-                            }
-                          }
-                        }
-                      }
-
-                      // Apply best strategy if found
-                      if (bestStrategy) {
-                        labelB.x = bestStrategy.x;
-                        labelB.y = bestStrategy.y;
-                      } else {
-                        // Last resort: try to space vertically with larger gaps
-                        const verticalOffset = (textHeight + padding * 2) * (j % 3);
-                        const newY = labelB.originalY + verticalOffset;
-
-                        if (newY >= chartBounds.top + 6 && newY <= chartBounds.bottom - 6) {
-                          labelB.y = newY;
-                        }
-                      }
-                    }
+                  if (overlapsX && overlapsY) {
+                    hasCollision = true;
+                    // Simple strategy: move down
+                    label.y = placed.y + textHeight + padding;
+                    break;
                   }
                 }
 
-                if (!hasCollisions) break;
-                iteration++;
+                // Check bounds and add if valid
+                if (label.x >= chartBounds.left &&
+                    label.x + label.width <= chartBounds.right - 5 &&
+                    label.y >= chartBounds.top + 6 &&
+                    label.y <= chartBounds.bottom - 6) {
+                  resolved.push(label);
+                }
+
+                // Limit total labels for performance
+                if (resolved.length >= 20) break;
               }
 
-              // Final pass: remove labels that are still overlapping or outside bounds
-              return resolved.filter(label =>
-                label.x >= chartBounds.left &&
-                label.x + label.width <= chartBounds.right - 5 &&
-                label.y >= chartBounds.top + 6 &&
-                label.y <= chartBounds.bottom - 6
-              );
+              return resolved;
             }
 
             // Second pass: render all labels with resolved positions
@@ -788,7 +656,7 @@ export function BoxPlotChart({
       />
     </div>
   );
-}
+});
 
 // Utility function to calculate box plot statistics
 export function calculateBoxPlotStats(values: number[]): BoxPlotData {

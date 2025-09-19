@@ -105,7 +105,7 @@ interface ScatterPlotChartProps {
   showAthleteNames?: boolean;
 }
 
-export function ScatterPlotChart({
+export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   data,
   statistics,
   config,
@@ -118,24 +118,14 @@ export function ScatterPlotChart({
 
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
-    console.log('🚀 ScatterPlot starting with data:', {
-      dataLength: data?.length || 0,
-      hasData: !!data,
-      dataType: typeof data,
-      sampleData: data?.slice(0, 2)
-    });
-
     if (!data || data.length === 0) {
-      console.log('❌ ScatterPlot: No data available');
       return null;
     }
 
     // Get metrics from actual data (like BoxPlotChart does)
     const availableMetrics = Array.from(new Set(data.map(d => d.metric)));
-    console.log('🔍 Available metrics:', availableMetrics);
 
     if (availableMetrics.length < 2) {
-      console.log('❌ ScatterPlot: Not enough metrics', availableMetrics.length);
       return null;
     }
 
@@ -177,19 +167,12 @@ export function ScatterPlotChart({
     // Simple fallback: use server statistics if available, otherwise calculate from data
     const validatedStats: Record<string, any> = {};
 
-    console.log('🔍 ScatterPlot Debug:', {
-      availableMetrics,
-      serverStats: statistics,
-      dataLength: data.length
-    });
-
     for (const metric of [xMetric, yMetric]) {
       let stats = statistics?.[metric];
 
       // Use server stats if they exist and have a mean value
       if (stats && typeof stats.mean === 'number' && !isNaN(stats.mean)) {
         validatedStats[metric] = stats;
-        console.log(`✅ Using server stats for ${metric}:`, stats.mean);
       } else {
         // Calculate statistics on client side as fallback
         const metricData = data.filter(d => d.metric === metric);
@@ -209,12 +192,10 @@ export function ScatterPlotChart({
             min,
             max
           };
-          console.log(`🔧 Calculated client stats for ${metric}:`, mean);
         }
       }
     }
 
-    console.log('✅ Final validated stats:', validatedStats);
 
     const datasets = [];
 
@@ -564,4 +545,4 @@ export function ScatterPlotChart({
       </div>
     </div>
   );
-}
+});

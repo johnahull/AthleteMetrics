@@ -34,11 +34,11 @@ interface ConnectedScatterChartProps {
   highlightAthlete?: string;
 }
 
-export function ConnectedScatterChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete
 }: ConnectedScatterChartProps) {
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
@@ -330,6 +330,6 @@ export function ConnectedScatterChart({
       )}
     </div>
   );
-}
+});
 
 export default ConnectedScatterChart;

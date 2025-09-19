@@ -57,7 +57,7 @@ const ATHLETE_COLORS = [
   'rgba(34, 197, 94, 0.8)'      // Emerald
 ];
 
-export function TimeSeriesBoxSwarmChart({
+export const TimeSeriesBoxSwarmChart = React.memo(function TimeSeriesBoxSwarmChart({
   data,
   config,
   selectedDates,
@@ -732,4 +732,4 @@ export function TimeSeriesBoxSwarmChart({
       </div>
     </div>
   );
-}
+});

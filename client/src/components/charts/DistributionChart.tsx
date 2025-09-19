@@ -34,11 +34,11 @@ interface DistributionChartProps {
   highlightAthlete?: string;
 }
 
-export function DistributionChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export const DistributionChart = React.memo(function DistributionChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete
 }: DistributionChartProps) {
   // Transform data for histogram visualization
   const distributionData = useMemo(() => {
@@ -122,7 +122,6 @@ export function DistributionChart({
 
     // Use server stats if they exist and have a valid mean
     if (!validatedStats || typeof validatedStats.mean !== 'number' || isNaN(validatedStats.mean)) {
-      console.log('🔧 DistributionChart: Calculating client-side stats for', primaryMetric);
 
       if (values.length > 0) {
         // Calculate statistics on client side as fallback
@@ -138,13 +137,6 @@ export function DistributionChart({
           ? sortedValues[Math.floor(count / 2)]
           : (sortedValues[count / 2 - 1] + sortedValues[count / 2]) / 2;
 
-        console.log('📊 DistributionChart median calculation:', {
-          primaryMetric,
-          count,
-          sortedValues: sortedValues.slice(0, 5),
-          median,
-          medianType: typeof median
-        });
         const variance = sortedValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
         const std = Math.sqrt(variance);
 
@@ -306,6 +298,6 @@ export function DistributionChart({
       )}
     </div>
   );
-}
+});
 
 export default DistributionChart;
