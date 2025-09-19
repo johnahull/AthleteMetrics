@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -27,6 +27,37 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber } from '@shared/utils/number-conversion';
 
+// Constants for athlete name rendering
+const ATHLETE_NAME_CONSTANTS = {
+  LABEL_OFFSET_X: 10,
+  LABEL_OFFSET_Y: 0,
+  BACKGROUND_PADDING: 2,
+  BACKGROUND_HEIGHT: 12,
+  BACKGROUND_ALPHA: 0.8,
+  LABEL_VERTICAL_OFFSET: 6
+} as const;
+
+// Interfaces for better type safety
+interface ScatterPoint {
+  x: number;
+  y: number;
+  athleteId: string;
+  athleteName: string;
+  teamName?: string;
+}
+
+interface RegressionResult {
+  slope: number;
+  intercept: number;
+}
+
+interface AthleteData {
+  athleteId: string;
+  athleteName: string;
+  teamName?: string;
+  metrics: Record<string, number>;
+}
+
 // Register Chart.js components
 ChartJS.register(
   LinearScale,
@@ -42,7 +73,7 @@ ChartJS.register(
 );
 
 // Regression calculation helper function
-function calculateRegression(points: any[]) {
+function calculateRegression(points: ScatterPoint[]): RegressionResult | null {
   if (points.length < 2) return null;
 
   // Validate points have valid x and y values
@@ -186,9 +217,24 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 }: ScatterPlotChartProps) {
   const monitor = usePerformanceMonitor('ScatterPlotChart');
   const chartRef = useRef<any>(null);
+  const namesRenderedRef = useRef<boolean>(false);
   const [showRegressionLine, setShowRegressionLine] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
+
+  // Cleanup chart on unmount
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy?.();
+      }
+    };
+  }, []);
+
+  // Reset names rendered flag when athlete names toggle changes
+  useEffect(() => {
+    namesRenderedRef.current = false;
+  }, [localShowAthleteNames]);
 
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
@@ -219,12 +265,12 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       }
       acc[point.athleteId].metrics[point.metric] = point.value;
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, AthleteData>);
 
     // Create scatter points for athletes with both metrics
-    const scatterPoints = Object.values(athleteData)
-      .filter((athlete: any) => athlete.metrics[xMetric] !== undefined && athlete.metrics[yMetric] !== undefined)
-      .map((athlete: any) => {
+    const scatterPoints: ScatterPoint[] = Object.values(athleteData)
+      .filter((athlete) => athlete.metrics[xMetric] !== undefined && athlete.metrics[yMetric] !== undefined)
+      .map((athlete): ScatterPoint => {
         // Convert values to numbers safely
         const xValue = safeNumber(athlete.metrics[xMetric]);
         const yValue = safeNumber(athlete.metrics[yMetric]);
@@ -236,7 +282,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           teamName: athlete.teamName
         };
       })
-      .filter((point: any) => !isNaN(point.x) && !isNaN(point.y)); // Filter out invalid numeric conversions
+      .filter((point) => !isNaN(point.x) && !isNaN(point.y)); // Filter out invalid numeric conversions
 
     if (scatterPoints.length === 0) return null;
 
@@ -388,7 +434,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     const n = points.length;
 
     // Validate that all points have valid numeric values
-    const validPoints = points.filter((p: any) =>
+    const validPoints = points.filter((p: ScatterPoint) =>
       typeof p.x === 'number' && typeof p.y === 'number' &&
       !isNaN(p.x) && !isNaN(p.y) &&
       isFinite(p.x) && isFinite(p.y)
@@ -396,11 +442,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
     if (validPoints.length < 2) return null;
 
-    const sumX = validPoints.reduce((sum: number, p: any) => sum + p.x, 0);
-    const sumY = validPoints.reduce((sum: number, p: any) => sum + p.y, 0);
-    const sumXY = validPoints.reduce((sum: number, p: any) => sum + p.x * p.y, 0);
-    const sumX2 = validPoints.reduce((sum: number, p: any) => sum + p.x * p.x, 0);
-    const sumY2 = validPoints.reduce((sum: number, p: any) => sum + p.y * p.y, 0);
+    const sumX = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.x, 0);
+    const sumY = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.y, 0);
+    const sumXY = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.x * p.y, 0);
+    const sumX2 = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.x * p.x, 0);
+    const sumY2 = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.y * p.y, 0);
 
     const numerator = validPoints.length * sumXY - sumX * sumY;
     const denominator = Math.sqrt((validPoints.length * sumX2 - sumX * sumX) * (validPoints.length * sumY2 - sumY * sumY));
@@ -460,8 +506,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
           // Calculate chart bounds for full background coverage
-          const xValues = scatterData.points.map((p: any) => p.x);
-          const yValues = scatterData.points.map((p: any) => p.y);
+          const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
+          const yValues = scatterData.points.map((p: ScatterPoint) => p.y);
 
           // Safety check for empty arrays
           if (xValues.length === 0 || yValues.length === 0) {
@@ -592,8 +638,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     },
     animation: {
       onComplete: function() {
-        // Render athlete names if enabled
-        if (localShowAthleteNames && chartRef.current) {
+        // Performance optimization: only render names if enabled and not already rendered
+        if (localShowAthleteNames && chartRef.current && !namesRenderedRef.current) {
           const chart = chartRef.current;
           const ctx = chart.ctx;
           const chartArea = chart.chartArea;
@@ -609,7 +655,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
             ctx.textBaseline = 'middle';
 
             // Render athlete names for each point
-            scatterData.points.forEach((point: any) => {
+            scatterData.points.forEach((point: ScatterPoint) => {
               const meta = chart.getDatasetMeta(0); // Get first dataset metadata
               if (meta && meta.data) {
                 // Find the corresponding chart element for this point
@@ -622,15 +668,19 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
                 });
 
                 if (chartElement && point.athleteName) {
-                  const x = chartElement.x + 10; // Offset right from point
-                  const y = chartElement.y;
+                  const x = chartElement.x + ATHLETE_NAME_CONSTANTS.LABEL_OFFSET_X;
+                  const y = chartElement.y + ATHLETE_NAME_CONSTANTS.LABEL_OFFSET_Y;
 
                   // Add a subtle background for better readability
                   const textWidth = ctx.measureText(point.athleteName).width;
-                  const padding = 2;
 
-                  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                  ctx.fillRect(x - padding, y - 6, textWidth + 2 * padding, 12);
+                  ctx.fillStyle = `rgba(255, 255, 255, ${ATHLETE_NAME_CONSTANTS.BACKGROUND_ALPHA})`;
+                  ctx.fillRect(
+                    x - ATHLETE_NAME_CONSTANTS.BACKGROUND_PADDING,
+                    y - ATHLETE_NAME_CONSTANTS.LABEL_VERTICAL_OFFSET,
+                    textWidth + 2 * ATHLETE_NAME_CONSTANTS.BACKGROUND_PADDING,
+                    ATHLETE_NAME_CONSTANTS.BACKGROUND_HEIGHT
+                  );
 
                   // Restore text color and draw text
                   ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
@@ -638,6 +688,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
                 }
               }
             });
+
+            // Mark as rendered to prevent redundant operations
+            namesRenderedRef.current = true;
 
             // Restore context state
             ctx.restore();
@@ -732,13 +785,17 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
       {/* Quadrant Legend */}
       {quadrantLegend && (
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+        <div
+          className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+          role="region"
+          aria-labelledby="quadrant-legend-title"
+        >
+          <h4 id="quadrant-legend-title" className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
             Performance Quadrants
           </h4>
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-2 gap-3 text-xs" role="list">
             {quadrantLegend.map((item, index) => (
-              <div key={index} className="flex items-center space-x-2">
+              <div key={index} className="flex items-center space-x-2" role="listitem">
                 <div
                   className="w-4 h-4 rounded border-2 flex-shrink-0"
                   style={{
