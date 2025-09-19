@@ -51,25 +51,80 @@ export function useAnalyticsData({
   // Memoize the query key to prevent unnecessary recalculations
   const queryKey = useMemo(() => getAnalyticsQueryKey(request), [request]);
 
-  // Optimized fetch function
+  // Optimized fetch function with robust error handling
   const fetchAnalyticsData = useCallback(async (): Promise<AnalyticsResponse> => {
-    const response = await fetch('/api/analytics/dashboard', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(request),
-    });
+    try {
+      const response = await fetch('/api/analytics/dashboard', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(request),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Analytics request failed: ${response.statusText}`);
+      if (!response.ok) {
+        // Provide more specific error messages based on status code
+        let errorMessage = 'Analytics request failed';
+        switch (response.status) {
+          case 401:
+            errorMessage = 'Authentication required. Please log in again.';
+            break;
+          case 403:
+            errorMessage = 'Access denied. You do not have permission to view this data.';
+            break;
+          case 429:
+            errorMessage = 'Too many requests. Please wait a moment and try again.';
+            break;
+          case 500:
+            errorMessage = 'Server error. Please try again later.';
+            break;
+          case 503:
+            errorMessage = 'Service temporarily unavailable. Please try again later.';
+            break;
+          default:
+            errorMessage = `Analytics request failed: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+
+      // Validate response structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format from analytics API');
+      }
+
+      return data;
+    } catch (error) {
+      // Handle network errors and other fetch issues
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+
+      // Re-throw other errors
+      throw error;
     }
-
-    return response.json();
   }, [request]);
 
-  // Use React Query for caching and background updates
+  // Generate fallback data for error scenarios
+  const fallbackData = useMemo((): AnalyticsResponse => ({
+    data: [],
+    statistics: {},
+    groupings: {},
+    meta: {
+      totalAthletes: 0,
+      totalMeasurements: 0,
+      dateRange: {
+        start: new Date(),
+        end: new Date()
+      },
+      appliedFilters: request.filters,
+      recommendedCharts: []
+    }
+  }), [request.filters]);
+
+  // Use React Query for caching and background updates with enhanced error handling
   const query = useQuery({
     queryKey,
     queryFn: fetchAnalyticsData,
@@ -78,7 +133,16 @@ export function useAnalyticsData({
     gcTime,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    retry: 1,
+    retry: (failureCount, error: any) => {
+      // Don't retry on client errors (4xx) except 429 (rate limit)
+      if (error?.message?.includes('Authentication required') ||
+          error?.message?.includes('Access denied')) {
+        return false;
+      }
+      // Retry up to 3 times for server errors and rate limits
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
   // Memoized chart data transformations
@@ -111,15 +175,22 @@ export function useAnalyticsData({
   }, [queryClient]);
 
   return {
-    data: query.data,
-    chartData,
-    statistics,
+    data: query.data || (query.isError ? fallbackData : null),
+    chartData: chartData || (query.isError ? [] : null),
+    statistics: statistics || (query.isError ? {} : {}),
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
+    errorMessage: query.error?.message || null,
+    hasData: !!query.data && !query.isError,
+    hasFallbackData: query.isError && !!fallbackData,
     refetch: query.refetch,
     prefetchRelatedData,
     invalidateCache,
+    // Additional helpers for error handling
+    isNetworkError: query.error?.message?.includes('Network error') || false,
+    isAuthError: query.error?.message?.includes('Authentication') || query.error?.message?.includes('Access denied') || false,
+    isRateLimited: query.error?.message?.includes('Too many requests') || false,
   };
 }
 

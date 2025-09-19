@@ -360,7 +360,9 @@ export function registerRoutes(app: Express) {
     skip: (req) => {
       // Skip rate limiting for localhost and optionally in development if flag is set
       const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
-      const bypassForDev = process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
       return isLocalhost || bypassForDev;
     }
   });
@@ -1641,7 +1643,13 @@ export function registerRoutes(app: Express) {
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     skip: (req) => {
-      // Skip rate limiting only if explicitly enabled via environment flag
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (isProduction) {
+        return false; // Always enforce rate limiting in production
+      }
+
+      // Skip rate limiting only if explicitly enabled via environment flag in non-production
       // This prevents accidental bypass in production
       return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && req.session.user?.role === 'site_admin';
     }

@@ -22,6 +22,7 @@ import {
   formatDateForDatabase,
   validateAnalyticsFilters
 } from "@shared/analytics-utils";
+import DOMPurify from "isomorphic-dompurify";
 
 // Type for the database query result
 type QueryResult = {
@@ -36,6 +37,25 @@ type QueryResult = {
   gender: string | null;
   birthYear: number;
 };
+
+/**
+ * Sanitize string inputs to prevent XSS and ensure data integrity
+ */
+function sanitizeString(input: string | null | undefined): string {
+  if (!input || typeof input !== 'string') {
+    return '';
+  }
+
+  // Use DOMPurify to sanitize and trim whitespace
+  const sanitized = DOMPurify.sanitize(input.trim());
+
+  // Additional validation: ensure it's still a reasonable string
+  if (sanitized.length === 0 || sanitized.length > 100) {
+    return input === null ? 'Unknown' : 'Invalid Name';
+  }
+
+  return sanitized;
+}
 
 
 export class AnalyticsService {
@@ -292,14 +312,14 @@ export class AnalyticsService {
 
       // Database query completed, processing results
 
-      // Transform to chart data format
+      // Transform to chart data format with input sanitization
       let chartData: ChartDataPoint[] = data.map((row: QueryResult) => ({
         athleteId: row.athleteId,
-        athleteName: row.athleteName || 'Unknown',
+        athleteName: sanitizeString(row.athleteName) || 'Unknown',
         value: typeof row.value === 'string' ? parseFloat(row.value) : (row.value || 0),
         date: new Date(row.date),
         metric: row.metric,
-        teamName: row.teamName || 'No Team'
+        teamName: sanitizeString(row.teamName) || 'No Team'
       }));
 
       // Apply filtering based on timeframe type

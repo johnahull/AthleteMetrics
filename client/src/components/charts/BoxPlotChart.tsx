@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -61,6 +61,98 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 }: BoxPlotChartProps) {
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
+
+  // Memoized label positions cache to prevent recalculation on every render
+  const labelPositionsCache = useRef<Map<string, LabelPosition[]>>(new Map());
+
+  // Generate cache key for label positions based on relevant data
+  const generateCacheKey = useCallback((chartData: any, chartArea: any) => {
+    const dataPoints = chartData.datasets.flatMap((dataset: any, datasetIndex: number) =>
+      dataset.data.filter((point: any) => point && point.athleteName)
+        .map((point: any, pointIndex: number) => `${datasetIndex}-${pointIndex}-${point.athleteName}-${point.x}-${point.y}`)
+    );
+    const areaKey = `${chartArea.left}-${chartArea.top}-${chartArea.right}-${chartArea.bottom}`;
+    return `${areaKey}-${dataPoints.join(',')}`;
+  }, []);
+
+  // Memoized label position calculation
+  const calculateLabelPositions = useCallback((chart: ChartJS<'scatter'>, ctx: CanvasRenderingContext2D, chartArea: any): LabelPosition[] => {
+    const cacheKey = generateCacheKey(chart.data, chartArea);
+
+    // Check cache first
+    if (labelPositionsCache.current.has(cacheKey)) {
+      return labelPositionsCache.current.get(cacheKey)!;
+    }
+
+    // Calculate label positions
+    const labelPositions: LabelPosition[] = [];
+
+    chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
+      if (dataset.data && Array.isArray(dataset.data)) {
+        dataset.data.forEach((point: any, pointIndex: number) => {
+          if (point && typeof point === 'object' && point.athleteName) {
+            const meta = chart.getDatasetMeta(datasetIndex);
+            const element = meta.data[pointIndex];
+
+            if (element && element.x !== undefined && element.y !== undefined) {
+              const textWidth = ctx.measureText(point.athleteName).width;
+              const textHeight = CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT;
+              const baseOffsetX = CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING;
+
+              // Calculate distance from metric center to determine safe positioning
+              const metricIndex = Math.round(element.x);
+              const distanceFromCenter = Math.abs(element.x - metricIndex);
+
+              // Position text based on point location relative to box center
+              let textX = element.x + baseOffsetX;
+              let textY = element.y;
+
+              // If point is close to center (within box area), position further right
+              if (distanceFromCenter < 0.3) {
+                textX = element.x + 15;
+              }
+
+              // Avoid positioning text too close to chart edges
+              if (textX + textWidth > chartArea.right - 10) {
+                // If text would overflow right, position to the left instead
+                textX = element.x - textWidth - baseOffsetX;
+              }
+
+              // Only add if within chart bounds
+              if (textX >= chartArea.left &&
+                  textX + textWidth <= chartArea.right &&
+                  textY >= chartArea.top &&
+                  textY <= chartArea.bottom) {
+
+                labelPositions.push({
+                  x: textX,
+                  y: textY,
+                  width: textWidth,
+                  height: textHeight,
+                  text: point.athleteName,
+                  originalX: element.x,
+                  originalY: element.y
+                });
+              }
+            }
+          }
+        });
+      }
+    });
+
+    // Cache the result
+    labelPositionsCache.current.set(cacheKey, labelPositions);
+
+    // Limit cache size to prevent memory leaks
+    if (labelPositionsCache.current.size > 10) {
+      const firstKey = labelPositionsCache.current.keys().next().value;
+      if (firstKey) {
+        labelPositionsCache.current.delete(firstKey);
+      }
+    }
+
+    return labelPositions;
+  }, [generateCacheKey]);
 
   // Transform data for box plot visualization
   const boxPlotData = useMemo(() => {
@@ -234,6 +326,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               const jitter = (Math.random() - 0.5) * jitterRange;
               // Convert value to number to handle string values
               const numericValue = safeNumber(point.value);
+
+              // Skip points with invalid numeric values
+              if (isNaN(numericValue)) {
+                return null;
+              }
+
               const isOutlier = outliers.includes(numericValue);
 
               return {
@@ -244,7 +342,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 teamName: point.teamName,
                 isOutlier
               };
-            });
+            })
+            .filter((point): point is NonNullable<typeof point> => point !== null);
 
           // Regular data points (non-outliers)
           const regularPoints = allPoints.filter(p => !p.isOutlier);
@@ -350,62 +449,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
 
-            // Collect all label positions for collision detection
-            const labelPositions: LabelPosition[] = [];
-
-            // First pass: collect all potential label positions
-            chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
-              if (dataset.data && Array.isArray(dataset.data)) {
-                dataset.data.forEach((point: any, pointIndex: number) => {
-                  if (point && typeof point === 'object' && point.athleteName) {
-                    const meta = chart.getDatasetMeta(datasetIndex);
-                    const element = meta.data[pointIndex];
-
-                    if (element && element.x !== undefined && element.y !== undefined) {
-                      const textWidth = ctx.measureText(point.athleteName).width;
-                      const textHeight = CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT;
-                      const baseOffsetX = CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING;
-
-                      // Calculate distance from metric center to determine safe positioning
-                      const metricIndex = Math.round(element.x);
-                      const distanceFromCenter = Math.abs(element.x - metricIndex);
-
-                      // Position text based on point location relative to box center
-                      let textX = element.x + baseOffsetX;
-                      let textY = element.y;
-
-                      // If point is close to center (within box area), position further right
-                      if (distanceFromCenter < 0.3) {
-                        textX = element.x + 15;
-                      }
-
-                      // Avoid positioning text too close to chart edges
-                      if (textX + textWidth > chartArea.right - 10) {
-                        // If text would overflow right, position to the left instead
-                        textX = element.x - textWidth - baseOffsetX;
-                      }
-
-                      // Only add if within chart bounds
-                      if (textX >= chartArea.left &&
-                          textX + textWidth <= chartArea.right &&
-                          textY >= chartArea.top &&
-                          textY <= chartArea.bottom) {
-
-                        labelPositions.push({
-                          x: textX,
-                          y: textY,
-                          width: textWidth,
-                          height: textHeight,
-                          text: point.athleteName,
-                          originalX: element.x,
-                          originalY: element.y
-                        });
-                      }
-                    }
-                  }
-                });
-              }
-            });
+            // Use memoized label position calculation
+            const labelPositions = calculateLabelPositions(chart, ctx, chartArea);
 
             // Efficient collision resolution using spatial indexing
             const resolvedPositions = resolveLabelsWithSpatialIndex(labelPositions, chartArea, {

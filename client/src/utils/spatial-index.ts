@@ -22,9 +22,13 @@ export interface LabelPosition extends Rectangle {
 export class SpatialIndex {
   private grid: Map<string, LabelPosition[]> = new Map();
   private gridSize: number;
+  private lastCleanup: number = Date.now();
+  private maxCellsBeforeCleanup: number = 1000;
+  private cleanupIntervalMs: number = 30000; // 30 seconds
 
-  constructor(gridSize: number = 50) {
+  constructor(gridSize: number = 50, maxCellsBeforeCleanup: number = 1000) {
     this.gridSize = gridSize;
+    this.maxCellsBeforeCleanup = maxCellsBeforeCleanup;
   }
 
   /**
@@ -65,6 +69,9 @@ export class SpatialIndex {
       }
       this.grid.get(cell)!.push(label);
     }
+
+    // Check if periodic cleanup is needed
+    this.checkAndPerformCleanup();
   }
 
   /**
@@ -147,6 +154,86 @@ export class SpatialIndex {
     const avgLabelsPerCell = cellCount > 0 ? totalLabels / cellCount : 0;
 
     return { cellCount, totalLabels, avgLabelsPerCell };
+  }
+
+  /**
+   * Check if cleanup is needed and perform it
+   */
+  private checkAndPerformCleanup(): void {
+    const now = Date.now();
+    const shouldCleanupByTime = now - this.lastCleanup > this.cleanupIntervalMs;
+    const shouldCleanupBySize = this.grid.size > this.maxCellsBeforeCleanup;
+
+    if (shouldCleanupByTime || shouldCleanupBySize) {
+      this.performCleanup();
+      this.lastCleanup = now;
+    }
+  }
+
+  /**
+   * Perform cleanup to prevent memory accumulation
+   * Removes empty cells and cells with stale data
+   */
+  private performCleanup(): void {
+    const cellsToDelete: string[] = [];
+
+    for (const [cellKey, labels] of this.grid.entries()) {
+      // Remove empty cells
+      if (labels.length === 0) {
+        cellsToDelete.push(cellKey);
+        continue;
+      }
+
+      // For cells with many labels, keep only the most recent ones
+      if (labels.length > 50) {
+        // Keep only the last 30 labels to prevent excessive memory usage
+        labels.splice(0, labels.length - 30);
+      }
+    }
+
+    // Delete empty cells
+    for (const cellKey of cellsToDelete) {
+      this.grid.delete(cellKey);
+    }
+
+    // If still too large, remove oldest cells (LRU style)
+    if (this.grid.size > this.maxCellsBeforeCleanup * 0.8) {
+      const entries = Array.from(this.grid.entries());
+      // Remove oldest 20% of cells
+      const cellsToRemove = Math.floor(entries.length * 0.2);
+      for (let i = 0; i < cellsToRemove; i++) {
+        this.grid.delete(entries[i][0]);
+      }
+    }
+  }
+
+  /**
+   * Force immediate cleanup
+   */
+  forceCleanup(): void {
+    this.performCleanup();
+    this.lastCleanup = Date.now();
+  }
+
+  /**
+   * Get memory usage information
+   */
+  getMemoryInfo(): {
+    cellCount: number;
+    totalLabels: number;
+    estimatedMemoryKB: number;
+    needsCleanup: boolean;
+  } {
+    const stats = this.getStats();
+    const estimatedMemoryKB = Math.round((stats.cellCount * 100 + stats.totalLabels * 200) / 1024); // Rough estimate
+    const needsCleanup = this.grid.size > this.maxCellsBeforeCleanup * 0.7;
+
+    return {
+      cellCount: stats.cellCount,
+      totalLabels: stats.totalLabels,
+      estimatedMemoryKB,
+      needsCleanup
+    };
   }
 }
 
