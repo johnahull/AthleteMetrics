@@ -74,6 +74,16 @@ export function BoxPlotChart({
 
     console.log('🔍 BoxPlotChart metricGroups:', metricGroups);
 
+    // Debug the actual values in metricGroups
+    Object.entries(metricGroups).forEach(([metric, values]) => {
+      console.log(`🔍 Client metricGroups[${metric}]:`, {
+        valueCount: values.length,
+        sampleValues: values.slice(0, 5),
+        valueTypes: values.slice(0, 5).map(v => typeof v),
+        allValuesValid: values.every(v => typeof v === 'number' && !isNaN(v) && isFinite(v))
+      });
+    });
+
     const datasets: any[] = [];
     const labels = Object.keys(metricGroups);
 
@@ -83,6 +93,50 @@ export function BoxPlotChart({
       const stats = statistics?.[metric];
 
       console.log(`🔍 Processing metric: ${metric}, values: ${values.length}, stats:`, stats);
+
+      // Check if server stats are valid (not all zeros), if not calculate our own
+      const hasValidStats = stats && stats.count > 0 && (stats.min !== 0 || stats.max !== 0);
+
+      if (!hasValidStats && values.length > 0) {
+        console.log(`⚠️ Server stats invalid for ${metric}, calculating client-side statistics`);
+        // Calculate statistics on client side as fallback
+        const sortedValues = [...values].sort((a, b) => a - b);
+        const count = sortedValues.length;
+        const sum = sortedValues.reduce((acc, val) => acc + val, 0);
+        const mean = sum / count;
+        const min = Math.min(...sortedValues);
+        const max = Math.max(...sortedValues);
+
+        // Calculate percentiles
+        const getPercentile = (p: number) => {
+          const index = (p / 100) * (count - 1);
+          const lower = Math.floor(index);
+          const upper = Math.ceil(index);
+          if (lower === upper) return sortedValues[lower];
+          const weight = index - lower;
+          return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+        };
+
+        stats = {
+          count,
+          mean,
+          median: getPercentile(50),
+          min,
+          max,
+          std: 0, // Not needed for box plot
+          variance: 0, // Not needed for box plot
+          percentiles: {
+            p5: getPercentile(5),
+            p10: getPercentile(10),
+            p25: getPercentile(25),
+            p50: getPercentile(50),
+            p75: getPercentile(75),
+            p90: getPercentile(90),
+            p95: getPercentile(95)
+          }
+        };
+        console.log(`✅ Client-calculated stats for ${metric}:`, stats);
+      }
 
       if (stats && values.length > 0) {
         console.log(`✅ Creating box plot for ${metric}:`, {
