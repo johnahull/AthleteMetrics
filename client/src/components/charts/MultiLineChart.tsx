@@ -73,7 +73,8 @@ export function MultiLineChart({
     data.forEach(trend => {
       allMetrics.add(trend.metric);
       trend.data.forEach(point => {
-        allDates.add(point.date.toISOString().split('T')[0]);
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        allDates.add(date.toISOString().split('T')[0]);
       });
     });
 
@@ -124,9 +125,10 @@ export function MultiLineChart({
 
         // Create data points for each date
         const lineData = sortedDates.map(dateStr => {
-          const point = metricData.find((p: any) => 
-            p.date.toISOString().split('T')[0] === dateStr
-          );
+          const point = metricData.find((p: any) => {
+            const pointDate = p.date instanceof Date ? p.date : new Date(p.date);
+            return pointDate.toISOString().split('T')[0] === dateStr;
+          });
           return point ? normalizeValue(point.value) : null;
         });
 
@@ -237,9 +239,10 @@ export function MultiLineChart({
             
             const dateStr = multiLineData?.sortedDates[context.dataIndex];
             const metricData = athlete.metrics[metric];
-            const point = metricData?.find((p: any) => 
-              p.date.toISOString().split('T')[0] === dateStr
-            );
+            const point = metricData?.find((p: any) => {
+              const pointDate = p.date instanceof Date ? p.date : new Date(p.date);
+              return pointDate.toISOString().split('T')[0] === dateStr;
+            });
             
             if (point) {
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';

@@ -12,9 +12,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, insertAthleteSchema, Gender, type InsertMeasurement, type InsertAthlete, type Team } from "@shared/schema";
-import { Search, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
-import { sortAthletesByLastName } from "@/lib/utils/names";
+import { AthleteSelector } from "@/components/ui/athlete-selector";
 
 // Type guards for safer runtime checking
 function hasTeamsProperty(athlete: any): athlete is Athlete & { teams: Array<{ id: string; name: string }> } {
@@ -27,7 +27,6 @@ function hasBirthYearProperty(athlete: any): athlete is Athlete & { birthYear: n
 
 export default function MeasurementForm() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -102,7 +101,6 @@ export default function MeasurementForm() {
         season: "",
       });
       setSelectedAthlete(null);
-      setSearchTerm("");
       resetTeamState();
     },
     onError: (error) => {
@@ -140,16 +138,11 @@ export default function MeasurementForm() {
     },
   });
 
-  const filteredAthletes = Array.isArray(athletes) ? (() => {
-    // First filter by search term
-    const filtered = (athletes as Athlete[]).filter((athlete) =>
-      athlete.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      athlete.teams?.some((team) => team.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-
-    // Then sort by last name using fullName property
-    return sortAthletesByLastName(filtered, 'fullName');
-  })() : [];
+  // Prepare athletes array for AthleteSelector component with proper fullName
+  const athletesForSelector = Array.isArray(athletes) ? (athletes as Athlete[]).map(athlete => ({
+    ...athlete,
+    fullName: athlete.fullName || 'Unknown'
+  })) : [];
 
   const metric = form.watch("metric");
   const date = form.watch("date");
@@ -203,7 +196,6 @@ export default function MeasurementForm() {
       season: "",
     });
     setSelectedAthlete(null);
-    setSearchTerm("");
     resetTeamState();
   };
 
@@ -216,59 +208,37 @@ export default function MeasurementForm() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Athlete <span className="text-red-500">*</span>
             </label>
-            <div className="relative">
-              <Input
-                placeholder="Search and select athlete..."
-                value={selectedAthlete ? selectedAthlete.fullName : searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  if (selectedAthlete && e.target.value !== selectedAthlete.fullName) {
-                    setSelectedAthlete(null);
-                    form.setValue("userId", "");
+            <AthleteSelector
+              athletes={athletesForSelector}
+              selectedAthlete={selectedAthlete}
+              onSelect={(athlete) => {
+                // Convert AthleteSelector.Athlete to the expected hook interface
+                const hookAthlete = athlete ? {
+                  id: athlete.id,
+                  fullName: athlete.fullName,
+                  birthYear: athlete.birthYear || 0, // Provide default value for required field
+                  teams: athlete.teams
+                } : null;
+
+                setSelectedAthlete(hookAthlete);
+                form.setValue("userId", athlete?.id || "");
+                if (athlete) {
+                  // Fetch active teams for the selected athlete
+                  const currentDate = form.getValues("date");
+                  if (currentDate) {
+                    fetchActiveTeams(athlete.id, currentDate);
                   }
-                }}
-                className="pl-10"
-                data-testid="input-search-athlete"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              
-              {searchTerm && !selectedAthlete && filteredAthletes.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredAthletes.slice(0, 10).map((athlete) => (
-                    <button
-                      key={athlete.id}
-                      type="button"
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
-                      onClick={() => {
-                        setSelectedAthlete(athlete);
-                        setSearchTerm("");
-                        form.setValue("userId", athlete.id);
-                        // Fetch active teams for the selected athlete
-                        const currentDate = form.getValues("date");
-                        if (currentDate) {
-                          fetchActiveTeams(athlete.id, currentDate);
-                        }
-                      }}
-                      data-testid={`option-athlete-${athlete.id}`}
-                    >
-                      <div>
-                        <p className="font-medium">{athlete.fullName}</p>
-                        <p className="text-sm text-gray-500">
-                          {hasTeamsProperty(athlete) 
-                            ? athlete.teams.map(t => t.name).join(', ') 
-                            : 'No teams'
-                          } • {hasBirthYearProperty(athlete) 
-                            ? athlete.birthYear 
-                            : 'Unknown year'
-                          }
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Start typing to search by name or team</p>
+                } else {
+                  resetTeamState();
+                }
+              }}
+              placeholder="Select athlete..."
+              searchPlaceholder="Search athletes by name or team..."
+              showTeamInfo={true}
+              disabled={createMeasurementMutation.isPending}
+              data-testid="input-search-athlete"
+            />
+            <p className="text-xs text-gray-500 mt-1">Click to browse or type to search athletes</p>
           </div>
 
           {/* Date */}

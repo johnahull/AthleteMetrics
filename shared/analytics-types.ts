@@ -97,10 +97,11 @@ export interface TrendData {
   athleteName: string;
   metric: string;
   data: TrendDataPoint[];
+  teamName?: string;
 }
 
 // Chart configuration types
-export type ChartType = 
+export type ChartType =
   | 'box_plot'
   | 'distribution'
   | 'bar_chart'
@@ -110,7 +111,8 @@ export type ChartType =
   | 'swarm_plot'
   | 'connected_scatter'
   | 'multi_line'
-  | 'box_swarm_combo';
+  | 'box_swarm_combo'
+  | 'time_series_box_swarm';
 
 export interface ChartConfiguration {
   type: ChartType;
@@ -309,7 +311,7 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   intra_group: {
     '1': {
       best: ['distribution', 'bar_chart', 'box_swarm_combo'],
-      trends: ['multi_line']
+      trends: ['time_series_box_swarm', 'multi_line']
     },
     '2': {
       best: ['scatter_plot'],
@@ -323,7 +325,7 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   inter_group: {
     '1': {
       best: ['box_swarm_combo', 'distribution'],
-      trends: ['multi_line']
+      trends: ['time_series_box_swarm', 'multi_line']
     },
     '2': {
       best: ['scatter_plot'],

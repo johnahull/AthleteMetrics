@@ -7,7 +7,7 @@ import { registerAuthRoutes } from "./auth-routes";
 import { registerUserRoutes } from "./user-routes";
 import { registerOrganizationRoutes } from "./organization-routes";
 // import { registerTeamRoutes } from "./team-routes";
-// import { registerAthleteRoutes } from "./athlete-routes";
+import { registerAthleteRoutes } from "./athlete-routes";
 // import { registerMeasurementRoutes } from "./measurement-routes";
 // import { registerAnalyticsRoutes } from "./analytics-routes";
 // import { registerImportRoutes } from "./import-routes";
@@ -25,9 +25,11 @@ export function registerAllRoutes(app: Express) {
   // Organization management routes
   registerOrganizationRoutes(app);
   
+  // Athlete management routes
+  registerAthleteRoutes(app);
+  
   // TODO: Add remaining route modules
   // registerTeamRoutes(app);
-  // registerAthleteRoutes(app);
   // registerMeasurementRoutes(app);
   // registerAnalyticsRoutes(app);
   // registerImportRoutes(app);
@@ -45,11 +47,11 @@ export function getRouteStats() {
       users: "✅ Registered", 
       organizations: "✅ Registered",
       teams: "🚧 Pending migration",
-      athletes: "🚧 Pending migration",
+      athletes: "✅ Registered",
       measurements: "🚧 Pending migration", 
       analytics: "🚧 Pending migration",
       imports: "🚧 Pending migration"
     },
-    status: "Partial migration complete - 3/8 modules refactored"
+    status: "Partial migration complete - 4/8 modules refactored"
   };
 }

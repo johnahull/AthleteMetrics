@@ -15,6 +15,7 @@ import { AccessController } from "./access-control";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
+import { validateAnalyticsRequest } from "./validation/analytics-validation";
 import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
@@ -357,8 +358,12 @@ export function registerRoutes(app: Express) {
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-      // Skip rate limiting for local development
-      return process.env.NODE_ENV === 'development' || req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      // Skip rate limiting for localhost and optionally in development if flag is set
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || bypassForDev;
     }
   });
 
@@ -1638,8 +1643,15 @@ export function registerRoutes(app: Express) {
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     skip: (req) => {
-      // Skip rate limiting for site admins in development
-      return process.env.NODE_ENV === 'development' && req.session.user?.role === 'site_admin';
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (isProduction) {
+        return false; // Always enforce rate limiting in production
+      }
+
+      // Skip rate limiting only if explicitly enabled via environment flag in non-production
+      // This prevents accidental bypass in production
+      return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && req.session.user?.role === 'site_admin';
     }
   });
 
@@ -1704,28 +1716,25 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Input validation for analytics request
-      if (!analyticsRequest.filters?.organizationId) {
-        return res.status(400).json({ message: "Organization ID is required" });
+      // Comprehensive input validation for analytics request
+      const validation = validateAnalyticsRequest(analyticsRequest);
+      if (!validation.success) {
+        return res.status(400).json({
+          message: "Invalid analytics request",
+          errors: validation.errors
+        });
       }
 
-      if (!analyticsRequest.metrics?.primary) {
-        return res.status(400).json({ message: "Primary metric is required" });
-      }
-
-      // Validate metric names against allowed metrics
-      const allowedMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
-      if (!allowedMetrics.includes(analyticsRequest.metrics.primary)) {
-        return res.status(400).json({ message: "Invalid primary metric" });
-      }
+      // Use validated data
+      const validatedRequest = validation.data!;
 
       // Role-based access control for advanced analytics
       const userRole = currentUser.role;
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       
       // Check if the request is for coach analytics (inter/intra group analysis)
-      const isCoachAnalyticsRequest = analyticsRequest.analysisType === 'inter_group' || 
-                                    analyticsRequest.analysisType === 'intra_group';
+      const isCoachAnalyticsRequest = validatedRequest.analysisType === 'inter_group' ||
+                                    validatedRequest.analysisType === 'intra_group';
       
       if (isCoachAnalyticsRequest && !userIsSiteAdmin && userRole !== 'coach' && userRole !== 'org_admin') {
         return res.status(403).json({ 
@@ -1738,8 +1747,8 @@ export function registerRoutes(app: Express) {
       const { AnalyticsService } = await import("./analytics-simple");
       const analyticsService = new AnalyticsService();
 
-      // Get analytics data
-      const analyticsData = await analyticsService.getAnalyticsData(analyticsRequest);
+      // Get analytics data using validated request
+      const analyticsData = await analyticsService.getAnalyticsData(validatedRequest);
       
       res.json(analyticsData);
     } catch (error) {

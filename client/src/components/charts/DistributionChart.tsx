@@ -34,24 +34,25 @@ interface DistributionChartProps {
   highlightAthlete?: string;
 }
 
-export function DistributionChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export const DistributionChart = React.memo(function DistributionChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete
 }: DistributionChartProps) {
   // Transform data for histogram visualization
   const distributionData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    // Focus on primary metric for distribution
-    const metrics = Object.keys(statistics || {});
-    const primaryMetric = metrics[0];
-    
+    // Get metrics from actual data (like BoxPlotChart does)
+    const availableMetrics = Array.from(new Set(data.map(d => d.metric)));
+    const primaryMetric = availableMetrics[0];
+
     if (!primaryMetric) return null;
 
     const metricData = data.filter(d => d.metric === primaryMetric);
-    const values = metricData.map(d => d.value);
+    // Convert values to numbers to handle string values
+    const values = metricData.map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value).filter(v => !isNaN(v));
     
     if (values.length === 0) return null;
 
@@ -94,8 +95,10 @@ export function DistributionChart({
     if (highlightAthlete) {
       const athleteData = metricData.find(d => d.athleteId === highlightAthlete);
       if (athleteData) {
+        // Convert value to number to handle string values
+        const numericValue = typeof athleteData.value === 'string' ? parseFloat(athleteData.value) : athleteData.value;
         const athleteBinIndex = Math.min(
-          Math.floor((athleteData.value - min) / binWidth), 
+          Math.floor((numericValue - min) / binWidth),
           binCount - 1
         );
         
@@ -114,12 +117,67 @@ export function DistributionChart({
       }
     }
 
+    // Simple fallback: use server statistics if available, otherwise calculate from data
+    let validatedStats = statistics?.[primaryMetric];
+
+    // Use server stats if they exist and have a valid mean
+    if (!validatedStats || typeof validatedStats.mean !== 'number' || isNaN(validatedStats.mean)) {
+
+      if (values.length > 0) {
+        // Calculate statistics on client side as fallback
+        const sortedValues = [...values].sort((a, b) => a - b);
+        const count = sortedValues.length;
+        const sum = sortedValues.reduce((acc, val) => acc + val, 0);
+        const mean = sum / count;
+        const min = Math.min(...sortedValues);
+        const max = Math.max(...sortedValues);
+
+        // Calculate median and std dev
+        const median = count % 2 === 1
+          ? sortedValues[Math.floor(count / 2)]
+          : (sortedValues[count / 2 - 1] + sortedValues[count / 2]) / 2;
+
+        const variance = sortedValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
+        const std = Math.sqrt(variance);
+
+        // Calculate percentiles (like the server does)
+        const getPercentile = (p: number) => {
+          const index = (p / 100) * (count - 1);
+          const lower = Math.floor(index);
+          const upper = Math.ceil(index);
+          if (lower === upper) return sortedValues[lower];
+          const weight = index - lower;
+          return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+        };
+
+        validatedStats = {
+          count,
+          mean,
+          median,
+          min,
+          max,
+          std,
+          variance,
+          percentiles: {
+            p5: getPercentile(5),
+            p10: getPercentile(10),
+            p25: getPercentile(25),
+            p50: median,
+            p75: getPercentile(75),
+            p90: getPercentile(90),
+            p95: getPercentile(95)
+          }
+        };
+      }
+    }
+
     return {
       labels,
       datasets,
       binData: bins,
       unit,
-      primaryMetric
+      primaryMetric,
+      validatedStats
     };
   }, [data, statistics, highlightAthlete]);
 
@@ -210,36 +268,36 @@ export function DistributionChart({
       <Bar data={distributionData} options={options} />
       
       {/* Summary statistics */}
-      {statistics && distributionData.primaryMetric && statistics[distributionData.primaryMetric] && (
+      {distributionData.validatedStats && (
         <div className="mt-4 grid grid-cols-4 gap-4 text-sm">
           <div className="text-center">
             <div className="font-medium">Mean</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].mean.toFixed(2)}{distributionData.unit}
+              {distributionData.validatedStats.mean?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Median</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].median.toFixed(2)}{distributionData.unit}
+              {distributionData.validatedStats.median?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Std Dev</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].std.toFixed(2)}{distributionData.unit}
+              {distributionData.validatedStats.std?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Range</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].min.toFixed(2)} - {statistics[distributionData.primaryMetric].max.toFixed(2)}{distributionData.unit}
+              {distributionData.validatedStats.min?.toFixed(2) || 'N/A'} - {distributionData.validatedStats.max?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
         </div>
       )}
     </div>
   );
-}
+});
 
 export default DistributionChart;

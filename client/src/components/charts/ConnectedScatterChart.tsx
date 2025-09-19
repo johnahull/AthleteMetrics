@@ -34,11 +34,11 @@ interface ConnectedScatterChartProps {
   highlightAthlete?: string;
 }
 
-export function ConnectedScatterChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete
 }: ConnectedScatterChartProps) {
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
@@ -83,13 +83,16 @@ export function ConnectedScatterChart({
       // Create connected points by matching dates
       const connectedPoints = xData
         .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => 
-            y.date.toISOString().split('T')[0] === xPoint.date.toISOString().split('T')[0]
-          );
+          const yPoint = yData.find((y: any) => {
+            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+          });
           
           return yPoint ? {
-            x: xPoint.value,
-            y: yPoint.value,
+            // Convert values to numbers to handle string values
+            x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+            y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
             date: xPoint.date,
             isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest
           } : null;
@@ -121,7 +124,7 @@ export function ConnectedScatterChart({
     });
 
     // Add group averages if statistics available
-    if (statistics && statistics[xMetric] && statistics[yMetric]) {
+    if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
       datasets.push({
         label: 'Group Average',
         data: [{
@@ -288,8 +291,14 @@ export function ConnectedScatterChart({
                   
                   if (xData.length < 2 || yData.length < 2) return 'N/A';
                   
-                  const xImprovement = xData[xData.length - 1].value - xData[0].value;
-                  const yImprovement = yData[yData.length - 1].value - yData[0].value;
+                  // Convert values to numbers to handle string values
+                  const xLastValue = typeof xData[xData.length - 1].value === 'string' ? parseFloat(xData[xData.length - 1].value) : xData[xData.length - 1].value;
+                  const xFirstValue = typeof xData[0].value === 'string' ? parseFloat(xData[0].value) : xData[0].value;
+                  const yLastValue = typeof yData[yData.length - 1].value === 'string' ? parseFloat(yData[yData.length - 1].value) : yData[yData.length - 1].value;
+                  const yFirstValue = typeof yData[0].value === 'string' ? parseFloat(yData[0].value) : yData[0].value;
+
+                  const xImprovement = xLastValue - xFirstValue;
+                  const yImprovement = yLastValue - yFirstValue;
                   
                   const xBetter = METRIC_CONFIG[scatterData.xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ? 
                     xImprovement < 0 : xImprovement > 0;
@@ -321,6 +330,6 @@ export function ConnectedScatterChart({
       )}
     </div>
   );
-}
+});
 
 export default ConnectedScatterChart;

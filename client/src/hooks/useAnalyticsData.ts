@@ -4,11 +4,12 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useCallback } from 'react';
-import type { 
-  AnalyticsRequest, 
-  AnalyticsResponse, 
+import { CHART_CONFIG } from '@/constants/chart-config';
+import type {
+  AnalyticsRequest,
+  AnalyticsResponse,
   ChartDataPoint,
-  StatisticalSummary 
+  StatisticalSummary
 } from '@shared/analytics-types';
 
 interface UseAnalyticsDataOptions {
@@ -50,25 +51,80 @@ export function useAnalyticsData({
   // Memoize the query key to prevent unnecessary recalculations
   const queryKey = useMemo(() => getAnalyticsQueryKey(request), [request]);
 
-  // Optimized fetch function
+  // Optimized fetch function with robust error handling
   const fetchAnalyticsData = useCallback(async (): Promise<AnalyticsResponse> => {
-    const response = await fetch('/api/analytics/dashboard', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(request),
-    });
+    try {
+      const response = await fetch('/api/analytics/dashboard', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(request),
+      });
 
-    if (!response.ok) {
-      throw new Error(`Analytics request failed: ${response.statusText}`);
+      if (!response.ok) {
+        // Provide more specific error messages based on status code
+        let errorMessage = 'Analytics request failed';
+        switch (response.status) {
+          case 401:
+            errorMessage = 'Authentication required. Please log in again.';
+            break;
+          case 403:
+            errorMessage = 'Access denied. You do not have permission to view this data.';
+            break;
+          case 429:
+            errorMessage = 'Too many requests. Please wait a moment and try again.';
+            break;
+          case 500:
+            errorMessage = 'Server error. Please try again later.';
+            break;
+          case 503:
+            errorMessage = 'Service temporarily unavailable. Please try again later.';
+            break;
+          default:
+            errorMessage = `Analytics request failed: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+
+      // Validate response structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format from analytics API');
+      }
+
+      return data;
+    } catch (error) {
+      // Handle network errors and other fetch issues
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+
+      // Re-throw other errors
+      throw error;
     }
-
-    return response.json();
   }, [request]);
 
-  // Use React Query for caching and background updates
+  // Generate fallback data for error scenarios
+  const fallbackData = useMemo((): AnalyticsResponse => ({
+    data: [],
+    statistics: {},
+    groupings: {},
+    meta: {
+      totalAthletes: 0,
+      totalMeasurements: 0,
+      dateRange: {
+        start: new Date(),
+        end: new Date()
+      },
+      appliedFilters: request.filters,
+      recommendedCharts: []
+    }
+  }), [request.filters]);
+
+  // Use React Query for caching and background updates with enhanced error handling
   const query = useQuery({
     queryKey,
     queryFn: fetchAnalyticsData,
@@ -77,7 +133,16 @@ export function useAnalyticsData({
     gcTime,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    retry: 1,
+    retry: (failureCount, error: any) => {
+      // Don't retry on client errors (4xx) except 429 (rate limit)
+      if (error?.message?.includes('Authentication required') ||
+          error?.message?.includes('Access denied')) {
+        return false;
+      }
+      // Retry up to 3 times for server errors and rate limits
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
   // Memoized chart data transformations
@@ -110,15 +175,22 @@ export function useAnalyticsData({
   }, [queryClient]);
 
   return {
-    data: query.data,
-    chartData,
-    statistics,
+    data: query.data || (query.isError ? fallbackData : null),
+    chartData: chartData || (query.isError ? [] : null),
+    statistics: statistics || (query.isError ? {} : {}),
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
+    errorMessage: query.error?.message || null,
+    hasData: !!query.data && !query.isError,
+    hasFallbackData: query.isError && !!fallbackData,
     refetch: query.refetch,
     prefetchRelatedData,
     invalidateCache,
+    // Additional helpers for error handling
+    isNetworkError: query.error?.message?.includes('Network error') || false,
+    isAuthError: query.error?.message?.includes('Authentication') || query.error?.message?.includes('Access denied') || false,
+    isRateLimited: query.error?.message?.includes('Too many requests') || false,
   };
 }
 
@@ -197,14 +269,14 @@ function recalculateStatistics(
 
     // Calculate percentiles
     const getPercentile = (p: number) => {
-      const index = (p / 100) * (sortedValues.length - 1);
+      const index = (p / CHART_CONFIG.ALGORITHM.PERCENTILE_DIVISOR) * (sortedValues.length - 1);
       const lower = Math.floor(index);
       const upper = Math.ceil(index);
-      
+
       if (lower === upper) {
         return sortedValues[lower];
       }
-      
+
       const weight = index - lower;
       return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
     };
@@ -212,19 +284,19 @@ function recalculateStatistics(
     newStats[metric] = {
       count: values.length,
       mean,
-      median: getPercentile(50),
+      median: getPercentile(CHART_CONFIG.PERCENTILES.P50),
       min: sortedValues[0],
       max: sortedValues[sortedValues.length - 1],
       std: standardDeviation,
       variance,
       percentiles: {
-        p5: getPercentile(5),
-        p10: getPercentile(10),
-        p25: getPercentile(25),
-        p50: getPercentile(50),
-        p75: getPercentile(75),
-        p90: getPercentile(90),
-        p95: getPercentile(95)
+        p5: getPercentile(CHART_CONFIG.PERCENTILES.P5),
+        p10: getPercentile(CHART_CONFIG.PERCENTILES.P10),
+        p25: getPercentile(CHART_CONFIG.PERCENTILES.P25),
+        p50: getPercentile(CHART_CONFIG.PERCENTILES.P50),
+        p75: getPercentile(CHART_CONFIG.PERCENTILES.P75),
+        p90: getPercentile(CHART_CONFIG.PERCENTILES.P90),
+        p95: getPercentile(CHART_CONFIG.PERCENTILES.P95)
       }
     };
   });

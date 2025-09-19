@@ -103,4 +103,8 @@ Key schema features:
 - `ANALYTICS_RATE_LIMIT` - Maximum requests per window (default: 50)
 - `ANALYTICS_RATE_LIMIT_MESSAGE` - Custom rate limit message (default: "Too many analytics requests, please try again later.")
 
-Note: Rate limiting is automatically skipped for site admins in development mode.
+#### Rate Limiting Bypass (Development Only)
+- `BYPASS_ANALYTICS_RATE_LIMIT` - Set to "true" to bypass analytics rate limiting for site admins (default: false)
+- `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)
+
+**Security Note**: Rate limiting bypasses are disabled by default and automatically disabled in production environments (NODE_ENV=production) regardless of environment variable settings. This provides an additional safeguard against accidental security vulnerabilities in production deployments.

@@ -44,6 +44,7 @@ const RadarChart = React.lazy(() => import('./RadarChart').then(m => ({ default:
 const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default: m.SwarmChart })));
 const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
+const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 
 interface ChartContainerProps {
   title: string;
@@ -57,6 +58,10 @@ interface ChartContainerProps {
   isLoading?: boolean;
   error?: string;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  selectedDates?: string[];
+  metric?: string;
   onExport?: () => void;
   onFullscreen?: () => void;
   className?: string;
@@ -74,6 +79,10 @@ export function ChartContainer({
   isLoading = false,
   error,
   highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
+  selectedDates,
+  metric,
   onExport,
   onFullscreen,
   className
@@ -101,6 +110,8 @@ export function ChartContainer({
         return MultiLineChart;
       case 'box_swarm_combo':
         return BoxPlotChart; // Composite chart handled within BoxPlotChart
+      case 'time_series_box_swarm':
+        return TimeSeriesBoxSwarmChart;
       default:
         return null;
     }
@@ -124,6 +135,7 @@ export function ChartContainer({
       case 'line_chart':
       case 'multi_line':
       case 'connected_scatter':
+      case 'time_series_box_swarm':
         return trends;
       case 'radar_chart':
         return multiMetric;
@@ -232,7 +244,7 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="w-full" style={{ height: '400px' }}>
+        <div className="w-full" style={{ height: '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense fallback={
@@ -244,9 +256,13 @@ export function ChartContainer({
                 <ChartComponent
                   data={chartData as any}
                   config={chartConfig}
-                  statistics={statistics}
+                  statistics={statistics || {}}
                   highlightAthlete={highlightAthlete}
+                  selectedAthleteIds={selectedAthleteIds}
+                  onAthleteSelectionChange={onAthleteSelectionChange}
                   showAllPoints={chartType === 'box_swarm_combo'}
+                  selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
+                  metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
                 />
               </React.Suspense>
             ) : (
@@ -268,7 +284,7 @@ export function getRecommendedChartType(
   timeframeType: string
 ): ChartType {
   const key = metricCount === 1 ? '1' : metricCount === 2 ? '2' : '3+';
-  
+
   if (analysisType === 'individual') {
     if (metricCount === 1) {
       return timeframeType === 'best' ? 'box_swarm_combo' : 'line_chart';
@@ -278,8 +294,9 @@ export function getRecommendedChartType(
       return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   } else {
+    // Group analysis (intra_group or inter_group)
     if (metricCount === 1) {
-      return timeframeType === 'best' ? 'distribution' : 'multi_line';
+      return timeframeType === 'best' ? 'distribution' : 'time_series_box_swarm';
     } else if (metricCount === 2) {
       return 'scatter_plot';
     } else {
@@ -322,6 +339,12 @@ export function validateChartData(
     case 'bar_chart':
       if (!Array.isArray(data) || data.length === 0) {
         errors.push('Chart requires data points array');
+      }
+      break;
+
+    case 'time_series_box_swarm':
+      if (!Array.isArray(data) || data.length === 0) {
+        errors.push('Time-series box+swarm chart requires trend data array');
       }
       break;
   }
