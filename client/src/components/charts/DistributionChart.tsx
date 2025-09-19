@@ -51,7 +51,8 @@ export function DistributionChart({
     if (!primaryMetric) return null;
 
     const metricData = data.filter(d => d.metric === primaryMetric);
-    const values = metricData.map(d => d.value);
+    // Convert values to numbers to handle string values
+    const values = metricData.map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value).filter(v => !isNaN(v));
     
     if (values.length === 0) return null;
 
@@ -94,8 +95,10 @@ export function DistributionChart({
     if (highlightAthlete) {
       const athleteData = metricData.find(d => d.athleteId === highlightAthlete);
       if (athleteData) {
+        // Convert value to number to handle string values
+        const numericValue = typeof athleteData.value === 'string' ? parseFloat(athleteData.value) : athleteData.value;
         const athleteBinIndex = Math.min(
-          Math.floor((athleteData.value - min) / binWidth), 
+          Math.floor((numericValue - min) / binWidth),
           binCount - 1
         );
         

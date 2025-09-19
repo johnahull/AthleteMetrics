@@ -203,7 +203,11 @@ export class AnalyticsService {
 
     for (const metric of allMetrics) {
       const metricData = data.filter(d => d.metric === metric);
-      const values = metricData.map(d => d.value).sort((a, b) => a - b);
+      // Convert decimal values to numbers (Drizzle returns decimals as strings)
+      const values = metricData
+        .map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value)
+        .filter(v => !isNaN(v))
+        .sort((a, b) => a - b);
 
       if (values.length === 0) continue;
 
@@ -418,7 +422,8 @@ export class AnalyticsService {
     return results.map(row => ({
       athleteId: row.athleteId,
       athleteName: row.athleteName,
-      value: row.value,
+      // Convert decimal values to numbers (Drizzle returns decimals as strings)
+      value: typeof row.value === 'string' ? parseFloat(row.value) : row.value,
       date: row.date,
       metric: row.metric,
       teamName: row.teamName,

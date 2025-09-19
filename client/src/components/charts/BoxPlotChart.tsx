@@ -72,7 +72,11 @@ export function BoxPlotChart({
       if (!groups[point.metric]) {
         groups[point.metric] = [];
       }
-      groups[point.metric].push(point.value);
+      // Convert value to number to handle string values
+      const numericValue = typeof point.value === 'string' ? parseFloat(point.value) : point.value;
+      if (!isNaN(numericValue)) {
+        groups[point.metric].push(numericValue);
+      }
       return groups;
     }, {} as Record<string, number[]>);
 
@@ -113,18 +117,22 @@ export function BoxPlotChart({
       if (!hasValidStats && values.length > 0) {
         console.log(`⚠️ Server stats invalid for ${metric}, calculating client-side statistics`);
         // Calculate statistics on client side as fallback
-        const sortedValues = [...values].sort((a, b) => a - b);
+        // Convert to numbers first to handle string values
+        const numericValues = values.map(v => typeof v === 'string' ? parseFloat(v) : v).filter(v => !isNaN(v));
+        const sortedValues = [...numericValues].sort((a, b) => a - b);
         const count = sortedValues.length;
         const sum = sortedValues.reduce((acc, val) => acc + val, 0);
         const mean = sum / count;
 
         console.log(`🔧 Client-side calculation for ${metric}:`, {
           rawValues: values.slice(0, 5),
+          rawValueTypes: values.slice(0, 5).map(v => typeof v),
+          numericValues: numericValues.slice(0, 5),
           sortedValues: sortedValues.slice(0, 5),
-          count,
+          originalCount: values.length,
+          validCount: count,
           sum,
-          mean,
-          valueTypes: values.slice(0, 3).map(v => typeof v)
+          mean
         });
         const min = Math.min(...sortedValues);
         const max = Math.max(...sortedValues);
@@ -263,11 +271,13 @@ export function BoxPlotChart({
             .map((point, pointIndex) => {
               const jitterRange = 0.25;
               const jitter = (Math.random() - 0.5) * jitterRange;
-              const isOutlier = outliers.includes(point.value);
+              // Convert value to number to handle string values
+              const numericValue = typeof point.value === 'string' ? parseFloat(point.value) : point.value;
+              const isOutlier = outliers.includes(numericValue);
 
               return {
                 x: xPos + jitter,
-                y: point.value,
+                y: numericValue,
                 athleteId: point.athleteId,
                 athleteName: point.athleteName,
                 teamName: point.teamName,
@@ -330,9 +340,11 @@ export function BoxPlotChart({
           );
 
           if (athleteData) {
+            // Convert value to number to handle string values
+            const numericValue = typeof athleteData.value === 'string' ? parseFloat(athleteData.value) : athleteData.value;
             datasets.push({
               label: `${athleteData.athleteName}`,
-              data: [{ x: xPos, y: athleteData.value }],
+              data: [{ x: xPos, y: numericValue }],
               type: 'scatter',
               backgroundColor: 'rgba(16, 185, 129, 1)',
               borderColor: 'rgba(16, 185, 129, 1)',

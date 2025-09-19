@@ -90,8 +90,9 @@ export function ConnectedScatterChart({
           });
           
           return yPoint ? {
-            x: xPoint.value,
-            y: yPoint.value,
+            // Convert values to numbers to handle string values
+            x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+            y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
             date: xPoint.date,
             isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest
           } : null;
@@ -290,8 +291,14 @@ export function ConnectedScatterChart({
                   
                   if (xData.length < 2 || yData.length < 2) return 'N/A';
                   
-                  const xImprovement = xData[xData.length - 1].value - xData[0].value;
-                  const yImprovement = yData[yData.length - 1].value - yData[0].value;
+                  // Convert values to numbers to handle string values
+                  const xLastValue = typeof xData[xData.length - 1].value === 'string' ? parseFloat(xData[xData.length - 1].value) : xData[xData.length - 1].value;
+                  const xFirstValue = typeof xData[0].value === 'string' ? parseFloat(xData[0].value) : xData[0].value;
+                  const yLastValue = typeof yData[yData.length - 1].value === 'string' ? parseFloat(yData[yData.length - 1].value) : yData[yData.length - 1].value;
+                  const yFirstValue = typeof yData[0].value === 'string' ? parseFloat(yData[0].value) : yData[0].value;
+
+                  const xImprovement = xLastValue - xFirstValue;
+                  const yImprovement = yLastValue - yFirstValue;
                   
                   const xBetter = METRIC_CONFIG[scatterData.xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ? 
                     xImprovement < 0 : xImprovement > 0;

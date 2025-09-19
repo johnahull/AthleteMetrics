@@ -158,13 +158,19 @@ export function ScatterPlotChart({
     // Create scatter points for athletes with both metrics
     const scatterPoints = Object.values(athleteData)
       .filter((athlete: any) => athlete.metrics[xMetric] !== undefined && athlete.metrics[yMetric] !== undefined)
-      .map((athlete: any) => ({
-        x: athlete.metrics[xMetric],
-        y: athlete.metrics[yMetric],
-        athleteId: athlete.athleteId,
-        athleteName: athlete.athleteName,
-        teamName: athlete.teamName
-      }));
+      .map((athlete: any) => {
+        // Convert values to numbers to handle string values
+        const xValue = typeof athlete.metrics[xMetric] === 'string' ? parseFloat(athlete.metrics[xMetric]) : athlete.metrics[xMetric];
+        const yValue = typeof athlete.metrics[yMetric] === 'string' ? parseFloat(athlete.metrics[yMetric]) : athlete.metrics[yMetric];
+        return {
+          x: xValue,
+          y: yValue,
+          athleteId: athlete.athleteId,
+          athleteName: athlete.athleteName,
+          teamName: athlete.teamName
+        };
+      })
+      .filter((point: any) => !isNaN(point.x) && !isNaN(point.y)); // Filter out invalid numeric conversions
 
     if (scatterPoints.length === 0) return null;
 
@@ -187,7 +193,8 @@ export function ScatterPlotChart({
       } else {
         // Calculate statistics on client side as fallback
         const metricData = data.filter(d => d.metric === metric);
-        const values = metricData.map(d => d.value);
+        // Convert values to numbers to handle string values
+        const values = metricData.map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value).filter(v => !isNaN(v));
 
         if (values.length > 0) {
           const count = values.length;
