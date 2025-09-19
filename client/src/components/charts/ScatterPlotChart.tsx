@@ -65,37 +65,89 @@ function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
   const xLowerIsBetter = xConfig?.lowerIsBetter || false;
   const yLowerIsBetter = yConfig?.lowerIsBetter || false;
 
+  // Get clean metric names (remove common suffixes)
+  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
+  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // Generate contextual descriptions based on metric combination
+  const getDescriptions = () => {
+    // Speed vs Power combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
+    }
+
+    // Speed vs Agility combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
+    }
+
+    // Power vs Agility combinations
+    if (xMetric.includes('VERTICAL') && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
+    }
+    if (yMetric.includes('VERTICAL') && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
+    }
+
+    // Agility vs Agility combinations
+    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Multi-Directional Elite', xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: 'Needs Agility Work' };
+    }
+
+    // Speed vs Speed combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('DASH') || yMetric.includes('FLY'))) {
+      return { elite: 'Speed Elite', xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: 'Needs Speed Work' };
+    }
+
+    // RSI combinations
+    if (xMetric.includes('RSI') || yMetric.includes('RSI')) {
+      const nonRSI = xMetric.includes('RSI') ? yName : xName;
+      return { elite: `Reactive + ${nonRSI} Elite`, xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: `Needs ${xName} & ${yName}` };
+    }
+
+    // Default generic descriptions with metric names
+    return { elite: `${xName} + ${yName} Elite`, xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: `Needs ${xName} & ${yName}` };
+  };
+
+  const descriptions = getDescriptions();
+
   if (!xLowerIsBetter && !yLowerIsBetter) {
-    // Both higher is better (e.g., vertical jump vs broad jump)
+    // Both higher is better (e.g., vertical jump vs RSI)
     return {
-      topRight: { label: 'Elite Performance', color: 'green' },
-      topLeft: { label: 'Good Y Performance', color: 'yellow' },
-      bottomRight: { label: 'Good X Performance', color: 'yellow' },
-      bottomLeft: { label: 'Development Needed', color: 'red' }
+      topRight: { label: descriptions.elite, color: 'green' },
+      topLeft: { label: descriptions.yGood, color: 'yellow' },
+      bottomRight: { label: descriptions.xGood, color: 'yellow' },
+      bottomLeft: { label: descriptions.development, color: 'red' }
     };
   } else if (xLowerIsBetter && !yLowerIsBetter) {
     // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
     return {
-      topLeft: { label: 'Elite Performance', color: 'green' },
-      topRight: { label: 'Good Y Performance', color: 'yellow' },
-      bottomLeft: { label: 'Good X Performance', color: 'yellow' },
-      bottomRight: { label: 'Development Needed', color: 'red' }
+      topLeft: { label: descriptions.elite, color: 'green' },
+      topRight: { label: descriptions.yGood, color: 'yellow' },
+      bottomLeft: { label: descriptions.xGood, color: 'yellow' },
+      bottomRight: { label: descriptions.development, color: 'red' }
     };
   } else if (!xLowerIsBetter && yLowerIsBetter) {
     // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
     return {
-      bottomRight: { label: 'Elite Performance', color: 'green' },
-      bottomLeft: { label: 'Good Y Performance', color: 'yellow' },
-      topRight: { label: 'Good X Performance', color: 'yellow' },
-      topLeft: { label: 'Development Needed', color: 'red' }
+      bottomRight: { label: descriptions.elite, color: 'green' },
+      bottomLeft: { label: descriptions.yGood, color: 'yellow' },
+      topRight: { label: descriptions.xGood, color: 'yellow' },
+      topLeft: { label: descriptions.development, color: 'red' }
     };
   } else {
     // Both lower is better (e.g., 40-yard dash vs agility time)
     return {
-      bottomLeft: { label: 'Elite Performance', color: 'green' },
-      bottomRight: { label: 'Good Y Performance', color: 'yellow' },
-      topLeft: { label: 'Good X Performance', color: 'yellow' },
-      topRight: { label: 'Development Needed', color: 'red' }
+      bottomLeft: { label: descriptions.elite, color: 'green' },
+      bottomRight: { label: descriptions.yGood, color: 'yellow' },
+      topLeft: { label: descriptions.xGood, color: 'yellow' },
+      topRight: { label: descriptions.development, color: 'red' }
     };
   }
 }
