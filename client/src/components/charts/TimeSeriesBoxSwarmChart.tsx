@@ -486,10 +486,10 @@ export function TimeSeriesBoxSwarmChart({
               });
 
               // Advanced collision detection and resolution
-              const resolvedPositions = resolveLabeLCollisions(labelPositions, chartArea);
+              const resolvedPositions = resolveLabelCollisions(labelPositions, chartArea);
 
               // Helper function for sophisticated label collision resolution
-              function resolveLabeLCollisions(
+              function resolveLabelCollisions(
                 labels: Array<{
                   x: number;
                   y: number;
@@ -655,7 +655,7 @@ export function TimeSeriesBoxSwarmChart({
         }
       }
     };
-  }, [config, metric, selectedDates]);
+  }, [config, metric, selectedDates, localShowAthleteNames]);
 
   if (!data || data.length === 0) {
     return (
