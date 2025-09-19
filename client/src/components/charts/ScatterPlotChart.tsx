@@ -118,11 +118,26 @@ export function ScatterPlotChart({
 
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
-    if (!data || data.length === 0) return null;
+    console.log('🚀 ScatterPlot starting with data:', {
+      dataLength: data?.length || 0,
+      hasData: !!data,
+      dataType: typeof data,
+      sampleData: data?.slice(0, 2)
+    });
+
+    if (!data || data.length === 0) {
+      console.log('❌ ScatterPlot: No data available');
+      return null;
+    }
 
     // Get metrics from actual data (like BoxPlotChart does)
     const availableMetrics = Array.from(new Set(data.map(d => d.metric)));
-    if (availableMetrics.length < 2) return null;
+    console.log('🔍 Available metrics:', availableMetrics);
+
+    if (availableMetrics.length < 2) {
+      console.log('❌ ScatterPlot: Not enough metrics', availableMetrics.length);
+      return null;
+    }
 
     const [xMetric, yMetric] = availableMetrics;
 
@@ -153,7 +168,7 @@ export function ScatterPlotChart({
 
     if (scatterPoints.length === 0) return null;
 
-    // Validate and calculate statistics (like BoxPlotChart does)
+    // Simple fallback: use server statistics if available, otherwise calculate from data
     const validatedStats: Record<string, any> = {};
 
     console.log('🔍 ScatterPlot Debug:', {
@@ -165,16 +180,11 @@ export function ScatterPlotChart({
     for (const metric of [xMetric, yMetric]) {
       let stats = statistics?.[metric];
 
-      // Check if server stats are valid (not all zeros), if not calculate our own
-      const hasValidStats = stats && stats.count > 0 && (stats.min !== 0 || stats.max !== 0);
-
-      console.log(`📊 Metric ${metric}:`, {
-        hasServerStats: !!stats,
-        hasValidStats,
-        serverStats: stats
-      });
-
-      if (!hasValidStats) {
+      // Use server stats if they exist and have a mean value
+      if (stats && typeof stats.mean === 'number' && !isNaN(stats.mean)) {
+        validatedStats[metric] = stats;
+        console.log(`✅ Using server stats for ${metric}:`, stats.mean);
+      } else {
         // Calculate statistics on client side as fallback
         const metricData = data.filter(d => d.metric === metric);
         const values = metricData.map(d => d.value);
@@ -192,9 +202,8 @@ export function ScatterPlotChart({
             min,
             max
           };
+          console.log(`🔧 Calculated client stats for ${metric}:`, mean);
         }
-      } else {
-        validatedStats[metric] = stats;
       }
     }
 

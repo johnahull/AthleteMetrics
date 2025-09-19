@@ -114,56 +114,66 @@ export function DistributionChart({
       }
     }
 
-    // Validate and calculate statistics (like BoxPlotChart does)
+    // Simple fallback: use server statistics if available, otherwise calculate from data
     let validatedStats = statistics?.[primaryMetric];
 
-    // Check if server stats are valid (not all zeros), if not calculate our own
-    const hasValidStats = validatedStats && validatedStats.count > 0 && (validatedStats.min !== 0 || validatedStats.max !== 0);
+    // Use server stats if they exist and have a valid mean
+    if (!validatedStats || typeof validatedStats.mean !== 'number' || isNaN(validatedStats.mean)) {
+      console.log('🔧 DistributionChart: Calculating client-side stats for', primaryMetric);
 
-    if (!hasValidStats && values.length > 0) {
-      // Calculate statistics on client side as fallback
-      const sortedValues = [...values].sort((a, b) => a - b);
-      const count = sortedValues.length;
-      const sum = sortedValues.reduce((acc, val) => acc + val, 0);
-      const mean = sum / count;
-      const min = Math.min(...sortedValues);
-      const max = Math.max(...sortedValues);
+      if (values.length > 0) {
+        // Calculate statistics on client side as fallback
+        const sortedValues = [...values].sort((a, b) => a - b);
+        const count = sortedValues.length;
+        const sum = sortedValues.reduce((acc, val) => acc + val, 0);
+        const mean = sum / count;
+        const min = Math.min(...sortedValues);
+        const max = Math.max(...sortedValues);
 
-      // Calculate median and std dev
-      const median = count % 2 === 1
-        ? sortedValues[Math.floor(count / 2)]
-        : (sortedValues[count / 2 - 1] + sortedValues[count / 2]) / 2;
-      const variance = sortedValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
-      const std = Math.sqrt(variance);
+        // Calculate median and std dev
+        const median = count % 2 === 1
+          ? sortedValues[Math.floor(count / 2)]
+          : (sortedValues[count / 2 - 1] + sortedValues[count / 2]) / 2;
 
-      // Calculate percentiles (like the server does)
-      const getPercentile = (p: number) => {
-        const index = (p / 100) * (count - 1);
-        const lower = Math.floor(index);
-        const upper = Math.ceil(index);
-        if (lower === upper) return sortedValues[lower];
-        const weight = index - lower;
-        return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
-      };
+        console.log('📊 DistributionChart median calculation:', {
+          primaryMetric,
+          count,
+          sortedValues: sortedValues.slice(0, 5),
+          median,
+          medianType: typeof median
+        });
+        const variance = sortedValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
+        const std = Math.sqrt(variance);
 
-      validatedStats = {
-        count,
-        mean,
-        median,
-        min,
-        max,
-        std,
-        variance,
-        percentiles: {
-          p5: getPercentile(5),
-          p10: getPercentile(10),
-          p25: getPercentile(25),
-          p50: median,
-          p75: getPercentile(75),
-          p90: getPercentile(90),
-          p95: getPercentile(95)
-        }
-      };
+        // Calculate percentiles (like the server does)
+        const getPercentile = (p: number) => {
+          const index = (p / 100) * (count - 1);
+          const lower = Math.floor(index);
+          const upper = Math.ceil(index);
+          if (lower === upper) return sortedValues[lower];
+          const weight = index - lower;
+          return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+        };
+
+        validatedStats = {
+          count,
+          mean,
+          median,
+          min,
+          max,
+          std,
+          variance,
+          percentiles: {
+            p5: getPercentile(5),
+            p10: getPercentile(10),
+            p25: getPercentile(25),
+            p50: median,
+            p75: getPercentile(75),
+            p90: getPercentile(90),
+            p95: getPercentile(95)
+          }
+        };
+      }
     }
 
     return {
