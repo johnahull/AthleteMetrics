@@ -8,6 +8,7 @@ import {
   Legend,
   ChartOptions,
   ScatterController,
+  LineController,
   PointElement,
   LineElement
 } from 'chart.js';
@@ -30,6 +31,7 @@ ChartJS.register(
   Tooltip,
   Legend,
   ScatterController,
+  LineController,
   PointElement,
   LineElement
 );
