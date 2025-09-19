@@ -2618,6 +2618,7 @@ export function registerRoutes(app: Express) {
 
       // Non-site admins can only access users from their organizations
       const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      console.log(`User ${currentUser.id} has ${userOrgs.length} organization(s):`, userOrgs);
       if (userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization access" });
       }
@@ -2632,7 +2633,9 @@ export function registerRoutes(app: Express) {
 
       // Get users from accessible organizations
       const targetOrgId = organizationId || userOrgs[0].organizationId;
+      console.log(`Fetching users for organization: ${targetOrgId}`);
       const orgUsers = await storage.getUsersByOrganization(targetOrgId);
+      console.log(`Found ${orgUsers.length} users in organization ${targetOrgId}`);
 
       // Include team memberships if requested
       if (includeTeamMemberships === "true") {

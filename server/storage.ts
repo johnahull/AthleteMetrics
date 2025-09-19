@@ -1947,9 +1947,9 @@ export class DatabaseStorage implements IStorage {
       role: userOrganizations.role
     })
     .from(users)
-    .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+    .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
     .where(eq(userOrganizations.organizationId, organizationId));
-    
+
     return result;
   }
 

@@ -36,12 +36,59 @@ export function registerUserRoutes(app: Express) {
   });
 
   /**
-   * Get all users (site admin only)
+   * Get users with organization filtering and team memberships
    */
-  app.get("/api/users", requireSiteAdmin, async (req, res) => {
+  app.get("/api/users", requireAuth, async (req, res) => {
     try {
-      const users = await userService.getUsers();
-      res.json(users);
+      const { organizationId, includeTeamMemberships } = req.query;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // For now, use the basic getUsersByOrganization from storage directly
+      // since UserService doesn't have this method yet
+      const userIsSiteAdmin = currentUser.isSiteAdmin === "true" || currentUser.admin === true;
+
+      if (userIsSiteAdmin) {
+        const users = await userService.getUsers();
+        return res.json(users);
+      }
+
+      // Use the storage layer directly for organization-based user retrieval
+      const storage = (userService as any).storage;
+
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      if (userOrgs.length === 0) {
+        return res.status(403).json({ message: "No organization access" });
+      }
+
+      const targetOrgId = organizationId || userOrgs[0].organizationId;
+      const orgUsers = await storage.getUsersByOrganization(targetOrgId);
+
+      // Include team memberships if requested
+      if (includeTeamMemberships === "true") {
+        const usersWithTeams = await Promise.all(
+          orgUsers.map(async (user: any) => {
+            const userTeams = await storage.getUserTeams(user.id);
+            return {
+              ...user,
+              teamMemberships: userTeams.map((ut: any) => ({
+                teamId: ut.team.id,
+                teamName: ut.team.name,
+                isActive: ut.isActive,
+                season: ut.season,
+                joinedAt: ut.joinedAt,
+                leftAt: ut.leftAt
+              }))
+            };
+          })
+        );
+        return res.json(usersWithTeams);
+      }
+
+      res.json(orgUsers);
     } catch (error) {
       console.error("Get users error:", error);
       res.status(500).json({ message: "Failed to fetch users" });
