@@ -185,6 +185,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   showAthleteNames = false
 }: ScatterPlotChartProps) {
   const monitor = usePerformanceMonitor('ScatterPlotChart');
+  const chartRef = useRef<any>(null);
   const [showRegressionLine, setShowRegressionLine] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
@@ -588,6 +589,61 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       if (event.native?.target) {
         (event.native.target as HTMLElement).style.cursor = elements.length > 0 ? 'pointer' : 'default';
       }
+    },
+    animation: {
+      onComplete: function() {
+        // Render athlete names if enabled
+        if (localShowAthleteNames && chartRef.current) {
+          const chart = chartRef.current;
+          const ctx = chart.ctx;
+          const chartArea = chart.chartArea;
+
+          if (ctx && chartArea && scatterData?.points) {
+            // Save current context state
+            ctx.save();
+
+            // Set text styling
+            ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
+            ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            // Render athlete names for each point
+            scatterData.points.forEach((point: any) => {
+              const meta = chart.getDatasetMeta(0); // Get first dataset metadata
+              if (meta && meta.data) {
+                // Find the corresponding chart element for this point
+                const chartElement = meta.data.find((element: any) => {
+                  if (element && element.$context && element.$context.raw) {
+                    const rawData = element.$context.raw;
+                    return rawData.x === point.x && rawData.y === point.y;
+                  }
+                  return false;
+                });
+
+                if (chartElement && point.athleteName) {
+                  const x = chartElement.x + 10; // Offset right from point
+                  const y = chartElement.y;
+
+                  // Add a subtle background for better readability
+                  const textWidth = ctx.measureText(point.athleteName).width;
+                  const padding = 2;
+
+                  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                  ctx.fillRect(x - padding, y - 6, textWidth + 2 * padding, 12);
+
+                  // Restore text color and draw text
+                  ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
+                  ctx.fillText(point.athleteName, x, y);
+                }
+              }
+            });
+
+            // Restore context state
+            ctx.restore();
+          }
+        }
+      }
     }
   }), [scatterData, config, showQuadrants, localShowAthleteNames]);
 
@@ -709,7 +765,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
       {/* Chart */}
       <div className="h-96">
-        <Scatter data={scatterData} options={options} />
+        <Scatter ref={chartRef} data={scatterData} options={options} />
       </div>
     </div>
   );
