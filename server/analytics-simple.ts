@@ -23,6 +23,20 @@ import {
   validateAnalyticsFilters
 } from "@shared/analytics-utils";
 
+// Type for the database query result
+type QueryResult = {
+  measurementId: string;
+  athleteId: string;
+  metric: string;
+  value: number;
+  date: string;
+  teamId: string | null;
+  athleteName: string;
+  teamName: string | null;
+  gender: string | null;
+  birthYear: number;
+};
+
 
 export class AnalyticsService {
   /**
@@ -275,7 +289,7 @@ export class AnalyticsService {
       whereConditions.push(lte(measurements.date, formatDateForDatabase(endDate)));
 
       // Query to get basic data
-      const data = await db
+      const data: QueryResult[] = await db
         .select({
           measurementId: measurements.id,
           athleteId: measurements.userId,
@@ -297,15 +311,15 @@ export class AnalyticsService {
 
       console.log('📊 Query results:', {
         totalRows: data.length,
-        uniqueAthletes: new Set(data.map(row => row.athleteId)).size,
-        metrics: [...new Set(data.map(row => row.metric))],
-        teams: [...new Set(data.map(row => row.teamName).filter(Boolean))],
-        teamIds: [...new Set(data.map(row => row.teamId).filter(Boolean))],
+        uniqueAthletes: new Set(data.map((row: QueryResult) => row.athleteId)).size,
+        metrics: [...new Set(data.map((row: QueryResult) => row.metric))],
+        teams: [...new Set(data.map((row: QueryResult) => row.teamName).filter(Boolean))],
+        teamIds: [...new Set(data.map((row: QueryResult) => row.teamId).filter(Boolean))],
         dateRange: data.length > 0 ? {
-          earliest: data.reduce((min, row) => row.date < min ? row.date : min, data[0].date),
-          latest: data.reduce((max, row) => row.date > max ? row.date : max, data[0].date)
+          earliest: data.reduce((min: string, row: QueryResult) => row.date < min ? row.date : min, data[0].date),
+          latest: data.reduce((max: string, row: QueryResult) => row.date > max ? row.date : max, data[0].date)
         } : null,
-        sampleRows: data.slice(0, 3).map(row => ({
+        sampleRows: data.slice(0, 3).map((row: QueryResult) => ({
           athlete: row.athleteName,
           teamId: row.teamId,
           teamName: row.teamName,
@@ -315,10 +329,10 @@ export class AnalyticsService {
       });
 
       // Transform to chart data format
-      let chartData: ChartDataPoint[] = data.map(row => ({
+      let chartData: ChartDataPoint[] = data.map((row: QueryResult) => ({
         athleteId: row.athleteId,
         athleteName: row.athleteName || 'Unknown',
-        value: parseFloat(row.value) || 0,
+        value: row.value || 0,
         date: new Date(row.date),
         metric: row.metric,
         teamName: row.teamName || 'No Team'

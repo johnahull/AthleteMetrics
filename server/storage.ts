@@ -344,7 +344,7 @@ export class DatabaseStorage implements IStorage {
 
       // Ensure only one role per organization by grouping and taking first
       const uniqueRoles = new Map();
-      orgRoles.forEach(r => {
+      orgRoles.forEach((r: {role: string | null, organizationId: string}) => {
         if (!uniqueRoles.has(r.organizationId)) {
           uniqueRoles.set(r.organizationId, r.role);
         }
@@ -361,7 +361,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(userTeams.userId, userId));
 
-    const mappedResult = result.map(({ user_teams, teams: team, organizations }) => ({
+    const mappedResult = result.map(({ user_teams, teams: team, organizations }: { user_teams: UserTeam, teams: Team, organizations: Organization }) => ({
       ...user_teams,
       team: { ...team, organization: organizations }
     }));
@@ -403,7 +403,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(userOrganizations.userId, users.id))
       .where(eq(userOrganizations.organizationId, organizationId));
 
-    return result.map(({ user_organizations, users: user }) => ({
+    return result.map(({ user_organizations, users: user }: { user_organizations: UserOrganization, users: User }) => ({
       ...user_organizations,
       user
     }));
@@ -499,7 +499,7 @@ export class DatabaseStorage implements IStorage {
       .from(userOrganizations)
       .where(eq(userOrganizations.userId, userId));
 
-    const orgIds = userOrgs.map(uo => uo.organizationId);
+    const orgIds = userOrgs.map((uo: UserOrganization) => uo.organizationId);
 
     if (orgIds.length === 0) {
       return [];
@@ -511,7 +511,7 @@ export class DatabaseStorage implements IStorage {
       .where(inArray(organizations.id, orgIds));
 
     const orgsWithUsers = await Promise.all(
-      orgsData.map(async (org) => {
+      orgsData.map(async (org: Organization) => {
         const users = await this.getOrganizationUsers(org.id);
         const invitations = await this.getOrganizationInvitations(org.id);
         return {
@@ -638,7 +638,7 @@ export class DatabaseStorage implements IStorage {
    */
   async archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team> {
     // Use transaction to ensure atomicity of archive operations
-    return await db.transaction(async (tx) => {
+    return await db.transaction(async (tx: any) => {
       const [archived] = await tx.update(teams)
         .set({
           isArchived: "true",
@@ -982,7 +982,7 @@ export class DatabaseStorage implements IStorage {
         .orderBy(asc(users.lastName), asc(users.firstName));
 
       // For "none" team filter, athletes should have empty teams array
-      return result.map(row => ({
+      return result.map((row: { users: User }) => ({
         ...row.users,
         teams: []
       }));
@@ -1017,7 +1017,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(users.lastName), asc(users.firstName));
 
     const athleteResults = await athleteQuery;
-    const athletes = athleteResults.map(row => row.users);
+    const athletes = athleteResults.map((row: { users: User }) => row.users);
 
     // If no athletes found, return empty array
     if (athletes.length === 0) {
@@ -1026,7 +1026,7 @@ export class DatabaseStorage implements IStorage {
 
     // Batch fetch all teams for all athletes in a single query
     // Filter for active team memberships and non-archived teams
-    const athleteIds = athletes.map(a => a.id);
+    const athleteIds = athletes.map((a: User) => a.id);
     const userTeamsResults = await db
       .select()
       .from(userTeams)
@@ -1043,12 +1043,12 @@ export class DatabaseStorage implements IStorage {
     const userTeamsMap = new Map<string, (Team & { organization: Organization })[]>();
 
     // Initialize empty arrays for all athletes
-    athletes.forEach(athlete => {
+    athletes.forEach((athlete: User) => {
       userTeamsMap.set(athlete.id, []);
     });
 
     // Populate the map with team data
-    userTeamsResults.forEach(row => {
+    userTeamsResults.forEach((row: { user_teams: UserTeam, teams: Team, organizations: Organization }) => {
       const userId = row.user_teams.userId;
       const team = {
         ...row.teams,
@@ -1062,7 +1062,7 @@ export class DatabaseStorage implements IStorage {
     });
 
     // Create final result with teams attached
-    const athletesWithTeams = athletes.map(athlete => ({
+    const athletesWithTeams = athletes.map((athlete: User) => ({
       ...athlete,
       teams: userTeamsMap.get(athlete.id) || []
     }));
@@ -1071,8 +1071,8 @@ export class DatabaseStorage implements IStorage {
 
     // Apply team filter
     if (filters?.teamId && filters.teamId !== 'none') {
-      return result.filter(athlete => 
-        athlete.teams.some((team: any) => team.id === filters.teamId)
+      return result.filter((athlete: User & { teams: (Team & { organization: Organization })[] }) =>
+        athlete.teams.some((team: Team) => team.id === filters.teamId)
       );
     }
 
@@ -1216,7 +1216,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
@@ -1259,7 +1259,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(eq(userTeams.userId, athleteId));
 
-    return result.map(({ teams: team, organizations }) => ({
+    return result.map(({ teams: team, organizations }: { teams: Team, organizations: Organization }) => ({
       ...team,
       organization: organizations
     }));
@@ -1470,21 +1470,21 @@ export class DatabaseStorage implements IStorage {
 
     // Filter by sport if specified
     if (filters?.sport && filters.sport !== "all") {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
+      filteredMeasurements = filteredMeasurements.filter((measurement: any) =>
         measurement.user.sports?.includes(filters.sport!)
       );
     }
 
     // Filter by gender if specified
     if (filters?.gender && filters.gender !== "all") {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
+      filteredMeasurements = filteredMeasurements.filter((measurement: any) =>
         measurement.user.gender === filters.gender
       );
     }
 
     // Filter by position if specified
     if (filters?.position && filters.position !== "all") {
-      filteredMeasurements = filteredMeasurements.filter(measurement =>
+      filteredMeasurements = filteredMeasurements.filter((measurement: any) =>
         measurement.user.positions?.includes(filters.position!)
       );
     }

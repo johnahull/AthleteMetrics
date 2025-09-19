@@ -553,10 +553,10 @@ export function ScatterPlotChart({
             });
 
             // Advanced collision detection and resolution
-            const resolvedPositions = resolveLabeLCollisions(labelPositions, chartArea);
+            const resolvedPositions = resolveLabelCollisions(labelPositions, chartArea);
 
             // Helper function for sophisticated label collision resolution
-            function resolveLabeLCollisions(
+            function resolveLabelCollisions(
               labels: Array<{
                 x: number;
                 y: number;

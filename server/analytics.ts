@@ -21,6 +21,22 @@ import type {
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 
+// Type for the database query result from buildBaseQuery
+type QueryResult = {
+  measurementId: string;
+  athleteId: string;
+  metric: string;
+  value: number;
+  date: string;
+  teamId: string | null;
+  season: string | null;
+  athleteName: string;
+  teamName: string | null;
+  birthDate: string | null;
+  gender: string | null;
+  school: string | null;
+};
+
 export class AnalyticsService {
   /**
    * Main analytics query builder
@@ -163,13 +179,13 @@ export class AnalyticsService {
     
     // Execute the query
     results = await query.execute();
-    
+
     if (timeframe.type === 'best') {
       // Filter and group by athlete+metric and take best
-      results = this.getBestPerAthleteMetric(results.filter(r => allMetrics.includes(r.metric)));
+      results = this.getBestPerAthleteMetric(results.filter((r: QueryResult) => allMetrics.includes(r.metric)));
     } else {
       // Filter for trends
-      results = results.filter(r => allMetrics.includes(r.metric));
+      results = results.filter((r: QueryResult) => allMetrics.includes(r.metric));
     }
 
     return this.transformToChartData(results);
@@ -448,8 +464,8 @@ export class AnalyticsService {
     }, {} as Record<string, ChartDataPoint[]>);
   }
 
-  private getBestPerAthleteMetric(results: any[]): any[] {
-    const bestResults: Record<string, any> = {};
+  private getBestPerAthleteMetric(results: QueryResult[]): QueryResult[] {
+    const bestResults: Record<string, QueryResult> = {};
 
     for (const result of results) {
       const key = `${result.athleteId}|${result.metric}`;
