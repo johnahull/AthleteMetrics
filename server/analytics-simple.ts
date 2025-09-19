@@ -94,7 +94,6 @@ export class AnalyticsService {
   private generateTrendsData(chartData: ChartDataPoint[], metric: string): TrendData[] {
     // Early return if no data
     if (!chartData || chartData.length === 0) {
-      console.log('📈 No chart data available for trends generation');
       return [];
     }
 
@@ -116,7 +115,6 @@ export class AnalyticsService {
 
     // Early return if no athletes have data for this metric
     if (Object.keys(athleteGroups).length === 0) {
-      console.log(`📈 No data found for metric: ${metric}`);
       return [];
     }
 
@@ -199,8 +197,6 @@ export class AnalyticsService {
       };
     });
 
-    console.log(`📈 Generated ${trends.length} trend series for ${trends.reduce((sum, t) => sum + t.data.length, 0)} data points`);
-
     return trends;
   }
 
@@ -212,17 +208,7 @@ export class AnalyticsService {
         throw new Error(`Invalid filters: ${validation.errors.join(', ')}`);
       }
 
-      console.log('🔍 Analytics request received:', {
-        analysisType: request.analysisType,
-        metrics: request.metrics,
-        timeframe: request.timeframe,
-        filters: {
-          teams: request.filters.teams,
-          genders: request.filters.genders,
-          birthYears: request.filters.birthYears,
-          organizationId: request.filters.organizationId
-        }
-      });
+      // Analytics request validation completed
 
       // Calculate date range using utility function
       const { startDate, endDate } = calculateDateRange(
@@ -231,11 +217,7 @@ export class AnalyticsService {
         request.timeframe.endDate
       );
 
-      console.log('📅 Calculated date range:', { 
-        startDate: startDate?.toISOString(), 
-        endDate: endDate.toISOString(),
-        period: request.timeframe.period 
-      });
+      // Date range calculated for analytics query
 
       // Build list of all metrics to query
       const allMetrics = [request.metrics.primary];
@@ -252,7 +234,6 @@ export class AnalyticsService {
 
       // Add team filtering if specified - filter by athlete team membership
       if (request.filters.teams && request.filters.teams.length > 0) {
-        console.log('🏀 Team filtering requested for teams:', request.filters.teams);
         // Filter to only include measurements from athletes who belong to the selected teams
         // This narrows down the comparison group, regardless of individual athlete being analyzed
         whereConditions.push(
@@ -309,24 +290,7 @@ export class AnalyticsService {
         .where(and(...whereConditions))
         .limit(10000); // Increased limit with proper safeguards
 
-      console.log('📊 Query results:', {
-        totalRows: data.length,
-        uniqueAthletes: new Set(data.map((row: QueryResult) => row.athleteId)).size,
-        metrics: [...new Set(data.map((row: QueryResult) => row.metric))],
-        teams: [...new Set(data.map((row: QueryResult) => row.teamName).filter(Boolean))],
-        teamIds: [...new Set(data.map((row: QueryResult) => row.teamId).filter(Boolean))],
-        dateRange: data.length > 0 ? {
-          earliest: data.reduce((min: string, row: QueryResult) => row.date < min ? row.date : min, data[0].date),
-          latest: data.reduce((max: string, row: QueryResult) => row.date > max ? row.date : max, data[0].date)
-        } : null,
-        sampleRows: data.slice(0, 3).map((row: QueryResult) => ({
-          athlete: row.athleteName,
-          teamId: row.teamId,
-          teamName: row.teamName,
-          metric: row.metric,
-          value: row.value
-        }))
-      });
+      // Database query completed, processing results
 
       // Transform to chart data format
       let chartData: ChartDataPoint[] = data.map((row: QueryResult) => ({
@@ -340,15 +304,9 @@ export class AnalyticsService {
 
       // Apply filtering based on timeframe type
       if (request.timeframe.type === 'best') {
-        console.log('📊 Filtering to best measurements per athlete');
-        const originalCount = chartData.length;
         chartData = filterToBestMeasurements(chartData);
-        console.log(`📊 Filtered from ${originalCount} to ${chartData.length} measurements (best per athlete)`);
       } else if (request.timeframe.type === 'trends') {
-        console.log('📈 Filtering to best measurements per athlete per date');
-        const originalCount = chartData.length;
         chartData = filterToBestMeasurementsPerDate(chartData);
-        console.log(`📈 Filtered from ${originalCount} to ${chartData.length} measurements (best per athlete per date)`);
       }
 
       // Robust statistics calculation using utility functions
@@ -366,14 +324,7 @@ export class AnalyticsService {
       }, {} as Record<string, number[]>);
 
       for (const [metric, values] of Object.entries(metricGroups)) {
-        console.log(`🔍 Server statistics calculation for ${metric}:`, {
-          valueCount: values.length,
-          sampleValues: values.slice(0, 5),
-          valueTypes: values.slice(0, 5).map(v => typeof v),
-          allValuesValid: values.every(v => typeof v === 'number' && !isNaN(v) && isFinite(v))
-        });
         statistics[metric] = calculateStatistics(values);
-        console.log(`📊 Server calculated statistics for ${metric}:`, statistics[metric]);
       }
 
       // Generate trends data if timeframe type is trends

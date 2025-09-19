@@ -22,6 +22,7 @@ import type {
   BoxPlotData
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { CHART_CONFIG } from '@/constants/chart-config';
 
 // Register Chart.js components
 ChartJS.register(
@@ -147,9 +148,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             { x: xPos - boxWidth/2, y: stats.percentiles.p25 }
           ],
           type: 'line',
-          backgroundColor: 'rgba(59, 130, 246, 0.2)',
-          borderColor: 'rgba(59, 130, 246, 0.8)',
-          borderWidth: 2,
+          backgroundColor: CHART_CONFIG.COLORS.PRIMARY_LIGHT,
+          borderColor: CHART_CONFIG.COLORS.PRIMARY_STRONG,
+          borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
           pointRadius: 0,
           showLine: true,
           fill: true,
@@ -164,9 +165,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             { x: xPos + boxWidth/2, y: stats.percentiles.p50 }
           ],
           type: 'line',
-          backgroundColor: 'rgba(59, 130, 246, 1)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 3,
+          backgroundColor: CHART_CONFIG.COLORS.PRIMARY,
+          borderColor: CHART_CONFIG.COLORS.PRIMARY,
+          borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
           pointRadius: 0,
           showLine: true,
           order: 2
@@ -185,9 +186,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             { x: xPos, y: lowerWhisker }
           ],
           type: 'line',
-          backgroundColor: 'rgba(59, 130, 246, 1)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 3, // Increased from 2
+          backgroundColor: CHART_CONFIG.COLORS.PRIMARY,
+          borderColor: CHART_CONFIG.COLORS.PRIMARY,
+          borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK, // Increased from 2
           pointRadius: 0,
           showLine: true,
           order: 4
@@ -201,9 +202,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             { x: xPos, y: upperWhisker }
           ],
           type: 'line',
-          backgroundColor: 'rgba(59, 130, 246, 1)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 3, // Increased from 2
+          backgroundColor: CHART_CONFIG.COLORS.PRIMARY,
+          borderColor: CHART_CONFIG.COLORS.PRIMARY,
+          borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK, // Increased from 2
           pointRadius: 0,
           showLine: true,
           order: 4
@@ -244,10 +245,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Data Points`,
               data: regularPoints,
               type: 'scatter',
-              backgroundColor: 'rgba(59, 130, 246, 0.4)',
-              borderColor: 'rgba(59, 130, 246, 0.7)',
-              borderWidth: 1,
-              pointRadius: 3,
+              backgroundColor: CHART_CONFIG.COLORS.PRIMARY_ALPHA,
+              borderColor: CHART_CONFIG.COLORS.PRIMARY_STRONG,
+              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+              pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
               showLine: false,
               order: 5
             });
@@ -260,10 +261,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
               data: outlierPoints,
               type: 'scatter',
-              backgroundColor: 'rgba(239, 68, 68, 0.6)',
-              borderColor: 'rgba(239, 68, 68, 1)',
-              borderWidth: 1,
-              pointRadius: 4,
+              backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
+              borderColor: CHART_CONFIG.COLORS.AVERAGE,
+              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+              pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
               showLine: false,
               order: 1
             });
@@ -298,10 +299,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               label: `${athleteData.athleteName}`,
               data: [{ x: xPos, y: numericValue }],
               type: 'scatter',
-              backgroundColor: 'rgba(16, 185, 129, 1)',
-              borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 3,
-              pointRadius: 8,
+              backgroundColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+              borderColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+              pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.HIGHLIGHTED,
               pointStyle: 'star',
               showLine: false,
               order: 0
@@ -336,8 +337,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             ctx.save();
 
             // Set text styling
-            ctx.font = '10px Arial';
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
+            ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
 
@@ -469,11 +470,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               const padding = 2;
 
               // Add a subtle background for better readability
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+              ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_DARK;
               ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
 
               // Restore text color and draw text
-              ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+              ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
               ctx.fillText(label.text, label.x, label.y);
             });
 

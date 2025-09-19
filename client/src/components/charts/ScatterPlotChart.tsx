@@ -23,6 +23,7 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { CHART_CONFIG } from '@/constants/chart-config';
 
 // Register Chart.js components
 ChartJS.register(
@@ -209,11 +210,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         type: 'scatter' as const,
         label: 'Athletes',
         data: mainPoints,
-        backgroundColor: 'rgba(59, 130, 246, 0.6)',
-        borderColor: 'rgba(59, 130, 246, 1)',
-        borderWidth: 1,
-        pointRadius: 5,
-        pointHoverRadius: 7
+        backgroundColor: CHART_CONFIG.COLORS.PRIMARY_ALPHA,
+        borderColor: CHART_CONFIG.COLORS.PRIMARY,
+        borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+        pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.DEFAULT,
+        pointHoverRadius: CHART_CONFIG.STYLING.POINT_HOVER_RADIUS.DEFAULT
       });
     }
 
@@ -225,11 +226,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           type: 'scatter' as const,
           label: highlightedPoint.athleteName,
           data: [highlightedPoint],
-          backgroundColor: 'rgba(16, 185, 129, 1)',
-          borderColor: 'rgba(16, 185, 129, 1)',
-          borderWidth: 3,
-          pointRadius: 8,
-          pointHoverRadius: 10,
+          backgroundColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+          borderColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+          borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+          pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.HIGHLIGHTED,
+          pointHoverRadius: CHART_CONFIG.STYLING.POINT_HOVER_RADIUS.HIGHLIGHTED,
           pointStyle: 'star'
         });
       }
@@ -244,16 +245,18 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           x: validatedStats[xMetric].mean,
           y: validatedStats[yMetric].mean
         }],
-        backgroundColor: 'rgba(239, 68, 68, 1)',
-        borderColor: 'rgba(239, 68, 68, 1)',
-        borderWidth: 3,
-        pointRadius: 8,
+        backgroundColor: CHART_CONFIG.COLORS.AVERAGE,
+        borderColor: CHART_CONFIG.COLORS.AVERAGE,
+        borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+        pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.LARGE,
         pointStyle: 'crossRot'
       });
     }
 
-    // Calculate regression line
-    const regression = calculateRegression(scatterPoints);
+    // Memoize regression calculation to avoid expensive recalculations
+    const regression = useMemo(() => {
+      return calculateRegression(scatterPoints);
+    }, [scatterPoints]);
 
     // Add regression line if enabled and we have enough points
     if (showRegressionLine && regression && scatterPoints.length >= 2) {
@@ -268,10 +271,10 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           { x: minX, y: regression.slope * minX + regression.intercept },
           { x: maxX, y: regression.slope * maxX + regression.intercept }
         ],
-        borderColor: 'rgba(107, 114, 128, 0.8)',
-        backgroundColor: 'rgba(107, 114, 128, 0.1)',
-        borderWidth: 2,
-        borderDash: [5, 5],
+        borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+        backgroundColor: CHART_CONFIG.COLORS.NEUTRAL_LIGHT,
+        borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+        borderDash: [...CHART_CONFIG.STYLING.DASHED_LINE],
         pointRadius: 0,
         pointHoverRadius: 0,
         fill: false,
@@ -299,7 +302,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     } as any;
   }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
 
-  // Calculate correlation coefficient
+  // Memoize correlation coefficient calculation
   const correlation = useMemo(() => {
     if (!scatterData || scatterData.points.length < 2) return null;
 
@@ -315,7 +318,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
 
     return denominator === 0 ? 0 : numerator / denominator;
-  }, [scatterData]);
+  }, [scatterData?.points]);
 
   // Chart options
   const options: ChartOptions<'scatter'> = {
@@ -326,7 +329,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         display: true,
         text: config.title,
         font: {
-          size: 16,
+          size: CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE + 6, // Slightly larger for title
           weight: 'bold'
         }
       },
@@ -372,16 +375,16 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
             return {};
           }
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
+          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
 
           const colorMap = {
-            green: 'rgba(16, 185, 129, 0.1)',
-            yellow: 'rgba(245, 158, 11, 0.1)',
-            orange: 'rgba(251, 146, 60, 0.1)',
-            red: 'rgba(239, 68, 68, 0.1)'
+            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+            orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
           };
 
           return {
@@ -436,9 +439,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
               xMax: xMean,
               yMin: yMin,
               yMax: yMax,
-              borderColor: 'rgba(107, 114, 128, 0.5)',
-              borderWidth: 1,
-              borderDash: [3, 3],
+              borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+              borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
               z: 1
             },
             // Horizontal line at y mean
@@ -448,9 +451,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
               xMax: xMax,
               yMin: yMean,
               yMax: yMean,
-              borderColor: 'rgba(107, 114, 128, 0.5)',
-              borderWidth: 1,
-              borderDash: [3, 3],
+              borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+              borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
               z: 1
             }
           };
@@ -482,7 +485,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     },
     elements: {
       point: {
-        hoverRadius: 8
+        hoverRadius: CHART_CONFIG.STYLING.POINT_HOVER_RADIUS.LARGE
       }
     },
     interaction: {
