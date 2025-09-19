@@ -261,8 +261,8 @@ export function ChartContainer({
                   selectedAthleteIds={selectedAthleteIds}
                   onAthleteSelectionChange={onAthleteSelectionChange}
                   showAllPoints={chartType === 'box_swarm_combo'}
-                  selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : undefined}
-                  metric={chartType === 'time_series_box_swarm' ? (metric || '') : undefined}
+                  selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
+                  metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
                 />
               </React.Suspense>
             ) : (

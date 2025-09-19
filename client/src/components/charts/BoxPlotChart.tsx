@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,11 +12,13 @@ import {
   LineElement
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
   StatisticalSummary,
-  BoxPlotData 
+  BoxPlotData
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
@@ -38,6 +40,7 @@ interface BoxPlotChartProps {
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
   showAllPoints?: boolean; // Option to show all data points (swarm style)
+  showAthleteNames?: boolean; // Option to show athlete names next to points
 }
 
 export function BoxPlotChart({
@@ -45,9 +48,11 @@ export function BoxPlotChart({
   config,
   statistics,
   highlightAthlete,
-  showAllPoints = false
+  showAllPoints = false,
+  showAthleteNames = false
 }: BoxPlotChartProps) {
   const chartRef = useRef<any>(null);
+  const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
 
   // Transform data for box plot visualization
   const boxPlotData = useMemo(() => {
@@ -248,12 +253,90 @@ export function BoxPlotChart({
       ),
       datasets
     };
-  }, [data, statistics, highlightAthlete, showAllPoints]);
+  }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames]);
 
   // Chart options
   const options: ChartOptions<'scatter'> = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: {
+      onComplete: function() {
+        // Render athlete names if enabled
+        if (localShowAthleteNames && showAllPoints && chartRef.current) {
+          const chart = chartRef.current;
+          const ctx = chart.ctx;
+          const chartArea = chart.chartArea;
+
+          if (ctx && chartArea) {
+            // Save current context state
+            ctx.save();
+
+            // Set text styling
+            ctx.font = '10px Arial';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            // Find and render names for swarm points
+            chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
+              if (dataset.data && Array.isArray(dataset.data)) {
+                dataset.data.forEach((point: any, pointIndex: number) => {
+                  if (point && typeof point === 'object' && point.athleteName) {
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    const element = meta.data[pointIndex];
+
+                    if (element && element.x !== undefined && element.y !== undefined) {
+                      // Smart positioning to avoid overlap with box plot elements
+                      const baseOffsetX = 8;
+                      const baseOffsetY = 0;
+
+                      // Calculate distance from metric center to determine safe positioning
+                      const metricIndex = Math.round(element.x);
+                      const distanceFromCenter = Math.abs(element.x - metricIndex);
+
+                      // Position text based on point location relative to box center
+                      let textX = element.x + baseOffsetX;
+                      let textY = element.y + baseOffsetY;
+
+                      // If point is close to center (within box area), position further right
+                      if (distanceFromCenter < 0.3) {
+                        textX = element.x + 15;
+                      }
+
+                      // Avoid positioning text too close to chart edges
+                      const textWidth = ctx.measureText(point.athleteName).width;
+                      if (textX + textWidth > chartArea.right - 10) {
+                        // If text would overflow right, position to the left instead
+                        textX = element.x - textWidth - 8;
+                      }
+
+                      // Ensure text stays within chart bounds
+                      if (textX >= chartArea.left &&
+                          textX + textWidth <= chartArea.right &&
+                          textY >= chartArea.top &&
+                          textY <= chartArea.bottom) {
+
+                        // Add a subtle background for better readability
+                        const padding = 2;
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.fillRect(textX - padding, textY - 6, textWidth + 2 * padding, 12);
+
+                        // Restore text color and draw text
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                        ctx.fillText(point.athleteName, textX, textY);
+                      }
+                    }
+                  }
+                });
+              }
+            });
+
+            // Restore context state
+            ctx.restore();
+          }
+        }
+      }
+    },
     plugins: {
       title: {
         display: true,
@@ -405,6 +488,20 @@ export function BoxPlotChart({
 
   return (
     <div className="w-full h-full">
+      {/* Toggle control for athlete names - only show when swarm mode is enabled */}
+      {showAllPoints && (
+        <div className="flex items-center space-x-2 mb-4 px-2">
+          <Switch
+            id="show-names"
+            checked={localShowAthleteNames}
+            onCheckedChange={setLocalShowAthleteNames}
+          />
+          <Label htmlFor="show-names" className="text-sm font-medium cursor-pointer">
+            Show athlete names
+          </Label>
+        </div>
+      )}
+
       <Chart
         ref={chartRef}
         type="scatter"
