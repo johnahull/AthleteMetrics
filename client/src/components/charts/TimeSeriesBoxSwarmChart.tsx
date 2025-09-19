@@ -262,7 +262,14 @@ export function TimeSeriesBoxSwarmChart({
 
           datasets.push({
             label: athleteData.athleteName,
-            data: [{ x: dateOffset + jitter, y: athleteData.value }],
+            data: [{
+              x: dateOffset + jitter,
+              y: athleteData.value,
+              // Store the actual date and date index for tooltip
+              dateStr: dateStr,
+              dateLabel: dateLabel,
+              isPersonalBest: athleteData.isPersonalBest
+            }],
             type: 'scatter',
             backgroundColor: athleteData.isPersonalBest ? 'gold' : color,
             borderColor: 'transparent',
@@ -317,10 +324,28 @@ export function TimeSeriesBoxSwarmChart({
                    !label.includes('MaxCap-');
           },
           callbacks: {
+            title: (tooltipItems: any[]) => {
+              // Show the correct date in the tooltip title
+              if (tooltipItems.length > 0) {
+                const item = tooltipItems[0];
+                const dataPoint = item.raw;
+                if (dataPoint && dataPoint.dateLabel) {
+                  return dataPoint.dateLabel;
+                }
+              }
+              return 'Date';
+            },
             label: (context: any) => {
               const datasetLabel = context.dataset.label;
               const value = context.parsed.y;
-              return `${datasetLabel}: ${value}${unit}`;
+              const dataPoint = context.raw;
+
+              // Build the tooltip line with athlete name, value, and personal best indicator
+              let label = `${datasetLabel}: ${value}${unit}`;
+              if (dataPoint && dataPoint.isPersonalBest) {
+                label += ' ⭐ (Personal Best)';
+              }
+              return label;
             }
           }
         }
