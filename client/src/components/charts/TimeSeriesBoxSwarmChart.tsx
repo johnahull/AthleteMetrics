@@ -264,9 +264,6 @@ export function TimeSeriesBoxSwarmChart({
           const currentDateStr = dateStr;
           const currentDateLabel = dateLabel;
 
-          // Debug logging
-          console.log(`Creating swarm point for athlete ${athleteData.athleteName} on ${currentDateLabel} (${currentDateStr}) at position ${dateOffset}`);
-
           datasets.push({
             label: athleteData.athleteName,
             data: [{
