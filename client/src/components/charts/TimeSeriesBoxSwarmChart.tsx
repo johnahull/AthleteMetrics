@@ -364,11 +364,14 @@ export function TimeSeriesBoxSwarmChart({
           grid: {
             display: false
           },
+          afterBuildTicks: function(scale: any) {
+            // Force ticks to be at integer positions where box plots are located
+            scale.ticks = [];
+            for (let i = 0; i < selectedDates.length; i++) {
+              scale.ticks.push({ value: i });
+            }
+          },
           ticks: {
-            stepSize: 1,
-            // Force ticks to be generated at integer positions
-            min: 0,
-            max: selectedDates.length - 1,
             callback: function(value: any) {
               // Only show labels at integer positions where box plots are located
               if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
