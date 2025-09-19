@@ -260,14 +260,21 @@ export function TimeSeriesBoxSwarmChart({
           const jitter = (Math.random() - 0.5) * 0.3; // Small horizontal jitter for visibility
           const color = athleteColorMap.get(athleteData.athleteId) || 'rgba(75, 85, 99, 0.8)';
 
+          // Capture the current iteration's date values to avoid closure issues
+          const currentDateStr = dateStr;
+          const currentDateLabel = dateLabel;
+
+          // Debug logging
+          console.log(`Creating swarm point for athlete ${athleteData.athleteName} on ${currentDateLabel} (${currentDateStr}) at position ${dateOffset}`);
+
           datasets.push({
             label: athleteData.athleteName,
             data: [{
               x: dateOffset + jitter,
               y: athleteData.value,
               // Store the actual date and date index for tooltip
-              dateStr: dateStr,
-              dateLabel: dateLabel,
+              dateStr: currentDateStr,
+              dateLabel: currentDateLabel,
               isPersonalBest: athleteData.isPersonalBest
             }],
             type: 'scatter',
