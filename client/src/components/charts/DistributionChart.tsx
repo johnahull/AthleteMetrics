@@ -215,25 +215,25 @@ export function DistributionChart({
           <div className="text-center">
             <div className="font-medium">Mean</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].mean.toFixed(2)}{distributionData.unit}
+              {statistics[distributionData.primaryMetric]?.mean?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Median</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].median.toFixed(2)}{distributionData.unit}
+              {statistics[distributionData.primaryMetric]?.median?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Std Dev</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].std.toFixed(2)}{distributionData.unit}
+              {statistics[distributionData.primaryMetric]?.std?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Range</div>
             <div className="text-muted-foreground">
-              {statistics[distributionData.primaryMetric].min.toFixed(2)} - {statistics[distributionData.primaryMetric].max.toFixed(2)}{distributionData.unit}
+              {statistics[distributionData.primaryMetric]?.min?.toFixed(2) || 'N/A'} - {statistics[distributionData.primaryMetric]?.max?.toFixed(2) || 'N/A'}{distributionData.unit}
             </div>
           </div>
         </div>

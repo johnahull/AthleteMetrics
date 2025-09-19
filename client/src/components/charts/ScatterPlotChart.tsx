@@ -237,7 +237,7 @@ export function ScatterPlotChart({
     }
 
     // Add group averages if statistics available
-    if (statistics && statistics[xMetric] && statistics[yMetric]) {
+    if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
       datasets.push({
         label: 'Group Average',
         data: [{
@@ -365,6 +365,12 @@ export function ScatterPlotChart({
           // Calculate chart bounds for full background coverage
           const xValues = scatterData.points.map((p: any) => p.x);
           const yValues = scatterData.points.map((p: any) => p.y);
+
+          // Safety check for empty arrays
+          if (xValues.length === 0 || yValues.length === 0) {
+            return {};
+          }
+
           const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
           const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
           const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.1;

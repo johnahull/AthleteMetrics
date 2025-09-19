@@ -123,7 +123,7 @@ export function ConnectedScatterChart({
     });
 
     // Add group averages if statistics available
-    if (statistics && statistics[xMetric] && statistics[yMetric]) {
+    if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
       datasets.push({
         label: 'Group Average',
         data: [{
