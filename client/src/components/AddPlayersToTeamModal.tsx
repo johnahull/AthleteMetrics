@@ -306,7 +306,6 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600">{player.emails?.[0] || 'No email'}</p>
                           {playerTeams.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {playerTeams.map((membership, index) => (
