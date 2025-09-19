@@ -19,6 +19,10 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { TIME_SERIES_CHART_CONSTANTS, ATHLETE_COLORS, BOX_PLOT_COLORS, PERSONAL_BEST } from './constants/timeSeriesChartConstants';
+import { calculateBoxPlotStatistics, safeParseDate, generateDeterministicJitter } from './utils/boxPlotStatistics';
+import { resolveLabelCollisions } from './utils/labelCollisionResolver';
+import type { AthleteDataPoint, ChartDataPoint, LabelPosition, ChartInstance, TooltipItem, ChartContext, ChartScale } from './types/timeSeriesChartTypes';
 
 // Register Chart.js components
 ChartJS.register(
@@ -41,19 +45,8 @@ interface TimeSeriesBoxSwarmProps {
   showAthleteNames?: boolean;
 }
 
-// Color palette for athletes
-const ATHLETE_COLORS = [
-  'rgba(59, 130, 246, 0.8)',    // Blue
-  'rgba(16, 185, 129, 0.8)',    // Green
-  'rgba(239, 68, 68, 0.8)',     // Red
-  'rgba(245, 158, 11, 0.8)',    // Amber
-  'rgba(139, 92, 246, 0.8)',    // Purple
-  'rgba(236, 72, 153, 0.8)',    // Pink
-  'rgba(20, 184, 166, 0.8)',    // Teal
-  'rgba(251, 146, 60, 0.8)',    // Orange
-  'rgba(124, 58, 237, 0.8)',    // Violet
-  'rgba(34, 197, 94, 0.8)'      // Emerald
-];
+// Extract constants to improve maintainability
+const { BOX_WIDTH, POINT_RADIUS, JITTER_RANGE, BASE_OFFSET_X, ANIMATION_DURATION, LAYOUT_PADDING } = TIME_SERIES_CHART_CONSTANTS;
 
 export function TimeSeriesBoxSwarmChart({
   data,
@@ -81,12 +74,12 @@ export function TimeSeriesBoxSwarmChart({
     // Sort selected dates chronologically
     const sortedDates = [...selectedDates].sort();
 
-    // Group data by date
-    const dateDataMap = new Map<string, { athleteId: string; athleteName: string; value: number; isPersonalBest?: boolean }[]>();
+    // Group data by date with improved type safety
+    const dateDataMap = new Map<string, AthleteDataPoint[]>();
 
     data.forEach(trend => {
       trend.data.forEach(point => {
-        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        const date = safeParseDate(point.date);
         const dateStr = date.toISOString().split('T')[0];
 
         if (selectedDates.includes(dateStr)) {
@@ -129,35 +122,26 @@ export function TimeSeriesBoxSwarmChart({
       const dateLabel = dateLabels[dateIndex];
 
       if (values.length > 0) {
-        // Calculate box plot statistics with proper quartile calculation
-        const q1Index = Math.max(0, Math.ceil(values.length * 0.25) - 1);
-        const medianIndex = Math.max(0, Math.ceil(values.length * 0.5) - 1);
-        const q3Index = Math.max(0, Math.ceil(values.length * 0.75) - 1);
-
-        const min = values[0];
-        const max = values[values.length - 1];
-        const q1 = values[q1Index];
-        const median = values[medianIndex];
-        const q3 = values[q3Index];
-        const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+        // Calculate box plot statistics using extracted utility
+        const statistics = calculateBoxPlotStatistics(values);
+        const { min, max, q1, median, q3, mean } = statistics;
 
         // Box plot components using numeric x-coordinates for proper rendering
         const dateOffset = dateIndex; // Use numeric position
-        const boxWidth = 0.3; // Width of box plot elements
 
         // 1. Box rectangle (Q1 to Q3) - drawn as rectangle outline
         datasets.push({
           label: `Box-${dateIndex}`,
           data: [
-            { x: dateOffset - boxWidth/2, y: q1 },
-            { x: dateOffset + boxWidth/2, y: q1 },
-            { x: dateOffset + boxWidth/2, y: q3 },
-            { x: dateOffset - boxWidth/2, y: q3 },
-            { x: dateOffset - boxWidth/2, y: q1 }
+            { x: dateOffset - BOX_WIDTH/2, y: q1 },
+            { x: dateOffset + BOX_WIDTH/2, y: q1 },
+            { x: dateOffset + BOX_WIDTH/2, y: q3 },
+            { x: dateOffset - BOX_WIDTH/2, y: q3 },
+            { x: dateOffset - BOX_WIDTH/2, y: q1 }
           ],
           type: 'line',
-          borderColor: 'rgba(75, 85, 99, 0.8)',
-          backgroundColor: 'rgba(75, 85, 99, 0.1)',
+          borderColor: BOX_PLOT_COLORS.BOX_BORDER,
+          backgroundColor: BOX_PLOT_COLORS.BOX_BACKGROUND,
           borderWidth: 2,
           pointRadius: 0,
           showLine: true,
@@ -170,8 +154,8 @@ export function TimeSeriesBoxSwarmChart({
         datasets.push({
           label: `Median-${dateIndex}`,
           data: [
-            { x: dateOffset - boxWidth/2, y: median },
-            { x: dateOffset + boxWidth/2, y: median }
+            { x: dateOffset - BOX_WIDTH/2, y: median },
+            { x: dateOffset + BOX_WIDTH/2, y: median }
           ],
           type: 'line',
           borderColor: 'rgba(75, 85, 99, 1)',
@@ -186,8 +170,8 @@ export function TimeSeriesBoxSwarmChart({
         datasets.push({
           label: `Mean-${dateIndex}`,
           data: [
-            { x: dateOffset - boxWidth/2, y: mean },
-            { x: dateOffset + boxWidth/2, y: mean }
+            { x: dateOffset - BOX_WIDTH/2, y: mean },
+            { x: dateOffset + BOX_WIDTH/2, y: mean }
           ],
           type: 'line',
           borderColor: 'rgba(239, 68, 68, 1)',
@@ -232,7 +216,7 @@ export function TimeSeriesBoxSwarmChart({
         });
 
         // 6. Whisker caps (horizontal lines at min and max)
-        const capWidth = boxWidth * 0.5;
+        const capWidth = BOX_WIDTH * TIME_SERIES_CHART_CONSTANTS.CAP_WIDTH_RATIO;
         datasets.push({
           label: `MinCap-${dateIndex}`,
           data: [
