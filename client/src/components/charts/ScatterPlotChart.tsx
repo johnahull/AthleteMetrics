@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -27,6 +27,37 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber } from '@shared/utils/number-conversion';
 
+// Constants for athlete name rendering
+const ATHLETE_NAME_CONSTANTS = {
+  LABEL_OFFSET_X: 10,
+  LABEL_OFFSET_Y: 0,
+  BACKGROUND_PADDING: 2,
+  BACKGROUND_HEIGHT: 12,
+  BACKGROUND_ALPHA: 0.8,
+  LABEL_VERTICAL_OFFSET: 6
+} as const;
+
+// Interfaces for better type safety
+interface ScatterPoint {
+  x: number;
+  y: number;
+  athleteId: string;
+  athleteName: string;
+  teamName?: string;
+}
+
+interface RegressionResult {
+  slope: number;
+  intercept: number;
+}
+
+interface AthleteData {
+  athleteId: string;
+  athleteName: string;
+  teamName?: string;
+  metrics: Record<string, number>;
+}
+
 // Register Chart.js components
 ChartJS.register(
   LinearScale,
@@ -42,17 +73,34 @@ ChartJS.register(
 );
 
 // Regression calculation helper function
-function calculateRegression(points: any[]) {
+function calculateRegression(points: ScatterPoint[]): RegressionResult | null {
   if (points.length < 2) return null;
 
-  const n = points.length;
-  const sumX = points.reduce((sum, p) => sum + p.x, 0);
-  const sumY = points.reduce((sum, p) => sum + p.y, 0);
-  const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
-  const sumX2 = points.reduce((sum, p) => sum + p.x * p.x, 0);
+  // Validate points have valid x and y values
+  const validPoints = points.filter(p =>
+    typeof p.x === 'number' && typeof p.y === 'number' &&
+    !isNaN(p.x) && !isNaN(p.y) &&
+    isFinite(p.x) && isFinite(p.y)
+  );
 
-  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  if (validPoints.length < 2) return null;
+
+  const n = validPoints.length;
+  const sumX = validPoints.reduce((sum, p) => sum + p.x, 0);
+  const sumY = validPoints.reduce((sum, p) => sum + p.y, 0);
+  const sumXY = validPoints.reduce((sum, p) => sum + p.x * p.y, 0);
+  const sumX2 = validPoints.reduce((sum, p) => sum + p.x * p.x, 0);
+
+  const denominator = n * sumX2 - sumX * sumX;
+
+  // Check for division by zero (all x values are the same)
+  if (denominator === 0 || !isFinite(denominator)) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
   const intercept = (sumY - slope * sumX) / n;
+
+  // Validate results
+  if (!isFinite(slope) || !isFinite(intercept)) return null;
 
   return { slope, intercept };
 }
@@ -65,37 +113,89 @@ function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
   const xLowerIsBetter = xConfig?.lowerIsBetter || false;
   const yLowerIsBetter = yConfig?.lowerIsBetter || false;
 
+  // Get clean metric names (remove common suffixes)
+  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
+  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // Generate contextual descriptions based on metric combination
+  const getDescriptions = () => {
+    // Speed vs Power combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
+    }
+
+    // Speed vs Agility combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
+    }
+
+    // Power vs Agility combinations
+    if (xMetric.includes('VERTICAL') && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
+    }
+    if (yMetric.includes('VERTICAL') && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
+    }
+
+    // Agility vs Agility combinations
+    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Multi-Directional Elite', xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: 'Needs Agility Work' };
+    }
+
+    // Speed vs Speed combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('DASH') || yMetric.includes('FLY'))) {
+      return { elite: 'Speed Elite', xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: 'Needs Speed Work' };
+    }
+
+    // RSI combinations
+    if (xMetric.includes('RSI') || yMetric.includes('RSI')) {
+      const nonRSI = xMetric.includes('RSI') ? yName : xName;
+      return { elite: `Reactive + ${nonRSI} Elite`, xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: `Needs ${xName} & ${yName}` };
+    }
+
+    // Default generic descriptions with metric names
+    return { elite: `${xName} + ${yName} Elite`, xGood: `Strong ${xName}`, yGood: `Strong ${yName}`, development: `Needs ${xName} & ${yName}` };
+  };
+
+  const descriptions = getDescriptions();
+
   if (!xLowerIsBetter && !yLowerIsBetter) {
-    // Both higher is better (e.g., vertical jump vs broad jump)
+    // Both higher is better (e.g., vertical jump vs RSI)
     return {
-      topRight: { label: 'Elite Performance', color: 'green' },
-      topLeft: { label: 'Good Y Performance', color: 'yellow' },
-      bottomRight: { label: 'Good X Performance', color: 'yellow' },
-      bottomLeft: { label: 'Development Needed', color: 'red' }
+      topRight: { label: descriptions.elite, color: 'green' },
+      topLeft: { label: descriptions.yGood, color: 'yellow' },
+      bottomRight: { label: descriptions.xGood, color: 'yellow' },
+      bottomLeft: { label: descriptions.development, color: 'red' }
     };
   } else if (xLowerIsBetter && !yLowerIsBetter) {
     // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
     return {
-      topLeft: { label: 'Elite Performance', color: 'green' },
-      topRight: { label: 'Good Y Performance', color: 'yellow' },
-      bottomLeft: { label: 'Good X Performance', color: 'yellow' },
-      bottomRight: { label: 'Development Needed', color: 'red' }
+      topLeft: { label: descriptions.elite, color: 'green' },
+      topRight: { label: descriptions.yGood, color: 'yellow' },
+      bottomLeft: { label: descriptions.xGood, color: 'yellow' },
+      bottomRight: { label: descriptions.development, color: 'red' }
     };
   } else if (!xLowerIsBetter && yLowerIsBetter) {
     // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
     return {
-      bottomRight: { label: 'Elite Performance', color: 'green' },
-      bottomLeft: { label: 'Good Y Performance', color: 'yellow' },
-      topRight: { label: 'Good X Performance', color: 'yellow' },
-      topLeft: { label: 'Development Needed', color: 'red' }
+      bottomRight: { label: descriptions.elite, color: 'green' },
+      bottomLeft: { label: descriptions.yGood, color: 'yellow' },
+      topRight: { label: descriptions.xGood, color: 'yellow' },
+      topLeft: { label: descriptions.development, color: 'red' }
     };
   } else {
     // Both lower is better (e.g., 40-yard dash vs agility time)
     return {
-      bottomLeft: { label: 'Elite Performance', color: 'green' },
-      bottomRight: { label: 'Good Y Performance', color: 'yellow' },
-      topLeft: { label: 'Good X Performance', color: 'yellow' },
-      topRight: { label: 'Development Needed', color: 'red' }
+      bottomLeft: { label: descriptions.elite, color: 'green' },
+      bottomRight: { label: descriptions.yGood, color: 'yellow' },
+      topLeft: { label: descriptions.xGood, color: 'yellow' },
+      topRight: { label: descriptions.development, color: 'red' }
     };
   }
 }
@@ -116,9 +216,25 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   showAthleteNames = false
 }: ScatterPlotChartProps) {
   const monitor = usePerformanceMonitor('ScatterPlotChart');
+  const chartRef = useRef<any>(null);
+  const namesRenderedRef = useRef<boolean>(false);
   const [showRegressionLine, setShowRegressionLine] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
+
+  // Cleanup chart on unmount
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy?.();
+      }
+    };
+  }, []);
+
+  // Reset names rendered flag when athlete names toggle changes
+  useEffect(() => {
+    namesRenderedRef.current = false;
+  }, [localShowAthleteNames]);
 
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
@@ -149,12 +265,12 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       }
       acc[point.athleteId].metrics[point.metric] = point.value;
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, AthleteData>);
 
     // Create scatter points for athletes with both metrics
-    const scatterPoints = Object.values(athleteData)
-      .filter((athlete: any) => athlete.metrics[xMetric] !== undefined && athlete.metrics[yMetric] !== undefined)
-      .map((athlete: any) => {
+    const scatterPoints: ScatterPoint[] = Object.values(athleteData)
+      .filter((athlete) => athlete.metrics[xMetric] !== undefined && athlete.metrics[yMetric] !== undefined)
+      .map((athlete): ScatterPoint => {
         // Convert values to numbers safely
         const xValue = safeNumber(athlete.metrics[xMetric]);
         const yValue = safeNumber(athlete.metrics[yMetric]);
@@ -166,7 +282,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           teamName: athlete.teamName
         };
       })
-      .filter((point: any) => !isNaN(point.x) && !isNaN(point.y)); // Filter out invalid numeric conversions
+      .filter((point) => !isNaN(point.x) && !isNaN(point.y)); // Filter out invalid numeric conversions
 
     if (scatterPoints.length === 0) return null;
 
@@ -247,8 +363,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         type: 'scatter' as const,
         label: 'Group Average',
         data: [{
-          x: validatedStats[xMetric].mean,
-          y: validatedStats[yMetric].mean
+          x: validatedStats[xMetric]?.mean || 0,
+          y: validatedStats[yMetric]?.mean || 0
         }],
         backgroundColor: CHART_CONFIG.COLORS.AVERAGE,
         borderColor: CHART_CONFIG.COLORS.AVERAGE,
@@ -308,7 +424,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     } finally {
       monitor.endTiming('dataTransformation');
     }
-  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
+  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants, localShowAthleteNames]);
 
   // Memoize correlation coefficient calculation
   const correlation = useMemo(() => {
@@ -316,26 +432,39 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
     const points = scatterData.points;
     const n = points.length;
-    const sumX = points.reduce((sum: number, p: any) => sum + p.x, 0);
-    const sumY = points.reduce((sum: number, p: any) => sum + p.y, 0);
-    const sumXY = points.reduce((sum: number, p: any) => sum + p.x * p.y, 0);
-    const sumX2 = points.reduce((sum: number, p: any) => sum + p.x * p.x, 0);
-    const sumY2 = points.reduce((sum: number, p: any) => sum + p.y * p.y, 0);
 
-    const numerator = n * sumXY - sumX * sumY;
-    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    // Validate that all points have valid numeric values
+    const validPoints = points.filter((p: ScatterPoint) =>
+      typeof p.x === 'number' && typeof p.y === 'number' &&
+      !isNaN(p.x) && !isNaN(p.y) &&
+      isFinite(p.x) && isFinite(p.y)
+    );
 
-    return denominator === 0 ? 0 : numerator / denominator;
+    if (validPoints.length < 2) return null;
+
+    const sumX = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.x, 0);
+    const sumY = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.y, 0);
+    const sumXY = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.x * p.y, 0);
+    const sumX2 = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.x * p.x, 0);
+    const sumY2 = validPoints.reduce((sum: number, p: ScatterPoint) => sum + p.y * p.y, 0);
+
+    const numerator = validPoints.length * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((validPoints.length * sumX2 - sumX * sumX) * (validPoints.length * sumY2 - sumY * sumY));
+
+    if (denominator === 0 || !isFinite(denominator)) return null;
+
+    const result = numerator / denominator;
+    return isNaN(result) || !isFinite(result) ? null : result;
   }, [scatterData?.points]);
 
   // Chart options
-  const options: ChartOptions<'scatter'> = {
+  const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       title: {
         display: true,
-        text: config.title,
+        text: scatterData ? `${scatterData.xLabel} vs ${scatterData.yLabel}` : config.title,
         font: {
           size: CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE + 6, // Slightly larger for title
           weight: 'bold'
@@ -348,11 +477,13 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       tooltip: {
         callbacks: {
           title: (context) => {
+            if (!context || context.length === 0) return 'Unknown';
             const point = context[0].raw as any;
-            return point.athleteName || 'Group Average';
+            return point?.athleteName || 'Group Average';
           },
           label: (context) => {
             const point = context.raw as any;
+            if (!point) return ['No data'];
             return [
               `${scatterData?.xLabel}: ${point.x}${scatterData?.xUnit}`,
               `${scatterData?.yLabel}: ${point.y}${scatterData?.yUnit}`
@@ -360,7 +491,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           },
           afterLabel: (context) => {
             const point = context.raw as any;
-            return point.teamName ? [`Team: ${point.teamName}`] : [];
+            return point?.teamName ? [`Team: ${point.teamName}`] : [];
           }
         }
       },
@@ -375,8 +506,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
           // Calculate chart bounds for full background coverage
-          const xValues = scatterData.points.map((p: any) => p.x);
-          const yValues = scatterData.points.map((p: any) => p.y);
+          const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
+          const yValues = scatterData.points.map((p: ScatterPoint) => p.y);
 
           // Safety check for empty arrays
           if (xValues.length === 0 || yValues.length === 0) {
@@ -504,8 +635,110 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       if (event.native?.target) {
         (event.native.target as HTMLElement).style.cursor = elements.length > 0 ? 'pointer' : 'default';
       }
+    },
+    animation: {
+      onComplete: function() {
+        // Performance optimization: only render names if enabled and not already rendered
+        if (localShowAthleteNames && chartRef.current && !namesRenderedRef.current) {
+          const chart = chartRef.current;
+          const ctx = chart.ctx;
+          const chartArea = chart.chartArea;
+
+          if (ctx && chartArea && scatterData?.points) {
+            // Save current context state
+            ctx.save();
+
+            // Set text styling
+            ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
+            ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            // Render athlete names for each point
+            scatterData.points.forEach((point: ScatterPoint) => {
+              const meta = chart.getDatasetMeta(0); // Get first dataset metadata
+              if (meta && meta.data) {
+                // Find the corresponding chart element for this point
+                const chartElement = meta.data.find((element: any) => {
+                  if (element && element.$context && element.$context.raw) {
+                    const rawData = element.$context.raw;
+                    return rawData.x === point.x && rawData.y === point.y;
+                  }
+                  return false;
+                });
+
+                if (chartElement && point.athleteName) {
+                  const x = chartElement.x + ATHLETE_NAME_CONSTANTS.LABEL_OFFSET_X;
+                  const y = chartElement.y + ATHLETE_NAME_CONSTANTS.LABEL_OFFSET_Y;
+
+                  // Add a subtle background for better readability
+                  const textWidth = ctx.measureText(point.athleteName).width;
+
+                  ctx.fillStyle = `rgba(255, 255, 255, ${ATHLETE_NAME_CONSTANTS.BACKGROUND_ALPHA})`;
+                  ctx.fillRect(
+                    x - ATHLETE_NAME_CONSTANTS.BACKGROUND_PADDING,
+                    y - ATHLETE_NAME_CONSTANTS.LABEL_VERTICAL_OFFSET,
+                    textWidth + 2 * ATHLETE_NAME_CONSTANTS.BACKGROUND_PADDING,
+                    ATHLETE_NAME_CONSTANTS.BACKGROUND_HEIGHT
+                  );
+
+                  // Restore text color and draw text
+                  ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
+                  ctx.fillText(point.athleteName, x, y);
+                }
+              }
+            });
+
+            // Mark as rendered to prevent redundant operations
+            namesRenderedRef.current = true;
+
+            // Restore context state
+            ctx.restore();
+          }
+        }
+      }
     }
-  };
+  }), [scatterData, config, showQuadrants, localShowAthleteNames]);
+
+  // Generate quadrant legend data (must be before early return to avoid hooks violation)
+  const quadrantLegend = useMemo(() => {
+    if (!scatterData || !showQuadrants) return null;
+
+    const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+    const colorMap = {
+      green: { bg: CHART_CONFIG.COLORS.QUADRANTS.ELITE, border: 'rgba(16, 185, 129, 0.3)' },
+      yellow: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
+      orange: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
+      red: { bg: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK, border: 'rgba(239, 68, 68, 0.3)' }
+    };
+
+    return [
+      {
+        label: labels.topRight.label,
+        color: labels.topRight.color,
+        position: 'Top Right',
+        ...colorMap[labels.topRight.color as keyof typeof colorMap]
+      },
+      {
+        label: labels.topLeft.label,
+        color: labels.topLeft.color,
+        position: 'Top Left',
+        ...colorMap[labels.topLeft.color as keyof typeof colorMap]
+      },
+      {
+        label: labels.bottomRight.label,
+        color: labels.bottomRight.color,
+        position: 'Bottom Right',
+        ...colorMap[labels.bottomRight.color as keyof typeof colorMap]
+      },
+      {
+        label: labels.bottomLeft.label,
+        color: labels.bottomLeft.color,
+        position: 'Bottom Left',
+        ...colorMap[labels.bottomLeft.color as keyof typeof colorMap]
+      }
+    ];
+  }, [scatterData, showQuadrants]);
 
   if (!scatterData) {
     return (
@@ -543,16 +776,53 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           />
           <Label htmlFor="athlete-names">Show Athlete Names</Label>
         </div>
-        {correlation !== null && (
+        {correlation !== null && typeof correlation === 'number' && (
           <div className="text-muted-foreground">
             Correlation: <span className="font-mono">{correlation.toFixed(3)}</span>
           </div>
         )}
       </div>
 
+      {/* Quadrant Legend */}
+      {quadrantLegend && (
+        <div
+          className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+          role="region"
+          aria-labelledby="quadrant-legend-title"
+        >
+          <h4 id="quadrant-legend-title" className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+            Performance Quadrants
+          </h4>
+          <div className="grid grid-cols-2 gap-3 text-xs" role="list">
+            {quadrantLegend.map((item, index) => (
+              <div key={index} className="flex items-center space-x-2" role="listitem">
+                <div
+                  className="w-4 h-4 rounded border-2 flex-shrink-0"
+                  style={{
+                    backgroundColor: item.bg,
+                    borderColor: item.border
+                  }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {item.label}
+                  </div>
+                  <div className="text-gray-500 dark:text-gray-400">
+                    {item.position}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Quadrants are based on the mean values of {scatterData?.xLabel} and {scatterData?.yLabel}
+          </div>
+        </div>
+      )}
+
       {/* Chart */}
       <div className="h-96">
-        <Scatter data={scatterData} options={options} />
+        <Scatter ref={chartRef} data={scatterData} options={options} />
       </div>
     </div>
   );
