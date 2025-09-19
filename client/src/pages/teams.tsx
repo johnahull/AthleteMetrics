@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
 import ArchiveTeamModal from "@/components/archive-team-modal";
+import AddPlayersToTeamModal from "@/components/AddPlayersToTeamModal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { useAuth } from "@/lib/auth";
 import type { Team, ArchiveTeam } from "@shared/schema";
@@ -20,6 +21,7 @@ export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [archivingTeam, setArchivingTeam] = useState<Team | null>(null);
+  const [addingPlayersToTeam, setAddingPlayersToTeam] = useState<Team | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -242,6 +244,14 @@ export default function Teams() {
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Team
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setAddingPlayersToTeam(team)}
+                      data-testid={`menu-add-players-${team.id}`}
+                      disabled={isArchived}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      Add Players
+                    </DropdownMenuItem>
                     {isArchived ? (
                       <DropdownMenuItem 
                         onClick={() => unarchiveTeamMutation.mutate(team.id)}
@@ -399,6 +409,12 @@ export default function Teams() {
           isLoading={archiveTeamMutation.isPending}
         />
       )}
+
+      <AddPlayersToTeamModal
+        isOpen={!!addingPlayersToTeam}
+        onClose={() => setAddingPlayersToTeam(null)}
+        team={addingPlayersToTeam}
+      />
     </div>
   );
 }

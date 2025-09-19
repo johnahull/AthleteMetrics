@@ -1094,6 +1094,106 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Add multiple players to a team
+  app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, async (req, res) => {
+    try {
+      const { teamId } = req.params;
+      const { playerIds } = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Validate input
+      if (!Array.isArray(playerIds) || playerIds.length === 0) {
+        return res.status(400).json({ message: "playerIds must be a non-empty array" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      // Add each player to the team
+      const results = [];
+      const errors = [];
+
+      for (const playerId of playerIds) {
+        try {
+          // Check if player exists and validate organization access
+          const player = await storage.getUser(playerId);
+          if (!player) {
+            errors.push({ playerId, error: "Player not found" });
+            continue;
+          }
+
+          // Validate player belongs to the same organization (if not site admin)
+          if (!userIsSiteAdmin) {
+            const playerOrgAccess = await canAccessOrganization(currentUser, player.organizationId);
+            if (!playerOrgAccess) {
+              errors.push({ playerId, error: "Access denied to this player" });
+              continue;
+            }
+          }
+
+          // Check if player is already on the team
+          const existingMemberships = await storage.getUserTeams(playerId);
+          const isActiveOnTeam = existingMemberships.some(membership =>
+            membership.teamId === teamId && membership.isActive === "true"
+          );
+
+          if (isActiveOnTeam) {
+            errors.push({ playerId, error: "Player is already on this team" });
+            continue;
+          }
+
+          // Add player to team using existing method
+          const newMembership = await storage.addUserToTeam(playerId, teamId);
+          results.push({ playerId, membership: newMembership });
+
+        } catch (error) {
+          console.error(`Error adding player ${playerId} to team ${teamId}:`, error);
+          errors.push({ playerId, error: "Failed to add player to team" });
+        }
+      }
+
+      // Return results
+      const response = {
+        success: results.length,
+        errors: errors.length,
+        results,
+        errors: errors.length > 0 ? errors : undefined
+      };
+
+      // If all failed, return error status
+      if (results.length === 0 && errors.length > 0) {
+        return res.status(400).json({
+          message: "Failed to add any players to team",
+          ...response
+        });
+      }
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error adding players to team:", error);
+      res.status(500).json({ message: "Failed to add players to team" });
+    }
+  });
+
   // Athlete routes
   app.get("/api/athletes", requireAuth, async (req, res) => {
     try {
@@ -2471,10 +2571,85 @@ export function registerRoutes(app: Express) {
   });
 
   // Get all users (site admin only)
-  app.get("/api/users", requireSiteAdmin, async (req, res) => {
+  app.get("/api/users", requireAuth, async (req, res) => {
     try {
-      const users = await storage.getUsers();
-      res.json(users);
+      const { organizationId, includeTeamMemberships } = req.query;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Site admins can access all users
+      if (userIsSiteAdmin) {
+        const users = await storage.getUsers();
+
+        // Include team memberships if requested
+        if (includeTeamMemberships === "true") {
+          const usersWithTeams = await Promise.all(
+            users.map(async (user) => {
+              const userTeams = await storage.getUserTeams(user.id);
+              return {
+                ...user,
+                teamMemberships: userTeams.map(ut => ({
+                  teamId: ut.team.id,
+                  teamName: ut.team.name,
+                  isActive: ut.isActive,
+                  season: ut.season,
+                  joinedAt: ut.joinedAt,
+                  leftAt: ut.leftAt
+                }))
+              };
+            })
+          );
+          return res.json(usersWithTeams);
+        }
+
+        return res.json(users);
+      }
+
+      // Non-site admins can only access users from their organizations
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      if (userOrgs.length === 0) {
+        return res.status(403).json({ message: "No organization access" });
+      }
+
+      // If organizationId is specified, validate access to it
+      if (organizationId) {
+        const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this organization" });
+        }
+      }
+
+      // Get users from accessible organizations
+      const targetOrgId = organizationId || userOrgs[0].organizationId;
+      const orgUsers = await storage.getUsersByOrganization(targetOrgId);
+
+      // Include team memberships if requested
+      if (includeTeamMemberships === "true") {
+        const usersWithTeams = await Promise.all(
+          orgUsers.map(async (user) => {
+            const userTeams = await storage.getUserTeams(user.id);
+            return {
+              ...user,
+              teamMemberships: userTeams.map(ut => ({
+                teamId: ut.team.id,
+                teamName: ut.team.name,
+                isActive: ut.isActive,
+                season: ut.season,
+                joinedAt: ut.joinedAt,
+                leftAt: ut.leftAt
+              }))
+            };
+          })
+        );
+        return res.json(usersWithTeams);
+      }
+
+      res.json(orgUsers);
     } catch (error) {
       console.error("Error getting users:", error);
       res.status(500).json({ message: "Failed to get users" });
