@@ -168,49 +168,6 @@ export function ScatterPlotChart({
 
     const [xMetric, yMetric] = metrics;
 
-    console.log('🔍 ScatterPlot statistics:', statistics);
-
-    // Check if server stats are valid and calculate client-side fallback if needed
-    let validStats = statistics;
-    if (statistics && (
-      !statistics[xMetric] || statistics[xMetric].count === 0 ||
-      !statistics[yMetric] || statistics[yMetric].count === 0
-    )) {
-      console.log('⚠️ Server stats invalid for scatter plot, calculating client-side statistics');
-
-      // Group data by metric to calculate stats
-      const metricGroups = data.reduce((groups, point) => {
-        if (!groups[point.metric]) groups[point.metric] = [];
-        groups[point.metric].push(point.value);
-        return groups;
-      }, {} as Record<string, number[]>);
-
-      // Calculate statistics for each metric
-      validStats = {};
-      for (const [metric, values] of Object.entries(metricGroups)) {
-        const count = values.length;
-        const sum = values.reduce((acc, val) => acc + val, 0);
-        const mean = sum / count;
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-
-        validStats[metric] = {
-          count,
-          mean,
-          median: mean, // Approximation for now
-          min,
-          max,
-          std: 0,
-          variance: 0,
-          percentiles: {
-            p5: min, p10: min, p25: min, p50: mean,
-            p75: max, p90: max, p95: max
-          }
-        };
-      }
-      console.log('✅ Client-calculated scatter stats:', validStats);
-    }
-
     // Group data by athlete (backend already provides best measurements per athlete)
     const athleteData = data.reduce((acc, point) => {
       if (!acc[point.athleteId]) {
@@ -280,15 +237,13 @@ export function ScatterPlotChart({
     }
 
     // Add group averages if statistics available
-    if (validStats && validStats[xMetric] && validStats[yMetric]) {
-      const groupAverage = {
-        x: validStats[xMetric].mean,
-        y: validStats[yMetric].mean
-      };
-
+    if (statistics && statistics[xMetric] && statistics[yMetric]) {
       datasets.push({
         label: 'Group Average',
-        data: [groupAverage],
+        data: [{
+          x: statistics[xMetric].mean,
+          y: statistics[yMetric].mean
+        }],
         backgroundColor: 'rgba(239, 68, 68, 1)',
         borderColor: 'rgba(239, 68, 68, 1)',
         borderWidth: 3,
@@ -339,8 +294,7 @@ export function ScatterPlotChart({
       xLabel,
       yLabel,
       points: scatterPoints,
-      regression,
-      validStats
+      regression
     } as any;
   }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
 
@@ -402,11 +356,10 @@ export function ScatterPlotChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: showQuadrants && scatterData && scatterData.datasets.length > 0 ? {
+      annotation: showQuadrants && statistics && scatterData ? {
         annotations: (() => {
-          // Use validStats which has client-side fallback calculations
-          const xMean = scatterData.validStats?.[scatterData.xMetric]?.mean || 0;
-          const yMean = scatterData.validStats?.[scatterData.yMetric]?.mean || 0;
+          const xMean = statistics[scatterData.xMetric]?.mean || 0;
+          const yMean = statistics[scatterData.yMetric]?.mean || 0;
           const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
           // Calculate chart bounds for full background coverage
@@ -506,11 +459,7 @@ export function ScatterPlotChart({
         },
         grid: {
           display: true
-        },
-        ...(scatterData?.points && scatterData.points.length > 0 ? {
-          min: Math.min(...scatterData.points.map((p: any) => p.x)) * 0.95,
-          max: Math.max(...scatterData.points.map((p: any) => p.x)) * 1.05
-        } : {})
+        }
       },
       y: {
         type: 'linear',
@@ -520,11 +469,7 @@ export function ScatterPlotChart({
         },
         grid: {
           display: true
-        },
-        ...(scatterData?.points && scatterData.points.length > 0 ? {
-          min: Math.min(...scatterData.points.map((p: any) => p.y)) * 0.95,
-          max: Math.max(...scatterData.points.map((p: any) => p.y)) * 1.05
-        } : {})
+        }
       }
     },
     elements: {
