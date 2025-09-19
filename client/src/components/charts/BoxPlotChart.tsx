@@ -96,6 +96,7 @@ export function BoxPlotChart({
             // Close the box
             { x: xPos - boxWidth/2, y: stats.percentiles.p25 }
           ],
+          type: 'line',
           backgroundColor: 'rgba(59, 130, 246, 0.2)',
           borderColor: 'rgba(59, 130, 246, 0.8)',
           borderWidth: 2,
@@ -112,6 +113,7 @@ export function BoxPlotChart({
             { x: xPos - boxWidth/2, y: stats.percentiles.p50 },
             { x: xPos + boxWidth/2, y: stats.percentiles.p50 }
           ],
+          type: 'line',
           backgroundColor: 'rgba(59, 130, 246, 1)',
           borderColor: 'rgba(59, 130, 246, 1)',
           borderWidth: 3,
@@ -132,6 +134,7 @@ export function BoxPlotChart({
             { x: xPos, y: stats.percentiles.p25 },
             { x: xPos, y: lowerWhisker }
           ],
+          type: 'line',
           backgroundColor: 'rgba(59, 130, 246, 1)',
           borderColor: 'rgba(59, 130, 246, 1)',
           borderWidth: 3, // Increased from 2
@@ -147,6 +150,7 @@ export function BoxPlotChart({
             { x: xPos, y: stats.percentiles.p75 },
             { x: xPos, y: upperWhisker }
           ],
+          type: 'line',
           backgroundColor: 'rgba(59, 130, 246, 1)',
           borderColor: 'rgba(59, 130, 246, 1)',
           borderWidth: 3, // Increased from 2
@@ -187,6 +191,7 @@ export function BoxPlotChart({
             datasets.push({
               label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Data Points`,
               data: regularPoints,
+              type: 'scatter',
               backgroundColor: 'rgba(59, 130, 246, 0.4)',
               borderColor: 'rgba(59, 130, 246, 0.7)',
               borderWidth: 1,
@@ -202,6 +207,7 @@ export function BoxPlotChart({
             datasets.push({
               label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
               data: outlierPoints,
+              type: 'scatter',
               backgroundColor: 'rgba(239, 68, 68, 0.6)',
               borderColor: 'rgba(239, 68, 68, 1)',
               borderWidth: 1,
@@ -216,6 +222,7 @@ export function BoxPlotChart({
             datasets.push({
               label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
               data: outliers.map(value => ({ x: xPos, y: value })),
+              type: 'scatter',
               backgroundColor: 'rgba(239, 68, 68, 0.6)',
               borderColor: 'rgba(239, 68, 68, 1)',
               borderWidth: 1,
@@ -236,6 +243,7 @@ export function BoxPlotChart({
             datasets.push({
               label: `${athleteData.athleteName}`,
               data: [{ x: xPos, y: athleteData.value }],
+              type: 'scatter',
               backgroundColor: 'rgba(16, 185, 129, 1)',
               borderColor: 'rgba(16, 185, 129, 1)',
               borderWidth: 3,
