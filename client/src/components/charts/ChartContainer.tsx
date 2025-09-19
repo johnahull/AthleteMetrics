@@ -256,7 +256,7 @@ export function ChartContainer({
                 <ChartComponent
                   data={chartData as any}
                   config={chartConfig}
-                  statistics={statistics}
+                  statistics={statistics || {}}
                   highlightAthlete={highlightAthlete}
                   selectedAthleteIds={selectedAthleteIds}
                   onAthleteSelectionChange={onAthleteSelectionChange}
