@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +11,8 @@ import {
   LineElement
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import type {
   TrendData,
   ChartConfiguration,
@@ -36,6 +38,7 @@ interface TimeSeriesBoxSwarmProps {
   selectedDates: string[];
   metric: string;
   statistics?: Record<string, StatisticalSummary>;
+  showAthleteNames?: boolean;
 }
 
 // Color palette for athletes
@@ -57,9 +60,11 @@ export function TimeSeriesBoxSwarmChart({
   config,
   selectedDates,
   metric,
-  statistics
+  statistics,
+  showAthleteNames = false
 }: TimeSeriesBoxSwarmProps) {
   const chartRef = useRef<any>(null);
+  const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
 
   // Process data for time-series box+swarm visualization
   const chartData = useMemo(() => {
@@ -272,7 +277,9 @@ export function TimeSeriesBoxSwarmChart({
               // Store the actual date and date index for tooltip
               dateStr: currentDateStr,
               dateLabel: currentDateLabel,
-              isPersonalBest: athleteData.isPersonalBest
+              isPersonalBest: athleteData.isPersonalBest,
+              athleteId: athleteData.athleteId,
+              athleteName: athleteData.athleteName
             }],
             type: 'scatter',
             backgroundColor: athleteData.isPersonalBest ? 'gold' : color,
@@ -402,7 +409,239 @@ export function TimeSeriesBoxSwarmChart({
         intersect: false
       },
       animation: {
-        duration: 750
+        duration: 750,
+        onComplete: function() {
+          // Render athlete names if enabled
+          if (localShowAthleteNames && chartRef.current) {
+            const chart = chartRef.current;
+            const ctx = chart.ctx;
+            const chartArea = chart.chartArea;
+
+            if (ctx && chartArea) {
+              // Save current context state
+              ctx.save();
+
+              // Set text styling
+              ctx.font = '10px Arial';
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+
+              // Collect all label positions for collision detection
+              const labelPositions: Array<{
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+                text: string;
+                originalX: number;
+                originalY: number;
+              }> = [];
+
+              // First pass: collect all potential label positions
+              chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
+                if (dataset.data && Array.isArray(dataset.data) && dataset.type === 'scatter') {
+                  dataset.data.forEach((point: any, pointIndex: number) => {
+                    if (point && typeof point === 'object' && point.athleteName) {
+                      const meta = chart.getDatasetMeta(datasetIndex);
+                      const element = meta.data[pointIndex];
+
+                      if (element && element.x !== undefined && element.y !== undefined) {
+                        const textWidth = ctx.measureText(point.athleteName).width;
+                        const textHeight = 12;
+                        const baseOffsetX = 8;
+
+                        // Position text to the right of the point
+                        let textX = element.x + baseOffsetX;
+                        let textY = element.y;
+
+                        // Avoid positioning text too close to chart edges
+                        if (textX + textWidth > chartArea.right - 10) {
+                          // If text would overflow right, position to the left instead
+                          textX = element.x - textWidth - 8;
+                        }
+
+                        // Only add if within chart bounds
+                        if (textX >= chartArea.left &&
+                            textX + textWidth <= chartArea.right &&
+                            textY >= chartArea.top &&
+                            textY <= chartArea.bottom) {
+
+                          labelPositions.push({
+                            x: textX,
+                            y: textY,
+                            width: textWidth,
+                            height: textHeight,
+                            text: point.athleteName,
+                            originalX: element.x,
+                            originalY: element.y
+                          });
+                        }
+                      }
+                    }
+                  });
+                }
+              });
+
+              // Advanced collision detection and resolution
+              const resolvedPositions = resolveLabeLCollisions(labelPositions, chartArea);
+
+              // Helper function for sophisticated label collision resolution
+              function resolveLabeLCollisions(
+                labels: Array<{
+                  x: number;
+                  y: number;
+                  width: number;
+                  height: number;
+                  text: string;
+                  originalX: number;
+                  originalY: number;
+                }>,
+                chartBounds: { left: number; top: number; right: number; bottom: number }
+              ) {
+                const resolved = labels.map(label => ({ ...label }));
+                const padding = 6;
+                const textHeight = 12;
+                const maxIterations = 25; // Increased for time-series charts which may have more points
+                let iteration = 0;
+
+                // Priority-based processing: labels closer to their original position get priority
+                resolved.sort((a, b) => {
+                  const distA = Math.sqrt(Math.pow(a.x - a.originalX, 2) + Math.pow(a.y - a.originalY, 2));
+                  const distB = Math.sqrt(Math.pow(b.x - b.originalX, 2) + Math.pow(b.y - b.originalY, 2));
+                  return distA - distB;
+                });
+
+                while (iteration < maxIterations) {
+                  let hasCollisions = false;
+
+                  for (let i = 0; i < resolved.length; i++) {
+                    for (let j = i + 1; j < resolved.length; j++) {
+                      const labelA = resolved[i];
+                      const labelB = resolved[j];
+
+                      // Check for collision with expanded bounds
+                      const overlapsX = labelA.x < labelB.x + labelB.width + padding &&
+                                       labelB.x < labelA.x + labelA.width + padding;
+                      const overlapsY = Math.abs(labelA.y - labelB.y) < textHeight + padding;
+
+                      if (overlapsX && overlapsY) {
+                        hasCollisions = true;
+
+                        // Try multiple positioning strategies for labelB
+                        const strategies = [
+                          // Strategy 1: Move down
+                          { x: labelB.x, y: labelA.y + textHeight + padding },
+                          // Strategy 2: Move up
+                          { x: labelB.x, y: labelA.y - textHeight - padding },
+                          // Strategy 3: Move right
+                          { x: labelA.x + labelA.width + padding, y: labelB.y },
+                          // Strategy 4: Move left
+                          { x: labelA.x - labelB.width - padding, y: labelB.y },
+                          // Strategy 5: Move diagonally down-right
+                          { x: labelA.x + labelA.width + padding, y: labelA.y + textHeight + padding },
+                          // Strategy 6: Move diagonally up-right
+                          { x: labelA.x + labelA.width + padding, y: labelA.y - textHeight - padding },
+                          // Strategy 7: Move further right
+                          { x: labelB.originalX + 30, y: labelB.originalY },
+                          // Strategy 8: Move further left
+                          { x: labelB.originalX - labelB.width - 20, y: labelB.originalY },
+                          // Strategy 9: Move vertically away from center
+                          { x: labelB.x, y: labelB.originalY + (labelB.originalY > (chartBounds.top + chartBounds.bottom) / 2 ? 20 : -20) },
+                          // Strategy 10: Move with larger spacing
+                          { x: labelB.originalX + 40, y: labelB.originalY + 15 }
+                        ];
+
+                        // Find the best valid strategy
+                        let bestStrategy = null;
+                        let bestScore = Infinity;
+
+                        for (const strategy of strategies) {
+                          // Check if strategy is within chart bounds
+                          if (strategy.x >= chartBounds.left &&
+                              strategy.x + labelB.width <= chartBounds.right - 5 &&
+                              strategy.y >= chartBounds.top + 6 &&
+                              strategy.y <= chartBounds.bottom - 6) {
+
+                            // Check if this position conflicts with other labels
+                            let conflicts = false;
+                            for (let k = 0; k < resolved.length; k++) {
+                              if (k === j) continue; // Skip self
+
+                              const other = resolved[k];
+                              const wouldOverlapX = strategy.x < other.x + other.width + padding &&
+                                                   other.x < strategy.x + labelB.width + padding;
+                              const wouldOverlapY = Math.abs(strategy.y - other.y) < textHeight + padding;
+
+                              if (wouldOverlapX && wouldOverlapY) {
+                                conflicts = true;
+                                break;
+                              }
+                            }
+
+                            if (!conflicts) {
+                              // Calculate score based on distance from original position
+                              const distance = Math.sqrt(
+                                Math.pow(strategy.x - labelB.originalX, 2) +
+                                Math.pow(strategy.y - labelB.originalY, 2)
+                              );
+
+                              if (distance < bestScore) {
+                                bestScore = distance;
+                                bestStrategy = strategy;
+                              }
+                            }
+                          }
+                        }
+
+                        // Apply best strategy if found
+                        if (bestStrategy) {
+                          labelB.x = bestStrategy.x;
+                          labelB.y = bestStrategy.y;
+                        } else {
+                          // Last resort: try to space vertically with larger gaps
+                          const verticalOffset = (textHeight + padding * 3) * (j % 4);
+                          const newY = labelB.originalY + verticalOffset;
+
+                          if (newY >= chartBounds.top + 6 && newY <= chartBounds.bottom - 6) {
+                            labelB.y = newY;
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  if (!hasCollisions) break;
+                  iteration++;
+                }
+
+                // Final pass: remove labels that are still overlapping or outside bounds
+                return resolved.filter(label =>
+                  label.x >= chartBounds.left &&
+                  label.x + label.width <= chartBounds.right - 5 &&
+                  label.y >= chartBounds.top + 6 &&
+                  label.y <= chartBounds.bottom - 6
+                );
+              }
+
+              // Second pass: render all labels with resolved positions
+              resolvedPositions.forEach(label => {
+                const padding = 2;
+
+                // Add a subtle background for better readability
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
+
+                // Restore text color and draw text
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillText(label.text, label.x, label.y);
+              });
+
+              // Restore context state
+              ctx.restore();
+            }
+          }
+        }
       },
       // Add layout padding to prevent edge rendering
       layout: {
@@ -440,6 +679,18 @@ export function TimeSeriesBoxSwarmChart({
 
   return (
     <div className="w-full h-full">
+      {/* Toggle control for athlete names */}
+      <div className="flex items-center space-x-2 mb-4 px-2">
+        <Switch
+          id="show-names-timeseries"
+          checked={localShowAthleteNames}
+          onCheckedChange={setLocalShowAthleteNames}
+        />
+        <Label htmlFor="show-names-timeseries" className="text-sm font-medium cursor-pointer">
+          Show athlete names
+        </Label>
+      </div>
+
       <Chart
         ref={chartRef}
         type="line"
