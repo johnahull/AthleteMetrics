@@ -368,16 +368,29 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
     const points = scatterData.points;
     const n = points.length;
-    const sumX = points.reduce((sum: number, p: any) => sum + p.x, 0);
-    const sumY = points.reduce((sum: number, p: any) => sum + p.y, 0);
-    const sumXY = points.reduce((sum: number, p: any) => sum + p.x * p.y, 0);
-    const sumX2 = points.reduce((sum: number, p: any) => sum + p.x * p.x, 0);
-    const sumY2 = points.reduce((sum: number, p: any) => sum + p.y * p.y, 0);
 
-    const numerator = n * sumXY - sumX * sumY;
-    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    // Validate that all points have valid numeric values
+    const validPoints = points.filter((p: any) =>
+      typeof p.x === 'number' && typeof p.y === 'number' &&
+      !isNaN(p.x) && !isNaN(p.y) &&
+      isFinite(p.x) && isFinite(p.y)
+    );
 
-    return denominator === 0 ? 0 : numerator / denominator;
+    if (validPoints.length < 2) return null;
+
+    const sumX = validPoints.reduce((sum: number, p: any) => sum + p.x, 0);
+    const sumY = validPoints.reduce((sum: number, p: any) => sum + p.y, 0);
+    const sumXY = validPoints.reduce((sum: number, p: any) => sum + p.x * p.y, 0);
+    const sumX2 = validPoints.reduce((sum: number, p: any) => sum + p.x * p.x, 0);
+    const sumY2 = validPoints.reduce((sum: number, p: any) => sum + p.y * p.y, 0);
+
+    const numerator = validPoints.length * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((validPoints.length * sumX2 - sumX * sumX) * (validPoints.length * sumY2 - sumY * sumY));
+
+    if (denominator === 0 || !isFinite(denominator)) return null;
+
+    const result = numerator / denominator;
+    return isNaN(result) || !isFinite(result) ? null : result;
   }, [scatterData?.points]);
 
   // Chart options
@@ -635,7 +648,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           />
           <Label htmlFor="athlete-names">Show Athlete Names</Label>
         </div>
-        {correlation !== null && (
+        {correlation !== null && typeof correlation === 'number' && (
           <div className="text-muted-foreground">
             Correlation: <span className="font-mono">{correlation.toFixed(3)}</span>
           </div>
