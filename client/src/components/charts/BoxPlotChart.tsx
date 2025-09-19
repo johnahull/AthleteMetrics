@@ -23,6 +23,7 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -68,7 +69,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         groups[point.metric] = [];
       }
       // Convert value to number to handle string values
-      const numericValue = typeof point.value === 'string' ? parseFloat(point.value) : point.value;
+      const numericValue = safeNumber(point.value);
       if (!isNaN(numericValue)) {
         groups[point.metric].push(numericValue);
       }
@@ -90,7 +91,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       if (!hasValidStats && values.length > 0) {
         // Calculate statistics on client side as fallback
         // Convert to numbers first to handle string values
-        const numericValues = values.map(v => typeof v === 'string' ? parseFloat(v) : v).filter(v => !isNaN(v));
+        const numericValues = values.map(v => safeNumber(v)).filter(v => !isNaN(v));
         const sortedValues = [...numericValues].sort((a, b) => a - b);
         const count = sortedValues.length;
         const sum = sortedValues.reduce((acc, val) => acc + val, 0);
@@ -225,7 +226,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               const jitterRange = 0.25;
               const jitter = (Math.random() - 0.5) * jitterRange;
               // Convert value to number to handle string values
-              const numericValue = typeof point.value === 'string' ? parseFloat(point.value) : point.value;
+              const numericValue = safeNumber(point.value);
               const isOutlier = outliers.includes(numericValue);
 
               return {

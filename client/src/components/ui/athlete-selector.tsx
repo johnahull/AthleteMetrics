@@ -1,18 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Search, ChevronDown, X, User } from 'lucide-react';
-import { filterAthletesByName, sortAthletesByLastName } from '@/lib/utils/names';
-
-export interface Athlete {
-  id: string;
-  name?: string;
-  fullName: string;
-  teamName?: string;
-  teams?: Array<{ id: string; name: string }>;
-  birthYear?: number;
-}
+import { useAthleteSelector, type Athlete } from '@/hooks/useAthleteSelector';
 
 interface AthleteSelectorProps {
   athletes: Athlete[];
@@ -40,63 +31,23 @@ export function AthleteSelector({
   'data-testid': testId
 }: AthleteSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [focusedIndex, setFocusedIndex] = useState(-1);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Normalize athlete data to handle both name and fullName properties
-  const normalizedAthletes = useMemo(() => {
-    return athletes.map(athlete => {
-      // Extract team information more robustly
-      let teamInfo = undefined;
-      if (showTeamInfo) {
-        if (athlete.teamName && athlete.teamName !== '' && athlete.teamName.trim() !== '') {
-          teamInfo = athlete.teamName;
-        } else if (athlete.teams && athlete.teams.length > 0) {
-          teamInfo = athlete.teams.map(t => t.name).join(', ');
-        } else {
-          teamInfo = 'No team';
-        }
-      }
-
-      return {
-        ...athlete,
-        displayName: athlete.fullName || athlete.name || 'Unknown',
-        teamInfo
-      };
-    });
-  }, [athletes, showTeamInfo]);
-
-  // Filter and sort athletes
-  const filteredAthletes = useMemo(() => {
-    let filtered = normalizedAthletes;
-
-    // Apply search filter if search term exists
-    if (searchTerm.trim()) {
-      filtered = filterAthletesByName(
-        normalizedAthletes.map(a => ({ ...a, name: a.displayName })),
-        searchTerm,
-        'name'
-      ).map(a => normalizedAthletes.find(na => na.id === a.id)!);
-    }
-
-    // Sort by last name
-    const sorted = sortAthletesByLastName(
-      filtered.map(a => ({ ...a, name: a.displayName })),
-      'name'
-    ).map(a => normalizedAthletes.find(na => na.id === a.id)!);
-
-    // Return all sorted athletes without limiting initial display
-    // Only limit search results to prevent performance issues with very large datasets
-    if (searchTerm.trim()) {
-      return sorted.slice(0, 100); // Limit search results to 100
-    }
-
-    return sorted; // Show all athletes when no search term
-  }, [normalizedAthletes, searchTerm]);
+  // Use shared athlete selector hook
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredAthletes
+  } = useAthleteSelector({
+    athletes,
+    maxSelection: 1,
+    initialSelection: selectedAthlete ? [selectedAthlete.id] : [],
+    searchEnabled: true
+  });
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -138,8 +89,12 @@ export function AthleteSelector({
   };
 
   // Handle athlete selection
-  const handleSelect = (athlete: Athlete) => {
-    onSelect(athlete);
+  const handleSelect = (athlete: any) => {
+    // Find the original athlete object to pass back
+    const originalAthlete = athletes.find(a => a.id === athlete.id);
+    if (originalAthlete) {
+      onSelect(originalAthlete);
+    }
     setIsOpen(false);
     setSearchTerm('');
     setFocusedIndex(-1);
@@ -269,34 +224,48 @@ export function AthleteSelector({
             </div>
           ) : (
             <>
-              {filteredAthletes.map((athlete, index) => (
-                <button
-                  key={athlete.id}
-                  type="button"
-                  className={cn(
-                    "w-full px-4 py-3 text-left hover:bg-accent/50 flex items-center justify-between transition-colors",
-                    focusedIndex === index && "bg-accent",
-                    selectedAthlete?.id === athlete.id && "bg-primary/10 text-primary"
-                  )}
-                  onClick={() => handleSelect(athlete)}
-                  data-testid={`${testId}-option-${athlete.id}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{athlete.displayName}</p>
-                    {showTeamInfo && athlete.teamInfo && (
-                      <p className="text-sm text-muted-foreground truncate">
-                        {athlete.teamInfo}
-                        {athlete.birthYear && ` • ${athlete.birthYear}`}
-                      </p>
+              {filteredAthletes.map((athlete, index) => {
+                // Get team information
+                let teamInfo = undefined;
+                if (showTeamInfo) {
+                  if (athlete.teamName && athlete.teamName !== '' && athlete.teamName.trim() !== '') {
+                    teamInfo = athlete.teamName;
+                  } else if ('teams' in athlete && athlete.teams && Array.isArray(athlete.teams) && athlete.teams.length > 0) {
+                    teamInfo = athlete.teams.map((t: any) => t.name).join(', ');
+                  } else {
+                    teamInfo = 'No team';
+                  }
+                }
+
+                return (
+                  <button
+                    key={athlete.id}
+                    type="button"
+                    className={cn(
+                      "w-full px-4 py-3 text-left hover:bg-accent/50 flex items-center justify-between transition-colors",
+                      focusedIndex === index && "bg-accent",
+                      selectedAthlete?.id === athlete.id && "bg-primary/10 text-primary"
                     )}
-                  </div>
-                  {selectedAthlete?.id === athlete.id && (
-                    <div className="flex-shrink-0 ml-2">
-                      <div className="w-2 h-2 bg-primary rounded-full" />
+                    onClick={() => handleSelect(athlete)}
+                    data-testid={`${testId}-option-${athlete.id}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{athlete.name}</p>
+                      {showTeamInfo && teamInfo && (
+                        <p className="text-sm text-muted-foreground truncate">
+                          {teamInfo}
+                          {'birthYear' in athlete && athlete.birthYear && ` • ${athlete.birthYear}`}
+                        </p>
+                      )}
                     </div>
-                  )}
-                </button>
-              ))}
+                    {selectedAthlete?.id === athlete.id && (
+                      <div className="flex-shrink-0 ml-2">
+                        <div className="w-2 h-2 bg-primary rounded-full" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </>
           )}
         </div>

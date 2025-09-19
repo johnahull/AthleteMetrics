@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -7,24 +7,27 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "./lib/auth";
 import Layout from "./components/layout";
 import Login from "./pages/login";
-import Dashboard from "./pages/dashboard";
-import Teams from "./pages/teams";
-import Athletes from "./pages/athletes";
-import AthleteProfile from "./pages/athlete-profile";
-import DataEntry from "./pages/data-entry";
-import Publish from "./pages/publish";
-import ImportExport from "./pages/import-export";
-import AdminPage from "./pages/admin";
-import Organizations from "./pages/organizations";
-import UserManagement from "./pages/user-management";
-import Profile from "./pages/profile";
-import UserProfile from "./pages/user-profile";
-import OrganizationProfile from "./pages/organization-profile";
-import AcceptInvitation from "./pages/accept-invitation";
-import EnhancedLogin from "./pages/enhanced-login";
-import ForgotPassword from "./pages/forgot-password";
-import ResetPassword from "./pages/reset-password";
 import NotFound from "@/pages/not-found";
+import { performanceMonitor } from "./utils/performance-monitoring";
+
+// Lazy load heavy pages to reduce initial bundle size
+const Dashboard = React.lazy(() => import("./pages/dashboard"));
+const Teams = React.lazy(() => import("./pages/teams"));
+const Athletes = React.lazy(() => import("./pages/athletes"));
+const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
+const DataEntry = React.lazy(() => import("./pages/data-entry"));
+const Publish = React.lazy(() => import("./pages/publish"));
+const ImportExport = React.lazy(() => import("./pages/import-export"));
+const AdminPage = React.lazy(() => import("./pages/admin"));
+const Organizations = React.lazy(() => import("./pages/organizations"));
+const UserManagement = React.lazy(() => import("./pages/user-management"));
+const Profile = React.lazy(() => import("./pages/profile"));
+const UserProfile = React.lazy(() => import("./pages/user-profile"));
+const OrganizationProfile = React.lazy(() => import("./pages/organization-profile"));
+const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
+const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
+const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
+const ResetPassword = React.lazy(() => import("./pages/reset-password"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -74,6 +77,13 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    // Initialize chunk loading monitoring in development
+    if (process.env.NODE_ENV === 'development') {
+      performanceMonitor.monitorChunkLoading();
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

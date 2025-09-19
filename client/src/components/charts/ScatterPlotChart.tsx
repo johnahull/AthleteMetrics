@@ -17,6 +17,7 @@ import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Scatter } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { usePerformanceMonitor } from '@/utils/performance-monitor';
 import type {
   ChartDataPoint,
   ChartConfiguration,
@@ -24,6 +25,7 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { safeNumber } from '@shared/utils/number-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -113,15 +115,18 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   highlightAthlete,
   showAthleteNames = false
 }: ScatterPlotChartProps) {
+  const monitor = usePerformanceMonitor('ScatterPlotChart');
   const [showRegressionLine, setShowRegressionLine] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
 
   // Transform data for scatter plot
   const scatterData = useMemo(() => {
-    if (!data || data.length === 0) {
-      return null;
-    }
+    monitor.startTiming('dataTransformation');
+    try {
+      if (!data || data.length === 0) {
+        return null;
+      }
 
     // Get metrics from actual data (like BoxPlotChart does)
     const availableMetrics = Array.from(new Set(data.map(d => d.metric)));
@@ -150,9 +155,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     const scatterPoints = Object.values(athleteData)
       .filter((athlete: any) => athlete.metrics[xMetric] !== undefined && athlete.metrics[yMetric] !== undefined)
       .map((athlete: any) => {
-        // Convert values to numbers to handle string values
-        const xValue = typeof athlete.metrics[xMetric] === 'string' ? parseFloat(athlete.metrics[xMetric]) : athlete.metrics[xMetric];
-        const yValue = typeof athlete.metrics[yMetric] === 'string' ? parseFloat(athlete.metrics[yMetric]) : athlete.metrics[yMetric];
+        // Convert values to numbers safely
+        const xValue = safeNumber(athlete.metrics[xMetric]);
+        const yValue = safeNumber(athlete.metrics[yMetric]);
         return {
           x: xValue,
           y: yValue,
@@ -177,8 +182,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       } else {
         // Calculate statistics on client side as fallback
         const metricData = data.filter(d => d.metric === metric);
-        // Convert values to numbers to handle string values
-        const values = metricData.map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value).filter(v => !isNaN(v));
+        // Convert values to numbers safely
+        const values = metricData.map(d => safeNumber(d.value)).filter(v => !isNaN(v));
 
         if (values.length > 0) {
           const count = values.length;
@@ -300,6 +305,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       regression,
       validatedStats
     } as any;
+    } finally {
+      monitor.endTiming('dataTransformation');
+    }
   }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
 
   // Memoize correlation coefficient calculation

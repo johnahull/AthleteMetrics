@@ -4,11 +4,12 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useCallback } from 'react';
-import type { 
-  AnalyticsRequest, 
-  AnalyticsResponse, 
+import { CHART_CONFIG } from '@/constants/chart-config';
+import type {
+  AnalyticsRequest,
+  AnalyticsResponse,
   ChartDataPoint,
-  StatisticalSummary 
+  StatisticalSummary
 } from '@shared/analytics-types';
 
 interface UseAnalyticsDataOptions {
@@ -197,14 +198,14 @@ function recalculateStatistics(
 
     // Calculate percentiles
     const getPercentile = (p: number) => {
-      const index = (p / 100) * (sortedValues.length - 1);
+      const index = (p / CHART_CONFIG.ALGORITHM.PERCENTILE_DIVISOR) * (sortedValues.length - 1);
       const lower = Math.floor(index);
       const upper = Math.ceil(index);
-      
+
       if (lower === upper) {
         return sortedValues[lower];
       }
-      
+
       const weight = index - lower;
       return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
     };
@@ -212,19 +213,19 @@ function recalculateStatistics(
     newStats[metric] = {
       count: values.length,
       mean,
-      median: getPercentile(50),
+      median: getPercentile(CHART_CONFIG.PERCENTILES.P50),
       min: sortedValues[0],
       max: sortedValues[sortedValues.length - 1],
       std: standardDeviation,
       variance,
       percentiles: {
-        p5: getPercentile(5),
-        p10: getPercentile(10),
-        p25: getPercentile(25),
-        p50: getPercentile(50),
-        p75: getPercentile(75),
-        p90: getPercentile(90),
-        p95: getPercentile(95)
+        p5: getPercentile(CHART_CONFIG.PERCENTILES.P5),
+        p10: getPercentile(CHART_CONFIG.PERCENTILES.P10),
+        p25: getPercentile(CHART_CONFIG.PERCENTILES.P25),
+        p50: getPercentile(CHART_CONFIG.PERCENTILES.P50),
+        p75: getPercentile(CHART_CONFIG.PERCENTILES.P75),
+        p90: getPercentile(CHART_CONFIG.PERCENTILES.P90),
+        p95: getPercentile(CHART_CONFIG.PERCENTILES.P95)
       }
     };
   });

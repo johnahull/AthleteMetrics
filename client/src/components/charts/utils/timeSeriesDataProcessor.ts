@@ -1,4 +1,5 @@
 import type { TrendData } from '@shared/analytics-types';
+import { safeNumber } from '@shared/utils/number-conversion';
 
 export interface ProcessedDateData {
   athleteId: string;
@@ -37,7 +38,7 @@ export function groupDataByDate(
         dateDataMap.get(dateStr)!.push({
           athleteId: trend.athleteId,
           athleteName: trend.athleteName,
-          value: point.value,
+          value: safeNumber(point.value),
           isPersonalBest: point.isPersonalBest
         });
       }

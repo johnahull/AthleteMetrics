@@ -206,6 +206,30 @@ export const ACCESSIBILITY_CONFIG = {
 } as const;
 
 // =============================================================================
+// ALGORITHM CONSTANTS
+// =============================================================================
+
+export const ALGORITHM_CONFIG = {
+  // Random shuffle algorithms
+  RANDOM_SHUFFLE_CENTER: 0.5, // Used in Math.random() - 0.5 for balanced shuffling
+
+  // Percentile calculations
+  PERCENTILE_DIVISOR: 100, // Used in (p / 100) * (length - 1) calculations
+
+  // Data limits and validation
+  AGE_VALIDATION: {
+    MIN_AGE: 10,
+    MAX_AGE: 25,
+  },
+
+  // Search result limits
+  SEARCH_RESULT_LIMIT: 100, // Maximum search results to prevent performance issues
+
+  // Jitter calculations for data visualization
+  JITTER_FACTOR: 0.5, // Used in (Math.random() - 0.5) * jitterRange
+} as const;
+
+// =============================================================================
 // EXPORT ALL CONFIGS
 // =============================================================================
 
@@ -220,6 +244,7 @@ export const CHART_CONFIG = {
   DISTRIBUTION: DISTRIBUTION_CONFIG,
   RESPONSIVE: RESPONSIVE_CONFIG,
   ACCESSIBILITY: ACCESSIBILITY_CONFIG,
+  ALGORITHM: ALGORITHM_CONFIG,
 } as const;
 
 export default CHART_CONFIG;
