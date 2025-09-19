@@ -227,6 +227,15 @@ export const ALGORITHM_CONFIG = {
 
   // Jitter calculations for data visualization
   JITTER_FACTOR: 0.5, // Used in (Math.random() - 0.5) * jitterRange
+
+  // Label collision detection configuration
+  COLLISION_DETECTION: {
+    MAX_LABELS: 20, // Maximum number of labels to render for performance
+    PADDING: 6, // Minimum padding between labels in pixels
+    TEXT_HEIGHT: 12, // Standard text height for collision calculations
+    GRID_SIZE: 50, // Grid cell size for spatial indexing (pixels)
+    MAX_ITERATIONS: 5, // Maximum attempts to resolve collisions per label
+  },
 } as const;
 
 // =============================================================================

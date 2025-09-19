@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -61,8 +61,10 @@ export const TimeSeriesBoxSwarmChart = React.memo(function TimeSeriesBoxSwarmCha
     showAthleteNames: localShowAthleteNames
   });
 
-  // Create chart options
-  const options = createTimeSeriesChartOptions(config, metric, chartData.labels);
+  // Create chart options with memoization for performance
+  const options = useMemo(() => {
+    return createTimeSeriesChartOptions(config, metric, chartData.labels);
+  }, [config, metric, chartData.labels]);
 
   if (!data || data.length === 0 || selectedDates.length === 0) {
     return (

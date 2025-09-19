@@ -10,7 +10,10 @@ import {
   ScatterController,
   LineController,
   PointElement,
-  LineElement
+  LineElement,
+  ChartData,
+  TooltipItem,
+  LegendItem
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
@@ -24,6 +27,7 @@ import type {
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conversion';
+import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
 
 // Register Chart.js components
 ChartJS.register(
@@ -55,7 +59,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   showAllPoints = false,
   showAthleteNames = false
 }: BoxPlotChartProps) {
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
 
   // Transform data for box plot visualization
@@ -94,6 +98,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         const numericValues = values.map(v => safeNumber(v)).filter(v => !isNaN(v));
         const sortedValues = [...numericValues].sort((a, b) => a - b);
         const count = sortedValues.length;
+        if (count === 0) {
+          return; // Skip metrics with no valid data
+        }
         const sum = sortedValues.reduce((acc, val) => acc + val, 0);
         const mean = sum / count;
         const min = Math.min(...sortedValues);
@@ -344,15 +351,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             ctx.textBaseline = 'middle';
 
             // Collect all label positions for collision detection
-            const labelPositions: Array<{
-              x: number;
-              y: number;
-              width: number;
-              height: number;
-              text: string;
-              originalX: number;
-              originalY: number;
-            }> = [];
+            const labelPositions: LabelPosition[] = [];
 
             // First pass: collect all potential label positions
             chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
@@ -364,8 +363,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
                     if (element && element.x !== undefined && element.y !== undefined) {
                       const textWidth = ctx.measureText(point.athleteName).width;
-                      const textHeight = 12;
-                      const baseOffsetX = 8;
+                      const textHeight = CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT;
+                      const baseOffsetX = CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING;
 
                       // Calculate distance from metric center to determine safe positioning
                       const metricIndex = Math.round(element.x);
@@ -383,7 +382,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                       // Avoid positioning text too close to chart edges
                       if (textX + textWidth > chartArea.right - 10) {
                         // If text would overflow right, position to the left instead
-                        textX = element.x - textWidth - 8;
+                        textX = element.x - textWidth - baseOffsetX;
                       }
 
                       // Only add if within chart bounds
@@ -408,63 +407,14 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               }
             });
 
-            // Simple and efficient collision resolution
-            const resolvedPositions = resolveLabelsEfficiently(labelPositions, chartArea);
-
-            // Efficient O(n log n) label collision resolution
-            function resolveLabelsEfficiently(
-              labels: Array<{
-                x: number;
-                y: number;
-                width: number;
-                height: number;
-                text: string;
-                originalX: number;
-                originalY: number;
-              }>,
-              chartBounds: { left: number; top: number; right: number; bottom: number }
-            ) {
-              if (labels.length === 0) return [];
-
-              const padding = 6;
-              const textHeight = 12;
-
-              // Sort labels by Y position for easier vertical spacing
-              const sorted = [...labels].sort((a, b) => a.y - b.y);
-              const resolved = [];
-
-              for (let i = 0; i < sorted.length; i++) {
-                const label = { ...sorted[i] };
-
-                // Check against already placed labels
-                let hasCollision = false;
-                for (const placed of resolved) {
-                  const overlapsX = label.x < placed.x + placed.width + padding &&
-                                   placed.x < label.x + label.width + padding;
-                  const overlapsY = Math.abs(label.y - placed.y) < textHeight + padding;
-
-                  if (overlapsX && overlapsY) {
-                    hasCollision = true;
-                    // Simple strategy: move down
-                    label.y = placed.y + textHeight + padding;
-                    break;
-                  }
-                }
-
-                // Check bounds and add if valid
-                if (label.x >= chartBounds.left &&
-                    label.x + label.width <= chartBounds.right - 5 &&
-                    label.y >= chartBounds.top + 6 &&
-                    label.y <= chartBounds.bottom - 6) {
-                  resolved.push(label);
-                }
-
-                // Limit total labels for performance
-                if (resolved.length >= 20) break;
-              }
-
-              return resolved;
-            }
+            // Efficient collision resolution using spatial indexing
+            const resolvedPositions = resolveLabelsWithSpatialIndex(labelPositions, chartArea, {
+              maxLabels: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_LABELS,
+              padding: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING,
+              textHeight: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT,
+              gridSize: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.GRID_SIZE,
+              maxIterations: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_ITERATIONS,
+            });
 
             // Second pass: render all labels with resolved positions
             resolvedPositions.forEach(label => {
@@ -625,6 +575,19 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       mode: 'point'
     }
   };
+
+  // Cleanup chart instance on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        try {
+          chartRef.current.destroy?.();
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }
+    };
+  }, []);
 
   if (!boxPlotData) {
     return (

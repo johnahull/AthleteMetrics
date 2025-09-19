@@ -192,7 +192,7 @@ export function SwarmChart({
             // Calculate percentile
             const allValues = swarmData?.swarmPoints.map(p => p.y).sort((a, b) => a - b) || [];
             const rank = allValues.filter(v => v < point.y).length;
-            const percentile = (rank / allValues.length) * 100;
+            const percentile = allValues.length > 0 ? (rank / allValues.length) * 100 : 0;
             
             return [
               `Team: ${point.teamName || 'Independent'}`,
