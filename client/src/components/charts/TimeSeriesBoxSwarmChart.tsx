@@ -359,65 +359,16 @@ export function TimeSeriesBoxSwarmChart({
               return label;
             }
           }
-        }
-      },
-      scales: {
-        x: {
-          type: 'linear' as const,
-          title: {
-            display: true,
-            text: 'Measurement Date'
-          },
-          grid: {
-            display: false
-          },
-          afterBuildTicks: function(scale: any) {
-            // Force ticks to be at integer positions where box plots are located
-            scale.ticks = [];
-            for (let i = 0; i < selectedDates.length; i++) {
-              scale.ticks.push({ value: i });
-            }
-          },
-          ticks: {
-            callback: function(value: any) {
-              // Only show labels at integer positions where box plots are located
-              if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
-                const label = currentDateLabels[value] || '';
-                return label;
-              }
-              return '';
-            }
-          },
-          min: -0.5,
-          max: selectedDates.length - 0.5
         },
-        y: {
-          type: 'linear' as const,
-          title: {
-            display: true,
-            text: `${metricLabel} (${unit})`
-          },
-          grid: {
-            color: 'rgba(75, 85, 99, 0.1)'
-          },
-          // Add padding to y-axis to prevent edge rendering
-          grace: '5%'
-        }
-      },
-      interaction: {
-        mode: 'nearest' as const,
-        intersect: false
-      },
-      animation: {
-        duration: 750,
-        onComplete: function() {
-          // Render athlete names if enabled
-          if (localShowAthleteNames && chartRef.current) {
-            const chart = chartRef.current;
-            const ctx = chart.ctx;
-            const chartArea = chart.chartArea;
+        // Add athlete labels plugin if enabled
+        ...(localShowAthleteNames ? {
+          athleteLabels: {
+            afterDraw: function(chart: any) {
+              const ctx = chart.ctx;
+              const chartArea = chart.chartArea;
 
-            if (ctx && chartArea) {
+              if (!ctx || !chartArea) return;
+
               // Save current context state
               ctx.save();
 
@@ -440,8 +391,8 @@ export function TimeSeriesBoxSwarmChart({
 
               // First pass: collect all potential label positions
               chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
-                if (dataset.data && Array.isArray(dataset.data) &&
-                    (dataset.type === 'scatter' || (!dataset.showLine && dataset.data.length === 1))) {
+                // Look for athlete datasets (single points with athlete names)
+                if (dataset.data && Array.isArray(dataset.data)) {
                   dataset.data.forEach((point: any, pointIndex: number) => {
                     if (point && typeof point === 'object' && point.athleteName) {
                       const meta = chart.getDatasetMeta(datasetIndex);
@@ -503,7 +454,7 @@ export function TimeSeriesBoxSwarmChart({
                 const resolved = labels.map(label => ({ ...label }));
                 const padding = 6;
                 const textHeight = 12;
-                const maxIterations = 25; // Increased for time-series charts which may have more points
+                const maxIterations = 25;
                 let iteration = 0;
 
                 // Priority-based processing: labels closer to their original position get priority
@@ -642,7 +593,57 @@ export function TimeSeriesBoxSwarmChart({
               ctx.restore();
             }
           }
+        } : {})
+      },
+      scales: {
+        x: {
+          type: 'linear' as const,
+          title: {
+            display: true,
+            text: 'Measurement Date'
+          },
+          grid: {
+            display: false
+          },
+          afterBuildTicks: function(scale: any) {
+            // Force ticks to be at integer positions where box plots are located
+            scale.ticks = [];
+            for (let i = 0; i < selectedDates.length; i++) {
+              scale.ticks.push({ value: i });
+            }
+          },
+          ticks: {
+            callback: function(value: any) {
+              // Only show labels at integer positions where box plots are located
+              if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
+                const label = currentDateLabels[value] || '';
+                return label;
+              }
+              return '';
+            }
+          },
+          min: -0.5,
+          max: selectedDates.length - 0.5
+        },
+        y: {
+          type: 'linear' as const,
+          title: {
+            display: true,
+            text: `${metricLabel} (${unit})`
+          },
+          grid: {
+            color: 'rgba(75, 85, 99, 0.1)'
+          },
+          // Add padding to y-axis to prevent edge rendering
+          grace: '5%'
         }
+      },
+      interaction: {
+        mode: 'nearest' as const,
+        intersect: false
+      },
+      animation: {
+        duration: 750
       },
       // Add layout padding to prevent edge rendering
       layout: {
