@@ -17,7 +17,7 @@ interface User {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  emails: string[];
   role: string;
   organizationId?: string;
   teamMemberships?: Array<{
@@ -82,12 +82,11 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
     if (!players) return [];
 
     let filtered = players.filter((player: User) => {
-      // Search by name or email
+      // Search by name only
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
         player.firstName.toLowerCase().includes(searchLower) ||
-        player.lastName.toLowerCase().includes(searchLower) ||
-        player.email.toLowerCase().includes(searchLower);
+        player.lastName.toLowerCase().includes(searchLower);
 
       if (!matchesSearch) return false;
 
@@ -200,7 +199,7 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
-                placeholder="Search players by name or email..."
+                placeholder="Search players by name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -307,7 +306,7 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600">{player.email}</p>
+                          <p className="text-sm text-gray-600">{player.emails?.[0] || 'No email'}</p>
                           {playerTeams.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {playerTeams.map((membership, index) => (
