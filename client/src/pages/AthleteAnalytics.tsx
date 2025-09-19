@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, startTransition } from 'react';
 import { createAnalyticsContext, hasOrgAccess } from '../lib/types/user';
 import { useAnalyticsData, useAnalyticsCacheWarming } from '../hooks/useAnalyticsData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -117,7 +117,7 @@ export function AthleteAnalytics() {
       metrics.additional.length + 1,
       timeframe.type
     );
-    setSelectedChartType(recommended);
+    startTransition(() => setSelectedChartType(recommended));
   }, [activeView, metrics, timeframe]);
 
   // Initialize cache warming on component mount
@@ -398,7 +398,7 @@ export function AthleteAnalytics() {
               <CardTitle className="text-sm">Chart Type</CardTitle>
             </CardHeader>
             <CardContent>
-              <Select value={selectedChartType} onValueChange={(value) => setSelectedChartType(value as ChartType)}>
+              <Select value={selectedChartType} onValueChange={(value) => startTransition(() => setSelectedChartType(value as ChartType))}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

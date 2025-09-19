@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -176,7 +176,7 @@ export function CoachAnalytics() {
       metrics.additional.length + 1,
       timeframe.type
     );
-    setSelectedChartType(recommended);
+    startTransition(() => setSelectedChartType(recommended));
   }, [analysisType, metrics, timeframe]);
 
   const loadInitialData = async () => {
@@ -513,7 +513,7 @@ export function CoachAnalytics() {
               <CardTitle className="text-sm">Chart Type</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <Select value={selectedChartType} onValueChange={(value) => setSelectedChartType(value as ChartType)}>
+              <Select value={selectedChartType} onValueChange={(value) => startTransition(() => setSelectedChartType(value as ChartType))}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
