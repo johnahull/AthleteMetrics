@@ -120,10 +120,11 @@ export function ScatterPlotChart({
   const scatterData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    const metrics = Object.keys(statistics || {});
-    if (metrics.length < 2) return null;
+    // Get metrics from actual data (like BoxPlotChart does)
+    const availableMetrics = Array.from(new Set(data.map(d => d.metric)));
+    if (availableMetrics.length < 2) return null;
 
-    const [xMetric, yMetric] = metrics;
+    const [xMetric, yMetric] = availableMetrics;
 
     // Group data by athlete (backend already provides best measurements per athlete)
     const athleteData = data.reduce((acc, point) => {
@@ -151,6 +152,53 @@ export function ScatterPlotChart({
       }));
 
     if (scatterPoints.length === 0) return null;
+
+    // Validate and calculate statistics (like BoxPlotChart does)
+    const validatedStats: Record<string, any> = {};
+
+    console.log('🔍 ScatterPlot Debug:', {
+      availableMetrics,
+      serverStats: statistics,
+      dataLength: data.length
+    });
+
+    for (const metric of [xMetric, yMetric]) {
+      let stats = statistics?.[metric];
+
+      // Check if server stats are valid (not all zeros), if not calculate our own
+      const hasValidStats = stats && stats.count > 0 && (stats.min !== 0 || stats.max !== 0);
+
+      console.log(`📊 Metric ${metric}:`, {
+        hasServerStats: !!stats,
+        hasValidStats,
+        serverStats: stats
+      });
+
+      if (!hasValidStats) {
+        // Calculate statistics on client side as fallback
+        const metricData = data.filter(d => d.metric === metric);
+        const values = metricData.map(d => d.value);
+
+        if (values.length > 0) {
+          const count = values.length;
+          const sum = values.reduce((acc, val) => acc + val, 0);
+          const mean = sum / count;
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+
+          validatedStats[metric] = {
+            count,
+            mean,
+            min,
+            max
+          };
+        }
+      } else {
+        validatedStats[metric] = stats;
+      }
+    }
+
+    console.log('✅ Final validated stats:', validatedStats);
 
     const datasets = [];
 
@@ -190,14 +238,14 @@ export function ScatterPlotChart({
       }
     }
 
-    // Add group averages if statistics available
-    if (statistics && statistics[xMetric]?.mean !== undefined && statistics[yMetric]?.mean !== undefined) {
+    // Add group averages using validated statistics
+    if (validatedStats[xMetric]?.mean !== undefined && validatedStats[yMetric]?.mean !== undefined) {
       datasets.push({
         type: 'scatter' as const,
         label: 'Group Average',
         data: [{
-          x: statistics[xMetric].mean,
-          y: statistics[yMetric].mean
+          x: validatedStats[xMetric].mean,
+          y: validatedStats[yMetric].mean
         }],
         backgroundColor: 'rgba(239, 68, 68, 1)',
         borderColor: 'rgba(239, 68, 68, 1)',
@@ -249,7 +297,8 @@ export function ScatterPlotChart({
       xLabel,
       yLabel,
       points: scatterPoints,
-      regression
+      regression,
+      validatedStats
     } as any;
   }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
 
@@ -311,10 +360,10 @@ export function ScatterPlotChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: showQuadrants && statistics && scatterData ? {
+      annotation: showQuadrants && scatterData ? {
         annotations: (() => {
-          const xMean = statistics[scatterData.xMetric]?.mean || 0;
-          const yMean = statistics[scatterData.yMetric]?.mean || 0;
+          const xMean = scatterData.validatedStats[scatterData.xMetric]?.mean || 0;
+          const yMean = scatterData.validatedStats[scatterData.yMetric]?.mean || 0;
           const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
           // Calculate chart bounds for full background coverage
