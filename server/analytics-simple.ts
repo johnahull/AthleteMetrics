@@ -332,7 +332,7 @@ export class AnalyticsService {
       let chartData: ChartDataPoint[] = data.map((row: QueryResult) => ({
         athleteId: row.athleteId,
         athleteName: row.athleteName || 'Unknown',
-        value: row.value || 0,
+        value: typeof row.value === 'string' ? parseFloat(row.value) : (row.value || 0),
         date: new Date(row.date),
         metric: row.metric,
         teamName: row.teamName || 'No Team'
@@ -357,7 +357,11 @@ export class AnalyticsService {
         if (!groups[point.metric]) {
           groups[point.metric] = [];
         }
-        groups[point.metric].push(point.value);
+        // Ensure value is a number before adding to statistics
+        const numValue = typeof point.value === 'string' ? parseFloat(point.value) : point.value;
+        if (!isNaN(numValue) && isFinite(numValue)) {
+          groups[point.metric].push(numValue);
+        }
         return groups;
       }, {} as Record<string, number[]>);
 
