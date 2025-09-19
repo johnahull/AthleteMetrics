@@ -51,6 +51,8 @@ export function generateSwarmPlotDatasets(
 
   // Create a dataset for each athlete
   athletePointsMap.forEach((points, athleteId) => {
+    if (points.length === 0) return; // Safety check
+
     const athleteName = points[0].athleteName;
     const color = points[0].color;
 

@@ -27,6 +27,7 @@ import type {
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conversion';
+import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
 
 // Register Chart.js components
@@ -323,7 +324,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             .filter(d => d.metric === metric)
             .map((point, pointIndex) => {
               const jitterRange = 0.25;
-              const jitter = (Math.random() - 0.5) * jitterRange;
+              const jitter = generateDeterministicJitter(point.athleteId, jitterRange);
               // Convert value to number to handle string values
               const numericValue = safeNumber(point.value);
 

@@ -15,6 +15,7 @@ import type {
   StatisticalSummary 
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 
 // Register Chart.js components
 ChartJS.register(
@@ -62,7 +63,7 @@ export function SwarmChart({
       // Calculate position along x-axis (categorical) with jitter
       const baseX = 0; // Single category
       const jitterRange = 0.3;
-      const jitter = (Math.random() - 0.5) * jitterRange;
+      const jitter = generateDeterministicJitter(athlete.athleteId, jitterRange);
       
       return {
         x: baseX + jitter,
