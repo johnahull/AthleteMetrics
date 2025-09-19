@@ -88,12 +88,15 @@ export function TimeSeriesBoxSwarmChart({
           if (!dateDataMap.has(dateStr)) {
             dateDataMap.set(dateStr, []);
           }
-          dateDataMap.get(dateStr)!.push({
-            athleteId: trend.athleteId,
-            athleteName: trend.athleteName,
-            value: point.value,
-            isPersonalBest: point.isPersonalBest
-          });
+          const dateDataArray = dateDataMap.get(dateStr);
+          if (dateDataArray) {
+            dateDataArray.push({
+              athleteId: trend.athleteId,
+              athleteName: trend.athleteName,
+              value: point.value,
+              isPersonalBest: point.isPersonalBest
+            });
+          }
         }
       });
     });
@@ -121,10 +124,10 @@ export function TimeSeriesBoxSwarmChart({
       const dateLabel = dateLabels[dateIndex];
 
       if (values.length > 0) {
-        // Calculate box plot statistics
-        const q1Index = Math.floor(values.length * 0.25);
-        const medianIndex = Math.floor(values.length * 0.5);
-        const q3Index = Math.floor(values.length * 0.75);
+        // Calculate box plot statistics with proper quartile calculation
+        const q1Index = Math.max(0, Math.ceil(values.length * 0.25) - 1);
+        const medianIndex = Math.max(0, Math.ceil(values.length * 0.5) - 1);
+        const q3Index = Math.max(0, Math.ceil(values.length * 0.75) - 1);
 
         const min = values[0];
         const max = values[values.length - 1];
@@ -256,8 +259,10 @@ export function TimeSeriesBoxSwarmChart({
         });
 
         // 7. Swarm plot - individual athlete points
-        dateData.forEach((athleteData) => {
-          const jitter = (Math.random() - 0.5) * 0.3; // Small horizontal jitter for visibility
+        dateData.forEach((athleteData, athleteIndex) => {
+          // Use deterministic jitter based on athlete ID hash to prevent jumping on re-render
+          const hash = athleteData.athleteId.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+          const jitter = ((hash % 100) / 100 - 0.5) * 0.3;
           const color = athleteColorMap.get(athleteData.athleteId) || 'rgba(75, 85, 99, 0.8)';
 
           datasets.push({
