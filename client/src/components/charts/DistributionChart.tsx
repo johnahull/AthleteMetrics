@@ -130,7 +130,9 @@ export function DistributionChart({
       const max = Math.max(...sortedValues);
 
       // Calculate median and std dev
-      const median = sortedValues[Math.floor(count / 2)];
+      const median = count % 2 === 1
+        ? sortedValues[Math.floor(count / 2)]
+        : (sortedValues[count / 2 - 1] + sortedValues[count / 2]) / 2;
       const variance = sortedValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
       const std = Math.sqrt(variance);
 
