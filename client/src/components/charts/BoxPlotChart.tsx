@@ -60,8 +60,12 @@ export function BoxPlotChart({
   const boxPlotData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    console.log('🔍 BoxPlotChart data:', data.length, 'points');
-    console.log('🔍 BoxPlotChart statistics:', statistics);
+    console.log('🔍 BoxPlotChart starting analysis:', {
+      dataLength: data.length,
+      dataPoints: data.slice(0, 3),
+      serverStatistics: statistics,
+      hasStatistics: !!statistics
+    });
 
     // Group data by metric
     const metricGroups = data.reduce((groups, point) => {
@@ -104,6 +108,15 @@ export function BoxPlotChart({
         const count = sortedValues.length;
         const sum = sortedValues.reduce((acc, val) => acc + val, 0);
         const mean = sum / count;
+
+        console.log(`🔧 Client-side calculation for ${metric}:`, {
+          rawValues: values.slice(0, 5),
+          sortedValues: sortedValues.slice(0, 5),
+          count,
+          sum,
+          mean,
+          valueTypes: values.slice(0, 3).map(v => typeof v)
+        });
         const min = Math.min(...sortedValues);
         const max = Math.max(...sortedValues);
 
