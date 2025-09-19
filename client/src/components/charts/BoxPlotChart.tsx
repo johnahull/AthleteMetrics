@@ -98,8 +98,17 @@ export function BoxPlotChart({
 
       console.log(`🔍 Processing metric: ${metric}, values: ${values.length}, stats:`, stats);
 
-      // Check if server stats are valid (not all zeros), if not calculate our own
-      const hasValidStats = stats && stats.count > 0 && (stats.min !== 0 || stats.max !== 0);
+      // Check if server stats are valid - simple check for valid mean value
+      const hasValidStats = stats && stats.count > 0 && typeof stats.mean === 'number' && !isNaN(stats.mean);
+
+      console.log(`📊 Stats validation for ${metric}:`, {
+        hasStats: !!stats,
+        count: stats?.count,
+        mean: stats?.mean,
+        meanType: typeof stats?.mean,
+        isValidMean: stats?.mean ? !isNaN(stats.mean) : false,
+        hasValidStats
+      });
 
       if (!hasValidStats && values.length > 0) {
         console.log(`⚠️ Server stats invalid for ${metric}, calculating client-side statistics`);
