@@ -40,7 +40,7 @@ export function registerUserRoutes(app: Express) {
    */
   app.get("/api/users", requireAuth, async (req, res) => {
     try {
-      const { organizationId, includeTeamMemberships } = req.query;
+      const { organizationId, includeTeamMemberships, role } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -65,7 +65,12 @@ export function registerUserRoutes(app: Express) {
       }
 
       const targetOrgId = organizationId || userOrgs[0].organizationId;
-      const orgUsers = await storage.getUsersByOrganization(targetOrgId);
+      let orgUsers = await storage.getUsersByOrganization(targetOrgId);
+
+      // Filter by role if specified (e.g., role=athlete for players only)
+      if (role) {
+        orgUsers = orgUsers.filter((user: any) => user.role === role);
+      }
 
       // Include team memberships if requested
       if (includeTeamMemberships === "true") {

@@ -68,8 +68,8 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
     queryKey: ["/api/users", effectiveOrganizationId, team?.id],
     queryFn: async () => {
       const url = effectiveOrganizationId
-        ? `/api/users?organizationId=${effectiveOrganizationId}&includeTeamMemberships=true`
-        : `/api/users?includeTeamMemberships=true`;
+        ? `/api/users?organizationId=${effectiveOrganizationId}&includeTeamMemberships=true&role=athlete`
+        : `/api/users?includeTeamMemberships=true&role=athlete`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch players');
       return response.json();
