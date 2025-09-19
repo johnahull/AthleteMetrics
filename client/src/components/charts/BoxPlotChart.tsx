@@ -90,7 +90,7 @@ export function BoxPlotChart({
     // Create box plot data for each metric
     labels.forEach((metric, index) => {
       const values = metricGroups[metric].sort((a, b) => a - b);
-      const stats = statistics?.[metric];
+      let stats = statistics?.[metric];
 
       console.log(`🔍 Processing metric: ${metric}, values: ${values.length}, stats:`, stats);
 
