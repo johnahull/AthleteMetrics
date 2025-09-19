@@ -168,6 +168,17 @@ export function ScatterPlotChart({
 
     const [xMetric, yMetric] = metrics;
 
+    console.log('🔍 Debug ScatterPlot:', {
+      statistics,
+      xMetric,
+      yMetric,
+      hasXStats: statistics?.[xMetric],
+      hasYStats: statistics?.[yMetric],
+      xMean: statistics?.[xMetric]?.mean,
+      yMean: statistics?.[yMetric]?.mean,
+      dataLength: data.length
+    });
+
     // Group data by athlete (backend already provides best measurements per athlete)
     const athleteData = data.reduce((acc, point) => {
       if (!acc[point.athleteId]) {
@@ -209,6 +220,7 @@ export function ScatterPlotChart({
 
     if (mainPoints.length > 0) {
       datasets.push({
+        type: 'scatter' as const,
         label: 'Athletes',
         data: mainPoints,
         backgroundColor: 'rgba(59, 130, 246, 0.6)',
@@ -224,6 +236,7 @@ export function ScatterPlotChart({
       const highlightedPoint = scatterPoints.find(p => p.athleteId === highlightAthlete);
       if (highlightedPoint) {
         datasets.push({
+          type: 'scatter' as const,
           label: highlightedPoint.athleteName,
           data: [highlightedPoint],
           backgroundColor: 'rgba(16, 185, 129, 1)',
@@ -238,22 +251,37 @@ export function ScatterPlotChart({
 
     // Add group averages if statistics available
     if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
+      const groupAverage = {
+        x: statistics[xMetric].mean,
+        y: statistics[yMetric].mean
+      };
+      console.log('✅ Adding group average:', groupAverage);
       datasets.push({
+        type: 'scatter' as const,
         label: 'Group Average',
-        data: [{
-          x: statistics[xMetric].mean,
-          y: statistics[yMetric].mean
-        }],
+        data: [groupAverage],
         backgroundColor: 'rgba(239, 68, 68, 1)',
         borderColor: 'rgba(239, 68, 68, 1)',
         borderWidth: 3,
         pointRadius: 8,
         pointStyle: 'crossRot'
       });
+    } else {
+      console.log('❌ Not adding group average:', {
+        hasStats: !!statistics,
+        hasXMean: statistics?.[xMetric]?.mean,
+        hasYMean: statistics?.[yMetric]?.mean
+      });
     }
 
     // Calculate regression line
     const regression = calculateRegression(scatterPoints);
+    console.log('📈 Regression calculation:', {
+      showRegressionLine,
+      regression,
+      scatterPointsLength: scatterPoints.length,
+      willAddRegression: showRegressionLine && regression && scatterPoints.length >= 2
+    });
 
     // Add regression line if enabled and we have enough points
     if (showRegressionLine && regression && scatterPoints.length >= 2) {
@@ -284,6 +312,16 @@ export function ScatterPlotChart({
     const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
     const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+
+    console.log('📊 Final datasets for Chart.js:', {
+      datasetCount: datasets.length,
+      datasets: datasets.map(d => ({
+        type: d.type,
+        label: d.label,
+        dataLength: d.data.length,
+        hasGroupAverage: d.label === 'Group Average'
+      }))
+    });
 
     return {
       datasets,
