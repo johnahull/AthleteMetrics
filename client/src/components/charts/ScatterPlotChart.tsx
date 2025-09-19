@@ -45,14 +45,31 @@ ChartJS.register(
 function calculateRegression(points: any[]) {
   if (points.length < 2) return null;
 
-  const n = points.length;
-  const sumX = points.reduce((sum, p) => sum + p.x, 0);
-  const sumY = points.reduce((sum, p) => sum + p.y, 0);
-  const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
-  const sumX2 = points.reduce((sum, p) => sum + p.x * p.x, 0);
+  // Validate points have valid x and y values
+  const validPoints = points.filter(p =>
+    typeof p.x === 'number' && typeof p.y === 'number' &&
+    !isNaN(p.x) && !isNaN(p.y) &&
+    isFinite(p.x) && isFinite(p.y)
+  );
 
-  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  if (validPoints.length < 2) return null;
+
+  const n = validPoints.length;
+  const sumX = validPoints.reduce((sum, p) => sum + p.x, 0);
+  const sumY = validPoints.reduce((sum, p) => sum + p.y, 0);
+  const sumXY = validPoints.reduce((sum, p) => sum + p.x * p.y, 0);
+  const sumX2 = validPoints.reduce((sum, p) => sum + p.x * p.x, 0);
+
+  const denominator = n * sumX2 - sumX * sumX;
+
+  // Check for division by zero (all x values are the same)
+  if (denominator === 0 || !isFinite(denominator)) return null;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
   const intercept = (sumY - slope * sumX) / n;
+
+  // Validate results
+  if (!isFinite(slope) || !isFinite(intercept)) return null;
 
   return { slope, intercept };
 }
@@ -413,11 +430,13 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       tooltip: {
         callbacks: {
           title: (context) => {
+            if (!context || context.length === 0) return 'Unknown';
             const point = context[0].raw as any;
-            return point.athleteName || 'Group Average';
+            return point?.athleteName || 'Group Average';
           },
           label: (context) => {
             const point = context.raw as any;
+            if (!point) return ['No data'];
             return [
               `${scatterData?.xLabel}: ${point.x}${scatterData?.xUnit}`,
               `${scatterData?.yLabel}: ${point.y}${scatterData?.yUnit}`
@@ -425,7 +444,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           },
           afterLabel: (context) => {
             const point = context.raw as any;
-            return point.teamName ? [`Team: ${point.teamName}`] : [];
+            return point?.teamName ? [`Team: ${point.teamName}`] : [];
           }
         }
       },
