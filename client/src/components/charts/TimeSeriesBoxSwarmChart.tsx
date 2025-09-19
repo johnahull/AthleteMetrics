@@ -696,7 +696,7 @@ export function TimeSeriesBoxSwarmChart({
 
       <Chart
         ref={chartRef}
-        type="line"
+        type="scatter"
         data={chartData}
         options={chartOptions}
       />
