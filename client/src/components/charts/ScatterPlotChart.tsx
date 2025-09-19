@@ -247,8 +247,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         type: 'scatter' as const,
         label: 'Group Average',
         data: [{
-          x: validatedStats[xMetric].mean,
-          y: validatedStats[yMetric].mean
+          x: validatedStats[xMetric]?.mean || 0,
+          y: validatedStats[yMetric]?.mean || 0
         }],
         backgroundColor: CHART_CONFIG.COLORS.AVERAGE,
         borderColor: CHART_CONFIG.COLORS.AVERAGE,
@@ -515,6 +515,46 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     );
   }
 
+  // Generate quadrant legend data
+  const quadrantLegend = useMemo(() => {
+    if (!scatterData || !showQuadrants) return null;
+
+    const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+    const colorMap = {
+      green: { bg: CHART_CONFIG.COLORS.QUADRANTS.ELITE, border: 'rgba(16, 185, 129, 0.3)' },
+      yellow: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
+      orange: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
+      red: { bg: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK, border: 'rgba(239, 68, 68, 0.3)' }
+    };
+
+    return [
+      {
+        label: labels.topRight.label,
+        color: labels.topRight.color,
+        position: 'Top Right',
+        ...colorMap[labels.topRight.color as keyof typeof colorMap]
+      },
+      {
+        label: labels.topLeft.label,
+        color: labels.topLeft.color,
+        position: 'Top Left',
+        ...colorMap[labels.topLeft.color as keyof typeof colorMap]
+      },
+      {
+        label: labels.bottomRight.label,
+        color: labels.bottomRight.color,
+        position: 'Bottom Right',
+        ...colorMap[labels.bottomRight.color as keyof typeof colorMap]
+      },
+      {
+        label: labels.bottomLeft.label,
+        color: labels.bottomLeft.color,
+        position: 'Bottom Left',
+        ...colorMap[labels.bottomLeft.color as keyof typeof colorMap]
+      }
+    ];
+  }, [scatterData, showQuadrants]);
+
   return (
     <div className="w-full h-full space-y-4">
       {/* Controls */}
@@ -549,6 +589,39 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           </div>
         )}
       </div>
+
+      {/* Quadrant Legend */}
+      {quadrantLegend && (
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+            Performance Quadrants
+          </h4>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            {quadrantLegend.map((item, index) => (
+              <div key={index} className="flex items-center space-x-2">
+                <div
+                  className="w-4 h-4 rounded border-2 flex-shrink-0"
+                  style={{
+                    backgroundColor: item.bg,
+                    borderColor: item.border
+                  }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {item.label}
+                  </div>
+                  <div className="text-gray-500 dark:text-gray-400">
+                    {item.position}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            Quadrants are based on the mean values of {scatterData?.xLabel} and {scatterData?.yLabel}
+          </div>
+        </div>
+      )}
 
       {/* Chart */}
       <div className="h-96">
