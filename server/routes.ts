@@ -1143,8 +1143,14 @@ export function registerRoutes(app: Express) {
 
           // Validate player belongs to the same organization (if not site admin)
           if (!userIsSiteAdmin) {
-            const playerOrgAccess = await canAccessOrganization(currentUser, player.organizationId);
-            if (!playerOrgAccess) {
+            const playerOrgs = await storage.getUserOrganizations(playerId);
+            const currentUserOrgs = await storage.getUserOrganizations(currentUser.id);
+
+            const hasSharedOrg = playerOrgs.some(pOrg =>
+              currentUserOrgs.some(uOrg => uOrg.organizationId === pOrg.organizationId)
+            );
+
+            if (!hasSharedOrg) {
               errors.push({ playerId, error: "Access denied to this player" });
               continue;
             }
@@ -1174,7 +1180,7 @@ export function registerRoutes(app: Express) {
       // Return results
       const response = {
         success: results.length,
-        errors: errors.length,
+        errorCount: errors.length,
         results,
         errors: errors.length > 0 ? errors : undefined
       };

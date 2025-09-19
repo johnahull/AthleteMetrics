@@ -106,14 +106,14 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
   }, [players, searchTerm, showOnlyAvailable, team]);
 
   // Check if a player is already on the team
-  const isPlayerOnTeam = (player: User) => {
+  const isPlayerOnTeam = (player: User): boolean => {
     return player.teamMemberships?.some(
       membership => membership.teamId === team?.id && membership.isActive === "true"
-    );
+    ) ?? false;
   };
 
   // Get player's current teams (excluding the target team)
-  const getPlayerTeams = (player: User) => {
+  const getPlayerTeams = (player: User): Array<{teamId: string; teamName: string; isActive: string; season?: string}> => {
     return player.teamMemberships?.filter(
       membership => membership.teamId !== team?.id && membership.isActive === "true"
     ) || [];
@@ -156,8 +156,8 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
 
   const handleSelectAll = () => {
     const availablePlayerIds = filteredPlayers
-      .filter(player => !isPlayerOnTeam(player))
-      .map(player => player.id);
+      .filter((player: User) => !isPlayerOnTeam(player))
+      .map((player: User) => player.id);
     setSelectedPlayerIds(availablePlayerIds);
   };
 
@@ -227,7 +227,7 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
                     variant="outline"
                     size="sm"
                     onClick={handleSelectAll}
-                    disabled={isPending || filteredPlayers.filter(p => !isPlayerOnTeam(p)).length === 0}
+                    disabled={isPending || filteredPlayers.filter((p: User) => !isPlayerOnTeam(p)).length === 0}
                   >
                     Select All Available
                   </Button>
