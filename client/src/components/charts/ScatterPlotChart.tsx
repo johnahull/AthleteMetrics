@@ -166,6 +166,49 @@ export function ScatterPlotChart({
 
     const [xMetric, yMetric] = metrics;
 
+    console.log('🔍 ScatterPlot statistics:', statistics);
+
+    // Check if server stats are valid and calculate client-side fallback if needed
+    let validStats = statistics;
+    if (statistics && (
+      !statistics[xMetric] || statistics[xMetric].count === 0 || statistics[xMetric].mean === 0 ||
+      !statistics[yMetric] || statistics[yMetric].count === 0 || statistics[yMetric].mean === 0
+    )) {
+      console.log('⚠️ Server stats invalid for scatter plot, calculating client-side statistics');
+
+      // Group data by metric to calculate stats
+      const metricGroups = data.reduce((groups, point) => {
+        if (!groups[point.metric]) groups[point.metric] = [];
+        groups[point.metric].push(point.value);
+        return groups;
+      }, {} as Record<string, number[]>);
+
+      // Calculate statistics for each metric
+      validStats = {};
+      for (const [metric, values] of Object.entries(metricGroups)) {
+        const count = values.length;
+        const sum = values.reduce((acc, val) => acc + val, 0);
+        const mean = sum / count;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+
+        validStats[metric] = {
+          count,
+          mean,
+          median: mean, // Approximation for now
+          min,
+          max,
+          std: 0,
+          variance: 0,
+          percentiles: {
+            p5: min, p10: min, p25: min, p50: mean,
+            p75: max, p90: max, p95: max
+          }
+        };
+      }
+      console.log('✅ Client-calculated scatter stats:', validStats);
+    }
+
     // Group data by athlete (backend already provides best measurements per athlete)
     const athleteData = data.reduce((acc, point) => {
       if (!acc[point.athleteId]) {
@@ -235,12 +278,12 @@ export function ScatterPlotChart({
     }
 
     // Add group averages if statistics available
-    if (statistics && statistics[xMetric] && statistics[yMetric]) {
+    if (validStats && validStats[xMetric] && validStats[yMetric]) {
       datasets.push({
         label: 'Group Average',
         data: [{
-          x: statistics[xMetric].mean,
-          y: statistics[yMetric].mean
+          x: validStats[xMetric].mean,
+          y: validStats[yMetric].mean
         }],
         backgroundColor: 'rgba(239, 68, 68, 1)',
         borderColor: 'rgba(239, 68, 68, 1)',
