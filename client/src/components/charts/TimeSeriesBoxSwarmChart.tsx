@@ -372,7 +372,7 @@ export function TimeSeriesBoxSwarmChart({
         }
       }
     };
-  }, [config, metric]);
+  }, [config, metric, selectedDates]);
 
   if (!data || data.length === 0) {
     return (

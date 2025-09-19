@@ -109,24 +109,37 @@ export function DateSelector({
   };
 
   if (!isExpanded) {
+    const hasSelectedDates = selectedDates.length > 0;
+    const containerClasses = hasSelectedDates
+      ? `p-4 bg-blue-50 rounded-lg border border-blue-200 ${className}`
+      : `p-4 bg-red-50 rounded-lg border border-red-200 ${className}`;
+    const iconColor = hasSelectedDates ? "text-blue-600" : "text-red-600";
+    const textColor = hasSelectedDates ? "text-blue-900" : "text-red-900";
+
     return (
-      <div className={`p-4 bg-gray-50 rounded-lg border ${className}`}>
+      <div className={containerClasses}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-900">
+            <Calendar className={`w-4 h-4 ${iconColor}`} />
+            <span className={`text-sm font-medium ${textColor}`}>
               Measurement Dates Selected: {selectedDates.length} of {maxSelection}
             </span>
             <Badge variant="outline" className="text-xs">
               {dateOptions.length} available
             </Badge>
+            {!hasSelectedDates && (
+              <span className="text-xs text-red-600 font-medium">
+                ← Select dates to view chart
+              </span>
+            )}
           </div>
           <Button
-            variant="outline"
+            variant={hasSelectedDates ? "outline" : "default"}
             size="sm"
             onClick={() => setIsExpanded(true)}
+            className={!hasSelectedDates ? "bg-red-600 hover:bg-red-700 text-white" : ""}
           >
-            Manage Dates
+            {hasSelectedDates ? "Manage Dates" : "Select Dates"}
           </Button>
         </div>
       </div>
