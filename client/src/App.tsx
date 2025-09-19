@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect } from "react";
+import React, { Suspense, useEffect, startTransition } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -43,13 +43,41 @@ function Router() {
       <Route path="/enhanced-login" component={EnhancedLogin} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/athletes/:id" component={AthleteProfile} />
-      <Route path="/athletes" component={Athletes} />
-      <Route path="/organizations/:id" component={OrganizationProfile} />
-      <Route path="/organizations" component={Organizations} />
-      <Route path="/users/:id" component={UserProfile} />
-      <Route path="/user-management" component={UserManagement} />
-      <Route path="/data-entry" component={DataEntry} />
+      <Route path="/athletes/:id">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading...</span></div>}>
+          <AthleteProfile />
+        </Suspense>
+      </Route>
+      <Route path="/athletes">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Athletes...</span></div>}>
+          <Athletes />
+        </Suspense>
+      </Route>
+      <Route path="/organizations/:id">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading...</span></div>}>
+          <OrganizationProfile />
+        </Suspense>
+      </Route>
+      <Route path="/organizations">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Organizations...</span></div>}>
+          <Organizations />
+        </Suspense>
+      </Route>
+      <Route path="/users/:id">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading User...</span></div>}>
+          <UserProfile />
+        </Suspense>
+      </Route>
+      <Route path="/user-management">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading User Management...</span></div>}>
+          <UserManagement />
+        </Suspense>
+      </Route>
+      <Route path="/data-entry">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Data Entry...</span></div>}>
+          <DataEntry />
+        </Suspense>
+      </Route>
       <Route path="/analytics">
         <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Analytics...</span></div>}>
           <Analytics />
@@ -65,12 +93,36 @@ function Router() {
           <AthleteAnalytics />
         </Suspense>
       </Route>
-      <Route path="/publish" component={Publish} />
-      <Route path="/import-export" component={ImportExport} />
-      <Route path="/admin" component={AdminPage} />
-      <Route path="/teams" component={Teams} />
-      <Route path="/profile" component={Profile} />
-      <Route path="/" component={Dashboard} />
+      <Route path="/publish">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Publish...</span></div>}>
+          <Publish />
+        </Suspense>
+      </Route>
+      <Route path="/import-export">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Import/Export...</span></div>}>
+          <ImportExport />
+        </Suspense>
+      </Route>
+      <Route path="/admin">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Admin...</span></div>}>
+          <AdminPage />
+        </Suspense>
+      </Route>
+      <Route path="/teams">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Teams...</span></div>}>
+          <Teams />
+        </Suspense>
+      </Route>
+      <Route path="/profile">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Profile...</span></div>}>
+          <Profile />
+        </Suspense>
+      </Route>
+      <Route path="/">
+        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Dashboard...</span></div>}>
+          <Dashboard />
+        </Suspense>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
