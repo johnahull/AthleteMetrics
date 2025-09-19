@@ -317,7 +317,7 @@ export function CoachAnalytics() {
 
     // Helper function to format metrics for display
     const formatMetricsForDisplay = () => {
-      if (selectedChartType === 'scatter_plot' && metrics.additional.length > 0) {
+      if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
         const primaryLabel = METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
         const additionalLabel = METRIC_CONFIG[metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || metrics.additional[0];
         return `${primaryLabel} vs ${additionalLabel}`;
@@ -329,7 +329,7 @@ export function CoachAnalytics() {
       case 'individual':
         const athleteName = availableAthletes.find(a => a.id === selectedAthleteId)?.name;
         title = athleteName ? `${athleteName} - Performance Analysis` : 'Individual Performance Analysis';
-        if (selectedChartType === 'scatter_plot' && metrics.additional.length > 0) {
+        if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
           subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
         } else {
           subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
