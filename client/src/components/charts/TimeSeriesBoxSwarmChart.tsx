@@ -440,7 +440,8 @@ export function TimeSeriesBoxSwarmChart({
 
               // First pass: collect all potential label positions
               chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
-                if (dataset.data && Array.isArray(dataset.data) && dataset.type === 'scatter') {
+                if (dataset.data && Array.isArray(dataset.data) &&
+                    (dataset.type === 'scatter' || (!dataset.showLine && dataset.data.length === 1))) {
                   dataset.data.forEach((point: any, pointIndex: number) => {
                     if (point && typeof point === 'object' && point.athleteName) {
                       const meta = chart.getDatasetMeta(datasetIndex);
