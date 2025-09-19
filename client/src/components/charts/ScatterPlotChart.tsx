@@ -9,6 +9,7 @@ import {
   Legend,
   ChartOptions,
   ScatterController,
+  LineController,
   Filler
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
@@ -32,6 +33,7 @@ ChartJS.register(
   Tooltip,
   Legend,
   ScatterController,
+  LineController,
   Filler,
   annotationPlugin
 );
@@ -171,8 +173,8 @@ export function ScatterPlotChart({
     // Check if server stats are valid and calculate client-side fallback if needed
     let validStats = statistics;
     if (statistics && (
-      !statistics[xMetric] || statistics[xMetric].count === 0 || statistics[xMetric].mean === 0 ||
-      !statistics[yMetric] || statistics[yMetric].count === 0 || statistics[yMetric].mean === 0
+      !statistics[xMetric] || statistics[xMetric].count === 0 ||
+      !statistics[yMetric] || statistics[yMetric].count === 0
     )) {
       console.log('⚠️ Server stats invalid for scatter plot, calculating client-side statistics');
 
@@ -279,12 +281,14 @@ export function ScatterPlotChart({
 
     // Add group averages if statistics available
     if (validStats && validStats[xMetric] && validStats[yMetric]) {
+      const groupAverage = {
+        x: validStats[xMetric].mean,
+        y: validStats[yMetric].mean
+      };
+
       datasets.push({
         label: 'Group Average',
-        data: [{
-          x: validStats[xMetric].mean,
-          y: validStats[yMetric].mean
-        }],
+        data: [groupAverage],
         backgroundColor: 'rgba(239, 68, 68, 1)',
         borderColor: 'rgba(239, 68, 68, 1)',
         borderWidth: 3,
@@ -335,7 +339,8 @@ export function ScatterPlotChart({
       xLabel,
       yLabel,
       points: scatterPoints,
-      regression
+      regression,
+      validStats
     } as any;
   }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
 
@@ -397,10 +402,11 @@ export function ScatterPlotChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: showQuadrants && statistics && scatterData ? {
+      annotation: showQuadrants && scatterData && scatterData.datasets.length > 0 ? {
         annotations: (() => {
-          const xMean = statistics[scatterData.xMetric]?.mean || 0;
-          const yMean = statistics[scatterData.yMetric]?.mean || 0;
+          // Use validStats which has client-side fallback calculations
+          const xMean = scatterData.validStats?.[scatterData.xMetric]?.mean || 0;
+          const yMean = scatterData.validStats?.[scatterData.yMetric]?.mean || 0;
           const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
           // Calculate chart bounds for full background coverage
@@ -500,7 +506,11 @@ export function ScatterPlotChart({
         },
         grid: {
           display: true
-        }
+        },
+        ...(scatterData?.points && scatterData.points.length > 0 ? {
+          min: Math.min(...scatterData.points.map((p: any) => p.x)) * 0.95,
+          max: Math.max(...scatterData.points.map((p: any) => p.x)) * 1.05
+        } : {})
       },
       y: {
         type: 'linear',
@@ -510,7 +520,11 @@ export function ScatterPlotChart({
         },
         grid: {
           display: true
-        }
+        },
+        ...(scatterData?.points && scatterData.points.length > 0 ? {
+          min: Math.min(...scatterData.points.map((p: any) => p.y)) * 0.95,
+          max: Math.max(...scatterData.points.map((p: any) => p.y)) * 1.05
+        } : {})
       }
     },
     elements: {
