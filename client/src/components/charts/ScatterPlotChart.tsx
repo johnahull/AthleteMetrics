@@ -387,7 +387,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     plugins: {
       title: {
         display: true,
-        text: config.title,
+        text: scatterData ? `${scatterData.xLabel} vs ${scatterData.yLabel}` : config.title,
         font: {
           size: CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE + 6, // Slightly larger for title
           weight: 'bold'
