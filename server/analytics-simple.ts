@@ -362,7 +362,14 @@ export class AnalyticsService {
       }, {} as Record<string, number[]>);
 
       for (const [metric, values] of Object.entries(metricGroups)) {
+        console.log(`🔍 Server statistics calculation for ${metric}:`, {
+          valueCount: values.length,
+          sampleValues: values.slice(0, 5),
+          valueTypes: values.slice(0, 5).map(v => typeof v),
+          allValuesValid: values.every(v => typeof v === 'number' && !isNaN(v) && isFinite(v))
+        });
         statistics[metric] = calculateStatistics(values);
+        console.log(`📊 Server calculated statistics for ${metric}:`, statistics[metric]);
       }
 
       // Generate trends data if timeframe type is trends
