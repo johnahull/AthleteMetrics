@@ -338,10 +338,16 @@ export function TimeSeriesBoxSwarmChart({
           ticks: {
             stepSize: 1,
             callback: function(value: any) {
+              // Debug logging to understand what's happening
+              console.log('Tick callback called with value:', value, 'selectedDates.length:', selectedDates.length, 'currentDateLabels:', currentDateLabels);
+
               // Only show labels at integer positions where box plots are located
               if (Number.isInteger(value) && value >= 0 && value < selectedDates.length) {
-                return currentDateLabels[value] || '';
+                const label = currentDateLabels[value] || '';
+                console.log('Returning label for value', value, ':', label);
+                return label;
               }
+              console.log('No label for value:', value);
               return '';
             }
           },
