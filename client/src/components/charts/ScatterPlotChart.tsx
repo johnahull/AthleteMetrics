@@ -377,7 +377,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     } finally {
       monitor.endTiming('dataTransformation');
     }
-  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants]);
+  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants, localShowAthleteNames]);
 
   // Memoize correlation coefficient calculation
   const correlation = useMemo(() => {
@@ -411,7 +411,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   }, [scatterData?.points]);
 
   // Chart options
-  const options: ChartOptions<'scatter'> = {
+  const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -589,7 +589,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         (event.native.target as HTMLElement).style.cursor = elements.length > 0 ? 'pointer' : 'default';
       }
     }
-  };
+  }), [scatterData, config, showQuadrants, localShowAthleteNames]);
 
   // Generate quadrant legend data (must be before early return to avoid hooks violation)
   const quadrantLegend = useMemo(() => {
