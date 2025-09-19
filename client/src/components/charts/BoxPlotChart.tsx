@@ -60,6 +60,9 @@ export function BoxPlotChart({
   const boxPlotData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
+    console.log('🔍 BoxPlotChart data:', data.length, 'points');
+    console.log('🔍 BoxPlotChart statistics:', statistics);
+
     // Group data by metric
     const metricGroups = data.reduce((groups, point) => {
       if (!groups[point.metric]) {
@@ -69,6 +72,8 @@ export function BoxPlotChart({
       return groups;
     }, {} as Record<string, number[]>);
 
+    console.log('🔍 BoxPlotChart metricGroups:', metricGroups);
+
     const datasets: any[] = [];
     const labels = Object.keys(metricGroups);
 
@@ -77,7 +82,16 @@ export function BoxPlotChart({
       const values = metricGroups[metric].sort((a, b) => a - b);
       const stats = statistics?.[metric];
 
+      console.log(`🔍 Processing metric: ${metric}, values: ${values.length}, stats:`, stats);
+
       if (stats && values.length > 0) {
+        console.log(`✅ Creating box plot for ${metric}:`, {
+          p25: stats.percentiles.p25,
+          p50: stats.percentiles.p50,
+          p75: stats.percentiles.p75,
+          min: stats.min,
+          max: stats.max
+        });
         const boxWidth = 0.4;
         const xPos = index;
 
@@ -254,11 +268,16 @@ export function BoxPlotChart({
             });
           }
         }
+      } else {
+        console.log(`❌ No stats or empty values for metric: ${metric}, stats:`, stats, 'values:', values.length);
       }
     });
 
+    console.log('📊 Final BoxPlotChart datasets:', datasets.length, 'datasets created');
+    console.log('📊 Dataset labels:', datasets.map(d => d.label));
+
     return {
-      labels: labels.map(metric => 
+      labels: labels.map(metric =>
         METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
       ),
       datasets
