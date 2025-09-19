@@ -315,19 +315,33 @@ export function CoachAnalytics() {
     let title = 'Performance Analytics';
     let subtitle = '';
 
+    // Helper function to format metrics for display
+    const formatMetricsForDisplay = () => {
+      if (selectedChartType === 'scatter_plot' && metrics.additional.length > 0) {
+        const primaryLabel = METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
+        const additionalLabel = METRIC_CONFIG[metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || metrics.additional[0];
+        return `${primaryLabel} vs ${additionalLabel}`;
+      }
+      return METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
+    };
+
     switch (analysisType) {
       case 'individual':
         const athleteName = availableAthletes.find(a => a.id === selectedAthleteId)?.name;
         title = athleteName ? `${athleteName} - Performance Analysis` : 'Individual Performance Analysis';
-        subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
+        if (selectedChartType === 'scatter_plot' && metrics.additional.length > 0) {
+          subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
+        } else {
+          subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
+        }
         break;
       case 'intra_group':
         title = 'Multi-Athlete Analysis';
-        subtitle = `Comparing athletes within selected groups - ${metrics.primary}`;
+        subtitle = `Comparing athletes within selected groups - ${formatMetricsForDisplay()}`;
         break;
       case 'inter_group':
         title = 'Inter-Group Comparison';
-        subtitle = `Comparing performance across different groups - ${metrics.primary}`;
+        subtitle = `Comparing performance across different groups - ${formatMetricsForDisplay()}`;
         break;
     }
 
