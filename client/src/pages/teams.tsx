@@ -12,8 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
 import ArchiveTeamModal from "@/components/archive-team-modal";
-import AddPlayersToTeamModal from "@/components/AddPlayersToTeamModal";
-import ManageTeamAthletesModal from "@/components/ManageTeamAthletesModal";
+import TeamAthletesModal from "@/components/TeamAthletesModal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { useAuth } from "@/lib/auth";
 import type { Team, ArchiveTeam } from "@shared/schema";
@@ -22,8 +21,7 @@ export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [archivingTeam, setArchivingTeam] = useState<Team | null>(null);
-  const [addingPlayersToTeam, setAddingPlayersToTeam] = useState<Team | null>(null);
-  const [managingTeamAthletes, setManagingTeamAthletes] = useState<Team | null>(null);
+  const [managingAthletes, setManagingAthletes] = useState<{ team: Team; defaultTab?: 'current' | 'add' } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -247,15 +245,15 @@ export default function Teams() {
                       Edit Team
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => setAddingPlayersToTeam(team)}
+                      onClick={() => setManagingAthletes({ team, defaultTab: 'add' })}
                       data-testid={`menu-add-players-${team.id}`}
                       disabled={isArchived}
                     >
                       <Users className="h-4 w-4 mr-2" />
-                      Add Players
+                      Add Athletes
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => setManagingTeamAthletes(team)}
+                      onClick={() => setManagingAthletes({ team, defaultTab: 'current' })}
                       data-testid={`menu-manage-athletes-${team.id}`}
                       disabled={isArchived}
                     >
@@ -420,16 +418,11 @@ export default function Teams() {
         />
       )}
 
-      <AddPlayersToTeamModal
-        isOpen={!!addingPlayersToTeam}
-        onClose={() => setAddingPlayersToTeam(null)}
-        team={addingPlayersToTeam}
-      />
-
-      <ManageTeamAthletesModal
-        isOpen={!!managingTeamAthletes}
-        onClose={() => setManagingTeamAthletes(null)}
-        team={managingTeamAthletes}
+      <TeamAthletesModal
+        isOpen={!!managingAthletes}
+        onClose={() => setManagingAthletes(null)}
+        team={managingAthletes?.team || null}
+        defaultTab={managingAthletes?.defaultTab || 'current'}
       />
     </div>
   );
