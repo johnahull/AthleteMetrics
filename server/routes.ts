@@ -1259,6 +1259,99 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Remove athlete from team
+  app.delete("/api/teams/:teamId/athletes/:athleteId", requireAuth, async (req, res) => {
+    const { teamId, athleteId } = req.params;
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Validate UUIDs
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(teamId) || !uuidRegex.test(athleteId)) {
+        return res.status(400).json({ message: "Invalid team or athlete ID" });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team's organization
+      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
+        return res.status(403).json({ message: "Access denied to this organization" });
+      }
+
+      // Check if athlete exists
+      const athlete = await storage.getUser(athleteId);
+      if (!athlete) {
+        return res.status(404).json({ message: "Athlete not found" });
+      }
+
+      // Validate athlete belongs to the same organization (if not site admin)
+      if (!userIsSiteAdmin) {
+        const [athleteOrgs, currentUserOrgs] = await Promise.all([
+          storage.getUserOrganizations(athleteId),
+          storage.getUserOrganizations(currentUser.id)
+        ]);
+
+        const hasSharedOrg = athleteOrgs.some(aOrg =>
+          currentUserOrgs.some(uOrg => uOrg.organizationId === aOrg.organizationId)
+        );
+
+        if (!hasSharedOrg) {
+          return res.status(403).json({ message: "Access denied to this athlete" });
+        }
+      }
+
+      // Check if athlete is actually on the team
+      const existingMemberships = await storage.getUserTeams(athleteId);
+      const isActiveOnTeam = existingMemberships.some(membership =>
+        membership.teamId === teamId && membership.isActive === "true"
+      );
+
+      if (!isActiveOnTeam) {
+        return res.status(400).json({ message: "Athlete is not currently on this team" });
+      }
+
+      // Remove athlete from team
+      await storage.removeUserFromTeam(athleteId, teamId);
+
+      // Audit log
+      console.log(`Team operation: User ${currentUser.id} removed athlete ${athleteId} from team ${teamId} (${team.name})`);
+
+      res.json({
+        message: "Athlete removed from team successfully",
+        teamId,
+        teamName: team.name,
+        athleteId,
+        athleteName: `${athlete.firstName} ${athlete.lastName}`
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error removing athlete ${athleteId} from team ${teamId}:`, error);
+
+      res.status(500).json({
+        message: "Failed to remove athlete from team",
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        teamId,
+        athleteId
+      });
+    }
+  });
+
   // Athlete routes
   app.get("/api/athletes", requireAuth, async (req, res) => {
     try {

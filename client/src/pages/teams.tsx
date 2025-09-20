@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Edit, Trash2, Users, MoreHorizontal, Archive, RotateCcw } from "lucide-react";
+import { Plus, Edit, Trash2, Users, MoreHorizontal, Archive, RotateCcw, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
 import ArchiveTeamModal from "@/components/archive-team-modal";
 import AddPlayersToTeamModal from "@/components/AddPlayersToTeamModal";
+import ManageTeamAthletesModal from "@/components/ManageTeamAthletesModal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { useAuth } from "@/lib/auth";
 import type { Team, ArchiveTeam } from "@shared/schema";
@@ -22,6 +23,7 @@ export default function Teams() {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [archivingTeam, setArchivingTeam] = useState<Team | null>(null);
   const [addingPlayersToTeam, setAddingPlayersToTeam] = useState<Team | null>(null);
+  const [managingTeamAthletes, setManagingTeamAthletes] = useState<Team | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -252,6 +254,14 @@ export default function Teams() {
                       <Users className="h-4 w-4 mr-2" />
                       Add Players
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setManagingTeamAthletes(team)}
+                      data-testid={`menu-manage-athletes-${team.id}`}
+                      disabled={isArchived}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Manage Athletes
+                    </DropdownMenuItem>
                     {isArchived ? (
                       <DropdownMenuItem 
                         onClick={() => unarchiveTeamMutation.mutate(team.id)}
@@ -414,6 +424,12 @@ export default function Teams() {
         isOpen={!!addingPlayersToTeam}
         onClose={() => setAddingPlayersToTeam(null)}
         team={addingPlayersToTeam}
+      />
+
+      <ManageTeamAthletesModal
+        isOpen={!!managingTeamAthletes}
+        onClose={() => setManagingTeamAthletes(null)}
+        team={managingTeamAthletes}
       />
     </div>
   );
