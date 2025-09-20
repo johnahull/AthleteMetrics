@@ -9,6 +9,11 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertUserSchema, insertAthleteSchema } from "@shared/schema";
 // Session types are loaded globally
 
+// Helper function to check if user is site admin
+function isSiteAdmin(user: any): boolean {
+  return user?.isSiteAdmin === true || user?.isSiteAdmin === "true";
+}
+
 // Rate limiting for athlete endpoints
 const athleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -81,27 +86,62 @@ export function registerAthleteRoutes(app: Express) {
   app.get("/api/athletes/:id", athleteLimiter, requireAuth, async (req, res) => {
     try {
       const athleteId = req.params.id;
-      // Use getAthletes with search to get athlete with teams included
-      const athletes = await storage.getAthletes({ search: athleteId });
-      const athlete = athletes.find(a => a.id === athleteId);
-      
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const athlete = await storage.getAthlete(athleteId);
       if (!athlete) {
         return res.status(404).json({ message: "Athlete not found" });
       }
 
-      // Transform the data to match the frontend's expected format
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Athletes can only view their own athlete data
+      if (currentUser.role === "athlete") {
+        if (currentUser.athleteId !== athleteId) {
+          return res.status(403).json({ message: "Athletes can only view their own profile" });
+        }
+      } else if (!userIsSiteAdmin) {
+        // Coaches and org admins can only view athletes from their organization
+        // Check if user has access to the same organization as the athlete
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "Access denied - no organization access" });
+        }
+
+        // Get the athlete's teams to determine organization
+        const athleteTeams = await storage.getUserTeams(athleteId);
+        if (athleteTeams.length === 0) {
+          return res.status(403).json({ message: "Athlete has no team assignments" });
+        }
+
+        // Check if user has access to any of the athlete's team organizations
+        const userOrgIds = userOrgs.map(org => org.organizationId);
+        const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+
+        const hasOrganizationAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+        if (!hasOrganizationAccess) {
+          return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
+        }
+      }
+
+      // Transform the data to match the frontend's expected format including teams
+      const athleteTeams = await storage.getUserTeams(athleteId);
       const transformedAthlete = {
         id: athlete.id,
         name: `${athlete.firstName} ${athlete.lastName}`,
         fullName: `${athlete.firstName} ${athlete.lastName}`,
         firstName: athlete.firstName,
         lastName: athlete.lastName,
-        teamName: athlete.teams && athlete.teams.length > 0 ? athlete.teams[0].name : undefined,
-        teams: athlete.teams?.map(team => ({
-          id: team.id,
-          name: team.name,
-          organization: team.organization
-        })) || [],
+        teamName: athleteTeams.length > 0 ? athleteTeams[0].team.name : undefined,
+        teams: athleteTeams.map(userTeam => ({
+          id: userTeam.team.id,
+          name: userTeam.team.name,
+          organization: userTeam.team.organization
+        })),
         birthYear: athlete.birthYear,
         birthDate: athlete.birthDate,
         graduationYear: athlete.graduationYear,
@@ -112,6 +152,7 @@ export function registerAthleteRoutes(app: Express) {
         height: athlete.height,
         weight: athlete.weight,
         gender: athlete.gender,
+        emails: athlete.emails
       };
 
       res.json(transformedAthlete);
