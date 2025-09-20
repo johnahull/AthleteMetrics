@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Users, Plus, UserCheck, UserMinus, Eye, UserPlus } from "lucide-react";
+import { Search, Users, Plus, UserCheck, UserMinus, Eye, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -52,6 +52,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(true);
 
+  // Pagination state
+  const [currentPageCurrent, setCurrentPageCurrent] = useState(1);
+  const [currentPageAvailable, setCurrentPageAvailable] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { organizationContext, userOrganizations, user } = useAuth();
@@ -74,8 +79,16 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       setSearchTerm("");
       setSelectedPlayerIds([]);
       setActiveTab(defaultTab);
+      setCurrentPageCurrent(1);
+      setCurrentPageAvailable(1);
     }
   }, [isOpen, team?.id, defaultTab]);
+
+  // Reset pagination when search term changes
+  useEffect(() => {
+    setCurrentPageCurrent(1);
+    setCurrentPageAvailable(1);
+  }, [searchTerm, showOnlyAvailable]);
 
   // Fetch current team athletes
   const { data: currentAthletes = [], isLoading: isLoadingCurrent } = useQuery({
@@ -123,6 +136,14 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
     );
   }, [currentAthletes, searchTerm]);
 
+  const paginatedCurrentAthletes = useMemo(() => {
+    const startIndex = (currentPageCurrent - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredCurrentAthletes.slice(startIndex, endIndex);
+  }, [filteredCurrentAthletes, currentPageCurrent]);
+
+  const totalPagesCurrent = Math.ceil(filteredCurrentAthletes.length / ITEMS_PER_PAGE);
+
   // Filter available athletes for adding
   const filteredAvailableAthletes = useMemo(() => {
     if (!availableAthletes) return [];
@@ -149,6 +170,14 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
     return filtered;
   }, [availableAthletes, searchTerm, showOnlyAvailable, team]);
+
+  const paginatedAvailableAthletes = useMemo(() => {
+    const startIndex = (currentPageAvailable - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredAvailableAthletes.slice(startIndex, endIndex);
+  }, [filteredAvailableAthletes, currentPageAvailable]);
+
+  const totalPagesAvailable = Math.ceil(filteredAvailableAthletes.length / ITEMS_PER_PAGE);
 
   // Check if athlete is on team
   const isAthleteOnTeam = (athlete: User): boolean => {
@@ -327,7 +356,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                   <span className="ml-2">Loading current athletes...</span>
                 </div>
-              ) : filteredCurrentAthletes.length === 0 ? (
+              ) : paginatedCurrentAthletes.length === 0 ? (
                 <Card className="bg-gray-50">
                   <CardContent className="flex flex-col items-center justify-center py-8">
                     {currentAthletes.length === 0 ? (
@@ -354,7 +383,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                   </CardContent>
                 </Card>
               ) : (
-                filteredCurrentAthletes.map((athlete: User) => {
+                paginatedCurrentAthletes.map((athlete: User) => {
                   const otherTeams = getAthleteOtherTeams(athlete);
 
                   return (
@@ -420,6 +449,33 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                 })
               )}
             </div>
+
+            {/* Pagination for current athletes */}
+            {totalPagesCurrent > 1 && (
+              <div className="flex items-center justify-center space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPageCurrent(Math.max(1, currentPageCurrent - 1))}
+                  disabled={currentPageCurrent === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600">
+                  Page {currentPageCurrent} of {totalPagesCurrent}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPageCurrent(Math.min(totalPagesCurrent, currentPageCurrent + 1))}
+                  disabled={currentPageCurrent === totalPagesCurrent}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
 
             {filteredCurrentAthletes.length > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -494,7 +550,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                   </CardContent>
                 </Card>
               ) : (
-                filteredAvailableAthletes.map((athlete: User) => {
+                paginatedAvailableAthletes.map((athlete: User) => {
                   const isOnTeam = isAthleteOnTeam(athlete);
                   const otherTeams = getAthleteOtherTeams(athlete);
                   const isSelected = selectedPlayerIds.includes(athlete.id);
@@ -554,6 +610,33 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                 })
               )}
             </div>
+
+            {/* Pagination for available athletes */}
+            {totalPagesAvailable > 1 && (
+              <div className="flex items-center justify-center space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPageAvailable(Math.max(1, currentPageAvailable - 1))}
+                  disabled={currentPageAvailable === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600">
+                  Page {currentPageAvailable} of {totalPagesAvailable}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPageAvailable(Math.min(totalPagesAvailable, currentPageAvailable + 1))}
+                  disabled={currentPageAvailable === totalPagesAvailable}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
 
             {selectedPlayerIds.length > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">

@@ -367,6 +367,25 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for team management operations (delete/modify team memberships)
+  const teamManagementLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 30, // Limit each IP to 30 team management operations per 15 minutes
+    message: {
+      error: "Too many team management operations, please try again later."
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      // Skip rate limiting for localhost and optionally in development if flag is set
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || bypassForDev;
+    }
+  });
+
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
 
@@ -503,7 +522,7 @@ export function registerRoutes(app: Express) {
             }
             
             // Log successful authentication without sensitive details
-            console.log(`User authenticated successfully (${user.id}): role=${userRole}, orgs=${userOrgs ? userOrgs.length : 0}`);
+            // User authenticated successfully - logging removed for production
 
             return res.json({ 
               success: true, 
@@ -1243,7 +1262,7 @@ export function registerRoutes(app: Express) {
 
       // Audit log for successful bulk operation
       if (result.results.length > 0) {
-        console.log(`Bulk team operation: User ${currentUser.id} added ${result.results.length} players to team ${teamId} (${team.name})`);
+        // Bulk team operation completed - logging removed for production
       }
 
       res.json(response);
@@ -1260,7 +1279,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Remove athlete from team
-  app.delete("/api/teams/:teamId/athletes/:athleteId", requireAuth, async (req, res) => {
+  app.delete("/api/teams/:teamId/athletes/:athleteId", teamManagementLimiter, requireAuth, async (req, res) => {
     const { teamId, athleteId } = req.params;
     try {
       const currentUser = req.session.user;
@@ -1329,7 +1348,7 @@ export function registerRoutes(app: Express) {
       await storage.removeUserFromTeam(athleteId, teamId);
 
       // Audit log
-      console.log(`Team operation: User ${currentUser.id} removed athlete ${athleteId} from team ${teamId} (${team.name})`);
+      // Team operation completed - logging removed for production
 
       res.json({
         message: "Athlete removed from team successfully",
@@ -1418,8 +1437,7 @@ export function registerRoutes(app: Express) {
         isActive: athlete.isActive === "true"
       }));
 
-      console.log(`Returning ${athletesList.length} athletes`);
-      console.log('Team assignments:', athletesList.map(a => `${a.teams.length} teams`).join(', '));
+      // Athletes retrieved - debug logging removed for production
 
       // Add cache-busting headers to ensure fresh data
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -1500,7 +1518,7 @@ export function registerRoutes(app: Express) {
 
       const athleteData = insertAthleteSchema.parse(req.body);
 
-      console.log('Received athlete data in API:', athleteData);
+      // Athlete data received - debug logging removed for production
 
       // Add organization context for non-site admins
       const userIsSiteAdmin = isSiteAdmin(currentUser);
@@ -1510,7 +1528,7 @@ export function registerRoutes(app: Express) {
 
       const athlete = await storage.createAthlete(athleteData);
 
-      console.log('Athlete created successfully with', athleteData.teamIds?.length || 0, 'team assignments');
+      // Athlete created successfully - debug logging removed for production
 
       res.status(201).json(athlete);
     } catch (error) {
@@ -1698,7 +1716,7 @@ export function registerRoutes(app: Express) {
         );
 
         // Log access validation result without exposing IDs
-        console.log(`Measurement access validation: hasAccess=${hasAccess}`);
+        // Measurement access validation completed - debug logging removed for production
 
         if (!hasAccess) {
           return res.status(403).json({ message: "Cannot create measurements for athletes outside your organization" });
@@ -2125,7 +2143,7 @@ export function registerRoutes(app: Express) {
           `${req.protocol}://${req.get('host')}/accept-invitation?token=${inv.token}`
         );
 
-        console.log(`Created ${invitations.length} invitations for athlete ${athlete.firstName} ${athlete.lastName}`);
+        // Invitations created for athlete - debug logging removed for production
 
         return res.status(201).json({
           invitations: invitations.map(inv => ({ id: inv.id, email: inv.email })),
@@ -2184,7 +2202,7 @@ export function registerRoutes(app: Express) {
       const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
 
       // Log invitation creation for admin reference
-      console.log(`Invitation created: ${invitation.id} for ${email}`);
+      // Invitation created - debug logging removed for production
 
       return res.status(201).json({
         id: invitation.id,
@@ -2728,94 +2746,8 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Get all users (site admin only)
-  app.get("/api/users", requireAuth, async (req, res) => {
-    try {
-      const { organizationId, includeTeamMemberships } = req.query;
-      const currentUser = req.session.user;
-
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      // Site admins can access all users
-      if (userIsSiteAdmin) {
-        const users = await storage.getUsers();
-
-        // Include team memberships if requested
-        if (includeTeamMemberships === "true") {
-          const usersWithTeams = await Promise.all(
-            users.map(async (user) => {
-              const userTeams = await storage.getUserTeams(user.id);
-              return {
-                ...user,
-                teamMemberships: userTeams.map(ut => ({
-                  teamId: ut.team.id,
-                  teamName: ut.team.name,
-                  isActive: ut.isActive,
-                  season: ut.season,
-                  joinedAt: ut.joinedAt,
-                  leftAt: ut.leftAt
-                }))
-              };
-            })
-          );
-          return res.json(usersWithTeams);
-        }
-
-        return res.json(users);
-      }
-
-      // Non-site admins can only access users from their organizations
-      const userOrgs = await storage.getUserOrganizations(currentUser.id);
-      console.log(`User ${currentUser.id} has ${userOrgs.length} organization(s):`, userOrgs);
-      if (userOrgs.length === 0) {
-        return res.status(403).json({ message: "No organization access" });
-      }
-
-      // If organizationId is specified, validate access to it
-      if (organizationId) {
-        const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
-        if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied to this organization" });
-        }
-      }
-
-      // Get users from accessible organizations
-      const targetOrgId = organizationId || userOrgs[0].organizationId;
-      console.log(`Fetching users for organization: ${targetOrgId}`);
-      const orgUsers = await storage.getUsersByOrganization(targetOrgId);
-      console.log(`Found ${orgUsers.length} users in organization ${targetOrgId}`);
-
-      // Include team memberships if requested
-      if (includeTeamMemberships === "true") {
-        const usersWithTeams = await Promise.all(
-          orgUsers.map(async (user) => {
-            const userTeams = await storage.getUserTeams(user.id);
-            return {
-              ...user,
-              teamMemberships: userTeams.map(ut => ({
-                teamId: ut.team.id,
-                teamName: ut.team.name,
-                isActive: ut.isActive,
-                season: ut.season,
-                joinedAt: ut.joinedAt,
-                leftAt: ut.leftAt
-              }))
-            };
-          })
-        );
-        return res.json(usersWithTeams);
-      }
-
-      res.json(orgUsers);
-    } catch (error) {
-      console.error("Error getting users:", error);
-      res.status(500).json({ message: "Failed to get users" });
-    }
-  });
+  // Get all users - REMOVED: Duplicate route now handled by ./routes/user-routes.ts
+  // This route was causing conflicts with the refactored user management routes
 
   app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {
@@ -3242,12 +3174,12 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "No image file uploaded" });
       }
 
-      console.log(`Processing OCR for file: ${file.originalname}, size: ${file.size} bytes, type: ${file.mimetype}`);
+      // Debug logging removed for production: Processing OCR for file
 
       // Extract text and data using OCR
       const ocrResult = await ocrService.extractTextFromImage(file.buffer);
       
-      console.log(`OCR completed with confidence: ${ocrResult.confidence}%, extracted ${ocrResult.extractedData.length} measurements`);
+      // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];

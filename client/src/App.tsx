@@ -1,9 +1,10 @@
-import React, { Suspense, useEffect, startTransition } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AuthProvider } from "./lib/auth";
 import Layout from "./components/layout";
 import Login from "./pages/login";
@@ -44,82 +45,82 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/athletes/:id">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading...</span></div>}>
+        <Suspense fallback={<LoadingSpinner />}>
           <AthleteProfile />
         </Suspense>
       </Route>
       <Route path="/athletes">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Athletes...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Athletes..." />}>
           <Athletes />
         </Suspense>
       </Route>
       <Route path="/organizations/:id">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading...</span></div>}>
+        <Suspense fallback={<LoadingSpinner />}>
           <OrganizationProfile />
         </Suspense>
       </Route>
       <Route path="/organizations">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Organizations...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Organizations..." />}>
           <Organizations />
         </Suspense>
       </Route>
       <Route path="/users/:id">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading User...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading User..." />}>
           <UserProfile />
         </Suspense>
       </Route>
       <Route path="/user-management">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading User Management...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading User Management..." />}>
           <UserManagement />
         </Suspense>
       </Route>
       <Route path="/data-entry">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Data Entry...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Data Entry..." />}>
           <DataEntry />
         </Suspense>
       </Route>
       <Route path="/analytics">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Analytics...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Analytics..." />}>
           <Analytics />
         </Suspense>
       </Route>
       <Route path="/coach-analytics">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Coach Analytics...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Coach Analytics..." />}>
           <CoachAnalytics />
         </Suspense>
       </Route>
       <Route path="/athlete-analytics">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Athlete Analytics...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Athlete Analytics..." />}>
           <AthleteAnalytics />
         </Suspense>
       </Route>
       <Route path="/publish">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Publish...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Publish..." />}>
           <Publish />
         </Suspense>
       </Route>
       <Route path="/import-export">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Import/Export...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Import/Export..." />}>
           <ImportExport />
         </Suspense>
       </Route>
       <Route path="/admin">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Admin...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Admin..." />}>
           <AdminPage />
         </Suspense>
       </Route>
       <Route path="/teams">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Teams...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Teams..." />}>
           <Teams />
         </Suspense>
       </Route>
       <Route path="/profile">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Profile...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Profile..." />}>
           <Profile />
         </Suspense>
       </Route>
       <Route path="/">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Dashboard...</span></div>}>
+        <Suspense fallback={<LoadingSpinner text="Loading Dashboard..." />}>
           <Dashboard />
         </Suspense>
       </Route>
