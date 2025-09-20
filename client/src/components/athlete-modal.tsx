@@ -12,16 +12,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertAthleteSchema, Gender, SoccerPosition, type InsertAthlete, type User, type Team } from "@shared/schema";
-import { Plus, Trash2, Mail, Phone, Users, Trophy } from "lucide-react";
+import { Plus, Trash2, Mail, Phone, Trophy } from "lucide-react";
 
 interface AthleteModalProps {
   isOpen: boolean;
   onClose: () => void;
   athlete: (User & { teams: Team[] }) | null;
-  teams: Team[];
 }
 
-export default function AthleteModal({ isOpen, onClose, athlete, teams }: AthleteModalProps) {
+export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!athlete;
@@ -346,72 +345,6 @@ export default function AthleteModal({ isOpen, onClose, athlete, teams }: Athlet
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              <FormField
-                control={form.control}
-                name="teamIds"
-                render={() => (
-                  <FormItem>
-                    <FormLabel className="flex items-center">
-                      <Users className="h-4 w-4 mr-2" />
-                      Teams (optional)
-                    </FormLabel>
-                    <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
-                      <div className="flex justify-between items-center pb-2 border-b">
-                        <span className="text-sm text-gray-600">
-                          {form.watch("teamIds")?.length || 0} team(s) selected
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => form.setValue("teamIds", [])}
-                          disabled={isPending}
-                          data-testid="button-clear-teams"
-                        >
-                          Clear All
-                        </Button>
-                      </div>
-                      {teams.map((team) => (
-                        <FormField
-                          key={team.id}
-                          control={form.control}
-                          name="teamIds"
-                          render={({ field }) => {
-                            return (
-                              <FormItem
-                                key={team.id}
-                                className="flex flex-row items-start space-x-3 space-y-0"
-                              >
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(team.id)}
-                                    onCheckedChange={(checked) => {
-                                      return checked
-                                        ? field.onChange([...(field.value || []), team.id])
-                                        : field.onChange(
-                                            (field.value || []).filter(
-                                              (value: string) => value !== team.id
-                                            )
-                                          )
-                                    }}
-                                    data-testid={`checkbox-team-${team.id}`}
-                                  />
-                                </FormControl>
-                                <FormLabel className="text-sm font-normal">
-                                  {team.name}
-                                </FormLabel>
-                              </FormItem>
-                            )
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
 
             <FormField
               control={form.control}

@@ -722,14 +722,12 @@ export default function Athletes() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         athlete={null}
-        teams={teams || []}
       />
 
       <AthleteModal
         isOpen={!!editingAthlete}
         onClose={() => setEditingAthlete(null)}
         athlete={editingAthlete}
-        teams={teams || []}
       />
     </div>
   );
