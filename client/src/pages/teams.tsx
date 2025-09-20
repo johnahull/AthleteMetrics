@@ -245,14 +245,6 @@ export default function Teams() {
                       Edit Team
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => setManagingAthletes({ team, defaultTab: 'add' })}
-                      data-testid={`menu-add-players-${team.id}`}
-                      disabled={isArchived}
-                    >
-                      <Users className="h-4 w-4 mr-2" />
-                      Add Athletes
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
                       onClick={() => setManagingAthletes({ team, defaultTab: 'current' })}
                       data-testid={`menu-manage-athletes-${team.id}`}
                       disabled={isArchived}
