@@ -1096,8 +1096,8 @@ export function registerRoutes(app: Express) {
 
   // Add multiple players to a team
   app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, async (req, res) => {
+    const { teamId } = req.params;
     try {
-      const { teamId } = req.params;
       const { playerIds } = req.body;
       const currentUser = req.session.user;
 
@@ -1115,6 +1115,21 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "playerIds must be a non-empty array" });
       }
 
+      // Limit number of players to prevent DoS attacks
+      if (playerIds.length > 100) {
+        return res.status(400).json({ message: "Cannot add more than 100 players at once" });
+      }
+
+      // Validate all playerIds are valid UUIDs
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const invalidIds = playerIds.filter(id => !uuidRegex.test(id));
+      if (invalidIds.length > 0) {
+        return res.status(400).json({
+          message: "Invalid player IDs provided",
+          invalidIds
+        });
+      }
+
       // Get the team to check access
       const team = await storage.getTeam(teamId);
       if (!team) {
@@ -1128,75 +1143,119 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this organization" });
       }
 
-      // Add each player to the team
-      const results = [];
-      const errors = [];
+      // Use transaction to ensure atomicity
+      const result = await db.transaction(async (tx: any) => {
+        const results = [];
+        const errors = [];
 
-      for (const playerId of playerIds) {
-        try {
-          // Check if player exists and validate organization access
-          const player = await storage.getUser(playerId);
-          if (!player) {
-            errors.push({ playerId, error: "Player not found" });
-            continue;
-          }
+        // Validate all players first (batch operation)
+        const playerValidationPromises = playerIds.map(async (playerId) => {
+          try {
+            // Check if player exists
+            const player = await storage.getUser(playerId);
+            if (!player) {
+              return { playerId, error: "Player not found", valid: false };
+            }
 
-          // Validate player belongs to the same organization (if not site admin)
-          if (!userIsSiteAdmin) {
-            const playerOrgs = await storage.getUserOrganizations(playerId);
-            const currentUserOrgs = await storage.getUserOrganizations(currentUser.id);
+            // Validate organization access for non-site admins
+            if (!userIsSiteAdmin) {
+              const [playerOrgs, currentUserOrgs] = await Promise.all([
+                storage.getUserOrganizations(playerId),
+                storage.getUserOrganizations(currentUser.id)
+              ]);
 
-            const hasSharedOrg = playerOrgs.some(pOrg =>
-              currentUserOrgs.some(uOrg => uOrg.organizationId === pOrg.organizationId)
+              const hasSharedOrg = playerOrgs.some(pOrg =>
+                currentUserOrgs.some(uOrg => uOrg.organizationId === pOrg.organizationId)
+              );
+
+              if (!hasSharedOrg) {
+                return { playerId, error: "Access denied to this player", valid: false };
+              }
+            }
+
+            // Check if player is already on the team
+            const existingMemberships = await storage.getUserTeams(playerId);
+            const isActiveOnTeam = existingMemberships.some(membership =>
+              membership.teamId === teamId && membership.isActive === "true"
             );
 
-            if (!hasSharedOrg) {
-              errors.push({ playerId, error: "Access denied to this player" });
-              continue;
+            if (isActiveOnTeam) {
+              return { playerId, error: "Player is already on this team", valid: false };
             }
+
+            return { playerId, player, valid: true };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown validation error";
+            console.error(`Error validating player ${playerId}:`, error);
+            return { playerId, error: `Validation failed: ${errorMessage}`, valid: false };
           }
+        });
 
-          // Check if player is already on the team
-          const existingMemberships = await storage.getUserTeams(playerId);
-          const isActiveOnTeam = existingMemberships.some(membership =>
-            membership.teamId === teamId && membership.isActive === "true"
-          );
+        // Wait for all validations to complete
+        const validationResults = await Promise.all(playerValidationPromises);
 
-          if (isActiveOnTeam) {
-            errors.push({ playerId, error: "Player is already on this team" });
-            continue;
-          }
+        // Separate valid players from errors
+        const validPlayers = validationResults.filter(result => result.valid);
+        const validationErrors = validationResults.filter(result => !result.valid);
 
-          // Add player to team using existing method
-          const newMembership = await storage.addUserToTeam(playerId, teamId);
-          results.push({ playerId, membership: newMembership });
+        errors.push(...validationErrors);
 
-        } catch (error) {
-          console.error(`Error adding player ${playerId} to team ${teamId}:`, error);
-          errors.push({ playerId, error: "Failed to add player to team" });
+        // Add valid players to team (batch operation)
+        if (validPlayers.length > 0) {
+          const addPlayerPromises = validPlayers.map(async ({ playerId }) => {
+            try {
+              const newMembership = await storage.addUserToTeam(playerId, teamId);
+              return { playerId, membership: newMembership, success: true };
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : "Unknown error";
+              console.error(`Error adding player ${playerId} to team ${teamId}:`, error);
+              return { playerId, error: `Failed to add player: ${errorMessage}`, success: false };
+            }
+          });
+
+          const addResults = await Promise.all(addPlayerPromises);
+
+          // Separate successful additions from failures
+          results.push(...addResults.filter(result => result.success));
+          errors.push(...addResults.filter(result => !result.success));
         }
-      }
 
-      // Return results
+        return { results, errors };
+      });
+
+      // Prepare response
       const response = {
-        success: results.length,
-        errorCount: errors.length,
-        results,
-        errors: errors.length > 0 ? errors : undefined
+        success: result.results.length,
+        errorCount: result.errors.length,
+        results: result.results,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+        teamId,
+        teamName: team.name
       };
 
       // If all failed, return error status
-      if (results.length === 0 && errors.length > 0) {
+      if (result.results.length === 0 && result.errors.length > 0) {
         return res.status(400).json({
           message: "Failed to add any players to team",
           ...response
         });
       }
 
+      // Audit log for successful bulk operation
+      if (result.results.length > 0) {
+        console.log(`Bulk team operation: User ${currentUser.id} added ${result.results.length} players to team ${teamId} (${team.name})`);
+      }
+
       res.json(response);
     } catch (error) {
-      console.error("Error adding players to team:", error);
-      res.status(500).json({ message: "Failed to add players to team" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error in bulk add players operation for team ${teamId}:`, error);
+
+      res.status(500).json({
+        message: "Failed to add players to team",
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        teamId: teamId
+      });
     }
   });
 

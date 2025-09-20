@@ -49,7 +49,7 @@ export function registerUserRoutes(app: Express) {
 
       // For now, use the basic getUsersByOrganization from storage directly
       // since UserService doesn't have this method yet
-      const userIsSiteAdmin = currentUser.isSiteAdmin === "true" || currentUser.admin === true;
+      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
 
       if (userIsSiteAdmin) {
         const users = await userService.getUsers();

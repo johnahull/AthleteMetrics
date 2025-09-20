@@ -126,14 +126,28 @@ export default function AddPlayersToTeamModal({ isOpen, onClose, team }: AddPlay
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({
-        title: "Success",
-        description: `${selectedPlayerIds.length} player(s) added to ${team?.name}`,
-      });
+
+      // Show detailed success message
+      const successCount = data.success || 0;
+      const errorCount = data.errorCount || 0;
+
+      if (successCount > 0 && errorCount === 0) {
+        toast({
+          title: "Success",
+          description: `Successfully added ${successCount} player${successCount !== 1 ? 's' : ''} to ${team?.name}`,
+        });
+      } else if (successCount > 0 && errorCount > 0) {
+        toast({
+          title: "Partial Success",
+          description: `Added ${successCount} player${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed.`,
+          variant: "default",
+        });
+      }
+
       onClose();
     },
     onError: (error: any) => {
