@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -247,12 +248,7 @@ export function ChartContainer({
         <div className="w-full" style={{ height: '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
-              <React.Suspense fallback={
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <span className="ml-2 text-muted-foreground">Loading chart...</span>
-                </div>
-              }>
+              <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
                 <ChartComponent
                   data={chartData as any}
                   config={chartConfig}
@@ -298,7 +294,7 @@ export function getRecommendedChartType(
     if (metricCount === 1) {
       return timeframeType === 'best' ? 'distribution' : 'time_series_box_swarm';
     } else if (metricCount === 2) {
-      return 'scatter_plot';
+      return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
       return 'radar_chart';
     }

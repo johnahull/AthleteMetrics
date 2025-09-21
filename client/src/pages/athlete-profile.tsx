@@ -535,7 +535,6 @@ export default function AthleteProfile() {
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
           athlete={athlete}
-          teams={teams}
         />
       )}
 

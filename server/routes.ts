@@ -8,6 +8,7 @@ import { body, validationResult } from "express-validator";
 import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
+import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -22,6 +23,17 @@ import { ocrService } from "./ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "./athlete-matching";
 import { reviewQueue } from "./review-queue";
 import type { ImportResult } from "@shared/import-types";
+import {
+  ValidationViolation,
+  ValidationFix,
+  ProcessedImportRow,
+  BulkOperationResult,
+  OperationResult,
+  OperationError,
+  ImportPreview,
+  CsvRow,
+  ExportRow
+} from "./types/bulk-operations";
 import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
 import { registerAllRoutes } from "./routes/index";
@@ -367,6 +379,25 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for team management operations (delete/modify team memberships)
+  const teamManagementLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 30, // Limit each IP to 30 team management operations per 15 minutes
+    message: {
+      error: "Too many team management operations, please try again later."
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      // Skip rate limiting for localhost and optionally in development if flag is set
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || bypassForDev;
+    }
+  });
+
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
 
@@ -503,7 +534,7 @@ export function registerRoutes(app: Express) {
             }
             
             // Log successful authentication without sensitive details
-            console.log(`User authenticated successfully (${user.id}): role=${userRole}, orgs=${userOrgs ? userOrgs.length : 0}`);
+            // User authenticated successfully - logging removed for production
 
             return res.json({ 
               success: true, 
@@ -808,7 +839,21 @@ export function registerRoutes(app: Express) {
 
   // ⚠️ END OF LEGACY AUTH/USER ROUTES - Now using refactored service layer
   
-  // Team routes with basic organization support
+  /**
+   * Get teams with organization filtering
+   * @route GET /api/teams
+   * @query {string} [organizationId] - Filter teams by organization (site admins only)
+   * @access All authenticated users (filtered by organization access)
+   * @returns {Object[]} teams - Array of team objects
+   * @returns {string} teams[].id - Team UUID
+   * @returns {string} teams[].name - Team name
+   * @returns {string} teams[].level - Team level (Club, HS, College)
+   * @returns {string} teams[].organizationId - Organization UUID
+   * @returns {string} teams[].isArchived - Archive status ("true"/"false")
+   * @throws {401} User not authenticated
+   * @throws {403} No organization access
+   * @throws {500} Server error fetching teams
+   */
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
       const {organizationId} = req.query;
@@ -851,6 +896,25 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  /**
+   * Create a new team
+   * @route POST /api/teams
+   * @body {Object} teamData - Team creation data
+   * @body {string} teamData.name - Team name (required)
+   * @body {string} teamData.level - Team level: "Club", "HS", or "College" (required)
+   * @body {string} [teamData.organizationId] - Organization UUID (auto-assigned for non-site admins)
+   * @body {string} [teamData.season] - Team season
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} team - Created team object
+   * @returns {string} team.id - Team UUID
+   * @returns {string} team.name - Team name
+   * @returns {string} team.level - Team level
+   * @returns {string} team.organizationId - Organization UUID
+   * @throws {400} Validation error or invalid organization
+   * @throws {401} User not authenticated
+   * @throws {403} Athletes cannot create teams or organization access denied
+   * @throws {500} Server error during team creation
+   */
   app.post("/api/teams", createLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
@@ -1094,10 +1158,479 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  /**
+   * Add multiple players to a team
+   * @route POST /api/teams/:teamId/add-players
+   * @param {string} teamId - UUID of the team
+   * @body {string[]} playerIds - Array of player UUIDs (max 100)
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} result - Operation results with success/error details
+   * @returns {Object[]} result.results - Array of successful additions
+   * @returns {Object[]} result.errors - Array of failed additions with reasons
+   * @throws {400} Invalid input, duplicate IDs, or validation errors
+   * @throws {401} User not authenticated
+   * @throws {403} Insufficient permissions or access denied
+   * @throws {404} Team not found
+   * @throws {500} Server error during transaction
+   */
+  app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, async (req, res) => {
+    const { teamId } = req.params;
+    try {
+      const { playerIds } = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Validate input
+      if (!Array.isArray(playerIds) || playerIds.length === 0) {
+        return res.status(400).json({ message: "playerIds must be a non-empty array" });
+      }
+
+      // Limit number of players to prevent DoS attacks
+      if (playerIds.length > 100) {
+        return res.status(400).json({ message: "Cannot add more than 100 players at once" });
+      }
+
+      // Validate all playerIds are valid UUIDs
+      try {
+        validateUuidsOrThrow(playerIds, "player IDs");
+      } catch (error: any) {
+        return res.status(400).json({
+          message: error.message
+        });
+      }
+
+      // Check for duplicate IDs within the request
+      const uniqueIds = new Set(playerIds);
+      if (uniqueIds.size !== playerIds.length) {
+        const duplicates = playerIds.filter((id, index) => playerIds.indexOf(id) !== index);
+        return res.status(400).json({
+          message: `Duplicate player IDs found: ${[...new Set(duplicates)].join(", ")}`
+        });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team and its organization
+      if (!team || (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Use transaction to ensure atomicity
+      const result = await db.transaction(async (tx: any) => {
+        const results = [];
+        const errors = [];
+
+        // Validate all players first (batch operation)
+        const playerValidationPromises = playerIds.map(async (playerId) => {
+          try {
+            // Check if player exists
+            const player = await storage.getUser(playerId);
+            if (!player) {
+              return { playerId, error: "Player not found", valid: false };
+            }
+
+            // Validate organization access for non-site admins
+            if (!userIsSiteAdmin) {
+              const [playerOrgs, currentUserOrgs] = await Promise.all([
+                storage.getUserOrganizations(playerId),
+                storage.getUserOrganizations(currentUser.id)
+              ]);
+
+              const hasSharedOrg = playerOrgs.some(pOrg =>
+                currentUserOrgs.some(uOrg => uOrg.organizationId === pOrg.organizationId)
+              );
+
+              if (!hasSharedOrg) {
+                return { playerId, error: "Access denied to this player", valid: false };
+              }
+            }
+
+            // Check if player is already on the team
+            const existingMemberships = await storage.getUserTeams(playerId);
+            const isActiveOnTeam = existingMemberships.some(membership =>
+              membership.teamId === teamId && membership.isActive === "true"
+            );
+
+            if (isActiveOnTeam) {
+              return { playerId, error: "Player is already on this team", valid: false };
+            }
+
+            return { playerId, player, valid: true };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown validation error";
+            console.error(`Error validating player ${playerId}:`, error);
+            return { playerId, error: `Validation failed: ${errorMessage}`, valid: false };
+          }
+        });
+
+        // Wait for all validations to complete
+        const validationResults = await Promise.all(playerValidationPromises);
+
+        // Separate valid players from errors
+        const validPlayers = validationResults.filter(result => result.valid);
+        const validationErrors = validationResults.filter(result => !result.valid);
+
+        errors.push(...validationErrors);
+
+        // Add valid players to team (batch operation)
+        if (validPlayers.length > 0) {
+          const addPlayerPromises = validPlayers.map(async ({ playerId }) => {
+            try {
+              const newMembership = await storage.addUserToTeam(playerId, teamId);
+              return { playerId, membership: newMembership, success: true };
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : "Unknown error";
+              console.error(`Error adding player ${playerId} to team ${teamId}:`, error);
+              return { playerId, error: `Failed to add player: ${errorMessage}`, success: false };
+            }
+          });
+
+          const addResults = await Promise.all(addPlayerPromises);
+
+          // Separate successful additions from failures
+          results.push(...addResults.filter(result => result.success));
+          errors.push(...addResults.filter(result => !result.success));
+        }
+
+        return { results, errors };
+      });
+
+      // Prepare response
+      const response = {
+        success: result.results.length,
+        errorCount: result.errors.length,
+        results: result.results,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+        teamId,
+        teamName: team.name
+      };
+
+      // If all failed, return error status
+      if (result.results.length === 0 && result.errors.length > 0) {
+        return res.status(400).json({
+          message: "Failed to add any players to team",
+          ...response
+        });
+      }
+
+      // Audit log for successful bulk operation
+      if (result.results.length > 0) {
+        // Bulk team operation completed - logging removed for production
+      }
+
+      res.json(response);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error in bulk add players operation for team ${teamId}:`, error);
+
+      res.status(500).json({
+        message: "Failed to add players to team",
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        teamId: teamId
+      });
+    }
+  });
+
+  /**
+   * Remove athlete from team
+   * @route DELETE /api/teams/:teamId/athletes/:athleteId
+   * @param {string} teamId - UUID of the team
+   * @param {string} athleteId - UUID of the athlete to remove
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} result - Success message with operation details
+   * @returns {string} result.message - Success confirmation message
+   * @returns {string} result.teamId - ID of the team
+   * @returns {string} result.athleteId - ID of the removed athlete
+   * @throws {400} Invalid UUID format for parameters
+   * @throws {401} User not authenticated
+   * @throws {403} Insufficient permissions or access denied
+   * @throws {404} Team or athlete not found
+   * @throws {500} Server error during removal operation
+   */
+  app.delete("/api/teams/:teamId/athletes/:athleteId", teamManagementLimiter, requireAuth, async (req, res) => {
+    const { teamId, athleteId } = req.params;
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Validate UUIDs
+      if (!validateUuidParams(req, res, ['teamId', 'athleteId'])) {
+        return; // Response already sent by validateUuidParams
+      }
+
+      // Get the team and athlete to check access
+      const team = await storage.getTeam(teamId);
+      const athlete = await storage.getUser(athleteId);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to both the team and athlete
+      if (!team || !athlete ||
+          (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Validate athlete belongs to the same organization (if not site admin)
+      if (!userIsSiteAdmin) {
+        const [athleteOrgs, currentUserOrgs] = await Promise.all([
+          storage.getUserOrganizations(athleteId),
+          storage.getUserOrganizations(currentUser.id)
+        ]);
+
+        const hasSharedOrg = athleteOrgs.some(aOrg =>
+          currentUserOrgs.some(uOrg => uOrg.organizationId === aOrg.organizationId)
+        );
+
+        if (!hasSharedOrg) {
+          return res.status(403).json({ message: "Access denied to this athlete" });
+        }
+      }
+
+      // Check if athlete is actually on the team
+      const existingMemberships = await storage.getUserTeams(athleteId);
+      const isActiveOnTeam = existingMemberships.some(membership =>
+        membership.teamId === teamId && membership.isActive === "true"
+      );
+
+      if (!isActiveOnTeam) {
+        return res.status(400).json({ message: "Athlete is not currently on this team" });
+      }
+
+      // Remove athlete from team
+      await storage.removeUserFromTeam(athleteId, teamId);
+
+      // Audit log
+      // Team operation completed - logging removed for production
+
+      res.json({
+        message: "Athlete removed from team successfully",
+        teamId,
+        teamName: team.name,
+        athleteId,
+        athleteName: `${athlete.firstName} ${athlete.lastName}`
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error removing athlete ${athleteId} from team ${teamId}:`, error);
+
+      res.status(500).json({
+        message: "Failed to remove athlete from team",
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        teamId,
+        athleteId
+      });
+    }
+  });
+
+  /**
+   * Remove multiple athletes from a team
+   * @route DELETE /api/teams/:teamId/remove-athletes
+   * @param {string} teamId - UUID of the team
+   * @body {string[]} athleteIds - Array of athlete UUIDs (max 100)
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} result - Operation results with success/error details
+   * @returns {number} result.success - Number of successful removals
+   * @returns {number} result.errorCount - Number of failed removals
+   * @returns {Object[]} result.results - Array of successful removals
+   * @returns {Object[]} [result.errors] - Array of failed operations (if any)
+   * @throws {400} Invalid input or validation errors
+   * @throws {401} User not authenticated
+   * @throws {403} Insufficient permissions or access denied
+   * @throws {404} Team not found
+   * @throws {500} Server error during transaction
+   */
+  app.delete("/api/teams/:teamId/remove-athletes", teamManagementLimiter, requireAuth, async (req, res) => {
+    const { teamId } = req.params;
+    try {
+      const { athleteIds } = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Validate input
+      if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+        return res.status(400).json({ message: "athleteIds must be a non-empty array" });
+      }
+
+      // Limit number of athletes to prevent DoS attacks
+      if (athleteIds.length > 100) {
+        return res.status(400).json({ message: "Cannot remove more than 100 athletes at once" });
+      }
+
+      // Validate all athleteIds are valid UUIDs
+      try {
+        validateUuidsOrThrow(athleteIds, "athlete IDs");
+      } catch (error: any) {
+        return res.status(400).json({
+          message: error.message
+        });
+      }
+
+      // Check for duplicate IDs within the request
+      const uniqueIds = new Set(athleteIds);
+      if (uniqueIds.size !== athleteIds.length) {
+        const duplicates = athleteIds.filter((id, index) => athleteIds.indexOf(id) !== index);
+        return res.status(400).json({
+          message: `Duplicate athlete IDs found: ${[...new Set(duplicates)].join(", ")}`
+        });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team and its organization
+      if (!team || (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Use transaction to ensure atomicity
+      const result = await db.transaction(async (tx: any) => {
+        const results = [];
+        const errors = [];
+
+        // Validate all athletes first (batch operation)
+        const athleteValidationPromises = athleteIds.map(async (athleteId) => {
+          try {
+            // Check if athlete exists
+            const athlete = await storage.getUser(athleteId);
+            if (!athlete) {
+              return { athleteId, error: "Athlete not found", valid: false };
+            }
+
+            // Validate organization access for non-site admins
+            if (!userIsSiteAdmin) {
+              const [athleteOrgs, currentUserOrgs] = await Promise.all([
+                storage.getUserOrganizations(athleteId),
+                storage.getUserOrganizations(currentUser.id)
+              ]);
+
+              const hasSharedOrg = athleteOrgs.some(aOrg =>
+                currentUserOrgs.some(uOrg => uOrg.organizationId === aOrg.organizationId)
+              );
+
+              if (!hasSharedOrg) {
+                return { athleteId, error: "Access denied to this athlete", valid: false };
+              }
+            }
+
+            // Check if athlete is currently on the team
+            const existingMemberships = await storage.getUserTeams(athleteId);
+            const isActiveOnTeam = existingMemberships.some(membership =>
+              membership.teamId === teamId && membership.isActive === "true"
+            );
+
+            if (!isActiveOnTeam) {
+              return { athleteId, error: "Athlete is not currently on this team", valid: false };
+            }
+
+            return { athleteId, athlete, valid: true };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown validation error";
+            console.error(`Error validating athlete ${athleteId}:`, error);
+            return { athleteId, error: `Validation failed: ${errorMessage}`, valid: false };
+          }
+        });
+
+        // Wait for all validations to complete
+        const validationResults = await Promise.all(athleteValidationPromises);
+
+        // Separate valid athletes from errors
+        const validAthletes = validationResults.filter(result => result.valid);
+        const validationErrors = validationResults.filter(result => !result.valid);
+
+        errors.push(...validationErrors);
+
+        // Remove valid athletes from team (batch operation)
+        if (validAthletes.length > 0) {
+          const removeAthletePromises = validAthletes.map(async ({ athleteId }) => {
+            try {
+              await storage.removeUserFromTeam(athleteId, teamId);
+              return { athleteId, success: true };
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : "Unknown error";
+              console.error(`Error removing athlete ${athleteId} from team ${teamId}:`, error);
+              return { athleteId, error: `Failed to remove athlete: ${errorMessage}`, success: false };
+            }
+          });
+
+          const removeResults = await Promise.all(removeAthletePromises);
+
+          // Separate successful removals from failures
+          results.push(...removeResults.filter(result => result.success));
+          errors.push(...removeResults.filter(result => !result.success));
+        }
+
+        return { results, errors };
+      });
+
+      // Prepare response
+      const response = {
+        success: result.results.length,
+        errorCount: result.errors.length,
+        results: result.results,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+        teamId,
+        teamName: team.name
+      };
+
+      // If all failed, return error status
+      if (result.results.length === 0 && result.errors.length > 0) {
+        return res.status(400).json({
+          message: "Failed to remove any athletes from team",
+          ...response
+        });
+      }
+
+      // Return success response
+      res.json({
+        message: result.results.length === athleteIds.length
+          ? `Successfully removed all ${result.results.length} athletes from team`
+          : `Successfully removed ${result.results.length} of ${athleteIds.length} athletes from team`,
+        ...response
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error in bulk remove athletes for team ${teamId}:`, error);
+
+      res.status(500).json({
+        message: "Failed to remove athletes from team",
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        teamId
+      });
+    }
+  });
+
   // Athlete routes
   app.get("/api/athletes", requireAuth, async (req, res) => {
     try {
-      const {teamId, birthYearFrom, birthYearTo, search, gender, organizationId } = req.query;
+      const {teamId, birthYearFrom, birthYearTo, search, gender, organizationId, page, limit } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1148,6 +1681,8 @@ export function registerRoutes(app: Express) {
         search: search as string,
         gender: gender as string,
         organizationId: orgContextForFiltering,
+        page: page ? parseInt(page as string) : undefined,
+        limit: limit ? parseInt(limit as string) : undefined,
       };
 
       const athletes = await storage.getAthletes(filters);
@@ -1160,8 +1695,7 @@ export function registerRoutes(app: Express) {
         isActive: athlete.isActive === "true"
       }));
 
-      console.log(`Returning ${athletesList.length} athletes`);
-      console.log('Team assignments:', athletesList.map(a => `${a.teams.length} teams`).join(', '));
+      // Athletes retrieved - debug logging removed for production
 
       // Add cache-busting headers to ensure fresh data
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -1242,7 +1776,7 @@ export function registerRoutes(app: Express) {
 
       const athleteData = insertAthleteSchema.parse(req.body);
 
-      console.log('Received athlete data in API:', athleteData);
+      // Athlete data received - debug logging removed for production
 
       // Add organization context for non-site admins
       const userIsSiteAdmin = isSiteAdmin(currentUser);
@@ -1252,7 +1786,7 @@ export function registerRoutes(app: Express) {
 
       const athlete = await storage.createAthlete(athleteData);
 
-      console.log('Athlete created successfully with', athleteData.teamIds?.length || 0, 'team assignments');
+      // Athlete created successfully - debug logging removed for production
 
       res.status(201).json(athlete);
     } catch (error) {
@@ -1440,7 +1974,7 @@ export function registerRoutes(app: Express) {
         );
 
         // Log access validation result without exposing IDs
-        console.log(`Measurement access validation: hasAccess=${hasAccess}`);
+        // Measurement access validation completed - debug logging removed for production
 
         if (!hasAccess) {
           return res.status(403).json({ message: "Cannot create measurements for athletes outside your organization" });
@@ -1867,7 +2401,7 @@ export function registerRoutes(app: Express) {
           `${req.protocol}://${req.get('host')}/accept-invitation?token=${inv.token}`
         );
 
-        console.log(`Created ${invitations.length} invitations for athlete ${athlete.firstName} ${athlete.lastName}`);
+        // Invitations created for athlete - debug logging removed for production
 
         return res.status(201).json({
           invitations: invitations.map(inv => ({ id: inv.id, email: inv.email })),
@@ -1926,7 +2460,7 @@ export function registerRoutes(app: Express) {
       const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
 
       // Log invitation creation for admin reference
-      console.log(`Invitation created: ${invitation.id} for ${email}`);
+      // Invitation created - debug logging removed for production
 
       return res.status(201).json({
         id: invitation.id,
@@ -2470,16 +3004,8 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Get all users (site admin only)
-  app.get("/api/users", requireSiteAdmin, async (req, res) => {
-    try {
-      const users = await storage.getUsers();
-      res.json(users);
-    } catch (error) {
-      console.error("Error getting users:", error);
-      res.status(500).json({ message: "Failed to get users" });
-    }
-  });
+  // Get all users - REMOVED: Duplicate route now handled by ./routes/user-routes.ts
+  // This route was causing conflicts with the refactored user management routes
 
   app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {
@@ -2906,12 +3432,12 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "No image file uploaded" });
       }
 
-      console.log(`Processing OCR for file: ${file.originalname}, size: ${file.size} bytes, type: ${file.mimetype}`);
+      // Debug logging removed for production: Processing OCR for file
 
       // Extract text and data using OCR
       const ocrResult = await ocrService.extractTextFromImage(file.buffer);
       
-      console.log(`OCR completed with confidence: ${ocrResult.confidence}%, extracted ${ocrResult.extractedData.length} measurements`);
+      // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];

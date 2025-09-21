@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import { body } from "express-validator";
 import { UserService } from "../services/user-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
+import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
 // Session types are loaded globally
 
 const userService = new UserService();
@@ -23,6 +24,23 @@ const createLimiter = rateLimit({
 export function registerUserRoutes(app: Express) {
   /**
    * Create user (site admin only)
+   * @route POST /api/users
+   * @body {Object} userData - User creation data
+   * @body {string} userData.firstName - User's first name (required)
+   * @body {string} userData.lastName - User's last name (required)
+   * @body {string[]} userData.emails - Array of email addresses (required)
+   * @body {string} userData.role - User role (required)
+   * @access Site Admins only
+   * @returns {Object} user - Created user object (limited fields)
+   * @returns {string} user.id - User UUID
+   * @returns {string[]} user.emails - User email addresses
+   * @returns {string} user.firstName - User's first name
+   * @returns {string} user.lastName - User's last name
+   * @throws {400} Validation error or invalid input
+   * @throws {401} User not authenticated
+   * @throws {403} Site admin access required
+   * @throws {429} Rate limit exceeded
+   * @throws {500} Server error during user creation
    */
   app.post("/api/users", createLimiter, requireSiteAdmin, async (req, res) => {
     try {
@@ -36,12 +54,111 @@ export function registerUserRoutes(app: Express) {
   });
 
   /**
-   * Get all users (site admin only)
+   * Get users with organization filtering and team memberships
+   * @route GET /api/users
+   * @query {string} [organizationId] - Filter by organization ID
+   * @query {string} [includeTeamMemberships] - Include team membership data ("true")
+   * @query {string} [role] - Filter by user role (e.g., "athlete")
+   * @query {string} [search] - Search term for name filtering
+   * @query {string} [excludeTeam] - Exclude users active on specific team
+   * @query {string} [season] - Filter by season for team memberships
+   * @access All authenticated users (filtered by organization access)
+   * @returns {Object[]} users - Array of user objects
+   * @returns {string} users[].id - User UUID
+   * @returns {string} users[].firstName - User's first name
+   * @returns {string} users[].lastName - User's last name
+   * @returns {string} users[].fullName - User's full name
+   * @returns {string} users[].role - User's role
+   * @returns {Object[]} [users[].teamMemberships] - Team memberships (if requested)
+   * @throws {401} User not authenticated
+   * @throws {403} No organization access
+   * @throws {500} Server error fetching users
    */
-  app.get("/api/users", requireSiteAdmin, async (req, res) => {
+  app.get("/api/users", requireAuth, async (req, res) => {
     try {
-      const users = await userService.getUsers();
-      res.json(users);
+      const { organizationId, includeTeamMemberships, role, search, excludeTeam, season } = req.query;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // For now, use the basic getUsersByOrganization from storage directly
+      // since UserService doesn't have this method yet
+      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
+
+      if (userIsSiteAdmin) {
+        const users = await userService.getUsers();
+        return res.json(users);
+      }
+
+      // Use the storage layer directly for organization-based user retrieval
+      const storage = (userService as any).storage;
+
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      if (userOrgs.length === 0) {
+        return res.status(403).json({ message: "No organization access" });
+      }
+
+      const targetOrgId = organizationId || userOrgs[0].organizationId;
+      let orgUsers = await storage.getUsersByOrganization(targetOrgId);
+
+      // Filter by role if specified (e.g., role=athlete for players only)
+      if (role) {
+        orgUsers = orgUsers.filter((user: any) => user.role === role);
+      }
+
+      // Filter by search term if specified with sanitization
+      if (search && typeof search === 'string') {
+        const sanitizedSearch = sanitizeSearchTerm(search);
+        if (!validateSearchTerm(sanitizedSearch)) {
+          return res.status(400).json({
+            message: "Invalid search term provided"
+          });
+        }
+
+        if (sanitizedSearch) {
+          const searchLower = sanitizedSearch.toLowerCase();
+          orgUsers = orgUsers.filter((user: any) =>
+            user.firstName?.toLowerCase().includes(searchLower) ||
+            user.lastName?.toLowerCase().includes(searchLower) ||
+            user.fullName?.toLowerCase().includes(searchLower)
+          );
+        }
+      }
+
+      // Include team memberships if requested - using optimized query to avoid N+1 problem
+      if (includeTeamMemberships === "true") {
+        // Sanitize search input to prevent injection attacks
+        let sanitizedSearch: string | undefined;
+        if (search && typeof search === 'string') {
+          sanitizedSearch = sanitizeSearchTerm(search);
+          if (!validateSearchTerm(sanitizedSearch)) {
+            return res.status(400).json({
+              message: "Invalid search term provided"
+            });
+          }
+          // Empty string after sanitization means no valid search term
+          sanitizedSearch = sanitizedSearch || undefined;
+        }
+
+        // Use optimized method that fetches users and team memberships in efficient queries
+        const filters = {
+          search: sanitizedSearch,
+          role: role as string | undefined,
+          excludeTeam: excludeTeam as string | undefined,
+          season: season as string | undefined
+        };
+
+        const usersWithTeams = await storage.getUsersWithTeamMembershipsByOrganization(
+          targetOrgId,
+          filters
+        );
+
+        return res.json(usersWithTeams);
+      }
+
+      res.json(orgUsers);
     } catch (error) {
       console.error("Get users error:", error);
       res.status(500).json({ message: "Failed to fetch users" });

@@ -4,6 +4,8 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { RouteWrapper } from "./components/RouteWrapper";
 import { AuthProvider } from "./lib/auth";
 import Layout from "./components/layout";
 import Login from "./pages/login";
@@ -43,34 +45,86 @@ function Router() {
       <Route path="/enhanced-login" component={EnhancedLogin} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/athletes/:id" component={AthleteProfile} />
-      <Route path="/athletes" component={Athletes} />
-      <Route path="/organizations/:id" component={OrganizationProfile} />
-      <Route path="/organizations" component={Organizations} />
-      <Route path="/users/:id" component={UserProfile} />
-      <Route path="/user-management" component={UserManagement} />
-      <Route path="/data-entry" component={DataEntry} />
+      <Route path="/athletes/:id">
+        <RouteWrapper>
+          <AthleteProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/athletes">
+        <RouteWrapper loadingText="Loading Athletes...">
+          <Athletes />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id">
+        <RouteWrapper>
+          <OrganizationProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations">
+        <RouteWrapper loadingText="Loading Organizations...">
+          <Organizations />
+        </RouteWrapper>
+      </Route>
+      <Route path="/users/:id">
+        <RouteWrapper loadingText="Loading User...">
+          <UserProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/user-management">
+        <RouteWrapper loadingText="Loading User Management...">
+          <UserManagement />
+        </RouteWrapper>
+      </Route>
+      <Route path="/data-entry">
+        <RouteWrapper loadingText="Loading Data Entry...">
+          <DataEntry />
+        </RouteWrapper>
+      </Route>
       <Route path="/analytics">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Analytics...</span></div>}>
+        <RouteWrapper loadingText="Loading Analytics...">
           <Analytics />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/coach-analytics">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Coach Analytics...</span></div>}>
+        <RouteWrapper loadingText="Loading Coach Analytics...">
           <CoachAnalytics />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/athlete-analytics">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div><span className="ml-2">Loading Athlete Analytics...</span></div>}>
+        <RouteWrapper loadingText="Loading Athlete Analytics...">
           <AthleteAnalytics />
-        </Suspense>
+        </RouteWrapper>
       </Route>
-      <Route path="/publish" component={Publish} />
-      <Route path="/import-export" component={ImportExport} />
-      <Route path="/admin" component={AdminPage} />
-      <Route path="/teams" component={Teams} />
-      <Route path="/profile" component={Profile} />
-      <Route path="/" component={Dashboard} />
+      <Route path="/publish">
+        <RouteWrapper loadingText="Loading Publish...">
+          <Publish />
+        </RouteWrapper>
+      </Route>
+      <Route path="/import-export">
+        <RouteWrapper loadingText="Loading Import/Export...">
+          <ImportExport />
+        </RouteWrapper>
+      </Route>
+      <Route path="/admin">
+        <RouteWrapper loadingText="Loading Admin...">
+          <AdminPage />
+        </RouteWrapper>
+      </Route>
+      <Route path="/teams">
+        <RouteWrapper loadingText="Loading Teams...">
+          <Teams />
+        </RouteWrapper>
+      </Route>
+      <Route path="/profile">
+        <RouteWrapper loadingText="Loading Profile...">
+          <Profile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/">
+        <RouteWrapper loadingText="Loading Dashboard...">
+          <Dashboard />
+        </RouteWrapper>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

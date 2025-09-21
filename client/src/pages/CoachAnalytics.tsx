@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, startTransition } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -176,7 +176,7 @@ export function CoachAnalytics() {
       metrics.additional.length + 1,
       timeframe.type
     );
-    setSelectedChartType(recommended);
+    startTransition(() => setSelectedChartType(recommended));
   }, [analysisType, metrics, timeframe]);
 
   const loadInitialData = async () => {
@@ -317,7 +317,7 @@ export function CoachAnalytics() {
 
     // Helper function to format metrics for display
     const formatMetricsForDisplay = () => {
-      if (selectedChartType === 'scatter_plot' && metrics.additional.length > 0) {
+      if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
         const primaryLabel = METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
         const additionalLabel = METRIC_CONFIG[metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || metrics.additional[0];
         return `${primaryLabel} vs ${additionalLabel}`;
@@ -329,7 +329,7 @@ export function CoachAnalytics() {
       case 'individual':
         const athleteName = availableAthletes.find(a => a.id === selectedAthleteId)?.name;
         title = athleteName ? `${athleteName} - Performance Analysis` : 'Individual Performance Analysis';
-        if (selectedChartType === 'scatter_plot' && metrics.additional.length > 0) {
+        if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
           subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
         } else {
           subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
@@ -513,7 +513,7 @@ export function CoachAnalytics() {
               <CardTitle className="text-sm">Chart Type</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <Select value={selectedChartType} onValueChange={(value) => setSelectedChartType(value as ChartType)}>
+              <Select value={selectedChartType} onValueChange={(value) => startTransition(() => setSelectedChartType(value as ChartType))}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>

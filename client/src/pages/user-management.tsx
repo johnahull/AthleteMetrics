@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -89,6 +90,7 @@ export default function UserManagement() {
   const { user, startImpersonation, impersonationStatus } = useAuth();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  const { confirm, ConfirmationComponent } = useConfirmation();
   const queryClient = useQueryClient();
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
@@ -471,9 +473,12 @@ export default function UserManagement() {
   });
 
   const handleDeleteInvitation = (invitationId: string, email: string) => {
-    if (window.confirm(`Are you sure you want to delete the invitation for ${email || 'this user'}?`)) {
-      deleteInvitationMutation.mutate(invitationId);
-    }
+    confirm({
+      title: "Delete Invitation",
+      description: `Are you sure you want to delete the invitation for ${email || 'this user'}? This action cannot be undone.`,
+      confirmText: "Delete",
+      onConfirm: () => deleteInvitationMutation.mutate(invitationId),
+    });
   };
 
   const copyExistingInviteLink = async (invitation: any) => {
@@ -1077,6 +1082,7 @@ export default function UserManagement() {
           </CardContent>
         </Card>
       </div>
+      {ConfirmationComponent}
     </div>
   );
 }

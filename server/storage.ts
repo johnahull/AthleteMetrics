@@ -47,6 +47,14 @@ export interface IStorage {
   removeUserFromOrganization(userId: string, organizationId: string): Promise<void>;
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
 
+  // Optimized queries
+  getUsersWithTeamMembershipsByOrganization(organizationId: string, filters?: {
+    search?: string;
+    role?: string;
+    excludeTeam?: string;
+    season?: string;
+  }): Promise<any[]>;
+
   // Invitations
   createInvitation(data: {
     email: string;
@@ -70,6 +78,9 @@ export interface IStorage {
     birthYearFrom?: number;
     birthYearTo?: number;
     search?: string;
+    gender?: string;
+    page?: number;
+    limit?: number;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
@@ -1949,7 +1960,7 @@ export class DatabaseStorage implements IStorage {
     .from(users)
     .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
     .where(eq(userOrganizations.organizationId, organizationId));
-    
+
     return result;
   }
 
@@ -1959,6 +1970,150 @@ export class DatabaseStorage implements IStorage {
       measurementsCreated: 0,
       teamsManaged: 0
     };
+  }
+
+  /**
+   * Optimized method to fetch users with team memberships in a single query to avoid N+1 problem
+   * This replaces the individual getUserTeams calls for each user
+   */
+  async getUsersWithTeamMembershipsByOrganization(organizationId: string, filters?: {
+    search?: string;
+    role?: string;
+    excludeTeam?: string;
+    season?: string;
+  }): Promise<any[]> {
+    console.log('Using optimized getUsersWithTeamMembershipsByOrganization query');
+
+    // Build WHERE conditions for user filtering
+    const userConditions = [eq(userOrganizations.organizationId, organizationId)];
+
+    if (filters?.role) {
+      userConditions.push(eq(userOrganizations.role, filters.role));
+    }
+
+    if (filters?.search) {
+      const searchLower = `%${filters.search.toLowerCase()}%`;
+      userConditions.push(
+        or(
+          sql`LOWER(${users.firstName}) LIKE ${searchLower}`,
+          sql`LOWER(${users.lastName}) LIKE ${searchLower}`,
+          sql`LOWER(${users.firstName} || ' ' || ${users.lastName}) LIKE ${searchLower}`
+        )!
+      );
+    }
+
+    // Step 1: Get all users in the organization
+    const usersQuery = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        fullName: users.fullName,
+        emails: users.emails,
+        birthDate: users.birthDate,
+        birthYear: users.birthYear,
+        graduationYear: users.graduationYear,
+        school: users.school,
+        phoneNumbers: users.phoneNumbers,
+        sports: users.sports,
+        positions: users.positions,
+        height: users.height,
+        weight: users.weight,
+        gender: users.gender,
+        role: userOrganizations.role,
+        createdAt: users.createdAt
+      })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...userConditions))
+      .orderBy(asc(users.lastName), asc(users.firstName));
+
+    if (usersQuery.length === 0) {
+      return [];
+    }
+
+    const userIds = usersQuery.map((user: any) => user.id);
+
+    // Step 2: Get all team memberships for these users in a single query
+    const teamMembershipConditions = [
+      inArray(userTeams.userId, userIds),
+      eq(userTeams.isActive, "true"),
+      eq(teams.isArchived, "false")
+    ];
+
+    if (filters?.excludeTeam) {
+      teamMembershipConditions.push(ne(teams.id, filters.excludeTeam));
+    }
+
+    if (filters?.season) {
+      teamMembershipConditions.push(eq(userTeams.season, filters.season));
+    }
+
+    const teamMemberships = await db
+      .select({
+        userId: userTeams.userId,
+        teamId: userTeams.teamId,
+        teamName: teams.name,
+        isActive: userTeams.isActive,
+        season: userTeams.season,
+        joinedAt: userTeams.joinedAt,
+        leftAt: userTeams.leftAt
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(and(...teamMembershipConditions));
+
+    // Step 3: Group team memberships by user ID for efficient lookup
+    const membershipsByUser = new Map<string, any[]>();
+    teamMemberships.forEach((membership: any) => {
+      if (!membershipsByUser.has(membership.userId)) {
+        membershipsByUser.set(membership.userId, []);
+      }
+      membershipsByUser.get(membership.userId)!.push({
+        teamId: membership.teamId,
+        teamName: membership.teamName,
+        isActive: membership.isActive,
+        season: membership.season,
+        joinedAt: membership.joinedAt,
+        leftAt: membership.leftAt
+      });
+    });
+
+    // Step 4: Combine users with their team memberships
+    const result = usersQuery.map((user: any) => ({
+      ...user,
+      teamMemberships: membershipsByUser.get(user.id) || []
+    }));
+
+    // Apply post-query filters if needed
+    let filteredResult = result;
+
+    if (filters?.excludeTeam) {
+      filteredResult = result.filter((user: any) => {
+        // Exclude users who are active members of the excluded team
+        const isOnExcludedTeam = user.teamMemberships.some((membership: any) =>
+          membership.teamId === filters.excludeTeam && membership.isActive === "true"
+        );
+        return !isOnExcludedTeam;
+      });
+    }
+
+    if (filters?.season) {
+      filteredResult = filteredResult.filter((user: any) => {
+        // If no team memberships, include the user
+        if (!user.teamMemberships || user.teamMemberships.length === 0) {
+          return true;
+        }
+        // Check if user has any membership in the specified season
+        return user.teamMemberships.some((membership: any) =>
+          membership.season === filters.season || !membership.season
+        );
+      });
+    }
+
+    console.log(`Optimized query returned ${filteredResult.length} users with team memberships`);
+    return filteredResult;
   }
 
 }

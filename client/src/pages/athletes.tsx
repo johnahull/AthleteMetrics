@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AthleteModal from "@/components/athlete-modal";
@@ -157,6 +157,41 @@ export default function Athletes() {
   const handleDeleteAthlete = async (athleteId: string, athleteName: string) => {
     if (window.confirm(`Are you sure you want to delete "${athleteName}"? This action cannot be undone.`)) {
       deleteAthleteMutation.mutate(athleteId);
+    }
+  };
+
+  // Remove athlete from team mutation
+  const removeAthleteFromTeamMutation = useMutation({
+    mutationFn: async ({ athleteId, teamId }: { athleteId: string; teamId: string }) => {
+      await apiRequest("DELETE", `/api/teams/${teamId}/athletes/${athleteId}`);
+    },
+    onSuccess: (_, { athleteId, teamId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+
+      // Find team name for better UX
+      const team = teams.find((t: any) => t.id === teamId);
+      toast({
+        title: "Success",
+        description: `Athlete removed from ${team?.name || 'team'} successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove athlete from team",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRemoveAthleteFromTeam = async (athleteId: string, athleteName: string, teamId: string) => {
+    const team = teams.find((t: any) => t.id === teamId);
+    const teamName = team?.name || 'this team';
+
+    if (window.confirm(`Are you sure you want to remove "${athleteName}" from ${teamName}?`)) {
+      removeAthleteFromTeamMutation.mutate({ athleteId, teamId });
     }
   };
 
@@ -648,6 +683,20 @@ export default function Athletes() {
                               <Mail className="h-4 w-4" />
                             </Button>
                           )}
+                          {/* Remove from Team Button - only show when viewing specific team */}
+                          {filters.teamId && filters.teamId !== 'all' && athlete.teams?.some((team: any) => team.id === filters.teamId) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveAthleteFromTeam(athlete.id, athlete.fullName, filters.teamId)}
+                              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              disabled={removeAthleteFromTeamMutation.isPending}
+                              title={`Remove from ${teams.find((t: any) => t.id === filters.teamId)?.name || 'team'}`}
+                              data-testid={`button-remove-from-team-${athlete.id}`}
+                            >
+                              <UserMinus className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -673,14 +722,12 @@ export default function Athletes() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         athlete={null}
-        teams={teams || []}
       />
 
       <AthleteModal
         isOpen={!!editingAthlete}
         onClose={() => setEditingAthlete(null)}
         athlete={editingAthlete}
-        teams={teams || []}
       />
     </div>
   );
