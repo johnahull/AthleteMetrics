@@ -8,6 +8,7 @@ import { body, validationResult } from "express-validator";
 import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
+import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -827,7 +828,21 @@ export function registerRoutes(app: Express) {
 
   // ⚠️ END OF LEGACY AUTH/USER ROUTES - Now using refactored service layer
   
-  // Team routes with basic organization support
+  /**
+   * Get teams with organization filtering
+   * @route GET /api/teams
+   * @query {string} [organizationId] - Filter teams by organization (site admins only)
+   * @access All authenticated users (filtered by organization access)
+   * @returns {Object[]} teams - Array of team objects
+   * @returns {string} teams[].id - Team UUID
+   * @returns {string} teams[].name - Team name
+   * @returns {string} teams[].level - Team level (Club, HS, College)
+   * @returns {string} teams[].organizationId - Organization UUID
+   * @returns {string} teams[].isArchived - Archive status ("true"/"false")
+   * @throws {401} User not authenticated
+   * @throws {403} No organization access
+   * @throws {500} Server error fetching teams
+   */
   app.get("/api/teams", requireAuth, async (req, res) => {
     try {
       const {organizationId} = req.query;
@@ -870,6 +885,25 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  /**
+   * Create a new team
+   * @route POST /api/teams
+   * @body {Object} teamData - Team creation data
+   * @body {string} teamData.name - Team name (required)
+   * @body {string} teamData.level - Team level: "Club", "HS", or "College" (required)
+   * @body {string} [teamData.organizationId] - Organization UUID (auto-assigned for non-site admins)
+   * @body {string} [teamData.season] - Team season
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} team - Created team object
+   * @returns {string} team.id - Team UUID
+   * @returns {string} team.name - Team name
+   * @returns {string} team.level - Team level
+   * @returns {string} team.organizationId - Organization UUID
+   * @throws {400} Validation error or invalid organization
+   * @throws {401} User not authenticated
+   * @throws {403} Athletes cannot create teams or organization access denied
+   * @throws {500} Server error during team creation
+   */
   app.post("/api/teams", createLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
@@ -1113,7 +1147,21 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Add multiple players to a team
+  /**
+   * Add multiple players to a team
+   * @route POST /api/teams/:teamId/add-players
+   * @param {string} teamId - UUID of the team
+   * @body {string[]} playerIds - Array of player UUIDs (max 100)
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} result - Operation results with success/error details
+   * @returns {Object[]} result.results - Array of successful additions
+   * @returns {Object[]} result.errors - Array of failed additions with reasons
+   * @throws {400} Invalid input, duplicate IDs, or validation errors
+   * @throws {401} User not authenticated
+   * @throws {403} Insufficient permissions or access denied
+   * @throws {404} Team not found
+   * @throws {500} Server error during transaction
+   */
   app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, async (req, res) => {
     const { teamId } = req.params;
     try {
@@ -1140,26 +1188,30 @@ export function registerRoutes(app: Express) {
       }
 
       // Validate all playerIds are valid UUIDs
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const invalidIds = playerIds.filter(id => !uuidRegex.test(id));
-      if (invalidIds.length > 0) {
+      try {
+        validateUuidsOrThrow(playerIds, "player IDs");
+      } catch (error: any) {
         return res.status(400).json({
-          message: "Invalid player IDs provided",
-          invalidIds
+          message: error.message
+        });
+      }
+
+      // Check for duplicate IDs within the request
+      const uniqueIds = new Set(playerIds);
+      if (uniqueIds.size !== playerIds.length) {
+        const duplicates = playerIds.filter((id, index) => playerIds.indexOf(id) !== index);
+        return res.status(400).json({
+          message: `Duplicate player IDs found: ${[...new Set(duplicates)].join(", ")}`
         });
       }
 
       // Get the team to check access
       const team = await storage.getTeam(teamId);
-      if (!team) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Validate user has access to the team's organization
-      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
-        return res.status(403).json({ message: "Access denied to this organization" });
+      // Validate user has access to the team and its organization
+      if (!team || (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
       // Use transaction to ensure atomicity
@@ -1278,7 +1330,22 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Remove athlete from team
+  /**
+   * Remove athlete from team
+   * @route DELETE /api/teams/:teamId/athletes/:athleteId
+   * @param {string} teamId - UUID of the team
+   * @param {string} athleteId - UUID of the athlete to remove
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} result - Success message with operation details
+   * @returns {string} result.message - Success confirmation message
+   * @returns {string} result.teamId - ID of the team
+   * @returns {string} result.athleteId - ID of the removed athlete
+   * @throws {400} Invalid UUID format for parameters
+   * @throws {401} User not authenticated
+   * @throws {403} Insufficient permissions or access denied
+   * @throws {404} Team or athlete not found
+   * @throws {500} Server error during removal operation
+   */
   app.delete("/api/teams/:teamId/athletes/:athleteId", teamManagementLimiter, requireAuth, async (req, res) => {
     const { teamId, athleteId } = req.params;
     try {
@@ -1294,28 +1361,19 @@ export function registerRoutes(app: Express) {
       }
 
       // Validate UUIDs
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(teamId) || !uuidRegex.test(athleteId)) {
-        return res.status(400).json({ message: "Invalid team or athlete ID" });
+      if (!validateUuidParams(req, res, ['teamId', 'athleteId'])) {
+        return; // Response already sent by validateUuidParams
       }
 
-      // Get the team to check access
+      // Get the team and athlete to check access
       const team = await storage.getTeam(teamId);
-      if (!team) {
-        return res.status(404).json({ message: "Team not found" });
-      }
-
+      const athlete = await storage.getUser(athleteId);
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Validate user has access to the team's organization
-      if (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId)) {
-        return res.status(403).json({ message: "Access denied to this organization" });
-      }
-
-      // Check if athlete exists
-      const athlete = await storage.getUser(athleteId);
-      if (!athlete) {
-        return res.status(404).json({ message: "Athlete not found" });
+      // Validate user has access to both the team and athlete
+      if (!team || !athlete ||
+          (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
       // Validate athlete belongs to the same organization (if not site admin)

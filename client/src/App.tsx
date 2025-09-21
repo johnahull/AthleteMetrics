@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { RouteWrapper } from "./components/RouteWrapper";
 import { AuthProvider } from "./lib/auth";
 import Layout from "./components/layout";
 import Login from "./pages/login";
@@ -45,84 +46,84 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/athletes/:id">
-        <Suspense fallback={<LoadingSpinner />}>
+        <RouteWrapper>
           <AthleteProfile />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/athletes">
-        <Suspense fallback={<LoadingSpinner text="Loading Athletes..." />}>
+        <RouteWrapper loadingText="Loading Athletes...">
           <Athletes />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/organizations/:id">
-        <Suspense fallback={<LoadingSpinner />}>
+        <RouteWrapper>
           <OrganizationProfile />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/organizations">
-        <Suspense fallback={<LoadingSpinner text="Loading Organizations..." />}>
+        <RouteWrapper loadingText="Loading Organizations...">
           <Organizations />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/users/:id">
-        <Suspense fallback={<LoadingSpinner text="Loading User..." />}>
+        <RouteWrapper loadingText="Loading User...">
           <UserProfile />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/user-management">
-        <Suspense fallback={<LoadingSpinner text="Loading User Management..." />}>
+        <RouteWrapper loadingText="Loading User Management...">
           <UserManagement />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/data-entry">
-        <Suspense fallback={<LoadingSpinner text="Loading Data Entry..." />}>
+        <RouteWrapper loadingText="Loading Data Entry...">
           <DataEntry />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/analytics">
-        <Suspense fallback={<LoadingSpinner text="Loading Analytics..." />}>
+        <RouteWrapper loadingText="Loading Analytics...">
           <Analytics />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/coach-analytics">
-        <Suspense fallback={<LoadingSpinner text="Loading Coach Analytics..." />}>
+        <RouteWrapper loadingText="Loading Coach Analytics...">
           <CoachAnalytics />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/athlete-analytics">
-        <Suspense fallback={<LoadingSpinner text="Loading Athlete Analytics..." />}>
+        <RouteWrapper loadingText="Loading Athlete Analytics...">
           <AthleteAnalytics />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/publish">
-        <Suspense fallback={<LoadingSpinner text="Loading Publish..." />}>
+        <RouteWrapper loadingText="Loading Publish...">
           <Publish />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/import-export">
-        <Suspense fallback={<LoadingSpinner text="Loading Import/Export..." />}>
+        <RouteWrapper loadingText="Loading Import/Export...">
           <ImportExport />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/admin">
-        <Suspense fallback={<LoadingSpinner text="Loading Admin..." />}>
+        <RouteWrapper loadingText="Loading Admin...">
           <AdminPage />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/teams">
-        <Suspense fallback={<LoadingSpinner text="Loading Teams..." />}>
+        <RouteWrapper loadingText="Loading Teams...">
           <Teams />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/profile">
-        <Suspense fallback={<LoadingSpinner text="Loading Profile..." />}>
+        <RouteWrapper loadingText="Loading Profile...">
           <Profile />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route path="/">
-        <Suspense fallback={<LoadingSpinner text="Loading Dashboard..." />}>
+        <RouteWrapper loadingText="Loading Dashboard...">
           <Dashboard />
-        </Suspense>
+        </RouteWrapper>
       </Route>
       <Route component={NotFound} />
     </Switch>

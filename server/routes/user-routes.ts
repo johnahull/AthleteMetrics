@@ -23,6 +23,23 @@ const createLimiter = rateLimit({
 export function registerUserRoutes(app: Express) {
   /**
    * Create user (site admin only)
+   * @route POST /api/users
+   * @body {Object} userData - User creation data
+   * @body {string} userData.firstName - User's first name (required)
+   * @body {string} userData.lastName - User's last name (required)
+   * @body {string[]} userData.emails - Array of email addresses (required)
+   * @body {string} userData.role - User role (required)
+   * @access Site Admins only
+   * @returns {Object} user - Created user object (limited fields)
+   * @returns {string} user.id - User UUID
+   * @returns {string[]} user.emails - User email addresses
+   * @returns {string} user.firstName - User's first name
+   * @returns {string} user.lastName - User's last name
+   * @throws {400} Validation error or invalid input
+   * @throws {401} User not authenticated
+   * @throws {403} Site admin access required
+   * @throws {429} Rate limit exceeded
+   * @throws {500} Server error during user creation
    */
   app.post("/api/users", createLimiter, requireSiteAdmin, async (req, res) => {
     try {
@@ -37,10 +54,28 @@ export function registerUserRoutes(app: Express) {
 
   /**
    * Get users with organization filtering and team memberships
+   * @route GET /api/users
+   * @query {string} [organizationId] - Filter by organization ID
+   * @query {string} [includeTeamMemberships] - Include team membership data ("true")
+   * @query {string} [role] - Filter by user role (e.g., "athlete")
+   * @query {string} [search] - Search term for name filtering
+   * @query {string} [excludeTeam] - Exclude users active on specific team
+   * @query {string} [season] - Filter by season for team memberships
+   * @access All authenticated users (filtered by organization access)
+   * @returns {Object[]} users - Array of user objects
+   * @returns {string} users[].id - User UUID
+   * @returns {string} users[].firstName - User's first name
+   * @returns {string} users[].lastName - User's last name
+   * @returns {string} users[].fullName - User's full name
+   * @returns {string} users[].role - User's role
+   * @returns {Object[]} [users[].teamMemberships] - Team memberships (if requested)
+   * @throws {401} User not authenticated
+   * @throws {403} No organization access
+   * @throws {500} Server error fetching users
    */
   app.get("/api/users", requireAuth, async (req, res) => {
     try {
-      const { organizationId, includeTeamMemberships, role } = req.query;
+      const { organizationId, includeTeamMemberships, role, search, excludeTeam, season } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -72,6 +107,16 @@ export function registerUserRoutes(app: Express) {
         orgUsers = orgUsers.filter((user: any) => user.role === role);
       }
 
+      // Filter by search term if specified
+      if (search && typeof search === 'string') {
+        const searchLower = search.toLowerCase();
+        orgUsers = orgUsers.filter((user: any) =>
+          user.firstName?.toLowerCase().includes(searchLower) ||
+          user.lastName?.toLowerCase().includes(searchLower) ||
+          user.fullName?.toLowerCase().includes(searchLower)
+        );
+      }
+
       // Include team memberships if requested
       if (includeTeamMemberships === "true") {
         const usersWithTeams = await Promise.all(
@@ -90,7 +135,33 @@ export function registerUserRoutes(app: Express) {
             };
           })
         );
-        return res.json(usersWithTeams);
+
+        // Filter out users who are active members of the excluded team
+        let filteredUsers = usersWithTeams;
+        if (excludeTeam && typeof excludeTeam === 'string') {
+          filteredUsers = usersWithTeams.filter((user: any) => {
+            const isOnExcludedTeam = user.teamMemberships?.some((membership: any) =>
+              membership.teamId === excludeTeam && membership.isActive === "true"
+            );
+            return !isOnExcludedTeam;
+          });
+        }
+
+        // Filter by season if specified
+        if (season && typeof season === 'string') {
+          filteredUsers = filteredUsers.filter((user: any) => {
+            // If no team memberships, include the user
+            if (!user.teamMemberships || user.teamMemberships.length === 0) {
+              return true;
+            }
+            // Check if user has any membership in the specified season
+            return user.teamMemberships.some((membership: any) =>
+              membership.season === season || !membership.season // Include users without season data
+            );
+          });
+        }
+
+        return res.json(filteredUsers);
       }
 
       res.json(orgUsers);
