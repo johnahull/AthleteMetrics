@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,6 +13,9 @@ import { Search, Users, Plus, UserCheck, UserMinus, Eye, UserPlus, ChevronLeft, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import { getAvailableSeasons, formatSeasonForDisplay } from "@/utils/seasons";
+import { sanitizeSearchTerm } from "@shared/input-sanitization";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Team, User } from "@shared/schema";
 
 // Extended User type for team management with memberships
@@ -51,6 +54,9 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   const [currentPageAvailable, setCurrentPageAvailable] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
+  // Dynamic seasons generation
+  const availableSeasons = useMemo(() => getAvailableSeasons(1, 1), []);
+
   // Accessibility refs
   const searchInputRef = useRef<HTMLInputElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -71,28 +77,44 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
 
+  // Reset all modal state to default values
+  const resetModalState = useCallback(() => {
+    setSearchTerm("");
+    setSelectedPlayerIds([]);
+    setSelectedCurrentAthleteIds([]);
+    setCurrentPageCurrent(1);
+    setCurrentPageAvailable(1);
+    setShowOnlyAvailable(true);
+    setSelectedSeason("");
+  }, []);
+
+  // Reset pagination state when filters change
+  const resetPagination = useCallback(() => {
+    setCurrentPageCurrent(1);
+    setCurrentPageAvailable(1);
+  }, []);
+
   // Reset state when modal opens/closes or team changes
   useEffect(() => {
     if (isOpen) {
-      setSearchTerm("");
-      setSelectedPlayerIds([]);
-      setSelectedCurrentAthleteIds([]);
+      resetModalState();
       setActiveTab(defaultTab);
-      setCurrentPageCurrent(1);
-      setCurrentPageAvailable(1);
 
       // Focus search input when modal opens for better accessibility
       setTimeout(() => {
         searchInputRef.current?.focus();
       }, 100);
     }
-  }, [isOpen, team?.id, defaultTab]);
+  }, [isOpen, team?.id, defaultTab, resetModalState]);
 
-  // Reset pagination when filters change
+  // Reset pagination when filters change (with debouncing to prevent excessive resets)
   useEffect(() => {
-    setCurrentPageCurrent(1);
-    setCurrentPageAvailable(1);
-  }, [searchTerm, showOnlyAvailable, selectedSeason]);
+    const timeoutId = setTimeout(() => {
+      resetPagination();
+    }, 150); // Small delay to debounce filter changes
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, showOnlyAvailable, selectedSeason, resetPagination]);
 
   // Reset bulk selection when tab changes
   useEffect(() => {
@@ -100,34 +122,53 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
     setSelectedPlayerIds([]);
   }, [activeTab]);
 
-  // Fetch current team athletes
-  const { data: currentAthletes = [], isLoading: isLoadingCurrent } = useQuery({
-    queryKey: ["/api/athletes", team?.id, "team-members"],
+  // Fetch current team athletes with pagination
+  const { data: currentAthletesResponse, isLoading: isLoadingCurrent } = useQuery({
+    queryKey: ["/api/athletes", team?.id, "team-members", searchTerm, currentPageCurrent, ITEMS_PER_PAGE],
     queryFn: async () => {
-      if (!team?.id) return [];
+      if (!team?.id) return { athletes: [], total: 0, page: 1, limit: ITEMS_PER_PAGE };
 
       const params = new URLSearchParams();
       params.append('teamId', team.id);
+      params.append('page', currentPageCurrent.toString());
+      params.append('limit', ITEMS_PER_PAGE.toString());
 
       if (effectiveOrganizationId) {
         params.append('organizationId', effectiveOrganizationId);
       }
 
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+
       const response = await fetch(`/api/athletes?${params}`);
       if (!response.ok) throw new Error('Failed to fetch team athletes');
-      return response.json();
+      const data = await response.json();
+
+      // Ensure we return consistent structure for pagination
+      return {
+        athletes: Array.isArray(data) ? data : data.athletes || [],
+        total: data.total || (Array.isArray(data) ? data.length : 0),
+        page: data.page || currentPageCurrent,
+        limit: data.limit || ITEMS_PER_PAGE
+      };
     },
     enabled: isOpen && !!team?.id
   });
 
-  // Fetch all organization athletes for adding with server-side filtering
-  const { data: availableAthletes = [], isLoading: isLoadingAvailable } = useQuery({
-    queryKey: ["/api/users", effectiveOrganizationId, team?.id, searchTerm, showOnlyAvailable, selectedSeason],
+  const currentAthletes = currentAthletesResponse?.athletes || [];
+  const currentAthletesTotal = currentAthletesResponse?.total || 0;
+
+  // Fetch all organization athletes for adding with server-side filtering and pagination
+  const { data: availableAthletesResponse, isLoading: isLoadingAvailable } = useQuery({
+    queryKey: ["/api/users", effectiveOrganizationId, team?.id, searchTerm, showOnlyAvailable, selectedSeason, currentPageAvailable, ITEMS_PER_PAGE],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (effectiveOrganizationId) params.append('organizationId', effectiveOrganizationId);
       params.append('includeTeamMemberships', 'true');
       params.append('role', 'athlete');
+      params.append('page', currentPageAvailable.toString());
+      params.append('limit', ITEMS_PER_PAGE.toString());
       if (searchTerm) params.append('search', searchTerm);
       if (selectedSeason) params.append('season', selectedSeason);
       if (showOnlyAvailable && team?.id) {
@@ -137,43 +178,29 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       const url = `/api/users?${params.toString()}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch athletes');
-      return response.json();
+      const data = await response.json();
+
+      // Ensure consistent structure for pagination
+      return {
+        users: Array.isArray(data) ? data : data.users || [],
+        total: data.total || (Array.isArray(data) ? data.length : 0),
+        page: data.page || currentPageAvailable,
+        limit: data.limit || ITEMS_PER_PAGE
+      };
     },
     enabled: isOpen && !!team?.id
   });
 
-  // Filter current athletes based on search
-  const filteredCurrentAthletes = useMemo(() => {
-    if (!searchTerm) return currentAthletes;
+  const availableAthletes = availableAthletesResponse?.users || [];
+  const availableAthletesTotal = availableAthletesResponse?.total || 0;
 
-    const searchLower = searchTerm.toLowerCase();
-    return currentAthletes.filter((athlete: UserWithTeamMemberships) =>
-      athlete.firstName.toLowerCase().includes(searchLower) ||
-      athlete.lastName.toLowerCase().includes(searchLower) ||
-      athlete.fullName?.toLowerCase().includes(searchLower)
-    );
-  }, [currentAthletes, searchTerm]);
+  // Data is already filtered and paginated server-side, no need for client-side processing
+  const paginatedCurrentAthletes = currentAthletes;
+  const paginatedAvailableAthletes = availableAthletes;
 
-  const paginatedCurrentAthletes = useMemo(() => {
-    const startIndex = (currentPageCurrent - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredCurrentAthletes.slice(startIndex, endIndex);
-  }, [filteredCurrentAthletes, currentPageCurrent]);
-
-  const totalPagesCurrent = Math.ceil(filteredCurrentAthletes.length / ITEMS_PER_PAGE);
-
-  // Available athletes are already filtered server-side
-  const filteredAvailableAthletes = useMemo(() => {
-    return availableAthletes || [];
-  }, [availableAthletes]);
-
-  const paginatedAvailableAthletes = useMemo(() => {
-    const startIndex = (currentPageAvailable - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredAvailableAthletes.slice(startIndex, endIndex);
-  }, [filteredAvailableAthletes, currentPageAvailable]);
-
-  const totalPagesAvailable = Math.ceil(filteredAvailableAthletes.length / ITEMS_PER_PAGE);
+  // Calculate total pages from server response
+  const totalPagesCurrent = Math.ceil(currentAthletesTotal / ITEMS_PER_PAGE);
+  const totalPagesAvailable = Math.ceil(availableAthletesTotal / ITEMS_PER_PAGE);
 
   // Check if athlete is on team
   const isAthleteOnTeam = (athlete: UserWithTeamMemberships): boolean => {
@@ -238,10 +265,13 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       return { previousAthletes, previousUsers };
     },
     onSuccess: (_, { athleteId }) => {
-      // Invalidate to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/athletes", team?.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", effectiveOrganizationId] });
+      // Invalidate all related queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+
+      // Reset pagination to first page for current view
+      setCurrentPageCurrent(1);
 
       const athlete = currentAthletes.find((a: UserWithTeamMemberships) => a.id === athleteId);
       toast({
@@ -343,10 +373,14 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       return { previousAthletes, previousUsers, selectedIds: athleteIds };
     },
     onSuccess: (data: { success: number; errorCount: number; errors?: any[] }) => {
-      // Invalidate to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/athletes", team?.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", effectiveOrganizationId] });
+      // Invalidate all related queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+
+      // Reset pagination to first page for both views
+      setCurrentPageCurrent(1);
+      setCurrentPageAvailable(1);
 
       const successCount = data.success || 0;
       const errorCount = data.errorCount || 0;
@@ -391,25 +425,16 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   // Bulk remove athletes mutation with optimistic updates
   const bulkRemoveAthletesMutation = useMutation({
     mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
-      // Since we don't have a bulk remove endpoint, we'll use multiple individual calls
-      const results = await Promise.allSettled(
-        athleteIds.map(athleteId =>
-          apiRequest("DELETE", `/api/teams/${team!.id}/athletes/${athleteId}`)
-        )
-      );
-
-      const success = results.filter(result => result.status === 'fulfilled').length;
-      const errors = results
-        .filter(result => result.status === 'rejected')
-        .map((result, index) => ({
-          athleteId: athleteIds[index],
-          error: result.status === 'rejected' ? result.reason?.message || 'Unknown error' : 'Unknown error'
-        }));
+      // Use the new bulk remove endpoint with database transactions
+      const response = await apiRequest("DELETE", `/api/teams/${team!.id}/remove-athletes`, {
+        athleteIds
+      });
+      const result = await response.json();
 
       return {
-        success,
-        errorCount: errors.length,
-        errors: errors.length > 0 ? errors : undefined
+        success: result.success || 0,
+        errorCount: result.errorCount || 0,
+        errors: result.errors
       };
     },
     onMutate: async (athleteIds: string[]) => {
@@ -459,10 +484,14 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       return { previousAthletes, previousUsers, selectedIds: athleteIds };
     },
     onSuccess: (data: { success: number; errorCount: number; errors?: any[] }) => {
-      // Invalidate to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/athletes", team?.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/users", effectiveOrganizationId] });
+      // Invalidate all related queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+
+      // Reset pagination to first page for both views
+      setCurrentPageCurrent(1);
+      setCurrentPageAvailable(1);
 
       const successCount = data.success || 0;
       const errorCount = data.errorCount || 0;
@@ -525,7 +554,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   // Handle select all available
   const handleSelectAllAvailable = () => {
-    const availableIds = filteredAvailableAthletes
+    const availableIds = availableAthletes
       .filter((athlete: UserWithTeamMemberships) => !isAthleteOnTeam(athlete))
       .map((athlete: UserWithTeamMemberships) => athlete.id);
     setSelectedPlayerIds(availableIds);
@@ -560,7 +589,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   // Handle select all current athletes
   const handleSelectAllCurrent = () => {
-    const allCurrentIds = filteredCurrentAthletes.map((athlete: UserWithTeamMemberships) => athlete.id);
+    const allCurrentIds = currentAthletes.map((athlete: UserWithTeamMemberships) => athlete.id);
     setSelectedCurrentAthleteIds(allCurrentIds);
   };
 
@@ -601,16 +630,40 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   if (!team) return null;
 
   const currentCount = currentAthletes.length;
-  const availableCount = filteredAvailableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length;
+  const availableCount = availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent
-        className="sm:max-w-3xl max-h-[85vh]"
-        role="dialog"
-        aria-labelledby="team-athletes-title"
-        aria-describedby="team-athletes-description"
+      <ErrorBoundary
+        onError={(error, errorInfo) => {
+          console.error('TeamAthletesModal Error:', error);
+          console.error('Error Info:', errorInfo);
+        }}
+        fallback={
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Users className="h-5 w-5" />
+                Team Management Error
+              </DialogTitle>
+              <DialogDescription>
+                Something went wrong while loading the team management interface. Please try again.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end pt-4">
+              <Button onClick={onClose} variant="outline">
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        }
       >
+        <DialogContent
+          className="sm:max-w-3xl max-h-[85vh]"
+          role="dialog"
+          aria-labelledby="team-athletes-title"
+          aria-describedby="team-athletes-description"
+        >
         <DialogHeader>
           <DialogTitle id="team-athletes-title" className="flex items-center gap-2">
             <Users className="h-5 w-5" aria-hidden="true" />
@@ -658,7 +711,10 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
               ref={searchInputRef}
               placeholder="Search athletes by name..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const sanitized = sanitizeSearchTerm(e.target.value);
+                setSearchTerm(sanitized);
+              }}
               className="pl-10"
               disabled={isPending}
               aria-describedby={searchTerm ? "search-results-count" : undefined}
@@ -666,8 +722,8 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             {searchTerm && (
               <div id="search-results-count" className="sr-only">
                 {activeTab === 'current'
-                  ? `${filteredCurrentAthletes.length} current athletes found`
-                  : `${filteredAvailableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes found`
+                  ? `${currentAthletes.length} current athletes found`
+                  : `${availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes found`
                 }
               </div>
             )}
@@ -681,20 +737,20 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             aria-labelledby="current-tab"
           >
             {/* Bulk Selection Controls for Current Athletes */}
-            {filteredCurrentAthletes.length > 0 && (
+            {currentAthletes.length > 0 && (
               <div className="flex items-center justify-between mb-4" role="toolbar" aria-label="Current athlete bulk actions">
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleSelectAllCurrent}
-                    disabled={isPending || filteredCurrentAthletes.length === 0}
+                    disabled={isPending || currentAthletes.length === 0}
                     aria-describedby="select-all-current-description"
                   >
-                    Select All ({filteredCurrentAthletes.length})
+                    Select All ({currentAthletes.length})
                   </Button>
                   <div id="select-all-current-description" className="sr-only">
-                    Select all {filteredCurrentAthletes.length} current athletes for bulk removal
+                    Select all {currentAthletes.length} current athletes for bulk removal
                   </div>
                   <Button
                     variant="outline"
@@ -873,11 +929,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
               </nav>
             )}
 
-            {filteredCurrentAthletes.length > 0 && (
+            {currentAthletes.length > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>{filteredCurrentAthletes.length}</strong> athlete{filteredCurrentAthletes.length !== 1 ? 's' : ''} on <strong>{team.name}</strong>
-                  {searchTerm && currentAthletes.length > filteredCurrentAthletes.length &&
+                  <strong>{currentAthletes.length}</strong> athlete{currentAthletes.length !== 1 ? 's' : ''} on <strong>{team.name}</strong>
+                  {searchTerm && currentAthletes.length > currentAthletes.length &&
                     ` (${currentAthletes.length} total)`
                   }
                 </p>
@@ -923,28 +979,29 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                     </div>
                     <SelectContent>
                       <SelectItem value="">All seasons</SelectItem>
-                      <SelectItem value="2024-Fall">2024 Fall</SelectItem>
-                      <SelectItem value="2024-Spring">2024 Spring</SelectItem>
-                      <SelectItem value="2025-Fall">2025 Fall</SelectItem>
-                      <SelectItem value="2025-Spring">2025 Spring</SelectItem>
+                      {availableSeasons.map(season => (
+                        <SelectItem key={season} value={season}>
+                          {formatSeasonForDisplay(season)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {filteredAvailableAthletes.length > 0 && (
+              {availableAthletes.length > 0 && (
                 <div className="flex gap-2" role="group" aria-label="Bulk selection actions">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleSelectAllAvailable}
-                    disabled={isPending || filteredAvailableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length === 0}
+                    disabled={isPending || availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length === 0}
                     aria-describedby="select-all-description"
                   >
                     Select All Available
                   </Button>
                   <div id="select-all-description" className="sr-only">
-                    Select all {filteredAvailableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes for adding to team
+                    Select all {availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes for adding to team
                   </div>
                   <Button
                     variant="outline"
@@ -964,7 +1021,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                   <span className="ml-2">Loading available athletes...</span>
                 </div>
-              ) : filteredAvailableAthletes.length === 0 ? (
+              ) : availableAthletes.length === 0 ? (
                 <Card className="bg-gray-50">
                   <CardContent className="flex flex-col items-center justify-center py-8">
                     <Users className="h-12 w-12 text-gray-400 mb-4" />
@@ -1080,7 +1137,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
               </div>
             )}
 
-            {filteredAvailableAthletes.length > 0 && selectedPlayerIds.length > 0 && (
+            {availableAthletes.length > 0 && selectedPlayerIds.length > 0 && (
               <div className="flex justify-end pt-2">
                 <Button
                   ref={addButtonRef}
@@ -1121,7 +1178,8 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             Done
           </Button>
         </div>
-      </DialogContent>
+        </DialogContent>
+      </ErrorBoundary>
     </Dialog>
   );
 }

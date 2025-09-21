@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import { body } from "express-validator";
 import { UserService } from "../services/user-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
+import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
 // Session types are loaded globally
 
 const userService = new UserService();
@@ -107,61 +108,54 @@ export function registerUserRoutes(app: Express) {
         orgUsers = orgUsers.filter((user: any) => user.role === role);
       }
 
-      // Filter by search term if specified
+      // Filter by search term if specified with sanitization
       if (search && typeof search === 'string') {
-        const searchLower = search.toLowerCase();
-        orgUsers = orgUsers.filter((user: any) =>
-          user.firstName?.toLowerCase().includes(searchLower) ||
-          user.lastName?.toLowerCase().includes(searchLower) ||
-          user.fullName?.toLowerCase().includes(searchLower)
-        );
+        const sanitizedSearch = sanitizeSearchTerm(search);
+        if (!validateSearchTerm(sanitizedSearch)) {
+          return res.status(400).json({
+            message: "Invalid search term provided"
+          });
+        }
+
+        if (sanitizedSearch) {
+          const searchLower = sanitizedSearch.toLowerCase();
+          orgUsers = orgUsers.filter((user: any) =>
+            user.firstName?.toLowerCase().includes(searchLower) ||
+            user.lastName?.toLowerCase().includes(searchLower) ||
+            user.fullName?.toLowerCase().includes(searchLower)
+          );
+        }
       }
 
-      // Include team memberships if requested
+      // Include team memberships if requested - using optimized query to avoid N+1 problem
       if (includeTeamMemberships === "true") {
-        const usersWithTeams = await Promise.all(
-          orgUsers.map(async (user: any) => {
-            const userTeams = await storage.getUserTeams(user.id);
-            return {
-              ...user,
-              teamMemberships: userTeams.map((ut: any) => ({
-                teamId: ut.team.id,
-                teamName: ut.team.name,
-                isActive: ut.isActive,
-                season: ut.season,
-                joinedAt: ut.joinedAt,
-                leftAt: ut.leftAt
-              }))
-            };
-          })
+        // Sanitize search input to prevent injection attacks
+        let sanitizedSearch: string | undefined;
+        if (search && typeof search === 'string') {
+          sanitizedSearch = sanitizeSearchTerm(search);
+          if (!validateSearchTerm(sanitizedSearch)) {
+            return res.status(400).json({
+              message: "Invalid search term provided"
+            });
+          }
+          // Empty string after sanitization means no valid search term
+          sanitizedSearch = sanitizedSearch || undefined;
+        }
+
+        // Use optimized method that fetches users and team memberships in efficient queries
+        const filters = {
+          search: sanitizedSearch,
+          role: role as string | undefined,
+          excludeTeam: excludeTeam as string | undefined,
+          season: season as string | undefined
+        };
+
+        const usersWithTeams = await storage.getUsersWithTeamMembershipsByOrganization(
+          targetOrgId,
+          filters
         );
 
-        // Filter out users who are active members of the excluded team
-        let filteredUsers = usersWithTeams;
-        if (excludeTeam && typeof excludeTeam === 'string') {
-          filteredUsers = usersWithTeams.filter((user: any) => {
-            const isOnExcludedTeam = user.teamMemberships?.some((membership: any) =>
-              membership.teamId === excludeTeam && membership.isActive === "true"
-            );
-            return !isOnExcludedTeam;
-          });
-        }
-
-        // Filter by season if specified
-        if (season && typeof season === 'string') {
-          filteredUsers = filteredUsers.filter((user: any) => {
-            // If no team memberships, include the user
-            if (!user.teamMemberships || user.teamMemberships.length === 0) {
-              return true;
-            }
-            // Check if user has any membership in the specified season
-            return user.teamMemberships.some((membership: any) =>
-              membership.season === season || !membership.season // Include users without season data
-            );
-          });
-        }
-
-        return res.json(filteredUsers);
+        return res.json(usersWithTeams);
       }
 
       res.json(orgUsers);

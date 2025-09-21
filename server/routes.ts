@@ -23,6 +23,17 @@ import { ocrService } from "./ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "./athlete-matching";
 import { reviewQueue } from "./review-queue";
 import type { ImportResult } from "@shared/import-types";
+import {
+  ValidationViolation,
+  ValidationFix,
+  ProcessedImportRow,
+  BulkOperationResult,
+  OperationResult,
+  OperationError,
+  ImportPreview,
+  CsvRow,
+  ExportRow
+} from "./types/bulk-operations";
 import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
 import { registerAllRoutes } from "./routes/index";
@@ -1429,10 +1440,197 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  /**
+   * Remove multiple athletes from a team
+   * @route DELETE /api/teams/:teamId/remove-athletes
+   * @param {string} teamId - UUID of the team
+   * @body {string[]} athleteIds - Array of athlete UUIDs (max 100)
+   * @access Coaches, Organization Admins, Site Admins
+   * @returns {Object} result - Operation results with success/error details
+   * @returns {number} result.success - Number of successful removals
+   * @returns {number} result.errorCount - Number of failed removals
+   * @returns {Object[]} result.results - Array of successful removals
+   * @returns {Object[]} [result.errors] - Array of failed operations (if any)
+   * @throws {400} Invalid input or validation errors
+   * @throws {401} User not authenticated
+   * @throws {403} Insufficient permissions or access denied
+   * @throws {404} Team not found
+   * @throws {500} Server error during transaction
+   */
+  app.delete("/api/teams/:teamId/remove-athletes", teamManagementLimiter, requireAuth, async (req, res) => {
+    const { teamId } = req.params;
+    try {
+      const { athleteIds } = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot modify team memberships
+      if (currentUser.role === "athlete") {
+        return res.status(403).json({ message: "Athletes cannot modify team memberships" });
+      }
+
+      // Validate input
+      if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+        return res.status(400).json({ message: "athleteIds must be a non-empty array" });
+      }
+
+      // Limit number of athletes to prevent DoS attacks
+      if (athleteIds.length > 100) {
+        return res.status(400).json({ message: "Cannot remove more than 100 athletes at once" });
+      }
+
+      // Validate all athleteIds are valid UUIDs
+      try {
+        validateUuidsOrThrow(athleteIds, "athlete IDs");
+      } catch (error: any) {
+        return res.status(400).json({
+          message: error.message
+        });
+      }
+
+      // Check for duplicate IDs within the request
+      const uniqueIds = new Set(athleteIds);
+      if (uniqueIds.size !== athleteIds.length) {
+        const duplicates = athleteIds.filter((id, index) => athleteIds.indexOf(id) !== index);
+        return res.status(400).json({
+          message: `Duplicate athlete IDs found: ${[...new Set(duplicates)].join(", ")}`
+        });
+      }
+
+      // Get the team to check access
+      const team = await storage.getTeam(teamId);
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Validate user has access to the team and its organization
+      if (!team || (!userIsSiteAdmin && !await canAccessOrganization(currentUser, team.organizationId))) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      // Use transaction to ensure atomicity
+      const result = await db.transaction(async (tx: any) => {
+        const results = [];
+        const errors = [];
+
+        // Validate all athletes first (batch operation)
+        const athleteValidationPromises = athleteIds.map(async (athleteId) => {
+          try {
+            // Check if athlete exists
+            const athlete = await storage.getUser(athleteId);
+            if (!athlete) {
+              return { athleteId, error: "Athlete not found", valid: false };
+            }
+
+            // Validate organization access for non-site admins
+            if (!userIsSiteAdmin) {
+              const [athleteOrgs, currentUserOrgs] = await Promise.all([
+                storage.getUserOrganizations(athleteId),
+                storage.getUserOrganizations(currentUser.id)
+              ]);
+
+              const hasSharedOrg = athleteOrgs.some(aOrg =>
+                currentUserOrgs.some(uOrg => uOrg.organizationId === aOrg.organizationId)
+              );
+
+              if (!hasSharedOrg) {
+                return { athleteId, error: "Access denied to this athlete", valid: false };
+              }
+            }
+
+            // Check if athlete is currently on the team
+            const existingMemberships = await storage.getUserTeams(athleteId);
+            const isActiveOnTeam = existingMemberships.some(membership =>
+              membership.teamId === teamId && membership.isActive === "true"
+            );
+
+            if (!isActiveOnTeam) {
+              return { athleteId, error: "Athlete is not currently on this team", valid: false };
+            }
+
+            return { athleteId, athlete, valid: true };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown validation error";
+            console.error(`Error validating athlete ${athleteId}:`, error);
+            return { athleteId, error: `Validation failed: ${errorMessage}`, valid: false };
+          }
+        });
+
+        // Wait for all validations to complete
+        const validationResults = await Promise.all(athleteValidationPromises);
+
+        // Separate valid athletes from errors
+        const validAthletes = validationResults.filter(result => result.valid);
+        const validationErrors = validationResults.filter(result => !result.valid);
+
+        errors.push(...validationErrors);
+
+        // Remove valid athletes from team (batch operation)
+        if (validAthletes.length > 0) {
+          const removeAthletePromises = validAthletes.map(async ({ athleteId }) => {
+            try {
+              await storage.removeUserFromTeam(athleteId, teamId);
+              return { athleteId, success: true };
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : "Unknown error";
+              console.error(`Error removing athlete ${athleteId} from team ${teamId}:`, error);
+              return { athleteId, error: `Failed to remove athlete: ${errorMessage}`, success: false };
+            }
+          });
+
+          const removeResults = await Promise.all(removeAthletePromises);
+
+          // Separate successful removals from failures
+          results.push(...removeResults.filter(result => result.success));
+          errors.push(...removeResults.filter(result => !result.success));
+        }
+
+        return { results, errors };
+      });
+
+      // Prepare response
+      const response = {
+        success: result.results.length,
+        errorCount: result.errors.length,
+        results: result.results,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+        teamId,
+        teamName: team.name
+      };
+
+      // If all failed, return error status
+      if (result.results.length === 0 && result.errors.length > 0) {
+        return res.status(400).json({
+          message: "Failed to remove any athletes from team",
+          ...response
+        });
+      }
+
+      // Return success response
+      res.json({
+        message: result.results.length === athleteIds.length
+          ? `Successfully removed all ${result.results.length} athletes from team`
+          : `Successfully removed ${result.results.length} of ${athleteIds.length} athletes from team`,
+        ...response
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Error in bulk remove athletes for team ${teamId}:`, error);
+
+      res.status(500).json({
+        message: "Failed to remove athletes from team",
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
+        teamId
+      });
+    }
+  });
+
   // Athlete routes
   app.get("/api/athletes", requireAuth, async (req, res) => {
     try {
-      const {teamId, birthYearFrom, birthYearTo, search, gender, organizationId } = req.query;
+      const {teamId, birthYearFrom, birthYearTo, search, gender, organizationId, page, limit } = req.query;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1483,6 +1681,8 @@ export function registerRoutes(app: Express) {
         search: search as string,
         gender: gender as string,
         organizationId: orgContextForFiltering,
+        page: page ? parseInt(page as string) : undefined,
+        limit: limit ? parseInt(limit as string) : undefined,
       };
 
       const athletes = await storage.getAthletes(filters);
