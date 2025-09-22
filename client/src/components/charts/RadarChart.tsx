@@ -225,22 +225,8 @@ export function RadarChart({
     // Add athlete datasets only for visible athletes
     athletesToShow.forEach((athlete, index) => {
       const athleteValues = metrics.map(metric => {
-        const value = athlete.metrics[metric];
-        if (value === undefined) return 0;
-
-        const min = minMaxValues[metric].min;
-        const max = minMaxValues[metric].max;
-        const range = max - min;
-        if (range === 0) return 50;
-        let scaledValue;
-        if (isLowerIsBetter(metric)) {
-          // For metrics where lower is better, invert the scaling
-          scaledValue = ((max - value) / range) * 100;
-        } else {
-          // For metrics where higher is better, use normal scaling
-          scaledValue = ((value - min) / range) * 100;
-        }
-        return Math.max(0, Math.min(100, scaledValue));
+        const scaledValue = athlete.scaledMetrics[metric];
+        return scaledValue !== undefined ? scaledValue : 0;
       });
 
       const color = colors[index % colors.length];
