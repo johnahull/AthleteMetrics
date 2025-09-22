@@ -1,0 +1,29 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+template: |
+  ## Changes
+  $CHANGES
+
+  ## Thanks
+  $CONTRIBUTORS
+
+categories:
+  - title: "🚀 Features"
+    labels: ["type:feature", "feat"]
+  - title: "🐛 Fixes"
+    labels: ["type:bug", "fix"]
+  - title: "🧹 Chores"
+    labels: ["type:chore", "chore"]
+
+change-template: "- $TITLE (#$NUMBER) by @$AUTHOR"
+version-resolver:
+  major:
+    labels: ["major"]
+  minor:
+    labels: ["minor","type:feature"]
+  patch:
+    labels: ["patch","type:bug","type:chore"]
+  default: patch
+exclude-labels:
+  - "skip-changelog"
+replacers: []
