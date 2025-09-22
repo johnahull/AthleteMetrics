@@ -222,7 +222,7 @@ export function RadarChart({
           athleteToggles[athlete.athleteId]
         );
 
-    if (athletesToShow.length === 0) return null;
+    // Always show group average, even if no individual athletes are selected
 
     const datasets = [];
 
