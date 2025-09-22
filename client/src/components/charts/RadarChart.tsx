@@ -93,7 +93,7 @@ export function RadarChart({
       const values = data
         .map(athlete => athlete.metrics[metric])
         .filter(value => value !== undefined);
-      
+
       if (values.length > 0) {
         minMaxValues[metric] = {
           min: Math.min(...values),
@@ -103,6 +103,12 @@ export function RadarChart({
         minMaxValues[metric] = { min: 0, max: 100 }; // Default if no data
       }
     });
+
+    // Check if metric has lower is better from configuration
+    const isLowerIsBetter = (metric: string): boolean => {
+      const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+      return metricConfig?.lowerIsBetter || false;
+    };
 
     // Calculate min-max scaled values for each metric
     const processedData = data.map(athlete => {
@@ -118,10 +124,16 @@ export function RadarChart({
         if (range === 0) {
           scaledMetrics[metric] = 50; // If no range, put at middle
         } else {
-          let scaledValue = ((value - min) / range) * 100;
+          let scaledValue;
+          if (isLowerIsBetter(metric)) {
+            // For metrics where lower is better, invert the scaling
+            scaledValue = ((max - value) / range) * 100;
+          } else {
+            // For metrics where higher is better, use normal scaling
+            scaledValue = ((value - min) / range) * 100;
+          }
           // Ensure the value is between 0 and 100
-          scaledValue = Math.max(0, Math.min(100, scaledValue));
-          scaledMetrics[metric] = scaledValue;
+          scaledMetrics[metric] = Math.max(0, Math.min(100, scaledValue));
         }
       });
 
@@ -140,9 +152,15 @@ export function RadarChart({
       const max = minMaxValues[metric].max;
       const range = max - min;
       if (range === 0) return 50;
-      let scaledAvg = ((avg - min) / range) * 100;
-      scaledAvg = Math.max(0, Math.min(100, scaledAvg));
-      return scaledAvg;
+      let scaledAvg;
+      if (isLowerIsBetter(metric)) {
+        // For metrics where lower is better, invert the scaling
+        scaledAvg = ((max - avg) / range) * 100;
+      } else {
+        // For metrics where higher is better, use normal scaling
+        scaledAvg = ((avg - min) / range) * 100;
+      }
+      return Math.max(0, Math.min(100, scaledAvg));
     });
 
     datasets.push({
@@ -175,14 +193,20 @@ export function RadarChart({
       const athleteValues = metrics.map(metric => {
         const value = athlete.metrics[metric];
         if (value === undefined) return 0;
-        
+
         const min = minMaxValues[metric].min;
         const max = minMaxValues[metric].max;
         const range = max - min;
         if (range === 0) return 50;
-        let scaledValue = ((value - min) / range) * 100;
-        scaledValue = Math.max(0, Math.min(100, scaledValue));
-        return scaledValue;
+        let scaledValue;
+        if (isLowerIsBetter(metric)) {
+          // For metrics where lower is better, invert the scaling
+          scaledValue = ((max - value) / range) * 100;
+        } else {
+          // For metrics where higher is better, use normal scaling
+          scaledValue = ((value - min) / range) * 100;
+        }
+        return Math.max(0, Math.min(100, scaledValue));
       });
 
       const color = colors[index % colors.length];
@@ -343,7 +367,13 @@ export function RadarChart({
               const range = max - min;
               let percentageOfRange = 0;
               if (range !== 0) {
-                percentageOfRange = ((value - min) / range) * 100;
+                if (isLowerIsBetter(metric)) {
+                  // For metrics where lower is better, invert the scaling
+                  percentageOfRange = ((max - value) / range) * 100;
+                } else {
+                  // For metrics where higher is better, use normal scaling
+                  percentageOfRange = ((value - min) / range) * 100;
+                }
               }
               const clampedPercentage = Math.max(0, Math.min(100, percentageOfRange));
 
