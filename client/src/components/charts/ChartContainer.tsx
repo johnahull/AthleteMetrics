@@ -88,7 +88,8 @@ export function ChartContainer({
   onFullscreen,
   className
 }: ChartContainerProps) {
-  // Memoize chart component selection
+  // Memoize chart component selection for generic cases only
+  // Exclude types that are handled explicitly with custom props
   const ChartComponent = useMemo(() => {
     switch (chartType) {
       case 'box_plot':
@@ -97,22 +98,20 @@ export function ChartContainer({
         return DistributionChart;
       case 'bar_chart':
         return BarChart;
-      case 'line_chart':
-        return LineChart;
       case 'scatter_plot':
         return ScatterPlotChart;
-      case 'radar_chart':
-        return RadarChart;
       case 'swarm_plot':
         return SwarmChart;
       case 'connected_scatter':
         return ConnectedScatterChart;
       case 'multi_line':
         return MultiLineChart;
+      // These cases are handled explicitly, so return null for generic component
+      case 'line_chart':
+      case 'radar_chart':
       case 'box_swarm_combo':
-        return BoxPlotChart; // Composite chart handled within BoxPlotChart
       case 'time_series_box_swarm':
-        return TimeSeriesBoxSwarmChart;
+        return null;
       default:
         return null;
     }
@@ -286,8 +285,6 @@ export function ChartContainer({
                     config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
-                    selectedAthleteIds={selectedAthleteIds}
-                    onAthleteSelectionChange={onAthleteSelectionChange}
                     showAllPoints={true}
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
@@ -295,25 +292,21 @@ export function ChartContainer({
                     data={trends || []}
                     config={chartConfig}
                     statistics={statistics}
-                    highlightAthlete={highlightAthlete}
-                    selectedAthleteIds={selectedAthleteIds}
-                    onAthleteSelectionChange={onAthleteSelectionChange}
                     selectedDates={selectedDates || []}
                     metric={metric || ''}
                   />
-                ) : (
+                ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}
                     data={chartData as any}
                     config={chartConfig}
                     statistics={statistics || {}}
                     highlightAthlete={highlightAthlete}
-                    selectedAthleteIds={selectedAthleteIds}
-                    onAthleteSelectionChange={onAthleteSelectionChange}
-                    showAllPoints={chartType === 'box_swarm_combo'}
-                    selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
-                    metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
                   />
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    Unsupported chart type: {chartType}
+                  </div>
                 )}
               </React.Suspense>
             ) : (

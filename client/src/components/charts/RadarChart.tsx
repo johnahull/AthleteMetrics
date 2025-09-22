@@ -13,10 +13,12 @@ import {
 import { Radar } from 'react-chartjs-2';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import type {
   MultiMetricData,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  TrendData
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
@@ -120,6 +122,30 @@ export function RadarChart({
       return allAthletes.slice(0, maxAthletes);
     }
   }, [allAthletes, effectiveSelectedIds, maxAthletes]);
+
+  // Convert MultiMetricData to TrendData format for enhanced athlete selector
+  const trendDataForSelector = useMemo((): TrendData[] => {
+    if (!data || data.length === 0) return [];
+
+    // Get the primary metric from the first available metric
+    const allMetrics = new Set<string>();
+    data.forEach(athlete => {
+      Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
+    });
+    const primaryMetric = Array.from(allMetrics)[0] || 'FLY10_TIME';
+
+    return data.map(athlete => ({
+      athleteId: athlete.athleteId,
+      athleteName: athlete.athleteName,
+      metric: primaryMetric,
+      teamName: '', // MultiMetricData doesn't include team info
+      data: [{
+        date: new Date(),
+        value: athlete.metrics[primaryMetric] || 0,
+        isPersonalBest: false
+      }]
+    }));
+  }, [data]);
 
   // Initialize toggles with displayed athletes enabled by default
   React.useEffect(() => {
@@ -424,6 +450,18 @@ export function RadarChart({
 
   return (
     <div className="w-full h-full">
+      {/* Enhanced Athlete Selection - Only show when not in highlight mode and we have enough athletes */}
+      {!highlightAthlete && data.length > 0 && trendDataForSelector.length > 0 && (
+        <AthleteSelectionEnhanced
+          data={trendDataForSelector}
+          selectedAthleteIds={effectiveSelectedIds}
+          onSelectionChange={handleSelectionChange}
+          maxSelection={maxAthletes}
+          metric={Array.from(new Set(data.flatMap(athlete => Object.keys(athlete.metrics))))[0] || 'FLY10_TIME'}
+          className="mb-4"
+        />
+      )}
+
       {/* Athlete Controls Panel - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
@@ -505,7 +543,10 @@ export function RadarChart({
         </div>
       )}
 
-      <Radar data={radarData} options={options} />
+      {/* Chart Container with fixed height */}
+      <div className="h-96 w-full">
+        <Radar data={radarData} options={options} />
+      </div>
 
       {/* Performance summary */}
       <div className="mt-4 text-sm">
