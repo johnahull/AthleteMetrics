@@ -132,6 +132,14 @@ export function ChartContainer({
 
   // Determine which data to pass based on chart type
   const chartData = useMemo(() => {
+    console.log('ChartContainer Debug:', {
+      chartType,
+      dataLength: data?.length || 0,
+      trendsLength: trends?.length || 0,
+      multiMetricLength: multiMetric?.length || 0,
+      hasMultiMetric: !!multiMetric
+    });
+
     switch (chartType) {
       case 'line_chart':
       case 'multi_line':
@@ -139,7 +147,8 @@ export function ChartContainer({
       case 'time_series_box_swarm':
         return trends;
       case 'radar_chart':
-        return multiMetric;
+        // For radar charts, we need multiMetric data, but fall back to data if multiMetric is not available
+        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
       default:
         return data;
     }
@@ -283,14 +292,13 @@ export function getRecommendedChartType(
   metricCount: number,
   timeframeType: string
 ): ChartType {
-  const key = metricCount === 1 ? '1' : metricCount === 2 ? '2' : '3+';
-
   if (analysisType === 'individual') {
     if (metricCount === 1) {
       return timeframeType === 'best' ? 'box_swarm_combo' : 'line_chart';
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
+      // 3+ metrics
       return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   } else {
@@ -300,6 +308,7 @@ export function getRecommendedChartType(
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
+      // 3+ metrics
       return 'radar_chart';
     }
   }

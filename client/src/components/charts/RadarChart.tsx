@@ -42,9 +42,21 @@ export function RadarChart({
   statistics, 
   highlightAthlete 
 }: RadarChartProps) {
+  // Debug logging
+  console.log('RadarChart Debug:', {
+    dataLength: data?.length || 0,
+    dataType: Array.isArray(data) ? 'array' : typeof data,
+    hasStatistics: !!statistics,
+    highlightAthlete,
+    sampleData: data?.slice(0, 2)
+  });
+
   // Transform data for radar chart
   const radarData = useMemo(() => {
-    if (!data || data.length === 0) return null;
+    if (!data || data.length === 0) {
+      console.log('RadarChart: No data provided');
+      return null;
+    }
 
     // Get all metrics from the data
     const allMetrics = new Set<string>();
@@ -53,7 +65,12 @@ export function RadarChart({
     });
 
     const metrics = Array.from(allMetrics);
-    if (metrics.length < 3) return null;
+    console.log('RadarChart: Found metrics:', metrics);
+    
+    if (metrics.length < 3) {
+      console.log(`RadarChart: Insufficient metrics (${metrics.length}/3 minimum required)`);
+      return null;
+    }
 
     // Create labels from metric config
     const labels = metrics.map(metric => 
@@ -235,10 +252,22 @@ export function RadarChart({
     }
   };
 
-  if (!radarData) {
+  if (!radarData || !data || data.length === 0) {
+    const metrics = data && data.length > 0 ? 
+      new Set(data.flatMap(athlete => Object.keys(athlete.metrics))) : 
+      new Set();
+    
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No data available for radar chart (requires 3+ metrics and multi-metric data)
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+          <div className="text-sm">
+            Radar charts require at least 3 metrics. Currently selected: {metrics.size} metric{metrics.size !== 1 ? 's' : ''}.
+          </div>
+          <div className="text-xs mt-2 text-gray-500">
+            Add more metrics in the Additional Metrics section above.
+          </div>
+        </div>
       </div>
     );
   }

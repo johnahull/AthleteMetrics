@@ -443,14 +443,13 @@ export class AnalyticsService {
 
       // Generate multi-metric data for radar charts when multiple metrics are selected
       const allSelectedMetrics = [request.metrics.primary, ...(request.metrics.additional || [])];
-      // Generate multiMetric data when radar chart is likely to be used
-      // This matches the chart recommendation logic where radar charts are used for 3+ metrics
-      const shouldGenerateMultiMetric = metricCount >= 3;
+      // Generate multiMetric data when we have 2+ metrics (not just 3+) to support radar charts
+      const shouldGenerateMultiMetric = metricCount >= 2;
       const multiMetric = shouldGenerateMultiMetric
         ? this.generateMultiMetricData(chartData, allSelectedMetrics)
         : [];
 
-      console.log(`Analytics Debug: metricCount=${metricCount}, shouldGenerateMultiMetric=${shouldGenerateMultiMetric}, multiMetric.length=${multiMetric.length}`);
+      console.log(`Analytics Debug: metricCount=${metricCount}, allSelectedMetrics=${JSON.stringify(allSelectedMetrics)}, shouldGenerateMultiMetric=${shouldGenerateMultiMetric}, multiMetric.length=${multiMetric.length}`);
 
       // Generate dynamic chart recommendations
       const recommendedCharts = this.getRecommendedChartTypes(
