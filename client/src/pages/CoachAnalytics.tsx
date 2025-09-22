@@ -60,39 +60,7 @@ export function CoachAnalytics() {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
 
-  // Role-based access control - only coaches and org admins
-  if (!user) {
-    return <div className="p-6">Loading...</div>;
-  }
-
-  const userRole = user?.role;
-  const isUserSiteAdmin = isSiteAdmin(user);
-
-  if (!isUserSiteAdmin && !hasRole(user as EnhancedUser, 'coach') && !hasRole(user as EnhancedUser, 'org_admin')) {
-    return (
-      <div className="p-6">
-        <div className="max-w-md mx-auto mt-20 text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-            </div>
-            <h2 className="text-lg font-semibold text-red-800 mb-2">Access Restricted</h2>
-            <p className="text-red-700 mb-4">
-              Coach Analytics is only available to coaches and organization administrators.
-            </p>
-            <p className="text-sm text-red-600">
-              Your current role: <span className="font-medium">{userRole || 'athlete'}</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Core state
   const [analysisType, setAnalysisType] = useState<AnalysisType>('individual');
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
@@ -131,53 +99,16 @@ export function CoachAnalytics() {
     if (organizationContext) {
       return organizationContext;
     }
-    
+
     const isSiteAdmin = user?.isSiteAdmin || false;
     if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
       return userOrganizations[0].organizationId;
     }
-    
+
     return null;
   };
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
-
-  // Load initial data and update organizationId in filters
-  useEffect(() => {
-    console.log('User object in coach analytics:', user);
-    console.log('Organization context:', organizationContext);
-    console.log('User organizations:', userOrganizations);
-    console.log('Effective organization ID:', effectiveOrganizationId);
-    
-    // Update filters with effective organization ID when available
-    if (effectiveOrganizationId && filters.organizationId !== effectiveOrganizationId) {
-      setFilters(prev => ({ ...prev, organizationId: effectiveOrganizationId }));
-    }
-    
-    loadInitialData();
-  }, [user, organizationContext, userOrganizations, effectiveOrganizationId]);
-
-  // Auto-refresh when key parameters change
-  useEffect(() => {
-    if (effectiveOrganizationId) {
-      // For individual analysis, only fetch data if an athlete is selected
-      if (analysisType === 'individual' && !selectedAthleteId) {
-        setAnalyticsData(null);
-        return;
-      }
-      fetchAnalyticsData();
-    }
-  }, [analysisType, filters, metrics, timeframe, selectedAthleteId, effectiveOrganizationId]);
-
-  // Update chart type recommendation when analysis parameters change
-  useEffect(() => {
-    const recommended = getRecommendedChartType(
-      analysisType,
-      metrics.additional.length + 1,
-      timeframe.type
-    );
-    startTransition(() => setSelectedChartType(recommended));
-  }, [analysisType, metrics, timeframe]);
 
   const loadInitialData = async () => {
     if (!effectiveOrganizationId) {
@@ -189,7 +120,7 @@ export function CoachAnalytics() {
     try {
       setIsLoadingAthletes(true);
       console.log('Loading athletes for organization:', effectiveOrganizationId);
-      
+
       // Load organization profile with users (much more efficient than /api/users)
       const [teamsResponse, organizationResponse] = await Promise.all([
         fetch('/api/teams'),
@@ -238,12 +169,6 @@ export function CoachAnalytics() {
       console.log('Finished loading athletes');
     }
   };
-
-  // Prepare athletes array for AthleteSelector component
-  const athletesForSelector = availableAthletes.map(athlete => ({
-    ...athlete,
-    fullName: athlete.name || 'Unknown' // Map 'name' to 'fullName' and ensure it's never undefined
-  }));
 
   const fetchAnalyticsData = async () => {
     if (!effectiveOrganizationId) return;
@@ -294,6 +219,49 @@ export function CoachAnalytics() {
     // TODO: Implement export functionality
     // Export analytics data functionality
   }, [analyticsData]);
+
+  // Load initial data and update organizationId in filters
+  useEffect(() => {
+    console.log('User object in coach analytics:', user);
+    console.log('Organization context:', organizationContext);
+    console.log('User organizations:', userOrganizations);
+    console.log('Effective organization ID:', effectiveOrganizationId);
+
+    // Update filters with effective organization ID when available
+    if (effectiveOrganizationId && filters.organizationId !== effectiveOrganizationId) {
+      setFilters(prev => ({ ...prev, organizationId: effectiveOrganizationId }));
+    }
+
+    loadInitialData();
+  }, [user, organizationContext, userOrganizations, effectiveOrganizationId]);
+
+  // Auto-refresh when key parameters change
+  useEffect(() => {
+    if (effectiveOrganizationId) {
+      // For individual analysis, only fetch data if an athlete is selected
+      if (analysisType === 'individual' && !selectedAthleteId) {
+        setAnalyticsData(null);
+        return;
+      }
+      fetchAnalyticsData();
+    }
+  }, [analysisType, filters, metrics, timeframe, selectedAthleteId, effectiveOrganizationId]);
+
+  // Update chart type recommendation when analysis parameters change
+  useEffect(() => {
+    const recommended = getRecommendedChartType(
+      analysisType,
+      metrics.additional.length + 1,
+      timeframe.type
+    );
+    startTransition(() => setSelectedChartType(recommended));
+  }, [analysisType, metrics, timeframe]);
+
+  // Prepare athletes array for AthleteSelector component
+  const athletesForSelector = availableAthletes.map(athlete => ({
+    ...athlete,
+    fullName: athlete.name || 'Unknown' // Map 'name' to 'fullName' and ensure it's never undefined
+  }));
 
   // Chart data based on current selection
   const chartData = useMemo(() => {
@@ -355,6 +323,39 @@ export function CoachAnalytics() {
       aspectRatio: 2
     };
   }, [analysisType, selectedChartType, metrics, timeframe, selectedAthleteId, availableAthletes]);
+
+  // CONDITIONAL RETURNS - MUST BE AFTER ALL HOOKS
+  if (!user) {
+    return <div className="p-6">Loading...</div>;
+  }
+
+  const userRole = user?.role;
+  const isUserSiteAdmin = isSiteAdmin(user);
+
+  if (!isUserSiteAdmin && !hasRole(user as EnhancedUser, 'coach') && !hasRole(user as EnhancedUser, 'org_admin')) {
+    return (
+      <div className="p-6">
+        <div className="max-w-md mx-auto mt-20 text-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex justify-center mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+            </div>
+            <h2 className="text-lg font-semibold text-red-800 mb-2">Access Restricted</h2>
+            <p className="text-red-700 mb-4">
+              Coach Analytics is only available to coaches and organization administrators.
+            </p>
+            <p className="text-sm text-red-600">
+              Your current role: <span className="font-medium">{userRole || 'athlete'}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
