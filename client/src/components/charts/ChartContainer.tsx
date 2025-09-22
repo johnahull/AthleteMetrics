@@ -185,7 +185,10 @@ export function ChartContainer({
     );
   }
 
-  if (!ChartComponent) {
+  // Only show unsupported chart error for truly unsupported types
+  // (ChartComponent is null for both unsupported types AND explicitly handled types)
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm'];
+  if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     return (
       <Card className={className}>
         <CardHeader>
