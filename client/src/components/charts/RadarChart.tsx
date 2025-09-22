@@ -474,8 +474,6 @@ export function RadarChart({
         />
       )}
 
-      <Radar data={radarData} options={options} />
-
       {/* Simple Athlete Controls Panel - Show when not in highlight mode */}
       {!highlightAthlete && allAvailableAthletes.length > 0 && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
@@ -558,6 +556,8 @@ export function RadarChart({
           </div>
         </div>
       )}
+
+      <Radar data={radarData} options={options} />
 
       {/* Performance summary */}
       <div className="mt-4 text-sm">
