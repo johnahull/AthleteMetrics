@@ -248,8 +248,12 @@ export function ChartContainer({
         <div className="w-full" style={{ height: '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
-              <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
+              <React.Suspense
+                key={`chart-${chartType}`}
+                fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}
+              >
                 <ChartComponent
+                  key={`chart-component-${chartType}`}
                   data={chartData as any}
                   config={chartConfig}
                   statistics={statistics || {}}
