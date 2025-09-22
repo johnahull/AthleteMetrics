@@ -266,7 +266,13 @@ export class AnalyticsService {
       metrics.every(metric => athlete.measurements[metric] !== undefined)
     );
 
+    // Debug logging
+    console.log(`MultiMetric Debug: Total athletes with some data: ${Object.keys(athleteGroups).length}`);
+    console.log(`MultiMetric Debug: Athletes with complete data for all ${metrics.length} metrics: ${completeAthletes.length}`);
+    console.log('MultiMetric Debug: Required metrics:', metrics);
+
     if (completeAthletes.length === 0) {
+      console.log('MultiMetric Debug: No athletes have complete data for all metrics');
       return [];
     }
 
@@ -281,7 +287,8 @@ export class AnalyticsService {
       completeAthletes.forEach(athlete => {
         const value = athlete.measurements[metric];
         const rank = sortedValues.findIndex(v => v === value);
-        const percentile = (rank / (sortedValues.length - 1)) * 100;
+        // Handle edge case where there's only one athlete
+        const percentile = sortedValues.length === 1 ? 50 : (rank / (sortedValues.length - 1)) * 100;
         metricPercentiles[metric][athlete.athleteId] = percentile;
       });
     });
@@ -436,13 +443,14 @@ export class AnalyticsService {
 
       // Generate multi-metric data for radar charts when multiple metrics are selected
       const allSelectedMetrics = [request.metrics.primary, ...(request.metrics.additional || [])];
-      const shouldGenerateMultiMetric = (
-        (metricCount >= 3 && request.timeframe.type === 'best') || // For 3+ metrics with best timeframe
-        (metricCount >= 3 && request.timeframe.type === 'trends' && request.analysisType === 'individual') // For individual trends with 3+ metrics
-      );
+      // Generate multiMetric data when radar chart is likely to be used
+      // This matches the chart recommendation logic where radar charts are used for 3+ metrics
+      const shouldGenerateMultiMetric = metricCount >= 3;
       const multiMetric = shouldGenerateMultiMetric
         ? this.generateMultiMetricData(chartData, allSelectedMetrics)
         : [];
+
+      console.log(`Analytics Debug: metricCount=${metricCount}, shouldGenerateMultiMetric=${shouldGenerateMultiMetric}, multiMetric.length=${multiMetric.length}`);
 
       // Generate dynamic chart recommendations
       const recommendedCharts = this.getRecommendedChartTypes(
