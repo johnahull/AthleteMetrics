@@ -154,8 +154,9 @@ export function ChartContainer({
   }, [chartType, data, trends, multiMetric]);
 
   if (isLoading) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={`${className} h-[700px] flex flex-col`}>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
           <Skeleton className="h-6 w-48" />
           {subtitle && <Skeleton className="h-4 w-32" />}
@@ -168,8 +169,9 @@ export function ChartContainer({
   }
 
   if (error) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={`${className} h-[700px] flex flex-col`}>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
           <CardTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
@@ -189,8 +191,9 @@ export function ChartContainer({
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
   const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={`${className} h-[700px] flex flex-col`}>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
           <CardTitle>Unsupported Chart Type</CardTitle>
         </CardHeader>
@@ -206,8 +209,9 @@ export function ChartContainer({
   }
 
   if (!chartData || (Array.isArray(chartData) && chartData.length === 0)) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={`${className} h-[700px] flex flex-col`}>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
           <CardTitle>{title}</CardTitle>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
@@ -223,8 +227,11 @@ export function ChartContainer({
     );
   }
 
+  // Use larger height for radar chart due to additional controls
+  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+
   return (
-    <Card className={`${className} h-[700px] flex flex-col`}>
+    <Card className={`${className} ${cardHeight} flex flex-col`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
