@@ -20,7 +20,7 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 
 // Register Chart.js components
 ChartJS.register(
-  RadialLinearScale,
+  RadialScale,
   PointElement,
   LineElement,
   Filler,
@@ -66,7 +66,7 @@ export function RadarChart({
 
     const metrics = Array.from(allMetrics);
     console.log('RadarChart: Found metrics:', metrics);
-    
+
     if (metrics.length < 3) {
       console.log(`RadarChart: Insufficient metrics (${metrics.length}/3 minimum required)`);
       return null;
@@ -82,32 +82,68 @@ export function RadarChart({
       const values = data
         .map(athlete => athlete.metrics[metric])
         .filter(value => value !== undefined);
-      
+
       return values.length > 0 ? 
         values.reduce((sum, val) => sum + val, 0) / values.length : 0;
     });
 
-    // Normalize values to 0-100 scale using min-max scaling
-    const normalizeValue = (value: number, metric: string) => {
-      const stats = statistics?.[metric];
-      if (!stats) return 50; // Default to middle if no stats
+    // Min-max values for scaling
+    const minMaxValues: Record<string, { min: number, max: number }> = {};
+    metrics.forEach(metric => {
+      const values = data
+        .map(athlete => athlete.metrics[metric])
+        .filter(value => value !== undefined);
+      
+      if (values.length > 0) {
+        minMaxValues[metric] = {
+          min: Math.min(...values),
+          max: Math.max(...values)
+        };
+      } else {
+        minMaxValues[metric] = { min: 0, max: 100 }; // Default if no data
+      }
+    });
 
-      // Use min-max normalization (0-100)
-      const { min, max } = stats;
-      
-      // Handle edge case where min equals max
-      if (min === max) return 50;
-      
-      // Scale to 0-100 range
-      return ((value - min) / (max - min)) * 100;
-    };
+    // Calculate min-max scaled values for each metric
+    const processedData = data.map(athlete => {
+      const scaledMetrics: Record<string, number> = {};
+
+      metrics.forEach(metric => {
+        const value = athlete.metrics[metric];
+        const min = minMaxValues[metric].min;
+        const max = minMaxValues[metric].max;
+
+        // Min-max scaling: (value - min) / (max - min) * 100
+        const range = max - min;
+        if (range === 0) {
+          scaledMetrics[metric] = 50; // If no range, put at middle
+        } else {
+          let scaledValue = ((value - min) / range) * 100;
+          // Ensure the value is between 0 and 100
+          scaledValue = Math.max(0, Math.min(100, scaledValue));
+          scaledMetrics[metric] = scaledValue;
+        }
+      });
+
+      return {
+        ...athlete,
+        scaledMetrics
+      };
+    });
 
     const datasets = [];
 
     // Group average dataset
-    const normalizedGroupAverages = groupAverages.map((avg, index) => 
-      normalizeValue(avg, metrics[index])
-    );
+    const normalizedGroupAverages = groupAverages.map((avg, index) => {
+      const metric = metrics[index];
+      const min = minMaxValues[metric].min;
+      const max = minMaxValues[metric].max;
+      const range = max - min;
+      if (range === 0) return 50;
+      let scaledAvg = ((avg - min) / range) * 100;
+      scaledAvg = Math.max(0, Math.min(100, scaledAvg));
+      return scaledAvg;
+    });
 
     datasets.push({
       label: 'Group Average',
@@ -138,11 +174,19 @@ export function RadarChart({
     athletesToShow.forEach((athlete, index) => {
       const athleteValues = metrics.map(metric => {
         const value = athlete.metrics[metric];
-        return value !== undefined ? normalizeValue(value, metric) : 0;
+        if (value === undefined) return 0;
+        
+        const min = minMaxValues[metric].min;
+        const max = minMaxValues[metric].max;
+        const range = max - min;
+        if (range === 0) return 50;
+        let scaledValue = ((value - min) / range) * 100;
+        scaledValue = Math.max(0, Math.min(100, scaledValue));
+        return scaledValue;
       });
 
       const color = colors[index % colors.length];
-      
+
       datasets.push({
         label: athlete.athleteName,
         data: athleteValues,
@@ -191,13 +235,13 @@ export function RadarChart({
             const metricIndex = context.dataIndex;
             const metric = radarData?.metrics[metricIndex];
             const rawValue = context.parsed.r;
-            
+
             if (!metric) return '';
 
             // Find the actual value for this athlete and metric
             const athleteName = context.dataset.label;
             let actualValue = 0;
-            
+
             if (athleteName === 'Group Average') {
               actualValue = radarData?.groupAverages[metricIndex] || 0;
             } else {
@@ -207,7 +251,7 @@ export function RadarChart({
 
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-            
+
             return [
               `${label}: ${actualValue.toFixed(2)}${unit}`,
               `Scaled: ${rawValue.toFixed(1)}% of range`
@@ -256,7 +300,7 @@ export function RadarChart({
     const metrics = data && data.length > 0 ? 
       new Set(data.flatMap(athlete => Object.keys(athlete.metrics))) : 
       new Set();
-    
+
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         <div className="text-center">
@@ -275,22 +319,34 @@ export function RadarChart({
   return (
     <div className="w-full h-full">
       <Radar data={radarData} options={options} />
-      
+
       {/* Performance summary */}
       <div className="mt-4 text-sm">
         <div className="text-center text-muted-foreground mb-2">
           Values shown as min-max scaled (0-100%) within group range
         </div>
-        
+
         {highlightAthlete && (
           <div className="grid grid-cols-3 gap-4 text-center">
             {radarData.metrics.slice(0, 3).map((metric, index) => {
               const athlete = data.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
-              const percentile = athlete?.percentileRanks[metric];
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
               const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-              
+              const min = minMaxValues[metric]?.min;
+              const max = minMaxValues[metric]?.max;
+
+              if (value === undefined || min === undefined || max === undefined) {
+                return null; // Skip if data is missing
+              }
+
+              const range = max - min;
+              let percentageOfRange = 0;
+              if (range !== 0) {
+                percentageOfRange = ((value - min) / range) * 100;
+              }
+              const clampedPercentage = Math.max(0, Math.min(100, percentageOfRange));
+
               return (
                 <div key={metric} className="space-y-1">
                   <div className="font-medium text-xs">{label}</div>
@@ -298,8 +354,7 @@ export function RadarChart({
                     {value?.toFixed(2)}{unit}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {((value || 0 - (statistics?.[metric]?.min || 0)) / 
-                      ((statistics?.[metric]?.max || 1) - (statistics?.[metric]?.min || 0)) * 100).toFixed(1)}% of range
+                    {clampedPercentage.toFixed(1)}% of range
                   </div>
                 </div>
               );
