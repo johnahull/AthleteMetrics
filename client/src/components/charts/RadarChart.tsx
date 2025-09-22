@@ -74,10 +74,20 @@ export function RadarChart({
 
   // Get all available athletes for toggle controls
   const allAvailableAthletes = useMemo(() => {
-    return highlightAthlete ? 
-      data.filter(athlete => athlete.athleteId === highlightAthlete) :
-      data.slice(0, 5);
-  }, [data, highlightAthlete]);
+    if (highlightAthlete) {
+      return data.filter(athlete => athlete.athleteId === highlightAthlete);
+    }
+    
+    // For enhanced selection (many athletes), use selected athletes or first few
+    if (data.length > 10) {
+      return effectiveSelectedIds.length > 0
+        ? data.filter(athlete => effectiveSelectedIds.includes(athlete.athleteId))
+        : data.slice(0, maxAthletes);
+    }
+    
+    // For simple toggle controls (fewer athletes), show first 10
+    return data.slice(0, Math.min(10, data.length));
+  }, [data, highlightAthlete, effectiveSelectedIds, maxAthletes]);
 
   // Convert MultiMetricData to TrendData format for enhanced athlete selector
   const trendDataForSelector = useMemo((): TrendData[] => {
@@ -183,7 +193,7 @@ export function RadarChart({
     // Filter athletes based on highlight mode, enhanced selection, or toggle states
     const athletesToShow = highlightAthlete
       ? data.filter(athlete => athlete.athleteId === highlightAthlete)
-      : effectiveSelectedIds.length > 0
+      : data.length > 10 && effectiveSelectedIds.length > 0
         ? data.filter(athlete => 
             effectiveSelectedIds.includes(athlete.athleteId) &&
             athleteToggles[athlete.athleteId] !== false
@@ -420,8 +430,8 @@ export function RadarChart({
 
   return (
     <div className="w-full h-full">
-      {/* Enhanced Athlete Selection - Only show when not in highlight mode and we have multiple athletes */}
-      {!highlightAthlete && data.length > 5 && trendDataForSelector.length > 0 && (
+      {/* Enhanced Athlete Selection - Only show when not in highlight mode and we have many athletes */}
+      {!highlightAthlete && data.length > 10 && trendDataForSelector.length > 0 && (
         <AthleteSelectionEnhanced
           data={trendDataForSelector}
           selectedAthleteIds={effectiveSelectedIds}
@@ -432,8 +442,8 @@ export function RadarChart({
         />
       )}
 
-      {/* Athlete Controls Panel - Only show when not in highlight mode and we have fewer athletes */}
-      {!highlightAthlete && data.length <= 5 && allAvailableAthletes.length > 0 && (
+      {/* Simple Athlete Controls Panel - Show when not in highlight mode and we have fewer athletes */}
+      {!highlightAthlete && data.length <= 10 && allAvailableAthletes.length > 0 && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-900">
