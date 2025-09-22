@@ -126,7 +126,7 @@ export default function DistributionChart({ data, title, metric }: DistributionC
           </div>
         </div>
         
-        <div className="w-full mb-4 flex-1">
+        <div className="w-full mb-4" style={{ height: '500px' }}>
           <Bar data={chartData} options={options} />
         </div>
         

@@ -256,7 +256,7 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
-        <div className="w-full flex-1">
+        <div className="w-full" style={{ height: '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense

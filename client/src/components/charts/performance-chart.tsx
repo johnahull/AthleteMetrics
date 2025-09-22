@@ -154,7 +154,7 @@ export default function PerformanceChart() {
             </SelectContent>
           </Select>
         </div>
-        <div className="w-full flex-1">
+        <div className="w-full" style={{ height: '500px' }}>
           <Line data={chartData} options={options} />
         </div>
       </CardContent>
