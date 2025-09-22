@@ -396,7 +396,8 @@ async function initializeOptionalAgents(): Promise<void> {
     'SearchAgent',
     'ImportExportAgent',
     'NotificationAgent',
-    'OCRAgent'
+    'OCRAgent',
+    'CodeReviewAgent'
   ];
 
   for (const agentName of optionalAgents) {

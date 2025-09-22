@@ -668,3 +668,161 @@ export interface SearchCriteria {
   limit?: number;
   offset?: number;
 }
+
+// Code Review Agent Interfaces
+export interface CodeReviewAgent extends BaseAgent {
+  analyzeFile(filePath: string, content: string, options?: AnalysisOptions): Promise<AgentResult<FileAnalysis>>;
+  analyzePullRequest(files: FileChange[], options?: PRAnalysisOptions): Promise<AgentResult<PRAnalysis>>;
+  scanSecurity(content: string, fileType: string): Promise<AgentResult<SecurityScanResult>>;
+  checkPerformance(content: string, fileType: string): Promise<AgentResult<PerformanceReport>>;
+  validateCodeStyle(content: string, fileType: string, rules?: StyleRules): Promise<AgentResult<StyleReport>>;
+  generateSummary(analysis: FileAnalysis[]): Promise<AgentResult<ReviewSummary>>;
+}
+
+export interface FileChange {
+  path: string;
+  content: string;
+  previousContent?: string;
+  changeType: 'added' | 'modified' | 'deleted';
+  diff?: string;
+}
+
+export interface AnalysisOptions {
+  includeSecurityScan?: boolean;
+  includePerformanceCheck?: boolean;
+  includeStyleValidation?: boolean;
+  customRules?: string[];
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface PRAnalysisOptions extends AnalysisOptions {
+  baseBranch?: string;
+  targetBranch?: string;
+  includeTests?: boolean;
+  maxFilesToAnalyze?: number;
+}
+
+export interface FileAnalysis {
+  filePath: string;
+  fileType: string;
+  summary: string;
+  issues: CodeIssue[];
+  metrics: CodeMetrics;
+  suggestions: string[];
+  complexity: ComplexityMetrics;
+}
+
+export interface CodeIssue {
+  id: string;
+  type: 'security' | 'performance' | 'style' | 'logic' | 'typing';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  line: number;
+  column?: number;
+  message: string;
+  description: string;
+  suggestion?: string;
+  rule?: string;
+  fixable?: boolean;
+}
+
+export interface CodeMetrics {
+  linesOfCode: number;
+  complexity: number;
+  maintainabilityIndex: number;
+  testCoverage?: number;
+  duplicatedLines?: number;
+  technicalDebt?: string;
+}
+
+export interface ComplexityMetrics {
+  cyclomaticComplexity: number;
+  cognitiveComplexity: number;
+  nestingDepth: number;
+  functionCount: number;
+  classCount?: number;
+}
+
+export interface SecurityScanResult {
+  vulnerabilities: SecurityVulnerability[];
+  securityScore: number;
+  recommendations: string[];
+}
+
+export interface SecurityVulnerability {
+  type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  line: number;
+  description: string;
+  cwe?: string;
+  recommendation: string;
+}
+
+export interface PerformanceReport {
+  issues: PerformanceIssue[];
+  score: number;
+  suggestions: string[];
+}
+
+export interface PerformanceIssue {
+  type: string;
+  severity: 'low' | 'medium' | 'high';
+  line: number;
+  description: string;
+  impact: string;
+  suggestion: string;
+}
+
+export interface StyleReport {
+  violations: StyleViolation[];
+  score: number;
+  summary: string;
+}
+
+export interface StyleViolation {
+  rule: string;
+  line: number;
+  column?: number;
+  message: string;
+  fixable: boolean;
+  suggestion?: string;
+}
+
+export interface StyleRules {
+  indentation?: 'spaces' | 'tabs';
+  indentSize?: number;
+  maxLineLength?: number;
+  semicolons?: boolean;
+  quotes?: 'single' | 'double';
+  trailingComma?: boolean;
+  customRules?: Record<string, any>;
+}
+
+export interface PRAnalysis {
+  overview: {
+    filesChanged: number;
+    linesAdded: number;
+    linesRemoved: number;
+    complexity: number;
+    riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  };
+  fileAnalyses: FileAnalysis[];
+  crossFileIssues: CodeIssue[];
+  testCoverage?: {
+    current: number;
+    change: number;
+    missingTests: string[];
+  };
+  summary: ReviewSummary;
+}
+
+export interface ReviewSummary {
+  overallScore: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  keyFindings: string[];
+  recommendations: string[];
+  blockers: CodeIssue[];
+  mustFix: CodeIssue[];
+  shouldFix: CodeIssue[];
+  suggestions: string[];
+  estimatedReviewTime: number;
+}

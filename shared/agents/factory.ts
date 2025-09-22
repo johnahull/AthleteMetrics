@@ -315,6 +315,24 @@ export class AgentFactory {
           timeout: 10000,
           retries: 2
         }
+      },
+      CodeReviewAgent: {
+        name: 'CodeReviewAgent',
+        description: 'Automated code analysis and review for AthleteMetrics',
+        requiredEnvVars: [],
+        optionalEnvVars: ['CODE_REVIEW_RULES_PATH', 'TS_CONFIG_PATH'],
+        dependencies: ['SecurityAgent'],
+        defaultConfig: {
+          enabled: true,
+          logLevel: 'info',
+          timeout: 30000, // Code analysis can be time-consuming
+          retries: 1,
+          circuitBreaker: {
+            enabled: true,
+            failureThreshold: 3,
+            resetTimeout: 60000
+          }
+        }
       }
     };
 
@@ -372,6 +390,10 @@ export class AgentFactory {
 
     this.agentRegistry.set('SearchAgent', this.lazyLoadES6(() =>
       import('../../server/agents/search-agent').then(m => m.SearchAgentImpl)
+    ));
+
+    this.agentRegistry.set('CodeReviewAgent', this.lazyLoadES6(() =>
+      import('../../server/agents/code-review-agent').then(m => m.CodeReviewAgent)
     ));
 
     this.agentRegistry.set('ImportExportAgent', this.lazyLoadES6(() =>
