@@ -72,22 +72,59 @@ export function RadarChart({
     sampleData: data?.slice(0, 2)
   });
 
-  // Get all available athletes for toggle controls
+  // Get athletes that should be displayed (either selected or first N for backwards compatibility)
+  const displayedAthletes = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    // Sort athletes by performance for smart defaults
+    const firstMetric = Object.keys(data[0]?.metrics || {})[0];
+    if (!firstMetric) return data.slice(0, Math.min(10, data.length));
+
+    const metricConfig = METRIC_CONFIG[firstMetric as keyof typeof METRIC_CONFIG];
+    const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+
+    const sortedData = [...data].sort((a, b) => {
+      const aValue = a.metrics[firstMetric];
+      const bValue = b.metrics[firstMetric];
+      if (aValue === undefined && bValue === undefined) return 0;
+      if (aValue === undefined) return 1;
+      if (bValue === undefined) return -1;
+      
+      return lowerIsBetter ? aValue - bValue : bValue - aValue;
+    });
+
+    if (effectiveSelectedIds.length > 0) {
+      // Use selected athletes in selection order
+      return effectiveSelectedIds.map((id, index) => {
+        const athlete = sortedData.find(a => a.athleteId === id);
+        return athlete ? { 
+          id: athlete.athleteId, 
+          name: athlete.athleteName, 
+          color: index,
+          ...athlete 
+        } : null;
+      }).filter(Boolean) as Array<{ id: string; name: string; color: number; athleteId: string; athleteName: string; metrics: any }>;
+    } else {
+      // Fallback to first N athletes for backwards compatibility
+      return sortedData.slice(0, maxAthletes).map((athlete, index) => ({
+        id: athlete.athleteId,
+        name: athlete.athleteName,
+        color: index,
+        athleteId: athlete.athleteId,
+        athleteName: athlete.athleteName,
+        metrics: athlete.metrics
+      }));
+    }
+  }, [data, effectiveSelectedIds, maxAthletes]);
+
+  // Get all available athletes for toggle controls (use displayedAthletes)
   const allAvailableAthletes = useMemo(() => {
     if (highlightAthlete) {
       return data.filter(athlete => athlete.athleteId === highlightAthlete);
     }
     
-    // For enhanced selection (many athletes), use selected athletes or first few
-    if (data.length > 10) {
-      return effectiveSelectedIds.length > 0
-        ? data.filter(athlete => effectiveSelectedIds.includes(athlete.athleteId))
-        : data.slice(0, maxAthletes);
-    }
-    
-    // For simple toggle controls (fewer athletes), show first 10
-    return data.slice(0, Math.min(10, data.length));
-  }, [data, highlightAthlete, effectiveSelectedIds, maxAthletes]);
+    return displayedAthletes;
+  }, [data, highlightAthlete, displayedAthletes]);
 
   // Convert MultiMetricData to TrendData format for enhanced athlete selector
   const trendDataForSelector = useMemo((): TrendData[] => {
@@ -113,11 +150,11 @@ export function RadarChart({
     }));
   }, [data]);
 
-  // Initialize toggles with all athletes enabled by default
+  // Initialize toggles with displayed athletes enabled by default
   React.useEffect(() => {
     const initialToggles: Record<string, boolean> = {};
     allAvailableAthletes.forEach(athlete => {
-      initialToggles[athlete.athleteId] = true;
+      initialToggles[athlete.id || athlete.athleteId] = true;
     });
     setAthleteToggles(initialToggles);
   }, [allAvailableAthletes]);
@@ -190,18 +227,13 @@ export function RadarChart({
       return metricConfig?.lowerIsBetter || false;
     };
 
-    // Filter athletes based on highlight mode, enhanced selection, or toggle states
+    // Filter based on highlighted athlete or toggle states
     const athletesToShow = highlightAthlete
       ? data.filter(athlete => athlete.athleteId === highlightAthlete)
-      : data.length > 10 && effectiveSelectedIds.length > 0
-        ? data.filter(athlete => 
-            effectiveSelectedIds.includes(athlete.athleteId) &&
-            athleteToggles[athlete.athleteId] !== false
-          )
-        : data.filter(athlete =>
-            allAvailableAthletes.some(a => a.athleteId === athlete.athleteId) &&
-            athleteToggles[athlete.athleteId]
-          );
+      : data.filter(athlete =>
+          allAvailableAthletes.some(a => a.id === athlete.athleteId) &&
+          athleteToggles[athlete.athleteId]
+        );
 
     if (athletesToShow.length === 0) return null;
 
@@ -393,7 +425,7 @@ export function RadarChart({
   const selectAllAthletes = () => {
     const allEnabled: Record<string, boolean> = {};
     allAvailableAthletes.forEach(athlete => {
-      allEnabled[athlete.athleteId] = true;
+      allEnabled[athlete.id || athlete.athleteId] = true;
     });
     setAthleteToggles(allEnabled);
   };
@@ -401,7 +433,7 @@ export function RadarChart({
   const clearAllAthletes = () => {
     const allDisabled: Record<string, boolean> = {};
     allAvailableAthletes.forEach(athlete => {
-      allDisabled[athlete.athleteId] = false;
+      allDisabled[athlete.id || athlete.athleteId] = false;
     });
     setAthleteToggles(allDisabled);
   };
@@ -442,8 +474,10 @@ export function RadarChart({
         />
       )}
 
-      {/* Simple Athlete Controls Panel - Show when not in highlight mode and we have fewer athletes */}
-      {!highlightAthlete && data.length <= 10 && allAvailableAthletes.length > 0 && (
+      <Radar data={radarData} options={options} />
+
+      {/* Simple Athlete Controls Panel - Show when not in highlight mode */}
+      {!highlightAthlete && allAvailableAthletes.length > 0 && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-900">
@@ -471,32 +505,39 @@ export function RadarChart({
 
           {/* Athletes Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
-            {allAvailableAthletes.map((athlete, index) => {
+            {allAvailableAthletes.map(athlete => {
               const colors = [
                 'rgba(59, 130, 246, 1)',    // Blue
                 'rgba(16, 185, 129, 1)',    // Green
                 'rgba(239, 68, 68, 1)',     // Red
                 'rgba(245, 158, 11, 1)',    // Amber
-                'rgba(139, 92, 246, 1)'     // Purple
+                'rgba(139, 92, 246, 1)',    // Purple
+                'rgba(236, 72, 153, 1)',    // Pink
+                'rgba(20, 184, 166, 1)',    // Teal
+                'rgba(251, 146, 60, 1)',    // Orange
+                'rgba(124, 58, 237, 1)',    // Violet
+                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
               ];
-              const athleteColor = colors[index % colors.length];
+              const athleteColor = colors[(athlete.color || 0) % colors.length];
+              const athleteId = athlete.id || athlete.athleteId;
+              const athleteName = athlete.name || athlete.athleteName;
 
               return (
-                <div key={athlete.athleteId} className="flex items-center space-x-2">
+                <div key={athleteId} className="flex items-center space-x-2">
                   <Checkbox
-                    id={`athlete-${athlete.athleteId}`}
-                    checked={athleteToggles[athlete.athleteId] !== false}
-                    onCheckedChange={() => toggleAthlete(athlete.athleteId)}
+                    id={`athlete-${athleteId}`}
+                    checked={athleteToggles[athleteId] || false}
+                    onCheckedChange={() => toggleAthlete(athleteId)}
                   />
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0"
                     style={{ backgroundColor: athleteColor }}
                   />
                   <label
-                    htmlFor={`athlete-${athlete.athleteId}`}
+                    htmlFor={`athlete-${athleteId}`}
                     className="text-sm cursor-pointer flex-1 truncate"
                   >
-                    {athlete.athleteName}
+                    {athleteName}
                   </label>
                 </div>
               );
@@ -517,8 +558,6 @@ export function RadarChart({
           </div>
         </div>
       )}
-
-      <Radar data={radarData} options={options} />
 
       {/* Performance summary */}
       <div className="mt-4 text-sm">
