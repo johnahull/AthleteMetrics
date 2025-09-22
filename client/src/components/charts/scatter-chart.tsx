@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Info } from "lucide-react";
 import { Scatter } from "react-chartjs-2";
+import { useRef, useEffect } from "react";
 import {
   Chart as ChartJS,
   LinearScale,
@@ -17,6 +18,17 @@ interface ScatterChartProps {
 }
 
 export default function ScatterChart({ data }: ScatterChartProps) {
+  const chartRef = useRef<any>(null);
+
+  // Cleanup chart instance on unmount
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy?.();
+      }
+    };
+  }, []);
+
   const processScatterData = (measurements: any[]) => {
     if (!measurements || measurements.length === 0) return { datasets: [] };
 
@@ -138,8 +150,8 @@ export default function ScatterChart({ data }: ScatterChartProps) {
     : null;
 
   return (
-    <Card className="bg-white">
-      <CardContent className="p-6">
+    <Card className="bg-white h-[700px] flex flex-col">
+      <CardContent className="p-6 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Fly-10 vs Vertical Jump</h3>
           <div className="flex items-center space-x-2">
@@ -148,8 +160,8 @@ export default function ScatterChart({ data }: ScatterChartProps) {
           </div>
         </div>
         
-        <div className="h-64 mb-4">
-          <Scatter data={chartData} options={options} />
+        <div className="w-full mb-4" style={{ height: '500px' }}>
+          <Scatter ref={chartRef} data={chartData} options={options} />
         </div>
         
         {correlation !== null && (

@@ -71,7 +71,7 @@ export class AuthService extends BaseService {
       return await this.storage.getUserOrganizations(userId);
     } catch (error) {
       console.error("AuthService.getUserOrganizations:", error);
-      return [];
+      throw new Error(`Failed to get user organizations: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
