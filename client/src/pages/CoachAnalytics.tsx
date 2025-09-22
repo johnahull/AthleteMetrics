@@ -110,7 +110,7 @@ export function CoachAnalytics() {
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
 
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     if (!effectiveOrganizationId) {
       console.log('No effective organization ID found, skipping athlete load');
       setIsLoadingAthletes(false);
@@ -168,9 +168,9 @@ export function CoachAnalytics() {
       setIsLoadingAthletes(false);
       console.log('Finished loading athletes');
     }
-  };
+  }, [effectiveOrganizationId]);
 
-  const fetchAnalyticsData = async () => {
+  const fetchAnalyticsData = useCallback(async () => {
     if (!effectiveOrganizationId) return;
 
     setIsLoading(true);
@@ -205,7 +205,7 @@ export function CoachAnalytics() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [effectiveOrganizationId, analysisType, filters, metrics, timeframe, selectedAthleteId]);
 
   const handleFiltersReset = useCallback(() => {
     setFilters({ organizationId: effectiveOrganizationId || '' });
@@ -233,7 +233,7 @@ export function CoachAnalytics() {
     }
 
     loadInitialData();
-  }, [user, organizationContext, userOrganizations, effectiveOrganizationId]);
+  }, [user, organizationContext, userOrganizations, effectiveOrganizationId, loadInitialData]);
 
   // Auto-refresh when key parameters change
   useEffect(() => {
@@ -245,7 +245,7 @@ export function CoachAnalytics() {
       }
       fetchAnalyticsData();
     }
-  }, [analysisType, filters, metrics, timeframe, selectedAthleteId, effectiveOrganizationId]);
+  }, [fetchAnalyticsData]);
 
   // Update chart type recommendation when analysis parameters change
   useEffect(() => {
