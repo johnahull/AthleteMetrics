@@ -536,7 +536,7 @@ export function RadarChart({
       )}
 
       {/* Chart Container with fixed height */}
-      <div className="h-96 w-full">
+      <div className="h-[500px] w-full">
         <Radar data={radarData} options={options} />
       </div>
 
