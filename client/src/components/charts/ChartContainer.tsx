@@ -264,7 +264,7 @@ export function ChartContainer({
                 {chartType === 'radar_chart' ? (
                   <RadarChart
                     data={multiMetric || []}
-                    config={config}
+                    config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
                     selectedAthleteIds={selectedAthleteIds}
@@ -274,7 +274,7 @@ export function ChartContainer({
                 ) : chartType === 'line_chart' ? (
                   <LineChart
                     data={trends || []}
-                    config={config}
+                    config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
                     selectedAthleteIds={selectedAthleteIds}
