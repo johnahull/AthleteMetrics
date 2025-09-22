@@ -261,18 +261,60 @@ export function ChartContainer({
                 key={`chart-${chartType}`}
                 fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}
               >
-                <ChartComponent
-                  key={`chart-component-${chartType}`}
-                  data={chartData as any}
-                  config={chartConfig}
-                  statistics={statistics || {}}
-                  highlightAthlete={highlightAthlete}
-                  selectedAthleteIds={selectedAthleteIds}
-                  onAthleteSelectionChange={onAthleteSelectionChange}
-                  showAllPoints={chartType === 'box_swarm_combo'}
-                  selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
-                  metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
-                />
+                {chartType === 'radar_chart' ? (
+                  <RadarChart
+                    data={multiMetric || []}
+                    config={config}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    maxAthletes={10}
+                  />
+                ) : chartType === 'line_chart' ? (
+                  <LineChart
+                    data={trends || []}
+                    config={config}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                  />
+                ) : chartType === 'box_swarm_combo' ? (
+                  <BoxPlotChart
+                    data={chartData as ChartDataPoint[]}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    showAllPoints={true}
+                  />
+                ) : chartType === 'time_series_box_swarm' ? (
+                  <TimeSeriesBoxSwarmChart
+                    data={trends || []}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    selectedDates={selectedDates || []}
+                    metric={metric || ''}
+                  />
+                ) : (
+                  <ChartComponent
+                    key={`chart-component-${chartType}`}
+                    data={chartData as any}
+                    config={chartConfig}
+                    statistics={statistics || {}}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    showAllPoints={chartType === 'box_swarm_combo'}
+                    selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
+                    metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
+                  />
+                )}
               </React.Suspense>
             ) : (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -335,13 +377,13 @@ export function validateChartData(
         errors.push('Line charts require trend data array');
       }
       break;
-    
+
     case 'radar_chart':
       if (!Array.isArray(data) || data.length === 0) {
         errors.push('Radar charts require multi-metric data array');
       }
       break;
-    
+
     case 'scatter_plot':
     case 'box_plot':
     case 'distribution':

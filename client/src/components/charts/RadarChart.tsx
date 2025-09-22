@@ -13,10 +13,12 @@ import {
 import { Radar } from 'react-chartjs-2';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import type { 
   MultiMetricData, 
   ChartConfiguration, 
-  StatisticalSummary 
+  StatisticalSummary,
+  TrendData
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
@@ -36,17 +38,30 @@ interface RadarChartProps {
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  maxAthletes?: number;
 }
 
 export function RadarChart({ 
   data, 
   config, 
   statistics, 
-  highlightAthlete 
+  highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
+  maxAthletes = 10
 }: RadarChartProps) {
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
   const [showGroupAverage, setShowGroupAverage] = useState(true);
+
+  // Enhanced athlete selection for multi-athlete radar charts
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+
+  // Use external selection if provided, otherwise use internal state
+  const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
+  const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
 
   // Debug logging
   console.log('RadarChart Debug:', {
@@ -64,6 +79,30 @@ export function RadarChart({
       data.slice(0, 5);
   }, [data, highlightAthlete]);
 
+  // Convert MultiMetricData to TrendData format for enhanced athlete selector
+  const trendDataForSelector = useMemo((): TrendData[] => {
+    if (!data || data.length === 0) return [];
+    
+    // Get the primary metric from the first available metric
+    const allMetrics = new Set<string>();
+    data.forEach(athlete => {
+      Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
+    });
+    const primaryMetric = Array.from(allMetrics)[0] || 'FLY10_TIME';
+
+    return data.map(athlete => ({
+      athleteId: athlete.athleteId,
+      athleteName: athlete.athleteName,
+      metric: primaryMetric,
+      teamName: '', // MultiMetricData doesn't include team info
+      data: [{
+        date: new Date(),
+        value: athlete.metrics[primaryMetric] || 0,
+        isPersonalBest: false
+      }]
+    }));
+  }, [data]);
+
   // Initialize toggles with all athletes enabled by default
   React.useEffect(() => {
     const initialToggles: Record<string, boolean> = {};
@@ -72,6 +111,15 @@ export function RadarChart({
     });
     setAthleteToggles(initialToggles);
   }, [allAvailableAthletes]);
+
+  // Initialize smart default selection when data changes and no external selection
+  React.useEffect(() => {
+    if (!selectedAthleteIds && data.length > 0 && effectiveSelectedIds.length === 0) {
+      // Auto-select first athletes up to maxAthletes
+      const defaultIds = data.slice(0, Math.min(maxAthletes, data.length)).map(a => a.athleteId);
+      setInternalSelectedIds(defaultIds);
+    }
+  }, [data, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
 
   // Transform data for radar chart
   const radarData = useMemo(() => {
@@ -132,13 +180,18 @@ export function RadarChart({
       return metricConfig?.lowerIsBetter || false;
     };
 
-    // Filter athletes based on highlight mode or toggle states (same logic as LineChart)
+    // Filter athletes based on highlight mode, enhanced selection, or toggle states
     const athletesToShow = highlightAthlete
       ? data.filter(athlete => athlete.athleteId === highlightAthlete)
-      : data.filter(athlete =>
-          allAvailableAthletes.some(a => a.athleteId === athlete.athleteId) &&
-          athleteToggles[athlete.athleteId]
-        );
+      : effectiveSelectedIds.length > 0
+        ? data.filter(athlete => 
+            effectiveSelectedIds.includes(athlete.athleteId) &&
+            athleteToggles[athlete.athleteId] !== false
+          )
+        : data.filter(athlete =>
+            allAvailableAthletes.some(a => a.athleteId === athlete.athleteId) &&
+            athleteToggles[athlete.athleteId]
+          );
 
     if (athletesToShow.length === 0) return null;
 
@@ -367,8 +420,20 @@ export function RadarChart({
 
   return (
     <div className="w-full h-full">
-      {/* Athlete Controls Panel - Only show when not in highlight mode */}
-      {!highlightAthlete && allAvailableAthletes.length > 0 && (
+      {/* Enhanced Athlete Selection - Only show when not in highlight mode and we have multiple athletes */}
+      {!highlightAthlete && data.length > 5 && trendDataForSelector.length > 0 && (
+        <AthleteSelectionEnhanced
+          data={trendDataForSelector}
+          selectedAthleteIds={effectiveSelectedIds}
+          onSelectionChange={handleSelectionChange}
+          maxSelection={maxAthletes}
+          metric={Array.from(new Set(data.flatMap(athlete => Object.keys(athlete.metrics))))[0] || 'FLY10_TIME'}
+          className="mb-4"
+        />
+      )}
+
+      {/* Athlete Controls Panel - Only show when not in highlight mode and we have fewer athletes */}
+      {!highlightAthlete && data.length <= 5 && allAvailableAthletes.length > 0 && (
         <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-900">
