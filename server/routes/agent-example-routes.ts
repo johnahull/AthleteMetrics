@@ -84,7 +84,7 @@ export function registerAgentExampleRoutes(app: Express) {
       'Graduation Year': 'graduationYear'
     };
 
-    const parseResult = await agents.execute('ImportExportAgent', 'parseCSV',
+    const parseResult = await agents.execute<{success: boolean, data?: any, error?: string}>('ImportExportAgent', 'parseCSV',
       csvBuffer, columnMapping
     );
 
@@ -101,7 +101,7 @@ export function registerAgentExampleRoutes(app: Express) {
       }
     };
 
-    const validationResult = await agents.execute('ImportExportAgent', 'validateImportData',
+    const validationResult = await agents.execute<{success: boolean, data?: {isValid: boolean, errors?: any[], warnings?: any[]}, error?: string}>('ImportExportAgent', 'validateImportData',
       parseResult.data?.preview, validationRules
     );
 
@@ -114,7 +114,7 @@ export function registerAgentExampleRoutes(app: Express) {
     }
 
     // Step 3: Import data
-    const importResult = await agents.execute('ImportExportAgent', 'importData',
+    const importResult = await agents.execute<{success: boolean, data?: any, error?: string}>('ImportExportAgent', 'importData',
       parseResult.data?.preview, 'athletes'
     );
 
@@ -148,7 +148,7 @@ export function registerAgentExampleRoutes(app: Express) {
       orderBy: 'last_name, first_name'
     };
 
-    const result = await agents.execute('ImportExportAgent', 'exportData',
+    const result = await agents.execute<{success: boolean, data?: {contentType?: string, filename?: string, data?: any}, error?: string}>('ImportExportAgent', 'exportData',
       exportQuery, format as string
     );
 
@@ -211,7 +211,7 @@ export function registerAgentExampleRoutes(app: Express) {
     const { athleteData } = req.body;
 
     // Step 1: Security - sanitize and validate input
-    const sanitizeResult = await agents.execute('SecurityAgent', 'sanitizeInput',
+    const sanitizeResult = await agents.execute<{success: boolean, data?: any, error?: string}>('SecurityAgent', 'sanitizeInput',
       athleteData, { stripHTML: true, maxLength: 255 }
     );
 
@@ -235,11 +235,7 @@ export function registerAgentExampleRoutes(app: Express) {
       }
     ]);
 
-    if (!parallelResult.success) {
-      return res.status(500).json({ message: 'Security checks failed', error: parallelResult.error });
-    }
-
-    const [hasPermission, rateLimitOk] = parallelResult.data || [];
+    const [hasPermission, rateLimitOk] = parallelResult || [];
 
     if (!hasPermission) {
       return res.status(403).json({ message: "Permission denied" });
@@ -251,7 +247,7 @@ export function registerAgentExampleRoutes(app: Express) {
 
     // Step 3: Database - check for existing athlete and create if not exists
     const checkExistingQuery = 'SELECT id FROM users WHERE $1 = ANY(emails) AND role = \'athlete\'';
-    const existingResult = await agents.execute('DatabaseAgent', 'queryOne',
+    const existingResult = await agents.execute<{success: boolean, data?: any, error?: string}>('DatabaseAgent', 'queryOne',
       checkExistingQuery, [sanitizedData?.email]
     );
 
@@ -270,7 +266,7 @@ export function registerAgentExampleRoutes(app: Express) {
       RETURNING id, first_name, last_name, emails
     `;
 
-    const newAthleteResult = await agents.execute('DatabaseAgent', 'queryOne',
+    const newAthleteResult = await agents.execute<{success: boolean, data?: any, error?: string}>('DatabaseAgent', 'queryOne',
       insertQuery, [
         sanitizedData?.firstName,
         sanitizedData?.lastName,
@@ -278,6 +274,12 @@ export function registerAgentExampleRoutes(app: Express) {
         req.session.user?.primaryOrganizationId
       ]
     );
+
+    if (!newAthleteResult.success) {
+      return res.status(500).json({ message: 'Failed to create athlete', error: newAthleteResult.error });
+    }
+
+    const newAthlete = newAthleteResult.data;
 
     // Step 5: Emit event for other systems (notifications, analytics, etc.)
     await agents.emitEvent('athlete_registered', {
