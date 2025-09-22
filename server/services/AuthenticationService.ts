@@ -92,7 +92,7 @@ export class AuthenticationService extends BaseService implements Authentication
   private readonly MAX_FAILED_ATTEMPTS = 5;
   private readonly LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
   private readonly SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
-  private readonly BCRYPT_ROUNDS = 12;
+  private readonly BCRYPT_ROUNDS = 14;
 
   constructor(config: ServiceConfig) {
     super(config, 'AuthenticationService');

@@ -12,6 +12,7 @@ import type {
   AnalyticsResponse,
   ChartRecommendation
 } from './types/common';
+import { createClient, type RedisClientType } from 'redis';
 
 // Re-export types for external use
 export type {
@@ -38,8 +39,35 @@ export interface AnalyticsServiceInterface {
 }
 
 export class AnalyticsService extends BaseService implements AnalyticsServiceInterface {
+  private cacheClient: RedisClientType | null = null;
+  private readonly CACHE_TTL = 600; // 10 minutes cache TTL
+
   constructor(config: ServiceConfig) {
     super(config, 'AnalyticsService');
+    this.initializeCache();
+  }
+
+  private async initializeCache(): Promise<void> {
+    try {
+      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      this.cacheClient = createClient({
+        url: redisUrl,
+        socket: {
+          connectTimeout: 60000
+        }
+      });
+
+      this.cacheClient.on('error', (err) => {
+        this.logger.warn('Analytics cache error:', err);
+        this.cacheClient = null;
+      });
+
+      await this.cacheClient.connect();
+      this.logger.info('Analytics cache initialized successfully');
+    } catch (error) {
+      this.logger.warn('Could not initialize analytics cache:', error);
+      this.cacheClient = null;
+    }
   }
 
   /**
@@ -55,8 +83,19 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
       // Apply organization context for non-site admins
       const organizationAwareFilters = this.applyOrganizationFilter(filters, context);
 
-      // Get measurements with filters
-      const measurements = await this.storage.getMeasurements(organizationAwareFilters);
+      // Apply default pagination limits for performance
+      const paginatedFilters = this.applyPaginationLimits(organizationAwareFilters);
+
+      // Check cache first
+      const cacheKey = this.generateCacheKey('performance_analytics', paginatedFilters, context);
+      const cached = await this.getFromCache(cacheKey);
+      if (cached) {
+        this.logger.debug('Returning cached performance analytics', { cacheKey });
+        return cached;
+      }
+
+      // Get measurements with filters and pagination
+      const measurements = await this.storage.getMeasurements(paginatedFilters);
 
       // Perform statistical analysis
       const statisticalSummary = this.calculateStatisticalSummary(measurements);
@@ -69,7 +108,7 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
       // Recommend optimal chart type
       const chartRecommendation = this.determineOptimalChartType(measurements, filters);
 
-      return {
+      const result = {
         data: measurements,
         statistics: statisticalSummary,
         groupings: {
@@ -83,6 +122,11 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
           generatedAt: new Date().toISOString()
         }
       };
+
+      // Cache the result
+      await this.setCache(cacheKey, result);
+
+      return result;
     });
   }
 
@@ -97,7 +141,8 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
       this.validatePermissions(context, { requireAuth: true });
 
       const organizationAwareFilters = this.applyOrganizationFilter(filters, context);
-      const measurements = await this.storage.getMeasurements(organizationAwareFilters);
+      const paginatedFilters = this.applyPaginationLimits(organizationAwareFilters);
+      const measurements = await this.storage.getMeasurements(paginatedFilters);
 
       return this.calculateStatisticalSummary(measurements);
     });
@@ -114,7 +159,8 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
       this.validatePermissions(context, { requireAuth: true });
 
       const organizationAwareFilters = this.applyOrganizationFilter(filters, context);
-      const measurements = await this.storage.getMeasurements(organizationAwareFilters);
+      const paginatedFilters = this.applyPaginationLimits(organizationAwareFilters);
+      const measurements = await this.storage.getMeasurements(paginatedFilters);
 
       return this.calculateTrendAnalysis(measurements);
     });
@@ -308,6 +354,29 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
     }
 
     throw new Error('Organization context required for analytics access');
+  }
+
+  private applyPaginationLimits(filters: MeasurementFilters): MeasurementFilters {
+    const DEFAULT_LIMIT = 1000;
+    const MAX_LIMIT = 10000;
+
+    // Apply default limit if not specified
+    let limit = filters.limit || DEFAULT_LIMIT;
+
+    // Enforce maximum limit for performance
+    if (limit > MAX_LIMIT) {
+      this.logger.warn('Requested limit exceeds maximum, applying max limit', {
+        requested: limit,
+        applied: MAX_LIMIT
+      });
+      limit = MAX_LIMIT;
+    }
+
+    return {
+      ...filters,
+      limit,
+      offset: filters.offset || 0
+    };
   }
 
   private calculateStatisticalSummary(measurements: any[]): any {
@@ -623,5 +692,83 @@ export class AnalyticsService extends BaseService implements AnalyticsServiceInt
   private generateIndividualInsights(individualMeasurements: any[], teamMeasurements: any[]): string[] {
     // Generate insights for individual athlete
     return [];
+  }
+
+  // Cache helper methods
+
+  private generateCacheKey(operation: string, filters: MeasurementFilters, context: ServiceContext): string {
+    // Create a deterministic cache key based on operation, filters, and context
+    const keyData = {
+      operation,
+      filters: {
+        ...filters,
+        // Sort arrays for consistent keys
+        teamIds: filters.teamIds?.sort(),
+      },
+      organizationId: context.organizationId,
+      userId: context.userId
+    };
+
+    const keyString = JSON.stringify(keyData);
+    const hash = this.hashString(keyString);
+    return `analytics:${operation}:${hash}`;
+  }
+
+  private hashString(str: string): string {
+    // Simple hash function for cache keys
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  private async getFromCache(key: string): Promise<any | null> {
+    if (!this.cacheClient) {
+      return null;
+    }
+
+    try {
+      const cached = await this.cacheClient.get(key);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (error) {
+      this.logger.warn('Error reading from cache', { key, error });
+    }
+
+    return null;
+  }
+
+  private async setCache(key: string, data: any): Promise<void> {
+    if (!this.cacheClient) {
+      return;
+    }
+
+    try {
+      const serialized = JSON.stringify(data);
+      await this.cacheClient.setEx(key, this.CACHE_TTL, serialized);
+      this.logger.debug('Data cached successfully', { key, ttl: this.CACHE_TTL });
+    } catch (error) {
+      this.logger.warn('Error writing to cache', { key, error });
+    }
+  }
+
+  private async invalidateCache(pattern: string): Promise<void> {
+    if (!this.cacheClient) {
+      return;
+    }
+
+    try {
+      const keys = await this.cacheClient.keys(`analytics:${pattern}*`);
+      if (keys.length > 0) {
+        await this.cacheClient.del(keys);
+        this.logger.debug('Cache invalidated', { pattern, keysRemoved: keys.length });
+      }
+    } catch (error) {
+      this.logger.warn('Error invalidating cache', { pattern, error });
+    }
   }
 }

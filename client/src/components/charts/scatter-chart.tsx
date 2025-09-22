@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Info } from "lucide-react";
 import { Scatter } from "react-chartjs-2";
+import { useRef, useEffect } from "react";
 import {
   Chart as ChartJS,
   LinearScale,
@@ -17,6 +18,17 @@ interface ScatterChartProps {
 }
 
 export default function ScatterChart({ data }: ScatterChartProps) {
+  const chartRef = useRef<any>(null);
+
+  // Cleanup chart instance on unmount
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy?.();
+      }
+    };
+  }, []);
+
   const processScatterData = (measurements: any[]) => {
     if (!measurements || measurements.length === 0) return { datasets: [] };
 
@@ -149,7 +161,7 @@ export default function ScatterChart({ data }: ScatterChartProps) {
         </div>
         
         <div className="w-full mb-4" style={{ height: '500px' }}>
-          <Scatter data={chartData} options={options} />
+          <Scatter ref={chartRef} data={chartData} options={options} />
         </div>
         
         {correlation !== null && (

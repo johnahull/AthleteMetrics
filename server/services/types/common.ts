@@ -22,6 +22,9 @@ export interface MeasurementFilters {
   gender?: string;
   position?: string;
   includeUnverified?: boolean;
+  // Pagination fields
+  limit?: number;
+  offset?: number;
 }
 
 // Analytics Request (for chart recommendations)

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Line } from "react-chartjs-2";
+import { useRef, useEffect } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,9 +25,19 @@ ChartJS.register(
 );
 
 export default function PerformanceChart() {
+  const chartRef = useRef<any>(null);
   const { data: measurements } = useQuery({
     queryKey: ["/api/measurements"],
   });
+
+  // Cleanup chart instance on unmount
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy?.();
+      }
+    };
+  }, []);
 
   // Process data for weekly trends
   const processWeeklyData = (measurements: any[]) => {
@@ -155,7 +166,7 @@ export default function PerformanceChart() {
           </Select>
         </div>
         <div className="w-full" style={{ height: '500px' }}>
-          <Line data={chartData} options={options} />
+          <Line ref={chartRef} data={chartData} options={options} />
         </div>
       </CardContent>
     </Card>

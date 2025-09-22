@@ -361,6 +361,12 @@ export class SecurityAgentImpl extends AbstractBaseAgent implements SecurityAgen
     const sanitized: any = {};
 
     for (const [key, value] of Object.entries(obj)) {
+      // Protect against prototype pollution
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        this.log('warn', 'Blocked potential prototype pollution attempt', { key });
+        continue;
+      }
+
       if (typeof value === 'string') {
         sanitized[key] = this.sanitizeString(value, rules);
       } else if (typeof value === 'number') {
