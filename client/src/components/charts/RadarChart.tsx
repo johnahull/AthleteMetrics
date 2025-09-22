@@ -87,19 +87,19 @@ export function RadarChart({
         values.reduce((sum, val) => sum + val, 0) / values.length : 0;
     });
 
-    // Normalize values to 0-100 scale using percentile ranks
+    // Normalize values to 0-100 scale using min-max scaling
     const normalizeValue = (value: number, metric: string) => {
       const stats = statistics?.[metric];
       if (!stats) return 50; // Default to middle if no stats
 
-      // Use percentile rank (0-100)
-      const allValues = data
-        .map(athlete => athlete.metrics[metric])
-        .filter(val => val !== undefined)
-        .sort((a, b) => a - b);
+      // Use min-max normalization (0-100)
+      const { min, max } = stats;
       
-      const rank = allValues.filter(v => v < value).length;
-      return (rank / allValues.length) * 100;
+      // Handle edge case where min equals max
+      if (min === max) return 50;
+      
+      // Scale to 0-100 range
+      return ((value - min) / (max - min)) * 100;
     };
 
     const datasets = [];
@@ -210,7 +210,7 @@ export function RadarChart({
             
             return [
               `${label}: ${actualValue.toFixed(2)}${unit}`,
-              `Percentile: ${rawValue.toFixed(0)}%`
+              `Scaled: ${rawValue.toFixed(1)}% of range`
             ];
           }
         }
@@ -279,7 +279,7 @@ export function RadarChart({
       {/* Performance summary */}
       <div className="mt-4 text-sm">
         <div className="text-center text-muted-foreground mb-2">
-          Values shown as percentile ranks (0-100%) relative to group
+          Values shown as min-max scaled (0-100%) within group range
         </div>
         
         {highlightAthlete && (
@@ -298,7 +298,8 @@ export function RadarChart({
                     {value?.toFixed(2)}{unit}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {percentile?.toFixed(0)}th percentile
+                    {((value || 0 - (statistics?.[metric]?.min || 0)) / 
+                      ((statistics?.[metric]?.max || 1) - (statistics?.[metric]?.min || 0)) * 100).toFixed(1)}% of range
                   </div>
                 </div>
               );
