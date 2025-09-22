@@ -107,10 +107,10 @@ const metricsSelectionSchema = z.object({
       return false;
     }
     // Limit additional metrics to prevent performance issues
-    return data.additional.length <= 3;
+    return data.additional.length <= 5;
   },
   {
-    message: 'Additional metrics cannot include primary metric and must be 3 or fewer',
+    message: 'Additional metrics cannot include primary metric and must be 5 or fewer',
     path: ['additional']
   }
 );
