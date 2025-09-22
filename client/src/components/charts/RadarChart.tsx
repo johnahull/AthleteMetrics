@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -11,6 +11,8 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import type { 
   MultiMetricData, 
   ChartConfiguration, 
@@ -42,6 +44,10 @@ export function RadarChart({
   statistics, 
   highlightAthlete 
 }: RadarChartProps) {
+  // State for athlete visibility toggles
+  const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
+  const [showGroupAverage, setShowGroupAverage] = useState(true);
+
   // Debug logging
   console.log('RadarChart Debug:', {
     dataLength: data?.length || 0,
@@ -50,6 +56,22 @@ export function RadarChart({
     highlightAthlete,
     sampleData: data?.slice(0, 2)
   });
+
+  // Get all available athletes for toggle controls
+  const allAvailableAthletes = useMemo(() => {
+    return highlightAthlete ? 
+      data.filter(athlete => athlete.athleteId === highlightAthlete) :
+      data.slice(0, 5);
+  }, [data, highlightAthlete]);
+
+  // Initialize toggles with all athletes enabled by default
+  React.useEffect(() => {
+    const initialToggles: Record<string, boolean> = {};
+    allAvailableAthletes.forEach(athlete => {
+      initialToggles[athlete.athleteId] = true;
+    });
+    setAthleteToggles(initialToggles);
+  }, [allAvailableAthletes]);
 
   // Transform data for radar chart
   const radarData = useMemo(() => {
@@ -163,23 +185,28 @@ export function RadarChart({
       return Math.max(0, Math.min(100, scaledAvg));
     });
 
-    datasets.push({
-      label: 'Group Average',
-      data: normalizedGroupAverages,
-      backgroundColor: 'rgba(156, 163, 175, 0.2)',
-      borderColor: 'rgba(156, 163, 175, 1)',
-      borderWidth: 2,
-      pointBackgroundColor: 'rgba(156, 163, 175, 1)',
-      pointBorderColor: '#fff',
-      pointHoverBackgroundColor: '#fff',
-      pointHoverBorderColor: 'rgba(156, 163, 175, 1)',
-      pointRadius: 4
-    });
+    // Add group average dataset if enabled
+    if (showGroupAverage) {
+      datasets.push({
+        label: 'Group Average',
+        data: normalizedGroupAverages,
+        backgroundColor: 'rgba(156, 163, 175, 0.2)',
+        borderColor: 'rgba(156, 163, 175, 1)',
+        borderWidth: 2,
+        pointBackgroundColor: 'rgba(156, 163, 175, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(156, 163, 175, 1)',
+        pointRadius: 4
+      });
+    }
 
-    // Individual athlete datasets
-    const athletesToShow = highlightAthlete ? 
-      data.filter(athlete => athlete.athleteId === highlightAthlete) :
-      data.slice(0, 5); // Show top 5 if no specific athlete
+    // Filter athletes based on toggle state
+    const athletesToShow = data.filter(athlete => 
+      highlightAthlete ? athlete.athleteId === highlightAthlete : true
+    ).slice(0, highlightAthlete ? undefined : 5).filter(athlete => 
+      athleteToggles[athlete.athleteId] !== false
+    );
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
@@ -320,6 +347,32 @@ export function RadarChart({
     }
   };
 
+  // Helper functions for athlete toggles
+  const toggleAthlete = (athleteId: string) => {
+    setAthleteToggles(prev => ({
+      ...prev,
+      [athleteId]: !prev[athleteId]
+    }));
+  };
+
+  const selectAllAthletes = () => {
+    const allEnabled: Record<string, boolean> = {};
+    allAvailableAthletes.forEach(athlete => {
+      allEnabled[athlete.athleteId] = true;
+    });
+    setAthleteToggles(allEnabled);
+  };
+
+  const clearAllAthletes = () => {
+    const allDisabled: Record<string, boolean> = {};
+    allAvailableAthletes.forEach(athlete => {
+      allDisabled[athlete.athleteId] = false;
+    });
+    setAthleteToggles(allDisabled);
+  };
+
+  const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+
   if (!radarData || !data || data.length === 0) {
     const metrics = data && data.length > 0 ? 
       new Set(data.flatMap(athlete => Object.keys(athlete.metrics))) : 
@@ -342,6 +395,82 @@ export function RadarChart({
 
   return (
     <div className="w-full h-full">
+      {/* Athlete Controls Panel - Only show when not in highlight mode */}
+      {!highlightAthlete && allAvailableAthletes.length > 0 && (
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-900">
+              Athletes ({visibleAthleteCount} of {allAvailableAthletes.length} visible)
+            </h3>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAllAthletes}
+                disabled={visibleAthleteCount === allAvailableAthletes.length}
+              >
+                Select All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAllAthletes}
+                disabled={visibleAthleteCount === 0}
+              >
+                Clear All
+              </Button>
+            </div>
+          </div>
+
+          {/* Athletes Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
+            {allAvailableAthletes.map((athlete, index) => {
+              const colors = [
+                'rgba(59, 130, 246, 1)',    // Blue
+                'rgba(16, 185, 129, 1)',    // Green
+                'rgba(239, 68, 68, 1)',     // Red
+                'rgba(245, 158, 11, 1)',    // Amber
+                'rgba(139, 92, 246, 1)'     // Purple
+              ];
+              const athleteColor = colors[index % colors.length];
+
+              return (
+                <div key={athlete.athleteId} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`athlete-${athlete.athleteId}`}
+                    checked={athleteToggles[athlete.athleteId] !== false}
+                    onCheckedChange={() => toggleAthlete(athlete.athleteId)}
+                  />
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: athleteColor }}
+                  />
+                  <label
+                    htmlFor={`athlete-${athlete.athleteId}`}
+                    className="text-sm cursor-pointer flex-1 truncate"
+                  >
+                    {athlete.athleteName}
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Group Average Toggle */}
+          <div className="flex items-center space-x-2 pt-2 border-t">
+            <Checkbox
+              id="group-average-radar"
+              checked={showGroupAverage}
+              onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
+            />
+            <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
+            <label htmlFor="group-average-radar" className="text-sm cursor-pointer">
+              Group Average
+            </label>
+          </div>
+        </div>
+      )}
+
       <Radar data={radarData} options={options} />
 
       {/* Performance summary */}
