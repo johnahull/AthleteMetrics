@@ -202,11 +202,14 @@ export function RadarChart({
     }
 
     // Filter athletes based on toggle state
-    const athletesToShow = data.filter(athlete => 
-      highlightAthlete ? athlete.athleteId === highlightAthlete : true
-    ).slice(0, highlightAthlete ? undefined : 5).filter(athlete => 
-      athleteToggles[athlete.athleteId] !== false
-    );
+    const athletesToShow = data.filter(athlete => {
+      // If in highlight mode, only show the highlighted athlete
+      if (highlightAthlete) {
+        return athlete.athleteId === highlightAthlete;
+      }
+      // Otherwise, filter based on toggle state
+      return athleteToggles[athlete.athleteId] !== false;
+    }).slice(0, highlightAthlete ? undefined : 5);
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
