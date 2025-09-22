@@ -54,7 +54,6 @@ export function RadarChart({
 }: RadarChartProps) {
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
-  const [showGroupAverage, setShowGroupAverage] = useState(true);
 
   // Smart default selection for athletes when not controlled by parent
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -245,21 +244,19 @@ export function RadarChart({
       return Math.max(0, Math.min(100, scaledAvg));
     });
 
-    // Add group average dataset if enabled
-    if (showGroupAverage) {
-      datasets.push({
-        label: 'Group Average',
-        data: normalizedGroupAverages,
-        backgroundColor: 'rgba(156, 163, 175, 0.2)',
-        borderColor: 'rgba(156, 163, 175, 1)',
-        borderWidth: 2,
-        pointBackgroundColor: 'rgba(156, 163, 175, 1)',
-        pointBorderColor: '#fff',
-        pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: 'rgba(156, 163, 175, 1)',
-        pointRadius: 4
-      });
-    }
+    // Always add group average dataset
+    datasets.push({
+      label: 'Group Average',
+      data: normalizedGroupAverages,
+      backgroundColor: 'rgba(156, 163, 175, 0.2)',
+      borderColor: 'rgba(156, 163, 175, 1)',
+      borderWidth: 2,
+      pointBackgroundColor: 'rgba(156, 163, 175, 1)',
+      pointBorderColor: '#fff',
+      pointHoverBackgroundColor: '#fff',
+      pointHoverBorderColor: 'rgba(156, 163, 175, 1)',
+      pointRadius: 4
+    });
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
@@ -313,7 +310,7 @@ export function RadarChart({
       groupAverages,
       minMaxValues
     };
-  }, [data, statistics, highlightAthlete, athleteToggles, displayedAthletes, showGroupAverage]);
+  }, [data, statistics, highlightAthlete, athleteToggles, displayedAthletes]);
 
   // Chart options
   const options: ChartOptions<'radar'> = {
@@ -528,17 +525,12 @@ export function RadarChart({
             })}
           </div>
 
-          {/* Group Average Toggle */}
+          {/* Group Average - Always Present */}
           <div className="flex items-center space-x-2 pt-2 border-t">
-            <Checkbox
-              id="group-average-radar"
-              checked={showGroupAverage}
-              onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
-            />
             <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
-            <label htmlFor="group-average-radar" className="text-sm cursor-pointer">
-              Group Average
-            </label>
+            <span className="text-sm text-gray-600">
+              Group Average (always shown)
+            </span>
           </div>
         </div>
       )}
