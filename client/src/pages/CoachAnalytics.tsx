@@ -620,49 +620,73 @@ export function CoachAnalytics() {
           </Card>
         )}
 
-        {!isLoading && !error && analyticsData && chartData && (
-          <>
-            {/* Enhanced Athlete Selector for Multi-Athlete Line Charts */}
-            {analysisType === 'intra_group' && selectedChartType === 'line_chart' && analyticsData.trends && analyticsData.trends.length > 0 && (
-              <AthleteSelectionEnhanced
-                data={analyticsData.trends}
-                selectedAthleteIds={selectedAthleteIds}
-                onSelectionChange={setSelectedAthleteIds}
-                maxSelection={10}
-                metric={metrics.primary}
-                className="mb-4"
-              />
-            )}
+        {/* Always render components with hooks to prevent hooks violations */}
+        {/* Enhanced Athlete Selector for Multi-Athlete Line Charts */}
+        <div style={{
+          display: (
+            !isLoading &&
+            !error &&
+            analyticsData &&
+            chartData &&
+            analysisType === 'intra_group' &&
+            selectedChartType === 'line_chart' &&
+            analyticsData.trends &&
+            analyticsData.trends.length > 0
+          ) ? 'block' : 'none'
+        }}>
+          <AthleteSelectionEnhanced
+            data={analyticsData?.trends || []}
+            selectedAthleteIds={selectedAthleteIds}
+            onSelectionChange={setSelectedAthleteIds}
+            maxSelection={10}
+            metric={metrics.primary}
+            className="mb-4"
+          />
+        </div>
 
-            {/* Date Selector for Time-Series Box+Swarm Charts */}
-            {analysisType !== 'individual' && selectedChartType === 'time_series_box_swarm' && analyticsData.trends && analyticsData.trends.length > 0 && (
-              <DateSelector
-                data={analyticsData.trends}
-                selectedDates={selectedDates}
-                onSelectionChange={setSelectedDates}
-                maxSelection={10}
-                className="mb-4"
-              />
-            )}
+        {/* Date Selector for Time-Series Box+Swarm Charts */}
+        <div style={{
+          display: (
+            !isLoading &&
+            !error &&
+            analyticsData &&
+            chartData &&
+            analysisType !== 'individual' &&
+            selectedChartType === 'time_series_box_swarm' &&
+            analyticsData.trends &&
+            analyticsData.trends.length > 0
+          ) ? 'block' : 'none'
+        }}>
+          <DateSelector
+            data={analyticsData?.trends || []}
+            selectedDates={selectedDates}
+            onSelectionChange={setSelectedDates}
+            maxSelection={10}
+            className="mb-4"
+          />
+        </div>
 
-            <ChartContainer
-              title={chartConfig.title}
-              subtitle={chartConfig.subtitle}
-              chartType={selectedChartType}
-              data={chartData as ChartDataPoint[]}
-              trends={analyticsData.trends}
-              multiMetric={analyticsData.multiMetric}
-              statistics={analyticsData.statistics}
-              config={chartConfig}
-              highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
-              selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
-              onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
-              selectedDates={selectedChartType === 'time_series_box_swarm' ? selectedDates : undefined}
-              metric={selectedChartType === 'time_series_box_swarm' ? metrics.primary : undefined}
-              onExport={handleExport}
-            />
-          </>
-        )}
+        {/* Chart Container */}
+        <div style={{
+          display: (!isLoading && !error && analyticsData && chartData) ? 'block' : 'none'
+        }}>
+          <ChartContainer
+            title={chartConfig.title}
+            subtitle={chartConfig.subtitle}
+            chartType={selectedChartType}
+            data={chartData as ChartDataPoint[] || []}
+            trends={analyticsData?.trends}
+            multiMetric={analyticsData?.multiMetric}
+            statistics={analyticsData?.statistics}
+            config={chartConfig}
+            highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
+            selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
+            onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
+            selectedDates={selectedChartType === 'time_series_box_swarm' ? selectedDates : undefined}
+            metric={selectedChartType === 'time_series_box_swarm' ? metrics.primary : undefined}
+            onExport={handleExport}
+          />
+        </div>
 
         {!isLoading && !error && !analyticsData && (
           <Card>
