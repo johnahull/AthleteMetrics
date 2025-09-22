@@ -436,6 +436,7 @@ export function RadarChart({
       allDisabled[athlete.id || athlete.athleteId] = false;
     });
     setAthleteToggles(allDisabled);
+    // Group average toggle remains unchanged
   };
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
