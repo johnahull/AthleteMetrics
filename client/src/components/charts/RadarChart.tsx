@@ -132,8 +132,18 @@ export function RadarChart({
       return metricConfig?.lowerIsBetter || false;
     };
 
+    // Filter athletes first before processing to match what will be shown
+    const athletesToProcess = data.filter(athlete => {
+      // If in highlight mode, only process the highlighted athlete
+      if (highlightAthlete) {
+        return athlete.athleteId === highlightAthlete;
+      }
+      // Otherwise, filter based on toggle state
+      return athleteToggles[athlete.athleteId] !== false;
+    }).slice(0, highlightAthlete ? undefined : 5);
+
     // Calculate min-max scaled values for each metric
-    const processedData = data.map(athlete => {
+    const processedData = athletesToProcess.map(athlete => {
       const scaledMetrics: Record<string, number> = {};
 
       metrics.forEach(metric => {
@@ -201,15 +211,8 @@ export function RadarChart({
       });
     }
 
-    // Filter athletes based on toggle state
-    const athletesToShow = data.filter(athlete => {
-      // If in highlight mode, only show the highlighted athlete
-      if (highlightAthlete) {
-        return athlete.athleteId === highlightAthlete;
-      }
-      // Otherwise, filter based on toggle state
-      return athleteToggles[athlete.athleteId] !== false;
-    }).slice(0, highlightAthlete ? undefined : 5);
+    // Use the already filtered and processed data
+    const athletesToShow = processedData;
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
@@ -219,6 +222,7 @@ export function RadarChart({
       { bg: 'rgba(139, 92, 246, 0.3)', border: 'rgba(139, 92, 246, 1)' }
     ];
 
+    // Add athlete datasets only for visible athletes
     athletesToShow.forEach((athlete, index) => {
       const athleteValues = metrics.map(metric => {
         const value = athlete.metrics[metric];
