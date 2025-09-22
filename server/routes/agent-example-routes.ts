@@ -88,6 +88,10 @@ export function registerAgentExampleRoutes(app: Express) {
       csvBuffer, columnMapping
     );
 
+    if (!parseResult.success) {
+      return res.status(400).json({ message: 'CSV parsing failed', error: parseResult.error });
+    }
+
     // Step 2: Validate data
     const validationRules = {
       required: ['firstName', 'lastName', 'email'],
@@ -98,26 +102,30 @@ export function registerAgentExampleRoutes(app: Express) {
     };
 
     const validationResult = await agents.execute('ImportExportAgent', 'validateImportData',
-      parseResult.preview, validationRules
+      parseResult.data?.preview, validationRules
     );
 
-    if (!validationResult.isValid) {
+    if (!validationResult.success || !validationResult.data?.isValid) {
       return res.status(400).json({
         message: "Validation failed",
-        errors: validationResult.errors,
-        warnings: validationResult.warnings
+        errors: validationResult.data?.errors || [],
+        warnings: validationResult.data?.warnings || []
       });
     }
 
     // Step 3: Import data
     const importResult = await agents.execute('ImportExportAgent', 'importData',
-      parseResult.preview, 'athletes'
+      parseResult.data?.preview, 'athletes'
     );
 
-    return {
+    if (!importResult.success) {
+      return res.status(500).json({ message: 'Import failed', error: importResult.error });
+    }
+
+    return res.json({
       message: "Import completed",
-      ...importResult
-    };
+      data: importResult.data
+    });
   }));
 
   /**
@@ -144,10 +152,14 @@ export function registerAgentExampleRoutes(app: Express) {
       exportQuery, format as string
     );
 
+    if (!result.success) {
+      return res.status(500).json({ message: 'Export failed', error: result.error });
+    }
+
     // Set response headers for file download
-    res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
-    res.setHeader('Content-Length', result.data.length);
+    res.setHeader('Content-Type', result.data?.contentType || 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.data?.filename || 'export.csv'}"`);
+    res.setHeader('Content-Length', result.data?.data?.length || 0);
 
     return res.send(result.data);
   }));
@@ -199,12 +211,18 @@ export function registerAgentExampleRoutes(app: Express) {
     const { athleteData } = req.body;
 
     // Step 1: Security - sanitize and validate input
-    const sanitizedData = await agents.execute('SecurityAgent', 'sanitizeInput',
+    const sanitizeResult = await agents.execute('SecurityAgent', 'sanitizeInput',
       athleteData, { stripHTML: true, maxLength: 255 }
     );
 
+    if (!sanitizeResult.success) {
+      return res.status(400).json({ message: 'Input sanitization failed', error: sanitizeResult.error });
+    }
+
+    const sanitizedData = sanitizeResult.data;
+
     // Step 2: Security - check permissions and rate limits
-    const [hasPermission, rateLimitOk] = await agents.executeParallel([
+    const parallelResult = await agents.executeParallel([
       {
         agentName: 'SecurityAgent',
         method: 'checkPermission',
@@ -217,6 +235,12 @@ export function registerAgentExampleRoutes(app: Express) {
       }
     ]);
 
+    if (!parallelResult.success) {
+      return res.status(500).json({ message: 'Security checks failed', error: parallelResult.error });
+    }
+
+    const [hasPermission, rateLimitOk] = parallelResult.data || [];
+
     if (!hasPermission) {
       return res.status(403).json({ message: "Permission denied" });
     }
@@ -228,10 +252,14 @@ export function registerAgentExampleRoutes(app: Express) {
     // Step 3: Database - check for existing athlete and create if not exists
     const checkExistingQuery = 'SELECT id FROM users WHERE $1 = ANY(emails) AND role = \'athlete\'';
     const existingResult = await agents.execute('DatabaseAgent', 'queryOne',
-      checkExistingQuery, [sanitizedData.email]
+      checkExistingQuery, [sanitizedData?.email]
     );
 
-    if (existingResult) {
+    if (!existingResult.success) {
+      return res.status(500).json({ message: 'Database query failed', error: existingResult.error });
+    }
+
+    if (existingResult.data) {
       return res.status(409).json({ message: "Athlete with this email already exists" });
     }
 
@@ -242,11 +270,11 @@ export function registerAgentExampleRoutes(app: Express) {
       RETURNING id, first_name, last_name, emails
     `;
 
-    const newAthlete = await agents.execute('DatabaseAgent', 'queryOne',
+    const newAthleteResult = await agents.execute('DatabaseAgent', 'queryOne',
       insertQuery, [
-        sanitizedData.firstName,
-        sanitizedData.lastName,
-        [sanitizedData.email],
+        sanitizedData?.firstName,
+        sanitizedData?.lastName,
+        [sanitizedData?.email],
         req.session.user?.primaryOrganizationId
       ]
     );
@@ -271,8 +299,7 @@ export function registerAgentExampleRoutes(app: Express) {
    */
   app.get("/api/agents/health-detailed", agentRoute(async (req, res, agents) => {
     // This would be handled by agentHealthCheck middleware, but here's a custom version
-    const orchestrator = agents.getAgent('orchestrator') ||
-                        getOrchestrator();
+    const orchestrator = getOrchestrator();
 
     if (!orchestrator) {
       return res.status(503).json({ status: 'error', message: 'Orchestrator not available' });

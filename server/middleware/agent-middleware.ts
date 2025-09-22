@@ -3,7 +3,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { AgentContext } from '@shared/agents/types';
+import { AgentContext, BaseAgent } from '@shared/agents/types';
 import { agentFactory } from '@shared/agents/factory';
 import { getOrchestrator } from '@shared/agents/orchestrator';
 import crypto from 'crypto';
@@ -105,7 +105,7 @@ export class AgentManager {
   /**
    * Get direct access to an agent (use with caution)
    */
-  getAgent<T>(agentName: string): T | undefined {
+  getAgent<T extends BaseAgent>(agentName: string): T | undefined {
     return agentFactory.getAgent<T>(agentName);
   }
 

@@ -540,6 +540,10 @@ export class AuthenticationAgentImpl extends AbstractBaseAgent implements Authen
       }
 
       // Verify the code
+      if (!secret) {
+        return this.createErrorResult('MFA secret not found', 'MFA_SECRET_MISSING');
+      }
+
       const isValid = authenticator.verify({ token: code, secret });
 
       if (isValid) {

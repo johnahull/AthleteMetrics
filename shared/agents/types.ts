@@ -40,6 +40,7 @@ export interface AgentResult<T = any> {
     executionTime: number;
     agentVersion: string;
     dependencies?: string[];
+    [key: string]: any; // Allow additional orchestrator-specific metadata
   };
 }
 

@@ -130,7 +130,7 @@ export class AgentOrchestrator extends EventEmitter {
         };
       }
 
-      return result;
+      return result as AgentResult<T>;
     } catch (error) {
       const executionTime = Date.now() - startTime;
 
@@ -173,7 +173,7 @@ export class AgentOrchestrator extends EventEmitter {
 
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value.success) {
-          data.push(result.value.data);
+          data.push(result.value.data as T);
         } else {
           errors.push(result.status === 'fulfilled' ? result.value.error : result.reason);
         }
