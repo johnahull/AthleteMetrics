@@ -139,8 +139,8 @@ export default function PerformanceChart() {
   };
 
   return (
-    <Card className="bg-white">
-      <CardContent className="p-6">
+    <Card className="bg-white h-[700px] flex flex-col">
+      <CardContent className="p-6 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Performance Trends</h3>
           <Select defaultValue="last8weeks">
@@ -154,7 +154,7 @@ export default function PerformanceChart() {
             </SelectContent>
           </Select>
         </div>
-        <div className="h-64">
+        <div className="w-full flex-1">
           <Line data={chartData} options={options} />
         </div>
       </CardContent>

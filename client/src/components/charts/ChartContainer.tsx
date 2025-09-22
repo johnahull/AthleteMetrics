@@ -155,13 +155,13 @@ export function ChartContainer({
 
   if (isLoading) {
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} h-[700px] flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <Skeleton className="h-6 w-48" />
           {subtitle && <Skeleton className="h-4 w-32" />}
         </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
+        <CardContent className="flex-1">
+          <Skeleton className="h-full w-full" />
         </CardContent>
       </Card>
     );
@@ -169,14 +169,14 @@ export function ChartContainer({
 
   if (error) {
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} h-[700px] flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <CardTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
             Chart Error
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
@@ -190,11 +190,11 @@ export function ChartContainer({
   const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} h-[700px] flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <CardTitle>Unsupported Chart Type</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Alert>
             <AlertDescription>
               Chart type "{chartType}" is not implemented yet.
@@ -207,12 +207,12 @@ export function ChartContainer({
 
   if (!chartData || (Array.isArray(chartData) && chartData.length === 0)) {
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} h-[700px] flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <CardTitle>{title}</CardTitle>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Alert>
             <AlertDescription>
               No data available for this chart. Try adjusting your filters or date range.
@@ -224,8 +224,8 @@ export function ChartContainer({
   }
 
   return (
-    <Card className={className}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card className={`${className} h-[700px] flex flex-col`}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
           {subtitle && (
@@ -255,8 +255,8 @@ export function ChartContainer({
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="w-full" style={{ height: '500px' }}>
+      <CardContent className="flex-1 flex flex-col">
+        <div className="w-full flex-1">
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense

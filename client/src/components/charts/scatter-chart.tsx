@@ -138,8 +138,8 @@ export default function ScatterChart({ data }: ScatterChartProps) {
     : null;
 
   return (
-    <Card className="bg-white">
-      <CardContent className="p-6">
+    <Card className="bg-white h-[700px] flex flex-col">
+      <CardContent className="p-6 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Fly-10 vs Vertical Jump</h3>
           <div className="flex items-center space-x-2">
@@ -148,7 +148,7 @@ export default function ScatterChart({ data }: ScatterChartProps) {
           </div>
         </div>
         
-        <div className="h-64 mb-4">
+        <div className="w-full mb-4 flex-1">
           <Scatter data={chartData} options={options} />
         </div>
         

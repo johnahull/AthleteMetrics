@@ -819,7 +819,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       )}
 
       {/* Chart */}
-      <div className="h-96">
+      <div className="w-full" style={{ height: '500px' }}>
         <Scatter ref={chartRef} data={scatterData} options={options} />
       </div>
     </div>
