@@ -505,9 +505,13 @@ export function CoachAnalytics() {
         onReset={handleFiltersReset}
       />
 
-      {/* Chart Controls Bar - Horizontal Layout */}
-      {analyticsData && (analysisType !== 'individual' || selectedAthleteId) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* Chart Controls Bar - Always render to prevent hooks violations */}
+      <div
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
+        style={{
+          display: (analyticsData && (analysisType !== 'individual' || selectedAthleteId)) ? 'grid' : 'none'
+        }}
+      >
           {/* Chart Type Selection */}
           <Card>
             <CardHeader className="pb-2">
@@ -519,7 +523,7 @@ export function CoachAnalytics() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {analyticsData.meta.recommendedCharts.map((chartType) => (
+                  {(analyticsData?.meta?.recommendedCharts || []).map((chartType) => (
                     <SelectItem key={chartType} value={chartType}>
                       {formatChartTypeName(chartType)}
                     </SelectItem>
@@ -537,11 +541,11 @@ export function CoachAnalytics() {
             <CardContent className="pt-0 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span>Athletes:</span>
-                <Badge variant="secondary" className="text-xs">{analyticsData.meta.totalAthletes}</Badge>
+                <Badge variant="secondary" className="text-xs">{analyticsData?.meta?.totalAthletes || 0}</Badge>
               </div>
               <div className="flex justify-between">
                 <span>Measurements:</span>
-                <Badge variant="secondary" className="text-xs">{analyticsData.meta.totalMeasurements}</Badge>
+                <Badge variant="secondary" className="text-xs">{analyticsData?.meta?.totalMeasurements || 0}</Badge>
               </div>
             </CardContent>
           </Card>
@@ -573,7 +577,7 @@ export function CoachAnalytics() {
               <CardTitle className="text-sm">Quick Stats</CardTitle>
             </CardHeader>
             <CardContent className="pt-0 space-y-1 text-sm">
-              {analyticsData.statistics[metrics.primary] && (
+              {analyticsData?.statistics?.[metrics.primary] && (
                 <>
                   <div className="flex justify-between">
                     <span>Average:</span>
@@ -598,7 +602,6 @@ export function CoachAnalytics() {
             </CardContent>
           </Card>
         </div>
-      )}
 
       {/* Chart Display - Full Width */}
       <div className="w-full">
