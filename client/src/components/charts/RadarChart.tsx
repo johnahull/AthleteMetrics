@@ -20,7 +20,7 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 
 // Register Chart.js components
 ChartJS.register(
-  RadialScale,
+  RadialLinearScale,
   PointElement,
   LineElement,
   Filler,
