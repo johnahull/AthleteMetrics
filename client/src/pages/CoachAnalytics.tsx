@@ -290,6 +290,16 @@ export function CoachAnalytics() {
         const additionalLabel = METRIC_CONFIG[metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || metrics.additional[0];
         return `${primaryLabel} vs ${additionalLabel}`;
       }
+      
+      // For radar charts and multi-metric displays, show all metrics
+      if (selectedChartType === 'radar_chart' && metrics.additional.length > 0) {
+        const allMetrics = [metrics.primary, ...metrics.additional];
+        const metricLabels = allMetrics.map(metric => 
+          METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
+        );
+        return metricLabels.join(', ');
+      }
+      
       return METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
     };
 
@@ -298,6 +308,8 @@ export function CoachAnalytics() {
         const athleteName = availableAthletes.find(a => a.id === selectedAthleteId)?.name;
         title = athleteName ? `${athleteName} - Performance Analysis` : 'Individual Performance Analysis';
         if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
+          subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
+        } else if (selectedChartType === 'radar_chart' && metrics.additional.length > 0) {
           subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
         } else {
           subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
