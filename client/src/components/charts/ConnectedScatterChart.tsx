@@ -634,12 +634,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 </div>
               </div>
             </div>
-          )}</div>
-        </div>
-      )}
-    </div>
-  );
-});
+          )}
         </div>
       )}
     </div>
