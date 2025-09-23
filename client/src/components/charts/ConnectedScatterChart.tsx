@@ -701,8 +701,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     interaction: {
       intersect: false,
       mode: 'point'
-    };
-  }), [scatterData, config, statistics]);
+    }
+  }, [scatterData, config, statistics]);
 
   if (!scatterData?.isValid) {
     return (
