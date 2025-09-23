@@ -11,8 +11,7 @@ import type {
   ChartDataPoint,
   StatisticalSummary,
   TrendData,
-  TrendDataPoint,
-  MultiMetricData
+  TrendDataPoint
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import {
@@ -221,91 +220,6 @@ export class AnalyticsService {
     return trends;
   }
 
-  /**
-   * Generate multi-metric data for radar charts from filtered chart data points
-   */
-  private generateMultiMetricData(chartData: ChartDataPoint[], metrics: string[]): MultiMetricData[] {
-    // Early return if no data or less than 2 metrics
-    if (!chartData || chartData.length === 0 || metrics.length < 2) {
-      return [];
-    }
-
-    // Group chart data by athlete
-    const athleteGroups = chartData.reduce((groups, point) => {
-      if (metrics.includes(point.metric)) {
-        if (!groups[point.athleteId]) {
-          groups[point.athleteId] = {
-            athleteId: point.athleteId,
-            athleteName: point.athleteName,
-            teamName: point.teamName,
-            measurements: {}
-          };
-        }
-
-        // Store the best value for each metric per athlete
-        const currentBest = groups[point.athleteId].measurements[point.metric];
-        const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
-        const lowerIsBetter = metricConfig?.lowerIsBetter || false;
-
-        if (!currentBest ||
-            (lowerIsBetter && point.value < currentBest) ||
-            (!lowerIsBetter && point.value > currentBest)) {
-          groups[point.athleteId].measurements[point.metric] = point.value;
-        }
-      }
-      return groups;
-    }, {} as Record<string, {
-      athleteId: string;
-      athleteName: string;
-      teamName?: string;
-      measurements: Record<string, number>
-    }>);
-
-    // Filter to only include athletes who have data for all metrics
-    const completeAthletes = Object.values(athleteGroups).filter(athlete =>
-      metrics.every(metric => athlete.measurements[metric] !== undefined)
-    );
-
-    // Debug logging
-    console.log(`MultiMetric Debug: Total athletes with some data: ${Object.keys(athleteGroups).length}`);
-    console.log(`MultiMetric Debug: Athletes with complete data for all ${metrics.length} metrics: ${completeAthletes.length}`);
-    console.log('MultiMetric Debug: Required metrics:', metrics);
-
-    if (completeAthletes.length === 0) {
-      console.log('MultiMetric Debug: No athletes have complete data for all metrics');
-      return [];
-    }
-
-    // Calculate percentile ranks for each metric
-    const metricPercentiles: Record<string, Record<string, number>> = {};
-
-    metrics.forEach(metric => {
-      const values = completeAthletes.map(athlete => athlete.measurements[metric]);
-      const sortedValues = [...values].sort((a, b) => a - b);
-
-      metricPercentiles[metric] = {};
-      completeAthletes.forEach(athlete => {
-        const value = athlete.measurements[metric];
-        const rank = sortedValues.findIndex(v => v === value);
-        // Handle edge case where there's only one athlete
-        const percentile = sortedValues.length === 1 ? 50 : (rank / (sortedValues.length - 1)) * 100;
-        metricPercentiles[metric][athlete.athleteId] = percentile;
-      });
-    });
-
-    // Convert to MultiMetricData format
-    const multiMetricData: MultiMetricData[] = completeAthletes.map(athlete => ({
-      athleteId: athlete.athleteId,
-      athleteName: athlete.athleteName,
-      metrics: athlete.measurements,
-      percentileRanks: Object.fromEntries(
-        metrics.map(metric => [metric, metricPercentiles[metric][athlete.athleteId]])
-      )
-    }));
-
-    return multiMetricData;
-  }
-
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
       // Validate request
@@ -441,16 +355,6 @@ export class AnalyticsService {
       // Calculate total metric count (primary + additional)
       const metricCount = 1 + (request.metrics.additional?.length || 0);
 
-      // Generate multi-metric data for radar charts when multiple metrics are selected
-      const allSelectedMetrics = [request.metrics.primary, ...(request.metrics.additional || [])];
-      // Generate multiMetric data when we have 2+ metrics (not just 3+) to support radar charts
-      const shouldGenerateMultiMetric = metricCount >= 2;
-      const multiMetric = shouldGenerateMultiMetric
-        ? this.generateMultiMetricData(chartData, allSelectedMetrics)
-        : [];
-
-      console.log(`Analytics Debug: metricCount=${metricCount}, allSelectedMetrics=${JSON.stringify(allSelectedMetrics)}, shouldGenerateMultiMetric=${shouldGenerateMultiMetric}, multiMetric.length=${multiMetric.length}`);
-
       // Generate dynamic chart recommendations
       const recommendedCharts = this.getRecommendedChartTypes(
         request.analysisType,
@@ -461,7 +365,7 @@ export class AnalyticsService {
       return {
         data: chartData,
         trends,
-        multiMetric,
+        multiMetric: [],
         statistics,
         groupings: {},
         meta: {

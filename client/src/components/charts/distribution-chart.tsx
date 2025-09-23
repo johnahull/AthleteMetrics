@@ -2,7 +2,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bar } from "react-chartjs-2";
 import { Expand, Download } from "lucide-react";
-import { useRef, useEffect } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -29,17 +28,6 @@ interface DistributionChartProps {
 }
 
 export default function DistributionChart({ data, title, metric }: DistributionChartProps) {
-  const chartRef = useRef<any>(null);
-
-  // Cleanup chart instance on unmount
-  useEffect(() => {
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.destroy?.();
-      }
-    };
-  }, []);
-
   const createHistogram = (values: number[], bins: number = 5) => {
     if (values.length === 0) return { labels: [], data: [] };
 
@@ -124,8 +112,8 @@ export default function DistributionChart({ data, title, metric }: DistributionC
   } : null;
 
   return (
-    <Card className="bg-white h-[700px] flex flex-col">
-      <CardContent className="p-6 flex-1 flex flex-col">
+    <Card className="bg-white">
+      <CardContent className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <div className="flex space-x-2">
@@ -138,8 +126,8 @@ export default function DistributionChart({ data, title, metric }: DistributionC
           </div>
         </div>
         
-        <div className="w-full mb-4" style={{ height: '500px' }}>
-          <Bar ref={chartRef} data={chartData} options={options} />
+        <div className="h-64 mb-4">
+          <Bar data={chartData} options={options} />
         </div>
         
         {stats && (
