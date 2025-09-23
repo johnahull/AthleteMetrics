@@ -170,6 +170,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       console.log('ConnectedScatterChart: No data provided');
       hasValidData = false;
       validationMessage = 'No data provided';
+      metrics = []; // Ensure metrics is always defined
     } else {
       // Log each trend data item to understand the structure
       data.forEach((trend, index) => {
@@ -207,12 +208,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         isValid: false,
         validationMessage,
         datasets: [],
-        xMetric: '',
-        yMetric: '',
+        xMetric: metrics[0] || '',
+        yMetric: metrics[1] || '',
         xUnit: '',
         yUnit: '',
-        xLabel: '',
-        yLabel: '',
+        xLabel: metrics[0] || '',
+        yLabel: metrics[1] || '',
         athleteTrends: {},
         analytics: null,
         chartData: { datasets: [], analytics: null }
@@ -441,7 +442,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
 
   // Chart options (always define this hook to maintain consistent hook order)
-  const options: ChartOptions<'scatter'> = useMemo(() => ({
+  const options: ChartOptions<'scatter'> = useMemo(() => {
+    // Ensure we have fallback values for invalid data to maintain hook consistency
+    const safeScatterData = scatterData || {
+      xLabel: 'X Axis',
+      yLabel: 'Y Axis', 
+      xUnit: '',
+      yUnit: '',
+      analytics: null,
+      chartData: { datasets: [], analytics: null }
+    };
+    
+    return {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -509,16 +521,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: scatterData?.analytics ? {
+      annotation: safeScatterData.analytics ? {
         annotations: (() => {
-          const xMean = scatterData.analytics.xMean;
-          const yMean = scatterData.analytics.yMean;
+          const xMean = safeScatterData.analytics.xMean;
+          const yMean = safeScatterData.analytics.yMean;
 
           // Get dynamic quadrant labels based on metric types
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+          const labels = getPerformanceQuadrantLabels(scatterData?.xMetric || '', scatterData?.yMetric || '');
 
           // Calculate chart bounds for full background coverage
-          const datasets = scatterData.chartData.datasets;
+          const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           const allPoints = datasets.flatMap(dataset => dataset.data || []);
@@ -621,15 +633,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         position: 'bottom',
         title: {
           display: true,
-          text: `${scatterData?.xLabel || 'X Axis'} (${scatterData?.xUnit || ''})`
+          text: `${safeScatterData.xLabel || 'X Axis'} (${safeScatterData.xUnit || ''})`
         },
         grid: {
           display: true,
           color: 'rgba(0, 0, 0, 0.1)'
         },
         // Set explicit bounds to match quadrant coverage
-        ...(scatterData?.analytics ? (() => {
-          const datasets = scatterData.chartData.datasets;
+        ...(safeScatterData?.analytics ? (() => {
+          const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           const allPoints = datasets.flatMap(dataset => dataset.data || []);
@@ -647,23 +659,23 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         type: 'linear',
         title: {
           display: true,
-          text: `${scatterData?.yLabel || 'Y Axis'} (${scatterData?.yUnit || ''})`
+          text: `${safeScatterData.yLabel || 'Y Axis'} (${safeScatterData.yUnit || ''})`
         },
         grid: {
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const yMean = scatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData.yMetric]?.mean) || 0;
+            const yMean = safeScatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData?.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const yMean = scatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData.yMetric]?.mean) || 0;
+            const yMean = safeScatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData?.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
         },
         // Set explicit bounds to match quadrant coverage
-        ...(scatterData?.analytics ? (() => {
-          const datasets = scatterData.chartData.datasets;
+        ...(safeScatterData?.analytics ? (() => {
+          const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           const allPoints = datasets.flatMap(dataset => dataset.data || []);
@@ -689,7 +701,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     interaction: {
       intersect: false,
       mode: 'point'
-    }
+    };
   }), [scatterData, config, statistics]);
 
   if (!scatterData?.isValid) {
