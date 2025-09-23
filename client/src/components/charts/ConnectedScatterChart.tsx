@@ -215,8 +215,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     };
   }, [data, statistics, highlightAthlete]);
 
-  // Chart options
-  const options: ChartOptions<'scatter'> = {
+  // Chart options (always define this hook to maintain consistent hook order)
+  const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -309,7 +309,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       intersect: false,
       mode: 'point'
     }
-  };
+  }), [scatterData]);
 
   if (!scatterData) {
     return (
