@@ -44,21 +44,14 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   const scatterData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    // Get unique metrics
+    // Get unique metrics from all data
     const metrics = Array.from(new Set(data.map(trend => trend.metric)));
     if (metrics.length < 2) return null;
 
     const [xMetric, yMetric] = metrics;
 
-    // Filter to highlighted athlete or show up to 3 athletes
-    const trendsToShow = highlightAthlete ? 
-      data.filter(trend => trend.athleteId === highlightAthlete) :
-      data.slice(0, 3);
-
-    if (trendsToShow.length === 0) return null;
-
-    // Group trends by athlete
-    const athleteTrends = trendsToShow.reduce((acc, trend) => {
+    // Group ALL trends by athlete FIRST
+    const allAthleteTrends = data.reduce((acc, trend) => {
       if (!acc[trend.athleteId]) {
         acc[trend.athleteId] = {
           athleteId: trend.athleteId,
@@ -67,6 +60,25 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         };
       }
       acc[trend.athleteId].metrics[trend.metric] = trend.data;
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Filter to highlighted athlete or show up to 3 athletes
+    const athletesToShow = highlightAthlete ?
+      [allAthleteTrends[highlightAthlete]].filter(Boolean) :
+      Object.values(allAthleteTrends).slice(0, 3);
+
+    // Ensure we have athletes with both metrics and valid data
+    const validAthletes = athletesToShow.filter((athlete: any) =>
+      athlete &&
+      metrics.every(metric => athlete.metrics[metric]?.length > 0)
+    );
+
+    if (validAthletes.length === 0) return null;
+
+    // Use valid athletes for chart data
+    const athleteTrends = validAthletes.reduce((acc, athlete: any) => {
+      acc[athlete.athleteId] = athlete;
       return acc;
     }, {} as Record<string, any>);
 
