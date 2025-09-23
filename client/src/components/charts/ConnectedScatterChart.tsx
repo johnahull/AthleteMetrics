@@ -9,6 +9,7 @@ import {
   Legend,
   ChartOptions
 } from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import { Scatter } from 'react-chartjs-2';
 import type {
   TrendData,
@@ -16,86 +17,9 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { CHART_CONFIG } from '@/constants/chart-config';
 
-// Custom plugin for quadrant backgrounds (defined before registration)
-const quadrantBackgroundPlugin = {
-  id: 'quadrantBackground',
-  beforeDatasetsDraw: (chart: any) => {
-    // Get the analytics data from the chart's custom data
-    const analytics = chart.config?.data?.analytics;
-
-    if (!analytics) {
-      return;
-    }
-
-    const { ctx, chartArea, scales } = chart;
-
-    if (!chartArea || !scales.x || !scales.y) {
-      return;
-    }
-
-    const { left, top, right, bottom } = chartArea;
-    const xMean = analytics.xMean;
-    const yMean = analytics.yMean;
-
-    // Convert mean values to pixel coordinates
-    const xMeanPixel = scales.x.getPixelForValue(xMean);
-    const yMeanPixel = scales.y.getPixelForValue(yMean);
-
-    // Ensure we have valid pixel coordinates
-    if (isNaN(xMeanPixel) || isNaN(yMeanPixel)) {
-      return;
-    }
-
-    // Clamp mean lines to chart area
-    const clampedXMeanPixel = Math.max(left, Math.min(right, xMeanPixel));
-    const clampedYMeanPixel = Math.max(top, Math.min(bottom, yMeanPixel));
-
-    ctx.save();
-
-    // Draw quadrant backgrounds with proper opacity
-    // Top-Right Quadrant (High X, High Y)
-    ctx.fillStyle = 'rgba(34, 197, 94, 0.1)'; // Light green
-    ctx.fillRect(clampedXMeanPixel, top, right - clampedXMeanPixel, clampedYMeanPixel - top);
-
-    // Top-Left Quadrant (Low X, High Y) 
-    ctx.fillStyle = 'rgba(245, 158, 11, 0.1)'; // Light yellow/amber
-    ctx.fillRect(left, top, clampedXMeanPixel - left, clampedYMeanPixel - top);
-
-    // Bottom-Right Quadrant (High X, Low Y)
-    ctx.fillStyle = 'rgba(249, 115, 22, 0.1)'; // Light orange
-    ctx.fillRect(clampedXMeanPixel, clampedYMeanPixel, right - clampedXMeanPixel, bottom - clampedYMeanPixel);
-
-    // Bottom-Left Quadrant (Low X, Low Y)
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.1)'; // Light red
-    ctx.fillRect(left, clampedYMeanPixel, clampedXMeanPixel - left, bottom - clampedYMeanPixel);
-
-    // Draw mean lines (dashed)
-    ctx.strokeStyle = 'rgba(75, 85, 99, 0.6)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
-
-    // Vertical mean line
-    if (clampedXMeanPixel >= left && clampedXMeanPixel <= right) {
-      ctx.beginPath();
-      ctx.moveTo(clampedXMeanPixel, top);
-      ctx.lineTo(clampedXMeanPixel, bottom);
-      ctx.stroke();
-    }
-
-    // Horizontal mean line
-    if (clampedYMeanPixel >= top && clampedYMeanPixel <= bottom) {
-      ctx.beginPath();
-      ctx.moveTo(left, clampedYMeanPixel);
-      ctx.lineTo(right, clampedYMeanPixel);
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-};
-
-// Register Chart.js components and the custom plugin
+// Register Chart.js components and annotation plugin
 ChartJS.register(
   LinearScale,
   PointElement,
@@ -103,7 +27,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  quadrantBackgroundPlugin
+  annotationPlugin
 );
 
 interface ConnectedScatterChartProps {
@@ -475,7 +399,101 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       legend: {
         display: config.showLegend,
         position: 'top' as const
-      }
+      },
+      annotation: scatterData?.analytics ? {
+        annotations: (() => {
+          const xMean = scatterData.analytics.xMean;
+          const yMean = scatterData.analytics.yMean;
+
+          // Calculate chart bounds for full background coverage
+          const datasets = scatterData.chartData.datasets;
+          if (!datasets || datasets.length === 0) return {};
+
+          const allPoints = datasets.flatMap(dataset => dataset.data || []);
+          if (allPoints.length === 0) return {};
+
+          const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
+          const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
+
+          if (xValues.length === 0 || yValues.length === 0) return {};
+
+          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.05;
+          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.05;
+          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.05;
+          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.05;
+
+          return {
+            // Top Right Quadrant (High X, High Y)
+            topRight: {
+              type: 'box' as const,
+              xMin: xMean,
+              xMax: xMax,
+              yMin: yMean,
+              yMax: yMax,
+              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+              borderWidth: 0,
+              z: 0
+            },
+            // Top Left Quadrant (Low X, High Y)
+            topLeft: {
+              type: 'box' as const,
+              xMin: xMin,
+              xMax: xMean,
+              yMin: yMean,
+              yMax: yMax,
+              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+              borderWidth: 0,
+              z: 0
+            },
+            // Bottom Right Quadrant (High X, Low Y)
+            bottomRight: {
+              type: 'box' as const,
+              xMin: xMean,
+              xMax: xMax,
+              yMin: yMin,
+              yMax: yMean,
+              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+              borderWidth: 0,
+              z: 0
+            },
+            // Bottom Left Quadrant (Low X, Low Y)
+            bottomLeft: {
+              type: 'box' as const,
+              xMin: xMin,
+              xMax: xMean,
+              yMin: yMin,
+              yMax: yMean,
+              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK,
+              borderWidth: 0,
+              z: 0
+            },
+            // Vertical line at x mean
+            xMeanLine: {
+              type: 'line' as const,
+              xMin: xMean,
+              xMax: xMean,
+              yMin: yMin,
+              yMax: yMax,
+              borderColor: 'rgba(75, 85, 99, 0.6)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              z: 1
+            },
+            // Horizontal line at y mean
+            yMeanLine: {
+              type: 'line' as const,
+              xMin: xMin,
+              xMax: xMax,
+              yMin: yMean,
+              yMax: yMean,
+              borderColor: 'rgba(75, 85, 99, 0.6)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              z: 1
+            }
+          };
+        })()
+      } : undefined
     },
     scales: {
       x: {
