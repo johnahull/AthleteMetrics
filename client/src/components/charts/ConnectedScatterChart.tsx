@@ -42,11 +42,19 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 }: ConnectedScatterChartProps) {
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
-    if (!data || data.length === 0) return null;
+    if (!data || data.length === 0) {
+      console.log('ConnectedScatterChart: No data provided');
+      return null;
+    }
 
     // Get unique metrics from all data
     const metrics = Array.from(new Set(data.map(trend => trend.metric)));
-    if (metrics.length < 2) return null;
+    console.log('ConnectedScatterChart: Available metrics:', metrics);
+
+    if (metrics.length < 2) {
+      console.log('ConnectedScatterChart: Not enough metrics', metrics.length);
+      return null;
+    }
 
     const [xMetric, yMetric] = metrics;
 
@@ -68,13 +76,33 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       [allAthleteTrends[highlightAthlete]].filter(Boolean) :
       Object.values(allAthleteTrends).slice(0, 3);
 
-    // Ensure we have athletes with both metrics and valid data
-    const validAthletes = athletesToShow.filter((athlete: any) =>
-      athlete &&
-      metrics.every(metric => athlete.metrics[metric]?.length > 0)
-    );
+    console.log('ConnectedScatterChart: Athletes to show:', athletesToShow.length);
+    console.log('ConnectedScatterChart: Athletes data:', athletesToShow.map((a: any) => ({
+      id: a?.athleteId,
+      name: a?.athleteName,
+      metrics: Object.keys(a?.metrics || {})
+    })));
 
-    if (validAthletes.length === 0) return null;
+    // Ensure we have athletes with both metrics and valid data
+    const validAthletes = athletesToShow.filter((athlete: any) => {
+      if (!athlete) return false;
+
+      // Only require the specific two metrics being used for X and Y axes
+      const hasXMetric = athlete.metrics[xMetric]?.length > 0;
+      const hasYMetric = athlete.metrics[yMetric]?.length > 0;
+
+      console.log(`ConnectedScatterChart: Athlete ${athlete.athleteName} has ${xMetric}:`, hasXMetric, athlete.metrics[xMetric]?.length);
+      console.log(`ConnectedScatterChart: Athlete ${athlete.athleteName} has ${yMetric}:`, hasYMetric, athlete.metrics[yMetric]?.length);
+
+      return hasXMetric && hasYMetric;
+    });
+
+    console.log('ConnectedScatterChart: Valid athletes:', validAthletes.length);
+
+    if (validAthletes.length === 0) {
+      console.log('ConnectedScatterChart: No valid athletes found');
+      return null;
+    }
 
     // Use valid athletes for chart data
     const athleteTrends = validAthletes.reduce((acc, athlete: any) => {
