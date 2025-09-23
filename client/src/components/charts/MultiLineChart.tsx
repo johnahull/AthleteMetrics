@@ -108,7 +108,7 @@ export function MultiLineChart({
 
     // Create dataset for each athlete-metric combination
     athletesToShow.forEach((athlete: any, athleteIndex) => {
-      const baseColor = athleteColors[athleteIndex % athleteColors.length];
+      const baseColor = athleteColors[athleteIndex % athleteColors.length] || 'rgba(75, 85, 99, 1)';
       
       metrics.forEach((metric, metricIndex) => {
         const metricData = athlete.metrics[metric];

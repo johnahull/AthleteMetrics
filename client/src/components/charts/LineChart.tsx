@@ -175,7 +175,7 @@ export function LineChart({
 
       // Find displayed athlete index for consistent color mapping
       const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId) ?? 0;
-      const color = colors[displayedIndex % colors.length];
+      const color = colors[displayedIndex % colors.length] || 'rgba(75, 85, 99, 1)';
       const isHighlighted = trend.athleteId === highlightAthlete;
 
       return {

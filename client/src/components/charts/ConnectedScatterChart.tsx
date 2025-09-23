@@ -100,7 +100,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         .filter(Boolean)
         .sort((a: any, b: any) => a.date.getTime() - b.date.getTime());
 
-      const color = colors[index % colors.length];
+      const color = colors[index % colors.length] || 'rgba(75, 85, 99, 1)';
       const isHighlighted = athlete.athleteId === highlightAthlete;
 
       return {
