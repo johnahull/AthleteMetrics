@@ -19,6 +19,89 @@ import type {
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 
+// Performance quadrant labels based on metric types
+function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
+  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
+  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
+  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
+  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
+
+  // Get clean metric names (remove common suffixes)
+  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
+  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // Generate contextual descriptions based on metric combination
+  const getDescriptions = () => {
+    // Speed vs Power combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
+    }
+
+    // Agility vs Power combinations
+    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
+    }
+    if ((yMetric.includes('AGILITY') || yMetric.includes('T_TEST')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
+    }
+
+    // Speed vs Agility combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
+    }
+
+    // Default generic descriptions
+    return {
+      elite: 'Elite Performance',
+      xGood: `Strong ${xName}`,
+      yGood: `Strong ${yName}`,
+      development: 'Needs Development'
+    };
+  };
+
+  const descriptions = getDescriptions();
+
+  if (!xLowerIsBetter && !yLowerIsBetter) {
+    // Both higher is better (e.g., vertical jump vs RSI)
+    return {
+      topRight: { label: descriptions.elite, color: 'green' },
+      topLeft: { label: descriptions.yGood, color: 'yellow' },
+      bottomRight: { label: descriptions.xGood, color: 'orange' },
+      bottomLeft: { label: descriptions.development, color: 'red' }
+    };
+  } else if (xLowerIsBetter && !yLowerIsBetter) {
+    // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
+    return {
+      topLeft: { label: descriptions.elite, color: 'green' },
+      topRight: { label: descriptions.yGood, color: 'orange' },
+      bottomLeft: { label: descriptions.xGood, color: 'yellow' },
+      bottomRight: { label: descriptions.development, color: 'red' }
+    };
+  } else if (!xLowerIsBetter && yLowerIsBetter) {
+    // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
+    return {
+      bottomRight: { label: descriptions.elite, color: 'green' },
+      bottomLeft: { label: descriptions.yGood, color: 'orange' },
+      topRight: { label: descriptions.xGood, color: 'yellow' },
+      topLeft: { label: descriptions.development, color: 'red' }
+    };
+  } else {
+    // Both lower is better (e.g., 40-yard dash vs agility time)
+    return {
+      bottomLeft: { label: descriptions.elite, color: 'green' },
+      bottomRight: { label: descriptions.yGood, color: 'yellow' },
+      topLeft: { label: descriptions.xGood, color: 'orange' },
+      topRight: { label: descriptions.development, color: 'red' }
+    };
+  }
+}
+
 // Register Chart.js components and annotation plugin
 ChartJS.register(
   LinearScale,
@@ -405,65 +488,65 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           const xMean = scatterData.analytics.xMean;
           const yMean = scatterData.analytics.yMean;
 
-          // Calculate chart bounds for full background coverage
-          const datasets = scatterData.chartData.datasets;
-          if (!datasets || datasets.length === 0) return {};
+          // Get dynamic quadrant labels based on metric types
+          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
-          if (allPoints.length === 0) return {};
+          // Use large values to extend to chart edges
+          const xMin = -999999;
+          const xMax = 999999;
+          const yMin = -999999;
+          const yMax = 999999;
 
-          const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
-          const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
-
-          if (xValues.length === 0 || yValues.length === 0) return {};
-
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.05;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.05;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.05;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.05;
+          // Color mapping for dynamic colors
+          const colorMap = {
+            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+            orange: 'rgba(249, 115, 22, 0.1)', // Orange color for distinction
+            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
+          };
 
           return {
-            // Top Right Quadrant (High X, High Y)
+            // Top Right Quadrant
             topRight: {
               type: 'box' as const,
               xMin: xMean,
               xMax: xMax,
               yMin: yMean,
               yMax: yMax,
-              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
               borderWidth: 0,
               z: 0
             },
-            // Top Left Quadrant (Low X, High Y)
+            // Top Left Quadrant
             topLeft: {
               type: 'box' as const,
               xMin: xMin,
               xMax: xMean,
               yMin: yMean,
               yMax: yMax,
-              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
               borderWidth: 0,
               z: 0
             },
-            // Bottom Right Quadrant (High X, Low Y)
+            // Bottom Right Quadrant
             bottomRight: {
               type: 'box' as const,
               xMin: xMean,
               xMax: xMax,
               yMin: yMin,
               yMax: yMean,
-              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
               borderWidth: 0,
               z: 0
             },
-            // Bottom Left Quadrant (Low X, Low Y)
+            // Bottom Left Quadrant
             bottomLeft: {
               type: 'box' as const,
               xMin: xMin,
               xMax: xMean,
               yMin: yMin,
               yMax: yMean,
-              backgroundColor: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK,
+              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
               borderWidth: 0,
               z: 0
             },
@@ -634,22 +717,34 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 Performance Zones (relative to athlete's mean)
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-green-50 border border-green-200 text-green-800 p-2 rounded">
-                  <div className="font-medium">High-High</div>
-                  <div>Elite Performance</div>
-                </div>
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-2 rounded">
-                  <div className="font-medium">Low-High</div>
-                  <div>Focus {scatterData.xLabel}</div>
-                </div>
-                <div className="bg-orange-50 border border-orange-200 text-orange-800 p-2 rounded">
-                  <div className="font-medium">High-Low</div>
-                  <div>Focus {scatterData.yLabel}</div>
-                </div>
-                <div className="bg-red-50 border border-red-200 text-red-800 p-2 rounded">
-                  <div className="font-medium">Low-Low</div>
-                  <div>Development Needed</div>
-                </div>
+                {(() => {
+                  const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+                  const colorClasses = {
+                    green: 'bg-green-50 border-green-200 text-green-800',
+                    yellow: 'bg-amber-50 border-amber-200 text-amber-800',
+                    orange: 'bg-orange-50 border-orange-200 text-orange-800',
+                    red: 'bg-red-50 border-red-200 text-red-800'
+                  };
+
+                  return [
+                    <div key="topLeft" className={`${colorClasses[labels.topLeft.color as keyof typeof colorClasses]} border p-2 rounded`}>
+                      <div className="font-medium">Top Left</div>
+                      <div>{labels.topLeft.label}</div>
+                    </div>,
+                    <div key="topRight" className={`${colorClasses[labels.topRight.color as keyof typeof colorClasses]} border p-2 rounded`}>
+                      <div className="font-medium">Top Right</div>
+                      <div>{labels.topRight.label}</div>
+                    </div>,
+                    <div key="bottomLeft" className={`${colorClasses[labels.bottomLeft.color as keyof typeof colorClasses]} border p-2 rounded`}>
+                      <div className="font-medium">Bottom Left</div>
+                      <div>{labels.bottomLeft.label}</div>
+                    </div>,
+                    <div key="bottomRight" className={`${colorClasses[labels.bottomRight.color as keyof typeof colorClasses]} border p-2 rounded`}>
+                      <div className="font-medium">Bottom Right</div>
+                      <div>{labels.bottomRight.label}</div>
+                    </div>
+                  ];
+                })()}
               </div>
             </div>
           )}
