@@ -281,8 +281,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
           date: p.date instanceof Date ? p.date : new Date(p.date)
         }))),
-        xMean: xValues.length > 0 ? xValues.reduce((a, b) => a + b, 0) / xValues.length : 0,
-        yMean: yValues.length > 0 ? yValues.reduce((a, b) => a + b, 0) / yValues.length : 0,
+        xMean: xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0,
+        yMean: yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0,
         dataPoints: matchedPoints.length
       };
     })() : null;
@@ -404,11 +404,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const xMean = scatterData?.analytics?.xMean || (statistics?.[scatterData?.xMetric]?.mean) || 0;
+            const xMean = scatterData?.analytics?.xMean || (scatterData?.xMetric && statistics?.[scatterData.xMetric]?.mean) || 0;
             return Math.abs(context.tick.value - xMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const xMean = scatterData?.analytics?.xMean || (statistics?.[scatterData?.xMetric]?.mean) || 0;
+            const xMean = scatterData?.analytics?.xMean || (scatterData?.xMetric && statistics?.[scatterData.xMetric]?.mean) || 0;
             return Math.abs(context.tick.value - xMean) < 0.01 ? 2 : 1;
           }
         }
@@ -423,11 +423,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData?.yMetric]?.mean) || 0;
+            const yMean = scatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData?.yMetric]?.mean) || 0;
+            const yMean = scatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
         }
