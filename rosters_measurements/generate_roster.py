@@ -9,11 +9,18 @@ HEADERS = [
 ]
 
 FIRST_NAMES_M = ["Ethan","Liam","Noah","Mason","Jacob","Aiden","James","Elijah","Benjamin","Lucas",
-                 "Alexander","Daniel","Matthew","Henry","Sebastian","Jack","Owen","Samuel","David","Joseph"]
+                 "Alexander","Daniel","Matthew","Henry","Sebastian","Jack","Owen","Samuel","David","Joseph",
+                 "William","Michael","Gabriel","Logan","Luke","Caleb","Ryan","Nathan","Isaac","Carter",
+                 "Wyatt","Leo","Hunter","Julian","Connor","Aaron","Eli","Andrew","Christian","Landon"]
 FIRST_NAMES_F = ["Mia","Ava","Sophia","Isabella","Charlotte","Amelia","Evelyn","Abigail","Emily","Elizabeth",
-                 "Sofia","Avery","Ella","Scarlett","Grace","Chloe","Victoria","Riley","Nora","Lily"]
+                 "Sofia","Avery","Ella","Scarlett","Grace","Chloe","Victoria","Riley","Nora","Lily",
+                 "Madison","Harper","Emma","Olivia","Hannah","Zoe","Layla","Maya","Natalie","Aria",
+                 "Hazel","Luna","Stella","Audrey","Savannah","Brooklyn","Claire","Paisley","Aurora","Violet"]
 LAST_NAMES = ["Martinez","Johnson","Garcia","Hernandez","Lopez","Rodriguez","Perez","Sanchez","Ramirez","Torres",
-              "Flores","Rivera","Gonzalez","Morales","Diaz","Castillo","Gomez","Santos","Reyes","Nguyen","Patel","Kim"]
+              "Flores","Rivera","Gonzalez","Morales","Diaz","Castillo","Gomez","Santos","Reyes","Nguyen","Patel","Kim",
+              "Smith","Brown","Davis","Miller","Wilson","Moore","Taylor","Anderson","Thomas","Jackson",
+              "White","Harris","Martin","Thompson","Young","King","Robinson","Walker","Perez","Hall",
+              "Allen","Collins","Stewart","Morris","Reed","Cooper","Bailey","Bell","Murphy","Cook"]
 SCHOOLS = ["Westlake HS","Lake Travis HS","Anderson HS","Bowie HS","McCallum HS","Austin HS","Reagan HS","Cedar Park HS"]
 EMAIL_DOMAINS = ["email.com","school.edu","mail.com","inbox.com"]
 
