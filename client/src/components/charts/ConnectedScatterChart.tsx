@@ -42,10 +42,23 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 }: ConnectedScatterChartProps) {
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
+    console.log('ConnectedScatterChart: Full data received:', data);
+    console.log('ConnectedScatterChart: Data length:', data?.length);
+
     if (!data || data.length === 0) {
       console.log('ConnectedScatterChart: No data provided');
       return null;
     }
+
+    // Log each trend data item to understand the structure
+    data.forEach((trend, index) => {
+      console.log(`ConnectedScatterChart: Trend ${index}:`, {
+        metric: trend.metric,
+        athleteId: trend.athleteId,
+        athleteName: trend.athleteName,
+        dataLength: trend.data?.length
+      });
+    });
 
     // Get unique metrics from all data
     const metrics = Array.from(new Set(data.map(trend => trend.metric)));
