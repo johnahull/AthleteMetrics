@@ -664,7 +664,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     };
   }, [data, statistics, highlightAthlete, displayedAthletes]);
 
-
   // Chart options (always define this hook to maintain consistent hook order)
   const options = useMemo(() => {
     // Ensure we have fallback values for invalid data to maintain hook consistency
@@ -677,7 +676,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       chartData: { datasets: [], analytics: null }
     };
     
-    return {
+    return {</old_str>
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -961,6 +960,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
 
+  // Early return check - moved after all hooks are defined to maintain hook order
   if (!scatterData?.isValid) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
