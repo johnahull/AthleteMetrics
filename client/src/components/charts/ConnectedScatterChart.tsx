@@ -447,10 +447,62 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       };
     })() : null;
 
-    // Add group averages if statistics available
+    // Add group average trend line using groupAverage data from TrendDataPoints
+    if (validAthletes.length > 0) {
+      const athlete = validAthletes[0];
+      const xData = athlete.metrics[xMetric] || [];
+      const yData = athlete.metrics[yMetric] || [];
+
+      // Create group average points for dates where both metrics have group averages
+      const groupAveragePoints = xData
+        .map((xPoint: any) => {
+          const yPoint = yData.find((y: any) => {
+            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+          });
+
+          // Only include if both points exist and have group averages
+          if (yPoint && xPoint.groupAverage !== undefined && yPoint.groupAverage !== undefined) {
+            return {
+              x: xPoint.groupAverage,
+              y: yPoint.groupAverage,
+              date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
+            };
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .sort((a: any, b: any) => {
+          const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+          const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+          return dateA.getTime() - dateB.getTime();
+        });
+
+      // Add group average trend line if we have data points
+      if (groupAveragePoints.length > 0) {
+        datasets.push({
+          label: 'Group Average Trend',
+          data: groupAveragePoints,
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          borderColor: 'rgba(99, 102, 241, 0.8)',
+          borderWidth: 2,
+          pointRadius: () => 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: () => 'rgba(99, 102, 241, 0.8)',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 1,
+          showLine: true,
+          fill: false,
+          tension: 0.1,
+        });
+      }
+    }
+
+    // Add overall group average point if statistics available
     if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
       datasets.push({
-        label: 'Group Average',
+        label: 'Overall Group Average',
         data: [{
           x: statistics[xMetric].mean,
           y: statistics[yMetric].mean
