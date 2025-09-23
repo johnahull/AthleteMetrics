@@ -529,10 +529,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
           if (xValues.length === 0 || yValues.length === 0) return {};
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
+          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
 
           // Color mapping for dynamic colors
           const colorMap = {
@@ -627,19 +627,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: 'rgba(0, 0, 0, 0.1)'
         },
-        // Set explicit bounds to prevent infinite scaling
-        ...(scatterData?.chartData?.datasets && scatterData.chartData.datasets.length > 0 ? (() => {
-          const allPoints = scatterData.chartData.datasets.flatMap(dataset => dataset.data || []);
+        // Set explicit bounds to match quadrant coverage
+        ...(scatterData?.analytics ? (() => {
+          const datasets = scatterData.chartData.datasets;
+          if (!datasets || datasets.length === 0) return {};
+
+          const allPoints = datasets.flatMap(dataset => dataset.data || []);
           const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
+
           if (xValues.length > 0) {
-            const xMin = Math.min(...xValues);
-            const xMax = Math.max(...xValues);
-            const xRange = xMax - xMin;
-            const padding = Math.max(xRange * 0.1, 0.1); // At least 0.1 padding
-            return {
-              min: xMin - padding,
-              max: xMax + padding
-            };
+            const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            return { min: xMin, max: xMax };
           }
           return {};
         })() : {})
@@ -662,19 +661,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
         },
-        // Set explicit bounds to prevent infinite scaling
-        ...(scatterData?.chartData?.datasets && scatterData.chartData.datasets.length > 0 ? (() => {
-          const allPoints = scatterData.chartData.datasets.flatMap(dataset => dataset.data || []);
+        // Set explicit bounds to match quadrant coverage
+        ...(scatterData?.analytics ? (() => {
+          const datasets = scatterData.chartData.datasets;
+          if (!datasets || datasets.length === 0) return {};
+
+          const allPoints = datasets.flatMap(dataset => dataset.data || []);
           const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
+
           if (yValues.length > 0) {
-            const yMin = Math.min(...yValues);
-            const yMax = Math.max(...yValues);
-            const yRange = yMax - yMin;
-            const padding = Math.max(yRange * 0.1, 0.1); // At least 0.1 padding
-            return {
-              min: yMin - padding,
-              max: yMax + padding
-            };
+            const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            return { min: yMin, max: yMax };
           }
           return {};
         })() : {})
