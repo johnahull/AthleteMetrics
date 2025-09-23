@@ -245,7 +245,7 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="w-full" style={{ height: '500px' }}>
+        <div className="w-full" style={{ height: chartType === 'connected_scatter' ? '650px' : '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
