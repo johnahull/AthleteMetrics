@@ -241,6 +241,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       [allAthleteTrends[highlightAthlete]].filter(Boolean) :
       Object.values(allAthleteTrends).slice(0, 3);
 
+    // Keep all athletes for group average calculations
+    const allAthletesForGroupCalc = Object.values(allAthleteTrends);
+
     console.log('ConnectedScatterChart: Athletes to show:', athletesToShow.length);
     console.log('ConnectedScatterChart: Athletes data:', athletesToShow.map((a: any) => ({
       id: a?.athleteId,
@@ -453,6 +456,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const xData = athlete.metrics[xMetric] || [];
       const yData = athlete.metrics[yMetric] || [];
 
+      console.log('ConnectedScatterChart: Checking group averages for:', { xMetric, yMetric });
+      console.log('ConnectedScatterChart: xData sample:', xData.slice(0, 2));
+      console.log('ConnectedScatterChart: yData sample:', yData.slice(0, 2));
+
       // Create group average points for dates where both metrics have group averages
       const groupAveragePoints = xData
         .map((xPoint: any) => {
@@ -460,6 +467,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
             const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+          });
+
+          console.log('ConnectedScatterChart: Point check:', {
+            xPoint: { date: xPoint.date, groupAverage: xPoint.groupAverage },
+            yPoint: yPoint ? { date: yPoint.date, groupAverage: yPoint.groupAverage } : null
           });
 
           // Only include if both points exist and have group averages
@@ -479,23 +491,117 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           return dateA.getTime() - dateB.getTime();
         });
 
+      console.log('ConnectedScatterChart: Group average points:', groupAveragePoints.length, groupAveragePoints);
+
       // Add group average trend line if we have data points
       if (groupAveragePoints.length > 0) {
         datasets.push({
           label: 'Group Average Trend',
           data: groupAveragePoints,
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          borderColor: 'rgba(99, 102, 241, 0.8)',
-          borderWidth: 2,
-          pointRadius: () => 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: () => 'rgba(99, 102, 241, 0.8)',
+          backgroundColor: 'rgba(99, 102, 241, 0.2)',
+          borderColor: 'rgba(99, 102, 241, 1)',
+          borderWidth: 3,
+          pointRadius: () => 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
           pointBorderColor: '#fff',
-          pointBorderWidth: 1,
+          pointBorderWidth: 2,
           showLine: true,
           fill: false,
           tension: 0.1,
         });
+        console.log('ConnectedScatterChart: Added group average trend line dataset');
+      } else {
+        console.log('ConnectedScatterChart: No group average points found - creating synthetic group trend');
+
+        // Fallback: Create synthetic group average trend line from all athlete data
+        if (allAthletesForGroupCalc.length > 1) {
+          // Collect all unique dates across all athletes
+          const allDatesSet = new Set<string>();
+          allAthletesForGroupCalc.forEach((athlete: any) => {
+            const xData = athlete.metrics[xMetric] || [];
+            const yData = athlete.metrics[yMetric] || [];
+            [...xData, ...yData].forEach((point: any) => {
+              try {
+                const date = point.date instanceof Date ? point.date : new Date(point.date);
+                allDatesSet.add(date.toISOString().split('T')[0]);
+              } catch (error) {
+                console.warn('Date parsing error in synthetic trend:', error);
+              }
+            });
+          });
+
+          const syntheticGroupPoints = Array.from(allDatesSet)
+            .sort()
+            .map(dateStr => {
+              // For each date, calculate group average from all athletes who have data for both metrics
+              const athleteValuesForDate: Array<{x: number, y: number}> = [];
+
+              allAthletesForGroupCalc.forEach((athlete: any) => {
+                const xData = athlete.metrics[xMetric] || [];
+                const yData = athlete.metrics[yMetric] || [];
+
+                const xPoint = xData.find((x: any) => {
+                  try {
+                    const xDate = x.date instanceof Date ? x.date : new Date(x.date);
+                    return xDate.toISOString().split('T')[0] === dateStr;
+                  } catch {
+                    return false;
+                  }
+                });
+
+                const yPoint = yData.find((y: any) => {
+                  try {
+                    const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+                    return yDate.toISOString().split('T')[0] === dateStr;
+                  } catch {
+                    return false;
+                  }
+                });
+
+                if (xPoint && yPoint) {
+                  athleteValuesForDate.push({
+                    x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+                    y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value
+                  });
+                }
+              });
+
+              // Calculate group average for this date if we have at least 2 athletes
+              if (athleteValuesForDate.length >= 2) {
+                const avgX = athleteValuesForDate.reduce((sum, val) => sum + val.x, 0) / athleteValuesForDate.length;
+                const avgY = athleteValuesForDate.reduce((sum, val) => sum + val.y, 0) / athleteValuesForDate.length;
+
+                return {
+                  x: avgX,
+                  y: avgY,
+                  date: new Date(dateStr)
+                };
+              }
+
+              return null;
+            })
+            .filter(Boolean);
+
+          if (syntheticGroupPoints.length > 0) {
+            datasets.push({
+              label: 'Group Average Trend',
+              data: syntheticGroupPoints,
+              backgroundColor: 'rgba(99, 102, 241, 0.2)',
+              borderColor: 'rgba(99, 102, 241, 1)',
+              borderWidth: 3,
+              pointRadius: () => 6,
+              pointHoverRadius: 8,
+              pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              showLine: true,
+              fill: false,
+              tension: 0.1,
+            });
+            console.log('ConnectedScatterChart: Added synthetic group average trend line:', syntheticGroupPoints.length, 'points');
+          }
+        }
       }
     }
 
