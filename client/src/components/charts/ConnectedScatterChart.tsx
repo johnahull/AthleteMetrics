@@ -161,38 +161,63 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     console.log('ConnectedScatterChart: Full data received:', data);
     console.log('ConnectedScatterChart: Data length:', data?.length);
 
+    // Early validation but don't return null yet - we need to maintain hook consistency
+    let hasValidData = true;
+    let validationMessage = '';
+
     if (!data || data.length === 0) {
       console.log('ConnectedScatterChart: No data provided');
-      return null;
+      hasValidData = false;
+      validationMessage = 'No data provided';
     }
 
-    // Log each trend data item to understand the structure
-    data.forEach((trend, index) => {
-      console.log(`ConnectedScatterChart: Trend ${index}:`, {
-        metric: trend.metric,
-        athleteId: trend.athleteId,
-        athleteName: trend.athleteName,
-        dataLength: trend.data?.length
+    if (hasValidData) {
+      // Log each trend data item to understand the structure
+      data.forEach((trend, index) => {
+        console.log(`ConnectedScatterChart: Trend ${index}:`, {
+          metric: trend.metric,
+          athleteId: trend.athleteId,
+          athleteName: trend.athleteName,
+          dataLength: trend.data?.length
+        });
       });
-    });
 
-    // Get unique metrics from all data
-    const metrics = Array.from(new Set(data.map(trend => trend.metric)));
-    console.log('ConnectedScatterChart: Available metrics:', metrics);
+      // Get unique metrics from all data
+      const metrics = Array.from(new Set(data.map(trend => trend.metric)));
+      console.log('ConnectedScatterChart: Available metrics:', metrics);
 
-    // For connected scatter plot, we need exactly 2 metrics
-    // If we have less than 2, check if we can use the config to determine the metrics we should be looking for
-    if (metrics.length < 2) {
-      console.log('ConnectedScatterChart: Not enough metrics in data, checking config');
-      
-      // If config specifies additional metrics but we don't have the data, show helpful message
-      if (config.subtitle && config.subtitle.includes('vs')) {
-        console.log('ConnectedScatterChart: Config indicates two metrics should be available but data only has:', metrics);
-        return null;
+      // For connected scatter plot, we need exactly 2 metrics
+      // If we have less than 2, check if we can use the config to determine the metrics we should be looking for
+      if (metrics.length < 2) {
+        console.log('ConnectedScatterChart: Not enough metrics in data, checking config');
+        
+        // If config specifies additional metrics but we don't have the data, show helpful message
+        if (config.subtitle && config.subtitle.includes('vs')) {
+          console.log('ConnectedScatterChart: Config indicates two metrics should be available but data only has:', metrics);
+        }
+        
+        console.log('ConnectedScatterChart: Not enough metrics', metrics.length);
+        hasValidData = false;
+        validationMessage = `Not enough metrics: ${metrics.length} (need 2)`;
       }
-      
-      console.log('ConnectedScatterChart: Not enough metrics', metrics.length);
-      return null;
+    }
+
+    // Return early if validation failed, but with a consistent structure
+    if (!hasValidData) {
+      return {
+        isValid: false,
+        validationMessage,
+        datasets: [],
+        xMetric: '',
+        yMetric: '',
+        xUnit: '',
+        yUnit: '',
+        xLabel: '',
+        yLabel: '',
+        athleteTrends: {},
+        analytics: null,
+        chartData: { datasets: [], analytics: null }
+      };
     }
 
     const [xMetric, yMetric] = metrics;
@@ -396,6 +421,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     }
 
     return {
+      isValid: true,
+      validationMessage: '',
       datasets,
       xMetric,
       yMetric,
@@ -625,7 +652,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     }
   }), [scatterData, config, statistics]);
 
-  if (!scatterData) {
+  if (!scatterData?.isValid) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         <div className="text-center">
@@ -634,7 +661,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             This chart requires exactly 2 metrics with time series data.
           </div>
           <div className="text-sm mt-1">
-            Please ensure both primary and additional metrics have measurement data for the selected time period.
+            {scatterData?.validationMessage || 'Please ensure both primary and additional metrics have measurement data for the selected time period.'}
           </div>
         </div>
       </div>
