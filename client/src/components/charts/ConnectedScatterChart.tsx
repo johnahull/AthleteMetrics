@@ -64,7 +64,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     const metrics = Array.from(new Set(data.map(trend => trend.metric)));
     console.log('ConnectedScatterChart: Available metrics:', metrics);
 
+    // For connected scatter plot, we need exactly 2 metrics
+    // If we have less than 2, check if we can use the config to determine the metrics we should be looking for
     if (metrics.length < 2) {
+      console.log('ConnectedScatterChart: Not enough metrics in data, checking config');
+      
+      // If config specifies additional metrics but we don't have the data, show helpful message
+      if (config.subtitle && config.subtitle.includes('vs')) {
+        console.log('ConnectedScatterChart: Config indicates two metrics should be available but data only has:', metrics);
+        return null;
+      }
+      
       console.log('ConnectedScatterChart: Not enough metrics', metrics.length);
       return null;
     }
@@ -314,7 +324,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   if (!scatterData) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No trend data available for connected scatter plot (requires 2+ metrics with time series data)
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            Please ensure both primary and additional metrics have measurement data for the selected time period.
+          </div>
+        </div>
       </div>
     );
   }
