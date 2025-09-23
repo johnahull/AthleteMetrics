@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BarChart3, Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading } = useAuth();
@@ -17,21 +17,21 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!username || !password) {
+    if (!email || !password) {
       toast({
         title: "Error",
-        description: "Please enter both username and password",
+        description: "Please enter both email and password",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      await login(username, password);
+      await login(email, password);
     } catch (error) {
       toast({
         title: "Login Failed", 
-        description: "Invalid username or password",
+        description: "Invalid email or password",
         variant: "destructive",
       });
     }
@@ -58,15 +58,15 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
                 disabled={isLoading}
-                data-testid="input-username"
+                data-testid="input-email"
               />
             </div>
             <div>
