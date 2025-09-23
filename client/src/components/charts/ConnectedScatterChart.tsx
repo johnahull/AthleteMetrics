@@ -21,11 +21,6 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useAthleteSelector } from '@/hooks/useAthleteSelector';
-import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Input } from '@/components/ui/input';
-import { Search, Users, X } from 'lucide-react';
 
 // Performance quadrant labels based on metric types
 function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
@@ -553,7 +548,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         .map((xPoint: any) => {
           const yPoint = yData.find((y: any) => {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? x.date : new Date(xPoint.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
 
@@ -1129,191 +1124,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   return (
     <div className="w-full h-full">
-      {/* Level 1: Athlete Selector (Above Chart) - Only show when not in highlight mode */}
-      {!highlightAthlete && allAthletes.length > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-sm font-medium text-gray-900">Select Athletes (max 10):</h3>
-            <span className="text-xs text-gray-500">
-              {effectiveSelectedIds.length} of {allAthletes.length} selected
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Multi-Select Athlete Dropdown */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-64 justify-start">
-                  <Users className="mr-2 h-4 w-4" />
-                  {effectiveSelectedIds.length === 0
-                    ? "Select athletes..."
-                    : `${effectiveSelectedIds.length} athlete${effectiveSelectedIds.length > 1 ? 's' : ''} selected`
-                  }
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80 p-0" align="start">
-                <div className="p-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Search className="h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search athletes..."
-                      value={athleteSelector.searchTerm}
-                      onChange={(e) => athleteSelector.setSearchTerm(e.target.value)}
-                      className="flex-1"
-                    />
-                  </div>
-
-                  <div className="flex gap-2 mb-3">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => athleteSelector.selectAll()}
-                      disabled={!athleteSelector.canSelectMore && athleteSelector.selectedIds.length !== athleteSelector.filteredAthletes.length}
-                    >
-                      Select All
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => athleteSelector.clearSelection()}
-                      disabled={!athleteSelector.hasSelection}
-                    >
-                      Clear
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => athleteSelector.selectRandom(5)}
-                    >
-                      Random 5
-                    </Button>
-                  </div>
-
-                  <div className="max-h-48 overflow-y-auto">
-                    {athleteSelector.filteredAthletes.map((athlete) => (
-                      <div
-                        key={athlete.id}
-                        className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                        onClick={() => athleteSelector.toggleAthlete(athlete.id)}
-                      >
-                        <Checkbox
-                          checked={effectiveSelectedIds.includes(athlete.id)}
-                          onCheckedChange={() => athleteSelector.toggleAthlete(athlete.id)}
-                        />
-                        <span className="text-sm">{athlete.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Selected Athletes Badges */}
-            <div className="flex flex-wrap gap-1 flex-1">
-              {effectiveSelectedIds.map((athleteId) => {
-                const athlete = allAthletes.find(a => a.id === athleteId);
-                if (!athlete) return null;
-
-                return (
-                  <Badge key={athleteId} variant="secondary" className="text-xs">
-                    {athlete.name}
-                    <X
-                      className="ml-1 h-3 w-3 cursor-pointer hover:text-red-500"
-                      onClick={() => athleteSelector.toggleAthlete(athleteId)}
-                    />
-                  </Badge>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Chart Container with Toggle Buttons */}
+      {/* Chart Container */}
       <div className="relative">
-        {/* Level 2: Athlete Toggle Buttons (At Top of Chart) */}
-        {!highlightAthlete && effectiveSelectedIds.length > 0 && (
-          <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm rounded-lg border shadow-sm p-2">
-            <div className="flex flex-wrap gap-1 items-center">
-              <span className="text-xs text-gray-600 mr-2">
-                Visible: {visibleAthleteCount}/{effectiveSelectedIds.length}
-              </span>
-
-              {/* Show/Hide All Buttons */}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 text-xs"
-                onClick={showAllSelectedAthletes}
-                disabled={visibleAthleteCount === effectiveSelectedIds.length}
-              >
-                Show All
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 text-xs"
-                onClick={hideAllSelectedAthletes}
-                disabled={visibleAthleteCount === 0}
-              >
-                Hide All
-              </Button>
-
-              {/* Individual Athlete Toggle Buttons */}
-              {effectiveSelectedIds.map((athleteId, index) => {
-                const athlete = allAthletes.find(a => a.id === athleteId);
-                if (!athlete) return null;
-
-                const colors = [
-                  'rgba(59, 130, 246, 1)',    // Blue
-                  'rgba(16, 185, 129, 1)',    // Green
-                  'rgba(239, 68, 68, 1)',     // Red
-                  'rgba(245, 158, 11, 1)',    // Amber
-                  'rgba(139, 92, 246, 1)',    // Purple
-                  'rgba(236, 72, 153, 1)',    // Pink
-                  'rgba(20, 184, 166, 1)',    // Teal
-                  'rgba(251, 146, 60, 1)',    // Orange
-                  'rgba(124, 58, 237, 1)',    // Violet
-                  'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-                ];
-                const athleteColor = colors[index % colors.length];
-
-                return (
-                  <Button
-                    key={athleteId}
-                    size="sm"
-                    variant={athleteToggles[athleteId] ? "default" : "outline"}
-                    className="h-6 text-xs px-2"
-                    onClick={() => toggleAthleteVisibility(athleteId)}
-                    style={{
-                      backgroundColor: athleteToggles[athleteId] ? athleteColor : 'transparent',
-                      borderColor: athleteColor,
-                      color: athleteToggles[athleteId] ? 'white' : athleteColor
-                    }}
-                  >
-                    {athlete.name}
-                  </Button>
-                );
-              })}
-
-              {/* Group Average Toggle */}
-              <Button
-                size="sm"
-                variant={showGroupAverage ? "default" : "outline"}
-                className="h-6 text-xs px-2 ml-2"
-                onClick={() => setShowGroupAverage(!showGroupAverage)}
-                style={{
-                  backgroundColor: showGroupAverage ? 'rgba(156, 163, 175, 1)' : 'transparent',
-                  borderColor: 'rgba(156, 163, 175, 1)',
-                  color: showGroupAverage ? 'white' : 'rgba(156, 163, 175, 1)'
-                }}
-              >
-                Group Avg
-              </Button>
-            </div>
-          </div>
-        )}
-
         <Line data={scatterData.chartData} options={options} />
       </div>
 
