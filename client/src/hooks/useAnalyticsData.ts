@@ -43,8 +43,8 @@ const getAnalyticsQueryKey = (request: AnalyticsRequest): [string, string] => {
 export function useAnalyticsData({
   request,
   enabled = true,
-  staleTime = 5 * 60 * 1000, // 5 minutes
-  gcTime = 10 * 60 * 1000, // 10 minutes
+  staleTime = 0, // Disable cache for debugging
+  gcTime = 0, // Disable cache for debugging
 }: UseAnalyticsDataOptions) {
   const queryClient = useQueryClient();
 
