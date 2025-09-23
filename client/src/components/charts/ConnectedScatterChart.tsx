@@ -679,8 +679,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       chartData: { datasets: [], analytics: null }
     };
     
-    return {</old_str>
-    responsive: true,
+    return {
+      responsive: true,
     maintainAspectRatio: false,
     plugins: {
       title: {
