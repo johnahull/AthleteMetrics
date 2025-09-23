@@ -243,6 +243,9 @@ export const ALGORITHM_CONFIG = {
 // =============================================================================
 
 export const CHART_CONFIG = {
+  SCATTER: {
+    CHART_PADDING: 0.1
+  },
   COLORS: CHART_COLORS,
   STYLING: CHART_STYLING,
   PERCENTILES,

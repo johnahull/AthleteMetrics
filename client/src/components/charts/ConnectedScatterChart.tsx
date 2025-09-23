@@ -255,7 +255,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         const [xMetric, yMetric] = metrics;
         const xData = data.filter(d => d.metric === xMetric && d.data?.length > 0);
         const yData = data.filter(d => d.metric === yMetric && d.data?.length > 0);
-        
+
         console.log('ConnectedScatterChart: Data availability:', {
           xMetric,
           yMetric,
@@ -266,6 +266,23 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         if (xData.length === 0 || yData.length === 0) {
           hasValidData = false;
           validationMessage = `Insufficient data for metrics ${xMetric} (${xData.length} trends) and ${yMetric} (${yData.length} trends)`;
+        }
+
+        // Additional validation: check if we have valid numeric values
+        if (hasValidData) {
+          const xValues = xData.flatMap(trend => 
+            trend.data.map(point => typeof point.value === 'string' ? parseFloat(point.value) : point.value)
+              .filter(val => !isNaN(val) && isFinite(val))
+          );
+          const yValues = yData.flatMap(trend => 
+            trend.data.map(point => typeof point.value === 'string' ? parseFloat(point.value) : point.value)
+              .filter(val => !isNaN(val) && isFinite(val))
+          );
+
+          if (xValues.length === 0 || yValues.length === 0) {
+            hasValidData = false;
+            validationMessage = `No valid numeric values found for ${xMetric} or ${yMetric}`;
+          }
         }
       }
     }
@@ -434,7 +451,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         borderWidth: isHighlighted ? 3 : 2,
         pointHoverRadius: isHighlighted ? 10 : 8,
         pointBackgroundColor: (context: any) => {
-          const point = context.raw;
+          const point = context.raw as any;
           if (point?.isPersonalBest) return 'rgba(255, 215, 0, 1)';
 
           // Different styling for interpolated vs actual data points
@@ -460,7 +477,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           return color;
         },
         pointRadius: (context: any) => {
-          const point = context.raw;
+          const point = context.raw as any;
           if (point?.isPersonalBest) return isHighlighted ? 8 : 6;
           if (point?.isInterpolated) return isHighlighted ? 3 : 2; // Smaller for interpolated points
           return isHighlighted ? 6 : 4; // Normal size for actual data
@@ -536,7 +553,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         .map((xPoint: any) => {
           const yPoint = yData.find((y: any) => {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            const xDate = xPoint.date instanceof Date ? x.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
 
@@ -721,7 +738,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       analytics: null,
       chartData: { datasets: [], analytics: null }
     };
-    
+
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -743,11 +760,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           title: (context: TooltipItem<'line'>[]) => {
             const point = context[0].raw as any;
             const datasetLabel = context[0].dataset.label;
-            
+
             if (datasetLabel === 'Group Average') {
               return 'Group Average';
             }
-            
+
             try {
               if (point.date) {
                 const date = point.date instanceof Date ? point.date : new Date(point.date);
@@ -761,8 +778,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           label: (context: TooltipItem<'line'>) => {
             const point = context.raw as any;
             return [
-              `${scatterData?.xLabel || 'X'}: ${point.x?.toFixed(2)}${scatterData?.xUnit || ''}`,
-              `${scatterData?.yLabel || 'Y'}: ${point.y?.toFixed(2)}${scatterData?.yUnit || ''}`
+              `${safeScatterData.xLabel || 'X'}: ${point.x?.toFixed(2)}${safeScatterData.xUnit || ''}`,
+              `${safeScatterData.yLabel || 'Y'}: ${point.y?.toFixed(2)}${safeScatterData.yUnit || ''}`
             ];
           },
           afterLabel: (context: TooltipItem<'line'>) => {
@@ -804,22 +821,61 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           // Get dynamic quadrant labels based on metric types
           const labels = getPerformanceQuadrantLabels(scatterData?.xMetric || '', scatterData?.yMetric || '');
 
-          // Calculate chart bounds for full background coverage
+          // Calculate chart bounds for full background coverage with better validation
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
+          // Only get data from athlete datasets, not from average lines
+          const athleteDatasets = datasets.filter(dataset => 
+            dataset.data && Array.isArray(dataset.data) && 
+            !dataset.label?.includes('Group Average') &&
+            !dataset.label?.includes('Overall Group Average')
+          );
+
+          if (athleteDatasets.length === 0) return {};
+
+          const allPoints = athleteDatasets.flatMap(dataset => dataset.data || []);
           if (allPoints.length === 0) return {};
 
-          const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
-          const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
+          // More robust data extraction with type checking
+          const xValues: number[] = [];
+          const yValues: number[] = [];
+
+          allPoints.forEach((point: any) => {
+            if (point && typeof point === 'object') {
+              const xVal = typeof point.x === 'number' && !isNaN(point.x) && isFinite(point.x) ? point.x : null;
+              const yVal = typeof point.y === 'number' && !isNaN(point.y) && isFinite(point.y) ? point.y : null;
+
+              if (xVal !== null && yVal !== null) {
+                xValues.push(xVal);
+                yValues.push(yVal);
+              }
+            }
+          });
 
           if (xValues.length === 0 || yValues.length === 0) return {};
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          // Calculate bounds with validation
+          const xMin = Math.min(...xValues);
+          const xMax = Math.max(...xValues);
+          const yMin = Math.min(...yValues);
+          const yMax = Math.max(...yValues);
+
+          // Ensure we have valid ranges
+          if (!isFinite(xMin) || !isFinite(xMax) || !isFinite(yMin) || !isFinite(yMax)) return {};
+
+          const xRange = xMax - xMin;
+          const yRange = yMax - yMin;
+
+          // Apply padding only if we have meaningful ranges
+          const padding = CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1;
+          const xPadding = xRange > 0 ? xRange * padding : 0.1;
+          const yPadding = yRange > 0 ? yRange * padding : 1;
+
+          const finalXMin = xMin - xPadding;
+          const finalXMax = xMax + xPadding;
+          const finalYMin = yMin - yPadding;
+          const finalYMax = yMax + yPadding;
 
           // Color mapping for dynamic colors
           const colorMap = {
@@ -834,9 +890,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             topRight: {
               type: 'box' as const,
               xMin: xMean,
-              xMax: xMax,
+              xMax: finalXMax,
               yMin: yMean,
-              yMax: yMax,
+              yMax: finalYMax,
               backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
               borderWidth: 0,
               z: 0
@@ -844,10 +900,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             // Top Left Quadrant
             topLeft: {
               type: 'box' as const,
-              xMin: xMin,
+              xMin: finalXMin,
               xMax: xMean,
               yMin: yMean,
-              yMax: yMax,
+              yMax: finalYMax,
               backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
               borderWidth: 0,
               z: 0
@@ -856,8 +912,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             bottomRight: {
               type: 'box' as const,
               xMin: xMean,
-              xMax: xMax,
-              yMin: yMin,
+              xMax: finalXMax,
+              yMin: finalYMin,
               yMax: yMean,
               backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
               borderWidth: 0,
@@ -866,9 +922,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             // Bottom Left Quadrant
             bottomLeft: {
               type: 'box' as const,
-              xMin: xMin,
+              xMin: finalXMin,
               xMax: xMean,
-              yMin: yMin,
+              yMin: finalYMin,
               yMax: yMean,
               backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
               borderWidth: 0,
@@ -879,8 +935,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               type: 'line' as const,
               xMin: xMean,
               xMax: xMean,
-              yMin: yMin,
-              yMax: yMax,
+              yMin: finalYMin,
+              yMax: finalYMax,
               borderColor: 'rgba(75, 85, 99, 0.6)',
               borderWidth: 1,
               borderDash: [5, 5],
@@ -889,8 +945,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             // Horizontal line at y mean
             yMeanLine: {
               type: 'line' as const,
-              xMin: xMin,
-              xMax: xMax,
+              xMin: finalXMin,
+              xMax: finalXMax,
               yMin: yMean,
               yMax: yMean,
               borderColor: 'rgba(75, 85, 99, 0.6)',
@@ -919,13 +975,33 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
-          const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
+          // Only get data from athlete datasets, not from average lines
+          const athleteDatasets = datasets.filter(dataset => 
+            dataset.data && Array.isArray(dataset.data) && 
+            !dataset.label?.includes('Group Average') &&
+            !dataset.label?.includes('Overall Group Average')
+          );
+
+          if (athleteDatasets.length === 0) return {};
+
+          const allPoints = athleteDatasets.flatMap(dataset => dataset.data || []);
+          const xValues: number[] = [];
+          allPoints.forEach((point: any) => {
+            if (point && typeof point === 'object' && typeof point.x === 'number' && !isNaN(point.x) && isFinite(point.x)) {
+              xValues.push(point.x);
+            }
+          });
 
           if (xValues.length > 0) {
-            const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-            const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-            return { min: xMin, max: xMax };
+            const xMin = Math.min(...xValues);
+            const xMax = Math.max(...xValues);
+            if (!isFinite(xMin) || !isFinite(xMax)) return {};
+
+            const xRange = xMax - xMin;
+            const padding = CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1;
+            const xPadding = xRange > 0 ? xRange * padding : 0.1;
+
+            return { min: xMin - xPadding, max: xMax + xPadding };
           }
           return {};
         })() : {})
@@ -953,13 +1029,32 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
-          const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
+          // Only get data from athlete datasets, not from average lines
+          const athleteDatasets = datasets.filter(dataset => 
+            dataset.data && Array.isArray(dataset.data) && 
+            !dataset.label?.includes('Group Average') &&
+            !dataset.label?.includes('Overall Group Average')
+          );
+
+          if (athleteDatasets.length === 0) return {};
+
+          const allPoints = athleteDatasets.flatMap(dataset => dataset.data || []);
+          const yValues: number[] = [];
+          allPoints.forEach((point: any) => {
+            if (point && typeof point === 'object' && typeof point.y === 'number' && !isNaN(point.y) && isFinite(point.y)) {
+              yValues.push(point.y);
+            }
+          });
 
           if (yValues.length > 0) {
-            const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-            const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-            return { min: yMin, max: yMax };
+            const yMin = Math.min(...yValues);
+            const yMax = Math.max(...yValues);
+            if (!isFinite(yMin) || !isFinite(yMax)) return {};
+
+            const yRange = yMax - yMin;
+            const padding = CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1;
+            const yPadding = yRange > 0 ? yRange * padding : 1;
+            return { min: yMin - yPadding, max: yMax + yPadding };
           }
           return {};
         })() : {})
@@ -1212,7 +1307,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
         <Line data={scatterData.chartData} options={options} />
       </div>
-      
+
       {/* Progress indicators */}
       {scatterData.analytics && (
         <div className="mt-4 text-sm">
@@ -1221,7 +1316,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               `Analytics for ${scatterData.analytics?.athleteName || 'selected athlete'}` :
               `Connected points show performance progression over time`}
           </div>
-          
+
           {/* Enhanced Analytics Display */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
