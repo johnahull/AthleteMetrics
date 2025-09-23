@@ -159,8 +159,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
-    console.log('ConnectedScatterChart: Full data received:', data);
-    console.log('ConnectedScatterChart: Data length:', data?.length);
 
     // Early validation but don't return null yet - we need to maintain hook consistency
     let hasValidData = true;
@@ -168,36 +166,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     let metrics: string[] = [];
 
     if (!data || data.length === 0) {
-      console.log('ConnectedScatterChart: No data provided');
       hasValidData = false;
       validationMessage = 'No data provided';
       metrics = []; // Ensure metrics is always defined
     } else {
-      // Log each trend data item to understand the structure
-      data.forEach((trend, index) => {
-        console.log(`ConnectedScatterChart: Trend ${index}:`, {
-          metric: trend.metric,
-          athleteId: trend.athleteId,
-          athleteName: trend.athleteName,
-          dataLength: trend.data?.length
-        });
-      });
-
       // Get unique metrics from all data
       metrics = Array.from(new Set(data.map(trend => trend.metric)));
-      console.log('ConnectedScatterChart: Available metrics:', metrics);
 
       // For connected scatter plot, we need exactly 2 metrics
-      // If we have less than 2, check if we can use the config to determine the metrics we should be looking for
       if (metrics.length < 2) {
-        console.log('ConnectedScatterChart: Not enough metrics in data, checking config');
-        
-        // If config specifies additional metrics but we don't have the data, show helpful message
-        if (config.subtitle && config.subtitle.includes('vs')) {
-          console.log('ConnectedScatterChart: Config indicates two metrics should be available but data only has:', metrics);
-        }
-        
-        console.log('ConnectedScatterChart: Not enough metrics', metrics.length);
         hasValidData = false;
         validationMessage = `Not enough metrics: ${metrics.length} (need 2)`;
       }
@@ -244,12 +221,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     // Keep all athletes for group average calculations
     const allAthletesForGroupCalc = Object.values(allAthleteTrends);
 
-    console.log('ConnectedScatterChart: Athletes to show:', athletesToShow.length);
-    console.log('ConnectedScatterChart: Athletes data:', athletesToShow.map((a: any) => ({
-      id: a?.athleteId,
-      name: a?.athleteName,
-      metrics: Object.keys(a?.metrics || {})
-    })));
 
     // Ensure we have athletes with both metrics and valid data
     const validAthletes = athletesToShow.filter((athlete: any) => {
@@ -259,16 +230,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const hasXMetric = athlete.metrics[xMetric]?.length > 0;
       const hasYMetric = athlete.metrics[yMetric]?.length > 0;
 
-      console.log(`ConnectedScatterChart: Athlete ${athlete.athleteName} has ${xMetric}:`, hasXMetric, athlete.metrics[xMetric]?.length);
-      console.log(`ConnectedScatterChart: Athlete ${athlete.athleteName} has ${yMetric}:`, hasYMetric, athlete.metrics[yMetric]?.length);
-
       return hasXMetric && hasYMetric;
     });
 
-    console.log('ConnectedScatterChart: Valid athletes:', validAthletes.length);
-
     if (validAthletes.length === 0) {
-      console.log('ConnectedScatterChart: No valid athletes found');
       return null;
     }
 
@@ -409,13 +374,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
     const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
 
-    // Calculate analytics for the first athlete (individual view)
+    // Calculate analytics for the highlighted athlete or first available athlete
     const analytics = validAthletes.length > 0 ? (() => {
-      const athlete = validAthletes[0];
-      const xData = athlete.metrics[xMetric] || [];
-      const yData = athlete.metrics[yMetric] || [];
+      // Use highlighted athlete if available, otherwise first athlete
+      const targetAthlete = highlightAthlete ?
+        validAthletes.find((a: any) => a.athleteId === highlightAthlete) || validAthletes[0] :
+        validAthletes[0];
 
-      // Match points by date for correlation calculation
+      const xData = targetAthlete.metrics[xMetric] || [];
+      const yData = targetAthlete.metrics[yMetric] || [];
+
+      // Match points by date for correlation calculation - only use actual measurement points
       const matchedPoints = xData
         .map((xPoint: any) => {
           const yPoint = yData.find((y: any) => {
@@ -446,7 +415,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         }))),
         xMean: statistics?.[xMetric]?.mean ?? (xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0),
         yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
-        dataPoints: matchedPoints.length
+        dataPoints: matchedPoints.length,
+        athleteName: targetAthlete.athleteName
       };
     })() : null;
 
@@ -456,9 +426,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const xData = athlete.metrics[xMetric] || [];
       const yData = athlete.metrics[yMetric] || [];
 
-      console.log('ConnectedScatterChart: Checking group averages for:', { xMetric, yMetric });
-      console.log('ConnectedScatterChart: xData sample:', xData.slice(0, 2));
-      console.log('ConnectedScatterChart: yData sample:', yData.slice(0, 2));
 
       // Create group average points for dates where both metrics have group averages
       const groupAveragePoints = xData
@@ -469,10 +436,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
 
-          console.log('ConnectedScatterChart: Point check:', {
-            xPoint: { date: xPoint.date, groupAverage: xPoint.groupAverage },
-            yPoint: yPoint ? { date: yPoint.date, groupAverage: yPoint.groupAverage } : null
-          });
 
           // Only include if both points exist and have group averages
           if (yPoint && xPoint.groupAverage !== undefined && yPoint.groupAverage !== undefined) {
@@ -491,7 +454,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           return dateA.getTime() - dateB.getTime();
         });
 
-      console.log('ConnectedScatterChart: Group average points:', groupAveragePoints.length, groupAveragePoints);
 
       // Add group average trend line if we have data points
       if (groupAveragePoints.length > 0) {
@@ -510,9 +472,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           fill: false,
           tension: 0.1,
         });
-        console.log('ConnectedScatterChart: Added group average trend line dataset');
       } else {
-        console.log('ConnectedScatterChart: No group average points found - creating synthetic group trend');
 
         // Fallback: Create synthetic group average trend line from all athlete data
         if (allAthletesForGroupCalc.length > 1) {
@@ -599,7 +559,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               fill: false,
               tension: 0.1,
             });
-            console.log('ConnectedScatterChart: Added synthetic group average trend line:', syntheticGroupPoints.length, 'points');
           }
         }
       }
@@ -939,10 +898,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       <Line data={scatterData.chartData} options={options} />
       
       {/* Progress indicators */}
-      {highlightAthlete && (
+      {scatterData.analytics && (
         <div className="mt-4 text-sm">
           <div className="text-center text-muted-foreground mb-2">
-            Connected points show performance progression over time
+            {highlightAthlete ?
+              `Analytics for ${scatterData.analytics?.athleteName || 'selected athlete'}` :
+              `Connected points show performance progression over time`}
           </div>
           
           {/* Enhanced Analytics Display */}
@@ -961,10 +922,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             </div>
 
             <div>
-              <div className="font-medium text-xs">X-Axis Trend</div>
+              <div className="font-medium text-xs">{scatterData.xLabel} Trend</div>
               <div className="text-lg font-bold text-blue-600">
                 {scatterData.analytics ?
-                  `${scatterData.analytics.xImprovement > 0 ? '+' : ''}${scatterData.analytics.xImprovement.toFixed(3)}/day` : 'N/A'}
+                  `${scatterData.analytics.xImprovement > 0 ? '+' : ''}${scatterData.analytics.xImprovement.toFixed(3)}${scatterData.xUnit ? `${scatterData.xUnit}/day` : '/day'}` : 'N/A'}
               </div>
               <div className="text-xs text-muted-foreground">
                 {scatterData.xMetric && METRIC_CONFIG[scatterData.xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ?
@@ -974,10 +935,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             </div>
 
             <div>
-              <div className="font-medium text-xs">Y-Axis Trend</div>
+              <div className="font-medium text-xs">{scatterData.yLabel} Trend</div>
               <div className="text-lg font-bold text-green-600">
                 {scatterData.analytics ?
-                  `${scatterData.analytics.yImprovement > 0 ? '+' : ''}${scatterData.analytics.yImprovement.toFixed(3)}/day` : 'N/A'}
+                  `${scatterData.analytics.yImprovement > 0 ? '+' : ''}${scatterData.analytics.yImprovement.toFixed(3)}${scatterData.yUnit ? `${scatterData.yUnit}/day` : '/day'}` : 'N/A'}
               </div>
               <div className="text-xs text-muted-foreground">
                 {scatterData.yMetric && METRIC_CONFIG[scatterData.yMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ?
