@@ -441,8 +441,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
           date: p.date instanceof Date ? p.date : new Date(p.date)
         }))),
-        xMean: xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0,
-        yMean: yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0,
+        xMean: statistics?.[xMetric]?.mean ?? (xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0),
+        yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
         dataPoints: matchedPoints.length
       };
     })() : null;
