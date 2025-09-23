@@ -11,7 +11,7 @@ import {
   TooltipItem
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
-import { Scatter } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 import type {
   TrendData,
   ChartConfiguration,
@@ -520,7 +520,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       },
       tooltip: {
         callbacks: {
-          title: (context: TooltipItem<'scatter'>[]) => {
+          title: (context: TooltipItem<'line'>[]) => {
             const point = context[0].raw as any;
             const datasetLabel = context[0].dataset.label;
             
@@ -538,14 +538,14 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             }
             return datasetLabel;
           },
-          label: (context: TooltipItem<'scatter'>) => {
+          label: (context: TooltipItem<'line'>) => {
             const point = context.raw as any;
             return [
               `${scatterData?.xLabel || 'X'}: ${point.x?.toFixed(2)}${scatterData?.xUnit || ''}`,
               `${scatterData?.yLabel || 'Y'}: ${point.y?.toFixed(2)}${scatterData?.yUnit || ''}`
             ];
           },
-          afterLabel: (context: TooltipItem<'scatter'>) => {
+          afterLabel: (context: TooltipItem<'line'>) => {
             const point = context.raw as any;
             const labels = [];
 
@@ -757,7 +757,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       intersect: false,
       mode: 'point'
     }
-  } satisfies ChartOptions<'scatter'>;
+  } satisfies ChartOptions<'line'>;
   }, [scatterData, config, statistics]);
 
   if (!scatterData?.isValid) {
@@ -778,7 +778,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   return (
     <div className="w-full h-full">
-      <Scatter data={scatterData.chartData} options={options} />
+      <Line data={scatterData.chartData} options={options} />
       
       {/* Progress indicators */}
       {highlightAthlete && (
