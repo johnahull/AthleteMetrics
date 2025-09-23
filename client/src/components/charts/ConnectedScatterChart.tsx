@@ -220,6 +220,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
+    console.log('ConnectedScatterChart: Processing data:', {
+      dataLength: data?.length || 0,
+      firstFewItems: data?.slice(0, 3)?.map(d => ({
+        metric: d.metric,
+        athleteId: d.athleteId,
+        athleteName: d.athleteName,
+        dataLength: d.data?.length || 0
+      }))
+    });
 
     // Early validation but don't return null yet - we need to maintain hook consistency
     let hasValidData = true;
@@ -233,16 +242,37 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     } else {
       // Get unique metrics from all data
       metrics = Array.from(new Set(data.map(trend => trend.metric)));
+      console.log('ConnectedScatterChart: Found metrics:', metrics);
 
       // For connected scatter plot, we need exactly 2 metrics
       if (metrics.length < 2) {
         hasValidData = false;
-        validationMessage = `Not enough metrics: ${metrics.length} (need 2)`;
+        validationMessage = `Not enough metrics: ${metrics.length} (need 2). Available: ${metrics.join(', ')}`;
+      }
+
+      // Also check if we have actual data points for both metrics
+      if (metrics.length >= 2) {
+        const [xMetric, yMetric] = metrics;
+        const xData = data.filter(d => d.metric === xMetric && d.data?.length > 0);
+        const yData = data.filter(d => d.metric === yMetric && d.data?.length > 0);
+        
+        console.log('ConnectedScatterChart: Data availability:', {
+          xMetric,
+          yMetric,
+          xDataCount: xData.length,
+          yDataCount: yData.length
+        });
+
+        if (xData.length === 0 || yData.length === 0) {
+          hasValidData = false;
+          validationMessage = `Insufficient data for metrics ${xMetric} (${xData.length} trends) and ${yMetric} (${yData.length} trends)`;
+        }
       }
     }
 
     // Return early if validation failed, but with a consistent structure
     if (!hasValidData) {
+      console.log('ConnectedScatterChart: Validation failed:', validationMessage);
       return {
         isValid: false,
         validationMessage,
@@ -274,13 +304,26 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       return acc;
     }, {} as Record<string, any>);
 
+    console.log('ConnectedScatterChart: Processed athlete trends:', {
+      athleteCount: Object.keys(allAthleteTrends).length,
+      firstAthlete: Object.values(allAthleteTrends)[0]
+    });
+
     // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
     const athletesToShow = highlightAthlete ?
       [allAthleteTrends[highlightAthlete]].filter(Boolean) :
-      displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean);
+      displayedAthletes.length > 0 
+        ? displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean)
+        : Object.values(allAthleteTrends).slice(0, 10); // Show first 10 athletes if none selected
 
     // Keep all athletes for group average calculations
     const allAthletesForGroupCalc = Object.values(allAthleteTrends);
+
+    console.log('ConnectedScatterChart: Athletes to show:', {
+      highlightAthlete,
+      displayedAthletesCount: displayedAthletes.length,
+      athletesToShowCount: athletesToShow.length
+    });
 
 
     // Ensure we have athletes with both metrics and valid data
