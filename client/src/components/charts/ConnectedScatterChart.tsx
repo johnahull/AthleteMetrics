@@ -998,10 +998,14 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (!isFinite(xMin) || !isFinite(xMax)) return {};
 
             const xRange = xMax - xMin;
-            const padding = CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1;
-            const xPadding = xRange > 0 ? xRange * padding : 0.1;
+            // Use larger padding for better visualization, minimum padding of 0.1
+            const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
+            const xPadding = xRange > 0 ? xRange * padding : Math.max(0.1, xMin * 0.1);
 
-            return { min: xMin - xPadding, max: xMax + xPadding };
+            return { 
+              min: Math.max(0, xMin - xPadding), 
+              max: xMax + xPadding 
+            };
           }
           return {};
         })() : {})
@@ -1052,9 +1056,14 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (!isFinite(yMin) || !isFinite(yMax)) return {};
 
             const yRange = yMax - yMin;
-            const padding = CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1;
-            const yPadding = yRange > 0 ? yRange * padding : 1;
-            return { min: yMin - yPadding, max: yMax + yPadding };
+            // Use larger padding for better visualization, ensure minimum meaningful padding
+            const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
+            const yPadding = yRange > 0 ? yRange * padding : Math.max(1, yMin * 0.1);
+            
+            return { 
+              min: Math.max(0, yMin - yPadding), 
+              max: yMax + yPadding 
+            };
           }
           return {};
         })() : {})

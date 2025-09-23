@@ -158,7 +158,7 @@ export const ANIMATION_CONFIG = {
 
 export const SCATTER_CONFIG = {
   MIN_POINTS_FOR_REGRESSION: 2,
-  CHART_PADDING: 0.1, // 10% padding around data bounds
+  CHART_PADDING: 0.2, // 20% padding around data bounds for better visualization
 } as const;
 
 export const BOX_PLOT_CONFIG = {
@@ -243,9 +243,6 @@ export const ALGORITHM_CONFIG = {
 // =============================================================================
 
 export const CHART_CONFIG = {
-  SCATTER: {
-    CHART_PADDING: 0.1
-  },
   COLORS: CHART_COLORS,
   STYLING: CHART_STYLING,
   PERCENTILES,
