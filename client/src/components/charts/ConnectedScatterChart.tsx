@@ -25,20 +25,12 @@ const quadrantBackgroundPlugin = {
     const analytics = chart.config?.data?.analytics;
 
     if (!analytics) {
-      console.log('QuadrantPlugin: No analytics data available on chart');
       return;
     }
-
-    console.log('QuadrantPlugin: Drawing quadrants with analytics:', analytics);
 
     const { ctx, chartArea, scales } = chart;
 
     if (!chartArea || !scales.x || !scales.y) {
-      console.log('QuadrantPlugin: Missing chart components', {
-        chartArea: !!chartArea,
-        scalesX: !!scales.x,
-        scalesY: !!scales.y
-      });
       return;
     }
 
@@ -46,18 +38,12 @@ const quadrantBackgroundPlugin = {
     const xMean = analytics.xMean;
     const yMean = analytics.yMean;
 
-    console.log('QuadrantPlugin: Mean values', { xMean, yMean });
-    console.log('QuadrantPlugin: Chart area', { left, top, right, bottom });
-
     // Convert mean values to pixel coordinates
     const xMeanPixel = scales.x.getPixelForValue(xMean);
     const yMeanPixel = scales.y.getPixelForValue(yMean);
 
-    console.log('QuadrantPlugin: Mean pixel coordinates', { xMeanPixel, yMeanPixel });
-
     // Ensure we have valid pixel coordinates
     if (isNaN(xMeanPixel) || isNaN(yMeanPixel)) {
-      console.log('QuadrantPlugin: Invalid pixel coordinates');
       return;
     }
 
@@ -67,53 +53,45 @@ const quadrantBackgroundPlugin = {
 
     ctx.save();
 
-    // Define quadrant colors (more visible backgrounds)
-    const quadrants = [
-      { x1: clampedXMeanPixel, y1: top, x2: right, y2: clampedYMeanPixel, color: 'rgba(34, 197, 94, 0.2)', label: 'High-High' }, // High-High (green)
-      { x1: left, y1: top, x2: clampedXMeanPixel, y2: clampedYMeanPixel, color: 'rgba(234, 179, 8, 0.2)', label: 'Low-High' }, // Low-High (yellow)
-      { x1: clampedXMeanPixel, y1: clampedYMeanPixel, x2: right, y2: bottom, color: 'rgba(249, 115, 22, 0.2)', label: 'High-Low' }, // High-Low (orange)
-      { x1: left, y1: clampedYMeanPixel, x2: clampedXMeanPixel, y2: bottom, color: 'rgba(239, 68, 68, 0.2)', label: 'Low-Low' } // Low-Low (red)
-    ];
+    // Draw quadrant backgrounds with proper opacity
+    // Top-Right Quadrant (High X, High Y)
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.1)'; // Light green
+    ctx.fillRect(clampedXMeanPixel, top, right - clampedXMeanPixel, clampedYMeanPixel - top);
 
-    // Draw quadrant backgrounds
-    quadrants.forEach((quad, index) => {
-      const width = quad.x2 - quad.x1;
-      const height = quad.y2 - quad.y1;
+    // Top-Left Quadrant (Low X, High Y) 
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.1)'; // Light yellow/amber
+    ctx.fillRect(left, top, clampedXMeanPixel - left, clampedYMeanPixel - top);
 
-      if (width > 0 && height > 0) {
-        ctx.fillStyle = quad.color;
-        ctx.fillRect(quad.x1, quad.y1, width, height);
-        console.log(`QuadrantPlugin: Drew quadrant ${index} (${quad.label})`, {
-          x: quad.x1, y: quad.y1, width, height
-        });
-      }
-    });
+    // Bottom-Right Quadrant (High X, Low Y)
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.1)'; // Light orange
+    ctx.fillRect(clampedXMeanPixel, clampedYMeanPixel, right - clampedXMeanPixel, bottom - clampedYMeanPixel);
+
+    // Bottom-Left Quadrant (Low X, Low Y)
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.1)'; // Light red
+    ctx.fillRect(left, clampedYMeanPixel, clampedXMeanPixel - left, bottom - clampedYMeanPixel);
 
     // Draw mean lines (dashed)
-    ctx.strokeStyle = 'rgba(75, 85, 99, 0.9)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 4]);
+    ctx.strokeStyle = 'rgba(75, 85, 99, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
 
-    // Vertical mean line (if within bounds)
+    // Vertical mean line
     if (clampedXMeanPixel >= left && clampedXMeanPixel <= right) {
       ctx.beginPath();
       ctx.moveTo(clampedXMeanPixel, top);
       ctx.lineTo(clampedXMeanPixel, bottom);
       ctx.stroke();
-      console.log('QuadrantPlugin: Drew vertical mean line at', clampedXMeanPixel);
     }
 
-    // Horizontal mean line (if within bounds)
+    // Horizontal mean line
     if (clampedYMeanPixel >= top && clampedYMeanPixel <= bottom) {
       ctx.beginPath();
       ctx.moveTo(left, clampedYMeanPixel);
       ctx.lineTo(right, clampedYMeanPixel);
       ctx.stroke();
-      console.log('QuadrantPlugin: Drew horizontal mean line at', clampedYMeanPixel);
     }
 
     ctx.restore();
-    console.log('QuadrantPlugin: Finished drawing quadrants');
   }
 };
 
@@ -638,25 +616,30 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 Performance Zones (relative to athlete's mean)
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-green-100 text-green-800 p-2 rounded">
+                <div className="bg-green-50 border border-green-200 text-green-800 p-2 rounded">
                   <div className="font-medium">High-High</div>
                   <div>Elite Performance</div>
                 </div>
-                <div className="bg-yellow-100 text-yellow-800 p-2 rounded">
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-2 rounded">
                   <div className="font-medium">Low-High</div>
                   <div>Focus {scatterData.xLabel}</div>
                 </div>
-                <div className="bg-orange-100 text-orange-800 p-2 rounded">
+                <div className="bg-orange-50 border border-orange-200 text-orange-800 p-2 rounded">
                   <div className="font-medium">High-Low</div>
                   <div>Focus {scatterData.yLabel}</div>
                 </div>
-                <div className="bg-red-100 text-red-800 p-2 rounded">
+                <div className="bg-red-50 border border-red-200 text-red-800 p-2 rounded">
                   <div className="font-medium">Low-Low</div>
                   <div>Development Needed</div>
                 </div>
               </div>
             </div>
-          )}
+          )}</div>
+        </div>
+      )}
+    </div>
+  );
+});
         </div>
       )}
     </div>
