@@ -241,32 +241,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       };
     });
 
-    // Add group averages if statistics available
-    if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
-      datasets.push({
-        label: 'Group Average',
-        data: [{
-          x: statistics[xMetric].mean,
-          y: statistics[yMetric].mean
-        }],
-        backgroundColor: 'rgba(156, 163, 175, 1)',
-        borderColor: 'rgba(156, 163, 175, 1)',
-        borderWidth: 3,
-        pointRadius: 8,
-        pointHoverRadius: 10,
-        pointBackgroundColor: () => 'rgba(156, 163, 175, 1)',
-        pointBorderColor: 'rgba(156, 163, 175, 1)',
-        pointBorderWidth: 2,
-        showLine: false,
-        fill: false,
-        tension: 0
-      });
-    }
-
-    // Add performance zone reference lines based on mean values
-    const xMean = analytics?.xMean || (statistics?.[xMetric]?.mean) || 0;
-    const yMean = analytics?.yMean || (statistics?.[yMetric]?.mean) || 0;
-
     const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
@@ -312,6 +286,28 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         dataPoints: matchedPoints.length
       };
     })() : null;
+
+    // Add group averages if statistics available
+    if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
+      datasets.push({
+        label: 'Group Average',
+        data: [{
+          x: statistics[xMetric].mean,
+          y: statistics[yMetric].mean
+        }],
+        backgroundColor: 'rgba(156, 163, 175, 1)',
+        borderColor: 'rgba(156, 163, 175, 1)',
+        borderWidth: 3,
+        pointRadius: 8,
+        pointHoverRadius: 10,
+        pointBackgroundColor: () => 'rgba(156, 163, 175, 1)',
+        pointBorderColor: 'rgba(156, 163, 175, 1)',
+        pointBorderWidth: 2,
+        showLine: false,
+        fill: false,
+        tension: 0
+      });
+    }
 
     return {
       datasets,
@@ -408,11 +404,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const xMean = scatterData?.analytics?.xMean || 0;
+            const xMean = scatterData?.analytics?.xMean || (statistics?.[scatterData?.xMetric]?.mean) || 0;
             return Math.abs(context.tick.value - xMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const xMean = scatterData?.analytics?.xMean || 0;
+            const xMean = scatterData?.analytics?.xMean || (statistics?.[scatterData?.xMetric]?.mean) || 0;
             return Math.abs(context.tick.value - xMean) < 0.01 ? 2 : 1;
           }
         }
@@ -427,11 +423,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const yMean = scatterData?.analytics?.yMean || 0;
+            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData?.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const yMean = scatterData?.analytics?.yMean || 0;
+            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData?.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
         }
