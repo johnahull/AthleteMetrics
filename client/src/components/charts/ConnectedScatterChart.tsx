@@ -40,6 +40,36 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   statistics,
   highlightAthlete
 }: ConnectedScatterChartProps) {
+  // Helper function to calculate correlation coefficient
+  const calculateCorrelation = (xValues: number[], yValues: number[]): number => {
+    if (xValues.length !== yValues.length || xValues.length < 2) return 0;
+
+    const n = xValues.length;
+    const sumX = xValues.reduce((a, b) => a + b, 0);
+    const sumY = yValues.reduce((a, b) => a + b, 0);
+    const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+    const sumYY = yValues.reduce((sum, y) => sum + y * y, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
+
+    return denominator === 0 ? 0 : numerator / denominator;
+  };
+
+  // Helper function to calculate rate of improvement (slope)
+  const calculateImprovement = (values: {value: number, date: Date}[]): number => {
+    if (values.length < 2) return 0;
+
+    const sortedValues = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const firstValue = sortedValues[0].value;
+    const lastValue = sortedValues[sortedValues.length - 1].value;
+    const timeSpan = sortedValues[sortedValues.length - 1].date.getTime() - sortedValues[0].date.getTime();
+    const daySpan = timeSpan / (1000 * 60 * 60 * 24); // Convert to days
+
+    return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
+  };
+
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
     console.log('ConnectedScatterChart: Full data received:', data);
@@ -185,7 +215,23 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         pointHoverRadius: isHighlighted ? 10 : 8,
         pointBackgroundColor: (context: any) => {
           const point = context.raw;
-          return point?.isPersonalBest ? 'rgba(255, 215, 0, 1)' : color;
+          if (point?.isPersonalBest) return 'rgba(255, 215, 0, 1)';
+
+          // Time-based color coding - newer points are more saturated
+          if (point?.date && connectedPoints.length > 1) {
+            const pointDate = new Date(point.date).getTime();
+            const oldestDate = Math.min(...connectedPoints.map((p: any) => new Date(p.date).getTime()));
+            const newestDate = Math.max(...connectedPoints.map((p: any) => new Date(p.date).getTime()));
+            const dateRange = newestDate - oldestDate;
+
+            if (dateRange > 0) {
+              const recency = (pointDate - oldestDate) / dateRange;
+              const opacity = 0.4 + (recency * 0.6); // Range from 0.4 to 1.0
+              return color.replace('1)', `${opacity})`);
+            }
+          }
+
+          return color;
         },
         pointBorderColor: '#fff',
         pointBorderWidth: 2,
@@ -217,10 +263,55 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       });
     }
 
+    // Add performance zone reference lines based on mean values
+    const xMean = analytics?.xMean || (statistics?.[xMetric]?.mean) || 0;
+    const yMean = analytics?.yMean || (statistics?.[yMetric]?.mean) || 0;
+
     const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
     const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
     const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+
+    // Calculate analytics for the first athlete (individual view)
+    const analytics = validAthletes.length > 0 ? (() => {
+      const athlete = validAthletes[0];
+      const xData = athlete.metrics[xMetric] || [];
+      const yData = athlete.metrics[yMetric] || [];
+
+      // Match points by date for correlation calculation
+      const matchedPoints = xData
+        .map((xPoint: any) => {
+          const yPoint = yData.find((y: any) => {
+            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+          });
+          return yPoint ? {
+            x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+            y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
+            date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
+          } : null;
+        })
+        .filter(Boolean);
+
+      const xValues = matchedPoints.map((p: any) => p.x);
+      const yValues = matchedPoints.map((p: any) => p.y);
+
+      return {
+        correlation: calculateCorrelation(xValues, yValues),
+        xImprovement: calculateImprovement(xData.map((p: any) => ({
+          value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
+          date: p.date instanceof Date ? p.date : new Date(p.date)
+        }))),
+        yImprovement: calculateImprovement(yData.map((p: any) => ({
+          value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
+          date: p.date instanceof Date ? p.date : new Date(p.date)
+        }))),
+        xMean: xValues.length > 0 ? xValues.reduce((a, b) => a + b, 0) / xValues.length : 0,
+        yMean: yValues.length > 0 ? yValues.reduce((a, b) => a + b, 0) / yValues.length : 0,
+        dataPoints: matchedPoints.length
+      };
+    })() : null;
 
     return {
       datasets,
@@ -230,7 +321,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       yUnit,
       xLabel,
       yLabel,
-      athleteTrends
+      athleteTrends,
+      analytics
     };
   }, [data, statistics, highlightAthlete]);
 
@@ -313,7 +405,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           text: `${scatterData?.xLabel} (${scatterData?.xUnit})`
         },
         grid: {
-          display: true
+          display: true,
+          color: (context: any) => {
+            // Highlight mean line
+            const xMean = scatterData?.analytics?.xMean || 0;
+            return Math.abs(context.tick.value - xMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
+          },
+          lineWidth: (context: any) => {
+            const xMean = scatterData?.analytics?.xMean || 0;
+            return Math.abs(context.tick.value - xMean) < 0.01 ? 2 : 1;
+          }
         }
       },
       y: {
@@ -323,7 +424,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           text: `${scatterData?.yLabel} (${scatterData?.yUnit})`
         },
         grid: {
-          display: true
+          display: true,
+          color: (context: any) => {
+            // Highlight mean line
+            const yMean = scatterData?.analytics?.yMean || 0;
+            return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
+          },
+          lineWidth: (context: any) => {
+            const yMean = scatterData?.analytics?.yMean || 0;
+            return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
+          }
         }
       }
     },
@@ -368,55 +478,90 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             Connected points show performance progression over time
           </div>
           
-          <div className="grid grid-cols-2 gap-4 text-center">
+          {/* Enhanced Analytics Display */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <div className="font-medium">Trajectory</div>
-              <div className="text-lg font-bold text-blue-600">
-                {/* Calculate overall improvement direction */}
-                {(() => {
-                  const athleteData = Object.values(scatterData.athleteTrends)[0] as any;
-                  if (!athleteData) return 'N/A';
-                  
-                  const xData = athleteData.metrics[scatterData.xMetric] || [];
-                  const yData = athleteData.metrics[scatterData.yMetric] || [];
-                  
-                  if (xData.length < 2 || yData.length < 2) return 'N/A';
-                  
-                  // Convert values to numbers to handle string values
-                  const xLastValue = typeof xData[xData.length - 1].value === 'string' ? parseFloat(xData[xData.length - 1].value) : xData[xData.length - 1].value;
-                  const xFirstValue = typeof xData[0].value === 'string' ? parseFloat(xData[0].value) : xData[0].value;
-                  const yLastValue = typeof yData[yData.length - 1].value === 'string' ? parseFloat(yData[yData.length - 1].value) : yData[yData.length - 1].value;
-                  const yFirstValue = typeof yData[0].value === 'string' ? parseFloat(yData[0].value) : yData[0].value;
-
-                  const xImprovement = xLastValue - xFirstValue;
-                  const yImprovement = yLastValue - yFirstValue;
-                  
-                  const xBetter = METRIC_CONFIG[scatterData.xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ? 
-                    xImprovement < 0 : xImprovement > 0;
-                  const yBetter = METRIC_CONFIG[scatterData.yMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ? 
-                    yImprovement < 0 : yImprovement > 0;
-                  
-                  if (xBetter && yBetter) return '↗️ Improving Both';
-                  if (xBetter || yBetter) return '↕️ Mixed Progress';
-                  return '↘️ Needs Focus';
-                })()}
+              <div className="font-medium text-xs">Correlation</div>
+              <div className="text-lg font-bold text-purple-600">
+                {scatterData.analytics ?
+                  `${(scatterData.analytics.correlation * 100).toFixed(0)}%` : 'N/A'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {scatterData.analytics && Math.abs(scatterData.analytics.correlation) > 0.7 ?
+                  'Strong' : scatterData.analytics && Math.abs(scatterData.analytics.correlation) > 0.3 ?
+                  'Moderate' : 'Weak'}
               </div>
             </div>
-            
+
             <div>
-              <div className="font-medium">Personal Bests</div>
+              <div className="font-medium text-xs">X-Axis Trend</div>
+              <div className="text-lg font-bold text-blue-600">
+                {scatterData.analytics ?
+                  `${scatterData.analytics.xImprovement > 0 ? '+' : ''}${scatterData.analytics.xImprovement.toFixed(3)}/day` : 'N/A'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {scatterData.xMetric && METRIC_CONFIG[scatterData.xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ?
+                  (scatterData.analytics && scatterData.analytics.xImprovement < 0 ? '📈 Improving' : '📉 Declining') :
+                  (scatterData.analytics && scatterData.analytics.xImprovement > 0 ? '📈 Improving' : '📉 Declining')}
+              </div>
+            </div>
+
+            <div>
+              <div className="font-medium text-xs">Y-Axis Trend</div>
+              <div className="text-lg font-bold text-green-600">
+                {scatterData.analytics ?
+                  `${scatterData.analytics.yImprovement > 0 ? '+' : ''}${scatterData.analytics.yImprovement.toFixed(3)}/day` : 'N/A'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {scatterData.yMetric && METRIC_CONFIG[scatterData.yMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ?
+                  (scatterData.analytics && scatterData.analytics.yImprovement < 0 ? '📈 Improving' : '📉 Declining') :
+                  (scatterData.analytics && scatterData.analytics.yImprovement > 0 ? '📈 Improving' : '📉 Declining')}
+              </div>
+            </div>
+
+            <div>
+              <div className="font-medium text-xs">Personal Bests</div>
               <div className="text-lg font-bold text-yellow-600">
-                {/* Count personal bests in the data */}
                 {(() => {
-                  const pbCount = scatterData.datasets[0]?.data?.filter((point: any) => 
+                  const pbCount = scatterData.datasets[0]?.data?.filter((point: any) =>
                     point.isPersonalBest
                   ).length || 0;
-                  
+
                   return `${pbCount} 🏆`;
                 })()}
               </div>
+              <div className="text-xs text-muted-foreground">
+                {scatterData.analytics ? `${scatterData.analytics.dataPoints} sessions` : ''}
+              </div>
             </div>
           </div>
+
+          {/* Performance Quadrants Guide */}
+          {scatterData.analytics && (
+            <div className="mt-4 text-center">
+              <div className="text-xs font-medium text-muted-foreground mb-2">
+                Performance Zones (relative to athlete's mean)
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-green-100 text-green-800 p-2 rounded">
+                  <div className="font-medium">High-High</div>
+                  <div>Elite Performance</div>
+                </div>
+                <div className="bg-yellow-100 text-yellow-800 p-2 rounded">
+                  <div className="font-medium">Low-High</div>
+                  <div>Focus {scatterData.xLabel}</div>
+                </div>
+                <div className="bg-orange-100 text-orange-800 p-2 rounded">
+                  <div className="font-medium">High-Low</div>
+                  <div>Focus {scatterData.yLabel}</div>
+                </div>
+                <div className="bg-red-100 text-red-800 p-2 rounded">
+                  <div className="font-medium">Low-Low</div>
+                  <div>Development Needed</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
