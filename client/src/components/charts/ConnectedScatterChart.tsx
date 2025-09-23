@@ -155,22 +155,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     return Array.from(athleteMap.values());
   }, [data]);
 
-  // Use athlete selector hook for multi-select (max 10)
-  const athleteSelector = useAthleteSelector({
-    athletes: allAthletes,
-    maxSelection: 10,
-    initialSelection: selectedAthleteIds || [],
-    searchEnabled: true
-  });
-
-  // Get effective selection (external prop or internal selector state)
-  const effectiveSelectedIds = selectedAthleteIds || athleteSelector.selectedIds;
-  const handleSelectionChange = onAthleteSelectionChange || athleteSelector.setSelectedIds;
+  // For multi-athlete trends, show all athletes
+  const effectiveSelectedIds = useMemo(() => {
+    return allAthletes.map(athlete => athlete.id);
+  }, [allAthletes]);
 
   // Initialize toggles when selected athletes change
   useEffect(() => {
     const newToggles: Record<string, boolean> = {};
-    effectiveSelectedIds.forEach(athleteId => {
+    effectiveSelectedIds.forEach((athleteId: string) => {
       newToggles[athleteId] = athleteToggles[athleteId] !== false; // Default to true unless explicitly false
     });
     setAthleteToggles(newToggles);
@@ -1089,7 +1082,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   const showAllSelectedAthletes = () => {
     const allVisible: Record<string, boolean> = {};
-    effectiveSelectedIds.forEach(athleteId => {
+    effectiveSelectedIds.forEach((athleteId: string) => {
       allVisible[athleteId] = true;
     });
     setAthleteToggles(allVisible);
@@ -1097,13 +1090,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   const hideAllSelectedAthletes = () => {
     const allHidden: Record<string, boolean> = {};
-    effectiveSelectedIds.forEach(athleteId => {
+    effectiveSelectedIds.forEach((athleteId: string) => {
       allHidden[athleteId] = false;
     });
     setAthleteToggles(allHidden);
   };
 
-  const visibleAthleteCount = effectiveSelectedIds.filter(id => athleteToggles[id]).length;
+  const visibleAthleteCount = effectiveSelectedIds.filter((id: string) => athleteToggles[id]).length;
 
   // Render error state or chart - no early return to maintain consistent hook order
   if (!scatterData?.isValid) {
