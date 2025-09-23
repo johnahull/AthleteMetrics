@@ -285,7 +285,7 @@ export function getRecommendedChartType(
     if (metricCount === 1) {
       return timeframeType === 'best' ? 'box_swarm_combo' : 'line_chart';
     } else if (metricCount === 2) {
-      return 'connected_scatter';
+      return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
       return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
@@ -294,7 +294,7 @@ export function getRecommendedChartType(
     if (metricCount === 1) {
       return timeframeType === 'best' ? 'distribution' : 'time_series_box_swarm';
     } else if (metricCount === 2) {
-      return 'connected_scatter';
+      return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
       return 'radar_chart';
     }
