@@ -284,34 +284,71 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const xData = athlete.metrics[xMetric] || [];
       const yData = athlete.metrics[yMetric] || [];
 
-      // Create connected points by matching dates
-      const connectedPoints = xData
-        .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => {
-            try {
-              const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-              const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
-              return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
-            } catch (error) {
-              console.warn('Date parsing error:', error, 'x:', xPoint.date, 'y:', y.date);
-              return false;
-            }
-          });
-          
-          return yPoint ? {
-            // Convert values to numbers to handle string values
-            x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
-            y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
-            date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
-            isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest
-          } : null;
-        })
-        .filter(Boolean)
-        .sort((a: any, b: any) => {
-          const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-          const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-          return dateA.getTime() - dateB.getTime();
+      // Create all points from both metrics, using last known values for missing data
+      const allDataPoints: any[] = [];
+
+      // Combine all unique dates from both metrics
+      const allDates = new Set<string>();
+
+      [...xData, ...yData].forEach((point: any) => {
+        try {
+          const date = point.date instanceof Date ? point.date : new Date(point.date);
+          allDates.add(date.toISOString().split('T')[0]);
+        } catch (error) {
+          console.warn('Date parsing error:', error);
+        }
+      });
+
+      const sortedDates = Array.from(allDates).sort();
+
+      let lastXValue: number | null = null;
+      let lastYValue: number | null = null;
+
+      // Create connected points for each date, using interpolation/last known values
+      sortedDates.forEach(dateStr => {
+        const currentDate = new Date(dateStr);
+
+        // Find exact matches for this date
+        const xPoint = xData.find((x: any) => {
+          try {
+            const xDate = x.date instanceof Date ? x.date : new Date(x.date);
+            return xDate.toISOString().split('T')[0] === dateStr;
+          } catch {
+            return false;
+          }
         });
+
+        const yPoint = yData.find((y: any) => {
+          try {
+            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+            return yDate.toISOString().split('T')[0] === dateStr;
+          } catch {
+            return false;
+          }
+        });
+
+        // Update last known values
+        if (xPoint) {
+          lastXValue = typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value;
+        }
+        if (yPoint) {
+          lastYValue = typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value;
+        }
+
+        // Only add point if we have both values (either current or last known)
+        if (lastXValue !== null && lastYValue !== null) {
+          allDataPoints.push({
+            x: lastXValue,
+            y: lastYValue,
+            date: currentDate,
+            isPersonalBest: xPoint?.isPersonalBest || yPoint?.isPersonalBest || false,
+            hasActualData: !!xPoint && !!yPoint, // Track if this point has real data for both metrics
+            isInterpolated: !xPoint || !yPoint // Track if this point uses interpolated/last known values
+          });
+        }
+      });
+
+      const connectedPoints = allDataPoints;
 
       const color = colors[index % colors.length] || 'rgba(75, 85, 99, 1)';
       const isHighlighted = athlete.athleteId === highlightAthlete;
@@ -322,11 +359,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         backgroundColor: color.replace('1)', '0.6)'),
         borderColor: color,
         borderWidth: isHighlighted ? 3 : 2,
-        pointRadius: isHighlighted ? 6 : 4,
         pointHoverRadius: isHighlighted ? 10 : 8,
         pointBackgroundColor: (context: any) => {
           const point = context.raw;
           if (point?.isPersonalBest) return 'rgba(255, 215, 0, 1)';
+
+          // Different styling for interpolated vs actual data points
+          if (point?.isInterpolated) {
+            // Interpolated points are more transparent
+            return color.replace('1)', '0.4)');
+          }
 
           // Time-based color coding - newer points are more saturated
           if (point?.date && connectedPoints.length > 1) {
@@ -337,12 +379,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
             if (dateRange > 0) {
               const recency = (pointDate - oldestDate) / dateRange;
-              const opacity = 0.4 + (recency * 0.6); // Range from 0.4 to 1.0
+              const opacity = 0.6 + (recency * 0.4); // Range from 0.6 to 1.0 for actual data
               return color.replace('1)', `${opacity})`);
             }
           }
 
           return color;
+        },
+        pointRadius: (context: any) => {
+          const point = context.raw;
+          if (point?.isPersonalBest) return isHighlighted ? 8 : 6;
+          if (point?.isInterpolated) return isHighlighted ? 3 : 2; // Smaller for interpolated points
+          return isHighlighted ? 6 : 4; // Normal size for actual data
         },
         pointBorderColor: '#fff',
         pointBorderWidth: 2,
@@ -409,7 +457,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         backgroundColor: 'rgba(156, 163, 175, 1)',
         borderColor: 'rgba(156, 163, 175, 1)',
         borderWidth: 3,
-        pointRadius: 8,
+        pointRadius: () => 8,
         pointHoverRadius: 10,
         pointBackgroundColor: () => 'rgba(156, 163, 175, 1)',
         pointBorderColor: 'rgba(156, 163, 175, 1)',
@@ -499,11 +547,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           afterLabel: (context) => {
             const point = context.raw as any;
             const labels = [];
-            
+
             if (point.isPersonalBest) {
               labels.push('🏆 Personal Best!');
             }
-            
+
+            if (point.isInterpolated) {
+              labels.push('📊 Interpolated data point');
+            } else if (point.hasActualData) {
+              labels.push('📈 Actual measurement');
+            }
+
             try {
               if (point.date) {
                 const date = point.date instanceof Date ? point.date : new Date(point.date);
@@ -512,7 +566,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             } catch (error) {
               console.warn('Date formatting error in afterLabel:', error, point.date);
             }
-            
+
             return labels;
           }
         }
