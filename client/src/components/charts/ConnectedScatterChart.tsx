@@ -10,21 +10,122 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Scatter } from 'react-chartjs-2';
-import type { 
-  TrendData, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  TrendData,
+  ChartConfiguration,
+  StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
-// Register Chart.js components
+// Custom plugin for quadrant backgrounds (defined before registration)
+const quadrantBackgroundPlugin = {
+  id: 'quadrantBackground',
+  beforeDatasetsDraw: (chart: any) => {
+    // Get the analytics data from the chart's custom data
+    const analytics = chart.config?.data?.analytics;
+
+    if (!analytics) {
+      console.log('QuadrantPlugin: No analytics data available on chart');
+      return;
+    }
+
+    console.log('QuadrantPlugin: Drawing quadrants with analytics:', analytics);
+
+    const { ctx, chartArea, scales } = chart;
+
+    if (!chartArea || !scales.x || !scales.y) {
+      console.log('QuadrantPlugin: Missing chart components', {
+        chartArea: !!chartArea,
+        scalesX: !!scales.x,
+        scalesY: !!scales.y
+      });
+      return;
+    }
+
+    const { left, top, right, bottom } = chartArea;
+    const xMean = analytics.xMean;
+    const yMean = analytics.yMean;
+
+    console.log('QuadrantPlugin: Mean values', { xMean, yMean });
+    console.log('QuadrantPlugin: Chart area', { left, top, right, bottom });
+
+    // Convert mean values to pixel coordinates
+    const xMeanPixel = scales.x.getPixelForValue(xMean);
+    const yMeanPixel = scales.y.getPixelForValue(yMean);
+
+    console.log('QuadrantPlugin: Mean pixel coordinates', { xMeanPixel, yMeanPixel });
+
+    // Ensure we have valid pixel coordinates
+    if (isNaN(xMeanPixel) || isNaN(yMeanPixel)) {
+      console.log('QuadrantPlugin: Invalid pixel coordinates');
+      return;
+    }
+
+    // Clamp mean lines to chart area
+    const clampedXMeanPixel = Math.max(left, Math.min(right, xMeanPixel));
+    const clampedYMeanPixel = Math.max(top, Math.min(bottom, yMeanPixel));
+
+    ctx.save();
+
+    // Define quadrant colors (more visible backgrounds)
+    const quadrants = [
+      { x1: clampedXMeanPixel, y1: top, x2: right, y2: clampedYMeanPixel, color: 'rgba(34, 197, 94, 0.2)', label: 'High-High' }, // High-High (green)
+      { x1: left, y1: top, x2: clampedXMeanPixel, y2: clampedYMeanPixel, color: 'rgba(234, 179, 8, 0.2)', label: 'Low-High' }, // Low-High (yellow)
+      { x1: clampedXMeanPixel, y1: clampedYMeanPixel, x2: right, y2: bottom, color: 'rgba(249, 115, 22, 0.2)', label: 'High-Low' }, // High-Low (orange)
+      { x1: left, y1: clampedYMeanPixel, x2: clampedXMeanPixel, y2: bottom, color: 'rgba(239, 68, 68, 0.2)', label: 'Low-Low' } // Low-Low (red)
+    ];
+
+    // Draw quadrant backgrounds
+    quadrants.forEach((quad, index) => {
+      const width = quad.x2 - quad.x1;
+      const height = quad.y2 - quad.y1;
+
+      if (width > 0 && height > 0) {
+        ctx.fillStyle = quad.color;
+        ctx.fillRect(quad.x1, quad.y1, width, height);
+        console.log(`QuadrantPlugin: Drew quadrant ${index} (${quad.label})`, {
+          x: quad.x1, y: quad.y1, width, height
+        });
+      }
+    });
+
+    // Draw mean lines (dashed)
+    ctx.strokeStyle = 'rgba(75, 85, 99, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+
+    // Vertical mean line (if within bounds)
+    if (clampedXMeanPixel >= left && clampedXMeanPixel <= right) {
+      ctx.beginPath();
+      ctx.moveTo(clampedXMeanPixel, top);
+      ctx.lineTo(clampedXMeanPixel, bottom);
+      ctx.stroke();
+      console.log('QuadrantPlugin: Drew vertical mean line at', clampedXMeanPixel);
+    }
+
+    // Horizontal mean line (if within bounds)
+    if (clampedYMeanPixel >= top && clampedYMeanPixel <= bottom) {
+      ctx.beginPath();
+      ctx.moveTo(left, clampedYMeanPixel);
+      ctx.lineTo(right, clampedYMeanPixel);
+      ctx.stroke();
+      console.log('QuadrantPlugin: Drew horizontal mean line at', clampedYMeanPixel);
+    }
+
+    ctx.restore();
+    console.log('QuadrantPlugin: Finished drawing quadrants');
+  }
+};
+
+// Register Chart.js components and the custom plugin
 ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  quadrantBackgroundPlugin
 );
 
 interface ConnectedScatterChartProps {
@@ -318,9 +419,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       xLabel,
       yLabel,
       athleteTrends,
-      analytics
+      analytics,
+      // Add analytics to chart data for plugin access
+      chartData: {
+        datasets,
+        analytics
+      }
     };
   }, [data, statistics, highlightAthlete]);
+
 
   // Chart options (always define this hook to maintain consistent hook order)
   const options: ChartOptions<'scatter'> = useMemo(() => ({
@@ -402,15 +509,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         },
         grid: {
           display: true,
-          color: (context: any) => {
-            // Highlight mean line
-            const xMean = scatterData?.analytics?.xMean || (scatterData?.xMetric && statistics?.[scatterData.xMetric]?.mean) || 0;
-            return Math.abs(context.tick.value - xMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
-          },
-          lineWidth: (context: any) => {
-            const xMean = scatterData?.analytics?.xMean || (scatterData?.xMetric && statistics?.[scatterData.xMetric]?.mean) || 0;
-            return Math.abs(context.tick.value - xMean) < 0.01 ? 2 : 1;
-          }
+          color: 'rgba(0, 0, 0, 0.1)'
         }
       },
       y: {
@@ -465,7 +564,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   return (
     <div className="w-full h-full">
-      <Scatter data={scatterData} options={options} />
+      <Scatter data={scatterData.chartData} options={options} />
       
       {/* Progress indicators */}
       {highlightAthlete && (
