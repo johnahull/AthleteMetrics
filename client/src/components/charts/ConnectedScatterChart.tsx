@@ -447,8 +447,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           label: (context) => {
             const point = context.raw as any;
             return [
-              `${scatterData?.xLabel}: ${point.x?.toFixed(2)}${scatterData?.xUnit}`,
-              `${scatterData?.yLabel}: ${point.y?.toFixed(2)}${scatterData?.yUnit}`
+              `${scatterData?.xLabel || 'X'}: ${point.x?.toFixed(2)}${scatterData?.xUnit || ''}`,
+              `${scatterData?.yLabel || 'Y'}: ${point.y?.toFixed(2)}${scatterData?.yUnit || ''}`
             ];
           },
           afterLabel: (context) => {
@@ -483,7 +483,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         position: 'bottom',
         title: {
           display: true,
-          text: `${scatterData?.xLabel} (${scatterData?.xUnit})`
+          text: `${scatterData?.xLabel || 'X Axis'} (${scatterData?.xUnit || ''})`
         },
         grid: {
           display: true,
@@ -494,7 +494,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         type: 'linear',
         title: {
           display: true,
-          text: `${scatterData?.yLabel} (${scatterData?.yUnit})`
+          text: `${scatterData?.yLabel || 'Y Axis'} (${scatterData?.yUnit || ''})`
         },
         grid: {
           display: true,
@@ -522,7 +522,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       intersect: false,
       mode: 'point'
     }
-  }), [scatterData]);
+  }), [scatterData, config, statistics]);
 
   if (!scatterData) {
     return (
