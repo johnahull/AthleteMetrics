@@ -147,21 +147,30 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const connectedPoints = xData
         .map((xPoint: any) => {
           const yPoint = yData.find((y: any) => {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
-            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+            try {
+              const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+              const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+              return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+            } catch (error) {
+              console.warn('Date parsing error:', error, 'x:', xPoint.date, 'y:', y.date);
+              return false;
+            }
           });
           
           return yPoint ? {
             // Convert values to numbers to handle string values
             x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
             y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
-            date: xPoint.date,
+            date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
             isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest
           } : null;
         })
         .filter(Boolean)
-        .sort((a: any, b: any) => a.date.getTime() - b.date.getTime());
+        .sort((a: any, b: any) => {
+          const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+          const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+          return dateA.getTime() - dateB.getTime();
+        });
 
       const color = colors[index % colors.length] || 'rgba(75, 85, 99, 1)';
       const isHighlighted = athlete.athleteId === highlightAthlete;
@@ -252,9 +261,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               return 'Group Average';
             }
             
-            return point.date ? 
-              `${datasetLabel} - ${new Date(point.date).toLocaleDateString()}` :
-              datasetLabel;
+            try {
+              if (point.date) {
+                const date = point.date instanceof Date ? point.date : new Date(point.date);
+                return `${datasetLabel} - ${date.toLocaleDateString()}`;
+              }
+            } catch (error) {
+              console.warn('Date formatting error:', error, point.date);
+            }
+            return datasetLabel;
           },
           label: (context) => {
             const point = context.raw as any;
@@ -271,8 +286,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               labels.push('🏆 Personal Best!');
             }
             
-            if (point.date) {
-              labels.push(`Date: ${new Date(point.date).toLocaleDateString()}`);
+            try {
+              if (point.date) {
+                const date = point.date instanceof Date ? point.date : new Date(point.date);
+                labels.push(`Date: ${date.toLocaleDateString()}`);
+              }
+            } catch (error) {
+              console.warn('Date formatting error in afterLabel:', error, point.date);
             }
             
             return labels;
