@@ -11,20 +11,29 @@ const router = Router();
 // Enhanced login with MFA support, account lockout, and security logging
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password, mfaToken, rememberMe = false } = req.body;
+    const { username, password, mfaToken, rememberMe = false } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
     const userAgent = req.get('User-Agent');
 
     // Validate required fields
-    if (!email || !password) {
+    if (!username || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required'
+        message: 'Username and password are required'
+      });
+    }
+
+    // Find user by username
+    const user = await storage.getUserByUsername(username);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
       });
     }
 
     // Check for account lockout
-    const lockCheck = await AuthSecurity.checkAccountLock(email);
+    const lockCheck = await AuthSecurity.checkAccountLock(user.emails?.[0] || '');
     if (lockCheck.isLocked) {
       return res.status(423).json({
         success: false,
@@ -34,23 +43,13 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Find user by email
-    const user = await storage.getUserByEmail(email);
-    if (!user) {
-      await AuthSecurity.recordFailedLogin(email, ipAddress, userAgent);
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password'
-      });
-    }
-
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      await AuthSecurity.recordFailedLogin(email, ipAddress, userAgent);
+      await AuthSecurity.recordFailedLogin(user.emails?.[0] || '', ipAddress, userAgent);
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password'
+        message: 'Invalid username or password'
       });
     }
 
@@ -78,7 +77,7 @@ router.post('/login', async (req: Request, res: Response) => {
         // Try backup codes
         const isBackupValid = await AuthSecurity.verifyBackupCode(user.id, mfaToken);
         if (!isBackupValid) {
-          await AuthSecurity.recordFailedLogin(email, ipAddress, userAgent);
+          await AuthSecurity.recordFailedLogin(user.emails?.[0] || '', ipAddress, userAgent);
           return res.status(401).json({
             success: false,
             message: 'Invalid authentication code'

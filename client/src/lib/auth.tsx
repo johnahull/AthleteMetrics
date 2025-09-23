@@ -8,7 +8,7 @@ interface AuthContextType {
   organizationContext: string | null;
   userOrganizations: UserOrganization[] | null;
   setOrganizationContext: (orgId: string | null) => void;
-  login: (email: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
   logout: () => void;
   impersonationStatus: ImpersonationStatus | null;
   startImpersonation: (userId: string) => Promise<{ success: boolean; message?: string }>;
@@ -151,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; redirectUrl?: string; message?: string }> => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; redirectUrl?: string; message?: string }> => {
     setIsLoading(true);
     try {
       const response = await fetch('/api/auth/login', {
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
 
       if (!response.ok) {
