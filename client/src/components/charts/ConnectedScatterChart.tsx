@@ -963,7 +963,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   const visibleAthleteCount = effectiveSelectedIds.filter(id => athleteToggles[id]).length;
 
-  // Early return check - moved after all hooks are defined to maintain hook order
+  // Render error state or chart - no early return to maintain consistent hook order
   if (!scatterData?.isValid) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
