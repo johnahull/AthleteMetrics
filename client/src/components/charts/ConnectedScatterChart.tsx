@@ -164,14 +164,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     // Early validation but don't return null yet - we need to maintain hook consistency
     let hasValidData = true;
     let validationMessage = '';
+    let metrics: string[] = [];
 
     if (!data || data.length === 0) {
       console.log('ConnectedScatterChart: No data provided');
       hasValidData = false;
       validationMessage = 'No data provided';
-    }
-
-    if (hasValidData) {
+    } else {
       // Log each trend data item to understand the structure
       data.forEach((trend, index) => {
         console.log(`ConnectedScatterChart: Trend ${index}:`, {
@@ -183,7 +182,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       });
 
       // Get unique metrics from all data
-      const metrics = Array.from(new Set(data.map(trend => trend.metric)));
+      metrics = Array.from(new Set(data.map(trend => trend.metric)));
       console.log('ConnectedScatterChart: Available metrics:', metrics);
 
       // For connected scatter plot, we need exactly 2 metrics
