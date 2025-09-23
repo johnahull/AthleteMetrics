@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -19,6 +19,8 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Performance quadrant labels based on metric types
 function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
@@ -119,14 +121,70 @@ interface ConnectedScatterChartProps {
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
 }
 
 export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   data,
   config,
   statistics,
-  highlightAthlete
+  highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
+  // Internal state for athlete selection and toggles
+  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
+  const [showGroupAverage, setShowGroupAverage] = useState(true);
+
+  // Get effective athlete selection (external prop or internal state)
+  const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
+  const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
+
+  // Process all athletes from data
+  const allAthletes = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const athleteMap = new Map();
+    data.forEach(trend => {
+      if (!athleteMap.has(trend.athleteId)) {
+        athleteMap.set(trend.athleteId, {
+          id: trend.athleteId,
+          name: trend.athleteName,
+          color: athleteMap.size
+        });
+      }
+    });
+
+    return Array.from(athleteMap.values());
+  }, [data]);
+
+  // Set up initial athlete selection
+  const maxAthletes = 10; // Limit for performance
+  useEffect(() => {
+    if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0) {
+      const initialSelection = allAthletes.slice(0, maxAthletes).map(a => a.id);
+      handleSelectionChange(initialSelection);
+    }
+  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
+
+  // Initialize athlete toggles when athletes change
+  useEffect(() => {
+    const newToggles: Record<string, boolean> = {};
+    allAthletes.forEach(athlete => {
+      newToggles[athlete.id] = effectiveSelectedIds.includes(athlete.id);
+    });
+    setAthleteToggles(newToggles);
+  }, [allAthletes, effectiveSelectedIds]);
+
+  // Filter displayed athletes based on selection and toggles
+  const displayedAthletes = useMemo(() => {
+    return allAthletes.filter(athlete =>
+      effectiveSelectedIds.includes(athlete.id) && athleteToggles[athlete.id]
+    );
+  }, [allAthletes, effectiveSelectedIds, athleteToggles]);
+
   // Helper function to calculate correlation coefficient
   const calculateCorrelation = (xValues: number[], yValues: number[]): number => {
     if (xValues.length !== yValues.length || xValues.length < 2) return 0;
@@ -213,10 +271,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       return acc;
     }, {} as Record<string, any>);
 
-    // Filter to highlighted athlete or show up to 3 athletes
+    // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
     const athletesToShow = highlightAthlete ?
       [allAthleteTrends[highlightAthlete]].filter(Boolean) :
-      Object.values(allAthleteTrends).slice(0, 3);
+      displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean);
 
     // Keep all athletes for group average calculations
     const allAthletesForGroupCalc = Object.values(allAthleteTrends);
@@ -604,7 +662,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         analytics
       }
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, displayedAthletes]);
 
 
   // Chart options (always define this hook to maintain consistent hook order)
@@ -877,6 +935,32 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   } satisfies ChartOptions<'line'>;
   }, [scatterData, config, statistics]);
 
+  // Helper functions for athlete toggles
+  const toggleAthlete = (athleteId: string) => {
+    setAthleteToggles(prev => ({
+      ...prev,
+      [athleteId]: !prev[athleteId]
+    }));
+  };
+
+  const selectAllAthletes = () => {
+    const allEnabled: Record<string, boolean> = {};
+    allAthletes.forEach(athlete => {
+      allEnabled[athlete.id] = true;
+    });
+    setAthleteToggles(allEnabled);
+  };
+
+  const clearAllAthletes = () => {
+    const allDisabled: Record<string, boolean> = {};
+    allAthletes.forEach(athlete => {
+      allDisabled[athlete.id] = false;
+    });
+    setAthleteToggles(allDisabled);
+  };
+
+  const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+
   if (!scatterData?.isValid) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -895,6 +979,87 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   return (
     <div className="w-full h-full">
+      {/* Athlete Controls Panel - Only show when not in highlight mode */}
+      {!highlightAthlete && allAthletes.length > 0 && (
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-900">
+              Athletes ({visibleAthleteCount} of {allAthletes.length} visible)
+            </h3>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectAllAthletes}
+                disabled={visibleAthleteCount === allAthletes.length}
+              >
+                Select All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAllAthletes}
+                disabled={visibleAthleteCount === 0}
+              >
+                Clear All
+              </Button>
+            </div>
+          </div>
+
+          {/* Athletes Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
+            {allAthletes.map(athlete => {
+              const colors = [
+                'rgba(59, 130, 246, 1)',    // Blue
+                'rgba(16, 185, 129, 1)',    // Green
+                'rgba(239, 68, 68, 1)',     // Red
+                'rgba(245, 158, 11, 1)',    // Amber
+                'rgba(139, 92, 246, 1)',    // Purple
+                'rgba(236, 72, 153, 1)',    // Pink
+                'rgba(20, 184, 166, 1)',    // Teal
+                'rgba(251, 146, 60, 1)',    // Orange
+                'rgba(124, 58, 237, 1)',    // Violet
+                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
+              ];
+              const athleteColor = colors[athlete.color % colors.length];
+
+              return (
+                <div key={athlete.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`athlete-${athlete.id}`}
+                    checked={athleteToggles[athlete.id] || false}
+                    onCheckedChange={() => toggleAthlete(athlete.id)}
+                  />
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: athleteColor }}
+                  />
+                  <label
+                    htmlFor={`athlete-${athlete.id}`}
+                    className="text-sm cursor-pointer flex-1 truncate"
+                  >
+                    {athlete.name}
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Group Average Toggle */}
+          <div className="flex items-center space-x-2 pt-2 border-t">
+            <Checkbox
+              id="group-average"
+              checked={showGroupAverage}
+              onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
+            />
+            <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
+            <label htmlFor="group-average" className="text-sm cursor-pointer">
+              Group Average
+            </label>
+          </div>
+        </div>
+      )}
+
       <Line data={scatterData.chartData} options={options} />
       
       {/* Progress indicators */}
