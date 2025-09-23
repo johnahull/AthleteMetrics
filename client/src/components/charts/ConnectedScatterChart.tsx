@@ -21,6 +21,11 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useAthleteSelector } from '@/hooks/useAthleteSelector';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import { Search, Users, X } from 'lucide-react';
 
 // Performance quadrant labels based on metric types
 function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
@@ -133,16 +138,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   selectedAthleteIds,
   onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
-  // Internal state for athlete selection and toggles
-  const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  // State for visibility toggles (separate from selection)
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
   const [showGroupAverage, setShowGroupAverage] = useState(true);
 
-  // Get effective athlete selection (external prop or internal state)
-  const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
-  const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
-
-  // Process all athletes from data
+  // Process all athletes from data for the selector
   const allAthletes = useMemo(() => {
     if (!data || data.length === 0) return [];
 
@@ -151,8 +151,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       if (!athleteMap.has(trend.athleteId)) {
         athleteMap.set(trend.athleteId, {
           id: trend.athleteId,
-          name: trend.athleteName,
-          color: athleteMap.size
+          fullName: trend.athleteName,
+          name: trend.athleteName
         });
       }
     });
@@ -160,25 +160,28 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     return Array.from(athleteMap.values());
   }, [data]);
 
-  // Set up initial athlete selection
-  const maxAthletes = 10; // Limit for performance
-  useEffect(() => {
-    if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0) {
-      const initialSelection = allAthletes.slice(0, maxAthletes).map(a => a.id);
-      handleSelectionChange(initialSelection);
-    }
-  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
+  // Use athlete selector hook for multi-select (max 10)
+  const athleteSelector = useAthleteSelector({
+    athletes: allAthletes,
+    maxSelection: 10,
+    initialSelection: selectedAthleteIds || [],
+    searchEnabled: true
+  });
 
-  // Initialize athlete toggles when athletes change
+  // Get effective selection (external prop or internal selector state)
+  const effectiveSelectedIds = selectedAthleteIds || athleteSelector.selectedIds;
+  const handleSelectionChange = onAthleteSelectionChange || athleteSelector.setSelectedIds;
+
+  // Initialize toggles when selected athletes change
   useEffect(() => {
     const newToggles: Record<string, boolean> = {};
-    allAthletes.forEach(athlete => {
-      newToggles[athlete.id] = effectiveSelectedIds.includes(athlete.id);
+    effectiveSelectedIds.forEach(athleteId => {
+      newToggles[athleteId] = athleteToggles[athleteId] !== false; // Default to true unless explicitly false
     });
     setAthleteToggles(newToggles);
-  }, [allAthletes, effectiveSelectedIds]);
+  }, [effectiveSelectedIds]);
 
-  // Filter displayed athletes based on selection and toggles
+  // Filter displayed athletes based on selection AND visibility toggles
   const displayedAthletes = useMemo(() => {
     return allAthletes.filter(athlete =>
       effectiveSelectedIds.includes(athlete.id) && athleteToggles[athlete.id]
@@ -934,31 +937,31 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   } satisfies ChartOptions<'line'>;
   }, [scatterData, config, statistics]);
 
-  // Helper functions for athlete toggles
-  const toggleAthlete = (athleteId: string) => {
+  // Helper functions for visibility toggles (not selection)
+  const toggleAthleteVisibility = (athleteId: string) => {
     setAthleteToggles(prev => ({
       ...prev,
       [athleteId]: !prev[athleteId]
     }));
   };
 
-  const selectAllAthletes = () => {
-    const allEnabled: Record<string, boolean> = {};
-    allAthletes.forEach(athlete => {
-      allEnabled[athlete.id] = true;
+  const showAllSelectedAthletes = () => {
+    const allVisible: Record<string, boolean> = {};
+    effectiveSelectedIds.forEach(athleteId => {
+      allVisible[athleteId] = true;
     });
-    setAthleteToggles(allEnabled);
+    setAthleteToggles(allVisible);
   };
 
-  const clearAllAthletes = () => {
-    const allDisabled: Record<string, boolean> = {};
-    allAthletes.forEach(athlete => {
-      allDisabled[athlete.id] = false;
+  const hideAllSelectedAthletes = () => {
+    const allHidden: Record<string, boolean> = {};
+    effectiveSelectedIds.forEach(athleteId => {
+      allHidden[athleteId] = false;
     });
-    setAthleteToggles(allDisabled);
+    setAthleteToggles(allHidden);
   };
 
-  const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+  const visibleAthleteCount = effectiveSelectedIds.filter(id => athleteToggles[id]).length;
 
   // Early return check - moved after all hooks are defined to maintain hook order
   if (!scatterData?.isValid) {
@@ -979,88 +982,193 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   return (
     <div className="w-full h-full">
-      {/* Athlete Controls Panel - Only show when not in highlight mode */}
+      {/* Level 1: Athlete Selector (Above Chart) - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-900">
-              Athletes ({visibleAthleteCount} of {allAthletes.length} visible)
-            </h3>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAllAthletes}
-                disabled={visibleAthleteCount === allAthletes.length}
-              >
-                Select All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAllAthletes}
-                disabled={visibleAthleteCount === 0}
-              >
-                Clear All
-              </Button>
-            </div>
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-sm font-medium text-gray-900">Select Athletes (max 10):</h3>
+            <span className="text-xs text-gray-500">
+              {effectiveSelectedIds.length} of {allAthletes.length} selected
+            </span>
           </div>
 
-          {/* Athletes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
-            {allAthletes.map(athlete => {
-              const colors = [
-                'rgba(59, 130, 246, 1)',    // Blue
-                'rgba(16, 185, 129, 1)',    // Green
-                'rgba(239, 68, 68, 1)',     // Red
-                'rgba(245, 158, 11, 1)',    // Amber
-                'rgba(139, 92, 246, 1)',    // Purple
-                'rgba(236, 72, 153, 1)',    // Pink
-                'rgba(20, 184, 166, 1)',    // Teal
-                'rgba(251, 146, 60, 1)',    // Orange
-                'rgba(124, 58, 237, 1)',    // Violet
-                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-              ];
-              const athleteColor = colors[athlete.color % colors.length];
+          <div className="flex items-center gap-2">
+            {/* Multi-Select Athlete Dropdown */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-64 justify-start">
+                  <Users className="mr-2 h-4 w-4" />
+                  {effectiveSelectedIds.length === 0
+                    ? "Select athletes..."
+                    : `${effectiveSelectedIds.length} athlete${effectiveSelectedIds.length > 1 ? 's' : ''} selected`
+                  }
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-0" align="start">
+                <div className="p-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Search className="h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search athletes..."
+                      value={athleteSelector.searchTerm}
+                      onChange={(e) => athleteSelector.setSearchTerm(e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
 
-              return (
-                <div key={athlete.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`athlete-${athlete.id}`}
-                    checked={athleteToggles[athlete.id] || false}
-                    onCheckedChange={() => toggleAthlete(athlete.id)}
-                  />
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: athleteColor }}
-                  />
-                  <label
-                    htmlFor={`athlete-${athlete.id}`}
-                    className="text-sm cursor-pointer flex-1 truncate"
-                  >
-                    {athlete.name}
-                  </label>
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => athleteSelector.selectAll()}
+                      disabled={!athleteSelector.canSelectMore && athleteSelector.selectedIds.length !== athleteSelector.filteredAthletes.length}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => athleteSelector.clearSelection()}
+                      disabled={!athleteSelector.hasSelection}
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => athleteSelector.selectRandom(5)}
+                    >
+                      Random 5
+                    </Button>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto">
+                    {athleteSelector.filteredAthletes.map((athlete) => (
+                      <div
+                        key={athlete.id}
+                        className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                        onClick={() => athleteSelector.toggleAthlete(athlete.id)}
+                      >
+                        <Checkbox
+                          checked={effectiveSelectedIds.includes(athlete.id)}
+                          onCheckedChange={() => athleteSelector.toggleAthlete(athlete.id)}
+                        />
+                        <span className="text-sm">{athlete.name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              </PopoverContent>
+            </Popover>
 
-          {/* Group Average Toggle */}
-          <div className="flex items-center space-x-2 pt-2 border-t">
-            <Checkbox
-              id="group-average"
-              checked={showGroupAverage}
-              onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
-            />
-            <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
-            <label htmlFor="group-average" className="text-sm cursor-pointer">
-              Group Average
-            </label>
+            {/* Selected Athletes Badges */}
+            <div className="flex flex-wrap gap-1 flex-1">
+              {effectiveSelectedIds.map((athleteId) => {
+                const athlete = allAthletes.find(a => a.id === athleteId);
+                if (!athlete) return null;
+
+                return (
+                  <Badge key={athleteId} variant="secondary" className="text-xs">
+                    {athlete.name}
+                    <X
+                      className="ml-1 h-3 w-3 cursor-pointer hover:text-red-500"
+                      onClick={() => athleteSelector.toggleAthlete(athleteId)}
+                    />
+                  </Badge>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
 
-      <Line data={scatterData.chartData} options={options} />
+      {/* Chart Container with Toggle Buttons */}
+      <div className="relative">
+        {/* Level 2: Athlete Toggle Buttons (At Top of Chart) */}
+        {!highlightAthlete && effectiveSelectedIds.length > 0 && (
+          <div className="absolute top-2 left-2 z-10 bg-white/90 backdrop-blur-sm rounded-lg border shadow-sm p-2">
+            <div className="flex flex-wrap gap-1 items-center">
+              <span className="text-xs text-gray-600 mr-2">
+                Visible: {visibleAthleteCount}/{effectiveSelectedIds.length}
+              </span>
+
+              {/* Show/Hide All Buttons */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs"
+                onClick={showAllSelectedAthletes}
+                disabled={visibleAthleteCount === effectiveSelectedIds.length}
+              >
+                Show All
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs"
+                onClick={hideAllSelectedAthletes}
+                disabled={visibleAthleteCount === 0}
+              >
+                Hide All
+              </Button>
+
+              {/* Individual Athlete Toggle Buttons */}
+              {effectiveSelectedIds.map((athleteId, index) => {
+                const athlete = allAthletes.find(a => a.id === athleteId);
+                if (!athlete) return null;
+
+                const colors = [
+                  'rgba(59, 130, 246, 1)',    // Blue
+                  'rgba(16, 185, 129, 1)',    // Green
+                  'rgba(239, 68, 68, 1)',     // Red
+                  'rgba(245, 158, 11, 1)',    // Amber
+                  'rgba(139, 92, 246, 1)',    // Purple
+                  'rgba(236, 72, 153, 1)',    // Pink
+                  'rgba(20, 184, 166, 1)',    // Teal
+                  'rgba(251, 146, 60, 1)',    // Orange
+                  'rgba(124, 58, 237, 1)',    // Violet
+                  'rgba(34, 197, 94, 1)'      // Emerald - 10th color
+                ];
+                const athleteColor = colors[index % colors.length];
+
+                return (
+                  <Button
+                    key={athleteId}
+                    size="sm"
+                    variant={athleteToggles[athleteId] ? "default" : "outline"}
+                    className="h-6 text-xs px-2"
+                    onClick={() => toggleAthleteVisibility(athleteId)}
+                    style={{
+                      backgroundColor: athleteToggles[athleteId] ? athleteColor : 'transparent',
+                      borderColor: athleteColor,
+                      color: athleteToggles[athleteId] ? 'white' : athleteColor
+                    }}
+                  >
+                    {athlete.name}
+                  </Button>
+                );
+              })}
+
+              {/* Group Average Toggle */}
+              <Button
+                size="sm"
+                variant={showGroupAverage ? "default" : "outline"}
+                className="h-6 text-xs px-2 ml-2"
+                onClick={() => setShowGroupAverage(!showGroupAverage)}
+                style={{
+                  backgroundColor: showGroupAverage ? 'rgba(156, 163, 175, 1)' : 'transparent',
+                  borderColor: 'rgba(156, 163, 175, 1)',
+                  color: showGroupAverage ? 'white' : 'rgba(156, 163, 175, 1)'
+                }}
+              >
+                Group Avg
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <Line data={scatterData.chartData} options={options} />
+      </div>
       
       {/* Progress indicators */}
       {scatterData.analytics && (
