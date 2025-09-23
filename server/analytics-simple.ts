@@ -348,9 +348,14 @@ export class AnalyticsService {
       }
 
       // Generate trends data if timeframe type is trends
-      const trends = request.timeframe.type === 'trends'
-        ? this.generateTrendsData(chartData, request.metrics.primary)
-        : [];
+      let trends: TrendData[] = [];
+      if (request.timeframe.type === 'trends') {
+        // Generate trends for all metrics (primary + additional)
+        for (const metric of allMetrics) {
+          const metricTrends = this.generateTrendsData(chartData, metric);
+          trends.push(...metricTrends);
+        }
+      }
 
       // Calculate total metric count (primary + additional)
       const metricCount = 1 + (request.metrics.additional?.length || 0);
