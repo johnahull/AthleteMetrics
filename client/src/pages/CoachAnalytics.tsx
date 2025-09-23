@@ -260,6 +260,11 @@ export function CoachAnalytics() {
         athleteId: analysisType === 'individual' ? selectedAthleteId : undefined
       };
 
+      console.log('CoachAnalytics: Analytics request being sent:', request);
+      console.log('CoachAnalytics: Metrics object:', metrics);
+      console.log('CoachAnalytics: Primary metric:', metrics.primary);
+      console.log('CoachAnalytics: Additional metrics:', metrics.additional);
+
       const response = await fetch('/api/analytics/dashboard', {
         method: 'POST',
         headers: {
