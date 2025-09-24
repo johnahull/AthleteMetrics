@@ -35,7 +35,7 @@ function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | Trend
   return data !== null && Array.isArray(data);
 }
 
-// TEMPORARY FIX: Import ConnectedScatterChart directly to test if lazy loading is causing hooks issues
+// Import ConnectedScatterChart directly to prevent hooks order violations during lazy loading
 import { ConnectedScatterChart } from './ConnectedScatterChart';
 
 // Lazy load other chart components to reduce bundle size
@@ -253,7 +253,7 @@ export function ChartContainer({
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               chartType === 'connected_scatter' ? (
-                // ConnectedScatterChart is not lazy loaded, render directly
+                // ConnectedScatterChart is not lazy loaded to prevent hooks order violations
                 <ConnectedScatterChart
                   data={chartData as any}
                   config={chartConfig}
