@@ -658,6 +658,8 @@ export function CoachAnalytics() {
               multiMetric={analyticsData.multiMetric}
               statistics={analyticsData.statistics}
               config={chartConfig}
+              isLoading={isLoading}
+              error={error}
               highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
               selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
               onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
