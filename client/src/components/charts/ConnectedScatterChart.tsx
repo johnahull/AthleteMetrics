@@ -72,43 +72,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   selectedAthleteIds,
   onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
-  // Early validation before any hooks to prevent hooks order violation
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            No data provided
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Get unique metrics from all data for early validation
-  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
-  
-  if (availableMetrics.length < 2) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            Not enough metrics: {availableMetrics.length} (need 2)
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Track mounted state to prevent memory leaks
+  // Track mounted state to prevent memory leaks - must be first
   const isMountedRef = useRef(true);
 
   // Cleanup on unmount to prevent memory leaks
@@ -213,6 +177,42 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [allAthletes]);
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+
+  // Data validation after all hooks are initialized
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            No data provided
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Get unique metrics from all data for validation
+  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
+  
+  if (availableMetrics.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            Not enough metrics: {availableMetrics.length} (need 2)
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full">
