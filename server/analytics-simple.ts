@@ -348,9 +348,24 @@ export class AnalyticsService {
       }
 
       // Generate trends data if timeframe type is trends
-      const trends = request.timeframe.type === 'trends'
-        ? this.generateTrendsData(chartData, request.metrics.primary)
-        : [];
+      let trends: TrendData[] = [];
+      if (request.timeframe.type === 'trends') {
+        console.log('AnalyticsService: Generating trends for metrics:', allMetrics);
+        console.log('AnalyticsService: Chart data available:', chartData.length, 'points');
+
+        // Check what metrics actually exist in the chart data
+        const availableMetrics = Array.from(new Set(chartData.map(point => point.metric)));
+        console.log('AnalyticsService: Metrics found in chart data:', availableMetrics);
+
+        // Generate trends for all metrics (primary + additional)
+        for (const metric of allMetrics) {
+          console.log(`AnalyticsService: Generating trends for metric: ${metric}`);
+          const metricTrends = this.generateTrendsData(chartData, metric);
+          console.log(`AnalyticsService: Generated ${metricTrends.length} trends for ${metric}`);
+          trends.push(...metricTrends);
+        }
+        console.log('AnalyticsService: Total trends generated:', trends.length);
+      }
 
       // Calculate total metric count (primary + additional)
       const metricCount = 1 + (request.metrics.additional?.length || 0);

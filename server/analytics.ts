@@ -85,12 +85,17 @@ export class AnalyticsService {
   /**
    * Build base SQL query with filters
    */
-  private buildBaseQuery(filters: AnalyticsFilters, timeframe: TimeframeConfig) {
+  private buildBaseQuery(filters: AnalyticsFilters, timeframe: TimeframeConfig, requiredMetrics?: string[]) {
     // Build all conditions at once to avoid multiple .where() calls
     const allConditions = [
       eq(measurements.isVerified, "true"),
       eq(userOrganizations.organizationId, filters.organizationId)
     ];
+
+    // Add metric filtering if specific metrics are required
+    if (requiredMetrics && requiredMetrics.length > 0) {
+      allConditions.push(inArray(measurements.metric, requiredMetrics));
+    }
 
     // Apply timeframe filters
     if (timeframe.period !== 'all_time') {
@@ -157,7 +162,7 @@ export class AnalyticsService {
     const allMetrics = [metrics.primary, ...metrics.additional];
     
     const individualFilters = { ...filters, athleteIds: [athleteId] };
-    const query = this.buildBaseQuery(individualFilters, timeframe);
+    const query = this.buildBaseQuery(individualFilters, timeframe, allMetrics);
     
     const results = await query.execute();
 
@@ -173,12 +178,16 @@ export class AnalyticsService {
     filters: AnalyticsFilters
   ): Promise<ChartDataPoint[]> {
     const allMetrics = [metrics.primary, ...metrics.additional];
-    const query = this.buildBaseQuery(filters, timeframe);
+    console.log('Analytics: Group data requested for metrics:', allMetrics);
+    
+    const query = this.buildBaseQuery(filters, timeframe, allMetrics);
     
     let results;
     
     // Execute the query
     results = await query.execute();
+    console.log('Analytics: Raw query results count:', results.length);
+    console.log('Analytics: Raw query result metrics:', Array.from(new Set(results.map((r: any) => r.metric))));
 
     if (timeframe.type === 'best') {
       // Filter and group by athlete+metric and take best
@@ -187,6 +196,9 @@ export class AnalyticsService {
       // Filter for trends
       results = results.filter((r: QueryResult) => allMetrics.includes(r.metric));
     }
+
+    console.log('Analytics: Filtered results count:', results.length);
+    console.log('Analytics: Filtered result metrics:', Array.from(new Set(results.map((r: any) => r.metric))));
 
     return this.transformToChartData(results);
   }
@@ -254,6 +266,10 @@ export class AnalyticsService {
   ): Promise<TrendData[]> {
     const trends: TrendData[] = [];
     const allMetrics = [metrics.primary, ...metrics.additional];
+
+    console.log('Analytics: Creating trend data for metrics:', allMetrics);
+    console.log('Analytics: Raw data count:', data.length);
+    console.log('Analytics: Data metrics available:', Array.from(new Set(data.map(d => d.metric))));
 
     // Group by athlete and metric
     const athleteMetricGroups = this.groupBy(data, ['athleteId', 'metric']);

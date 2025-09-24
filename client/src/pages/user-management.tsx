@@ -359,44 +359,55 @@ export default function UserManagement() {
   };
 
   const handleDeleteUser = (userId: string, userName: string) => {
-    if (confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      deleteUserMutation.mutate(userId);
-    }
+    confirm({
+      title: "Delete User",
+      description: `Are you sure you want to delete ${userName}? This action cannot be undone.`,
+      confirmText: "Delete",
+      onConfirm: () => deleteUserMutation.mutate(userId),
+    });
   };
 
   const handleToggleUserStatus = (userId: string, userName: string, currentStatus: string) => {
     const isCurrentlyActive = currentStatus === "true";
     const action = isCurrentlyActive ? "deactivate" : "activate";
 
-    if (confirm(`Are you sure you want to ${action} ${userName}?`)) {
-      toggleUserStatusMutation.mutate({ userId, isActive: !isCurrentlyActive });
-    }
+    confirm({
+      title: `${action.charAt(0).toUpperCase() + action.slice(1)} User`,
+      description: `Are you sure you want to ${action} ${userName}?`,
+      confirmText: action.charAt(0).toUpperCase() + action.slice(1),
+      onConfirm: () => toggleUserStatusMutation.mutate({ userId, isActive: !isCurrentlyActive }),
+    });
   };
 
   const handleImpersonate = async (userId: string, userName: string) => {
-    if (confirm(`Are you sure you want to impersonate ${userName}? You will be able to see and do everything as this user.`)) {
-      try {
-        const result = await startImpersonation(userId);
-        if (result.success) {
-          toast({
-            title: "Impersonation Started",
-            description: result.message || `Now impersonating ${userName}`,
-          });
-        } else {
+    confirm({
+      title: "Impersonate User",
+      description: `Are you sure you want to impersonate ${userName}? You will be able to see and do everything as this user.`,
+      confirmText: "Impersonate",
+      onConfirm: async () => {
+        try {
+          const result = await startImpersonation(userId);
+          if (result.success) {
+            toast({
+              title: "Impersonation Started",
+              description: result.message || `Now impersonating ${userName}`,
+            });
+          } else {
+            toast({
+              title: "Error",
+              description: result.message || "Failed to start impersonation",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
           toast({
             title: "Error",
-            description: result.message || "Failed to start impersonation",
+            description: "An unexpected error occurred",
             variant: "destructive",
           });
         }
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred",
-          variant: "destructive",
-        });
-      }
-    }
+      },
+    });
   };
 
   const generateInviteLink = async (userId: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
@@ -923,12 +934,15 @@ export default function UserManagement() {
                                   // Validate role transitions
                                   if ((currentRole === 'athlete' && (newRole === 'coach' || newRole === 'org_admin')) ||
                                     ((currentRole === 'coach' || currentRole === 'org_admin') && newRole === 'athlete')) {
-                                    if (!confirm('Athletes cannot be coaches or admins, and coaches/admins cannot be athletes. Are you sure you want to change this role?')) {
-                                      return;
-                                    }
+                                    confirm({
+                                      title: "Role Change Warning",
+                                      description: 'Athletes cannot be coaches or admins, and coaches/admins cannot be athletes. Are you sure you want to change this role?',
+                                      confirmText: "Change Role",
+                                      onConfirm: () => handleRoleChange(userOrg.user.id, newRole),
+                                    });
+                                  } else {
+                                    handleRoleChange(userOrg.user.id, newRole);
                                   }
-
-                                  handleRoleChange(userOrg.user.id, newRole);
                                 }}
                                 className="text-sm border border-gray-300 rounded px-2 py-1 capitalize"
                                 data-testid={`user-role-select-${userOrg.user.id}`}
