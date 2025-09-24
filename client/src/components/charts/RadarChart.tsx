@@ -53,7 +53,7 @@ export function RadarChart({
     });
 
     const metrics = Array.from(allMetrics);
-    if (metrics.length < 3) return null;
+    if (metrics.length < 2) return null;
 
     // Create labels from metric config
     const labels = metrics.map(metric => 
@@ -238,7 +238,15 @@ export function RadarChart({
   if (!radarData) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No data available for radar chart (requires 3+ metrics and multi-metric data)
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+          <div className="text-sm">
+            Radar charts require at least 2 metrics with data for each athlete.
+          </div>
+          <div className="text-sm mt-1 text-muted-foreground/80">
+            Try selecting more metrics or adjusting your filters.
+          </div>
+        </div>
       </div>
     );
   }
