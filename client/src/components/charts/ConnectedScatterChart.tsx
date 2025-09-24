@@ -22,6 +22,17 @@ import { CHART_CONFIG } from '@/constants/chart-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 
+// Metric-specific minimum ranges for better visualization
+const METRIC_MINIMUM_RANGES = {
+  VERTICAL_JUMP: 4.0, // inches - ensures 1-2 inch differences are visible
+  FLY10_TIME: 0.3,    // seconds - meaningful time differences
+  DASH_40YD: 0.5,     // seconds - meaningful sprint differences
+  AGILITY_505: 0.4,   // seconds - agility test precision
+  AGILITY_5105: 0.6,  // seconds - longer agility test
+  T_TEST: 0.8,        // seconds - T-test variations
+  RSI: 1.0            // unitless - RSI range significance
+} as const;
+
 // Performance quadrant labels based on metric types
 function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
   const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
@@ -1063,13 +1074,25 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (!isFinite(yMin) || !isFinite(yMax)) return {};
 
             const yRange = yMax - yMin;
-            // Use larger padding for better visualization, ensure minimum meaningful padding
+            
+            // Get metric-specific minimum range for better visualization
+            const yMetric = scatterData?.yMetric || '';
+            const minRange = METRIC_MINIMUM_RANGES[yMetric as keyof typeof METRIC_MINIMUM_RANGES] || 2.0;
+            
+            // Use the larger of actual range or minimum meaningful range
+            const effectiveRange = Math.max(yRange, minRange);
+            
+            // Apply padding based on effective range for better visualization
             const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
-            const yPadding = yRange > 0 ? Math.max(yRange * padding, 0.5) : Math.max(Math.abs(yMin) * 0.2, 2);
+            const yPadding = effectiveRange * padding;
+            
+            // Calculate bounds ensuring they encompass the data with meaningful scale
+            const rangeCenter = (yMin + yMax) / 2;
+            const halfEffectiveRange = effectiveRange / 2;
             
             return { 
-              min: yMin - yPadding, 
-              max: yMax + yPadding 
+              min: rangeCenter - halfEffectiveRange - yPadding, 
+              max: rangeCenter + halfEffectiveRange + yPadding 
             };
           }
           return {};
