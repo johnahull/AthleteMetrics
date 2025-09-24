@@ -48,16 +48,12 @@ function formatChartTypeName(chartType: string): string {
 }
 
 export function AthleteAnalytics() {
+  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   const { user } = useAuth();
 
-  // Ensure user is authenticated
-  if (!user) {
-    return <div className="p-6">Loading...</div>;
-  }
-
-  // Create proper analytics context
-  const analyticsContext = useMemo(() => 
-    createAnalyticsContext(user, user?.currentOrganization?.id), 
+  // Create proper analytics context - safe even if user is null
+  const analyticsContext = useMemo(() =>
+    user ? createAnalyticsContext(user, user?.currentOrganization?.id) : null,
     [user]
   );
   
@@ -206,6 +202,11 @@ export function AthleteAnalytics() {
         Math.round(((getBestPerformanceValue(metrics.primary, userStats) - userStats.min) / (userStats.max - userStats.min)) * 100) : 50
     };
   }, [analyticsData, user, metrics]);
+
+  // Conditional rendering AFTER all hooks - prevents hooks order violations
+  if (!user) {
+    return <div className="p-6">Loading...</div>;
+  }
 
   return (
     <ErrorBoundary>
