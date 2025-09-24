@@ -662,6 +662,22 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Chart options
   const options = useMemo(() => {
+    if (!scatterData) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: config.title || 'Chart Loading...',
+            font: {
+              size: 16,
+              weight: 'bold'
+            }
+          }
+        }
+      } satisfies ChartOptions<'line'>;
+    }
     
     return {
     responsive: true,
@@ -737,7 +753,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: scatterData.analytics ? {
+      annotation: scatterData?.analytics ? {
         annotations: (() => {
           const xMean = scatterData.analytics.xMean;
           const yMean = scatterData.analytics.yMean;
@@ -856,7 +872,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           color: 'rgba(0, 0, 0, 0.1)'
         },
         // Set explicit bounds to match quadrant coverage
-        ...(scatterData.analytics ? (() => {
+        ...(scatterData?.analytics ? (() => {
           const datasets = scatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
@@ -881,16 +897,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const yMean = scatterData.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
+            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const yMean = scatterData.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
+            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
         },
         // Set explicit bounds to match quadrant coverage
-        ...(scatterData.analytics ? (() => {
+        ...(scatterData?.analytics ? (() => {
           const datasets = scatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
