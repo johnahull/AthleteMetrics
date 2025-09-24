@@ -75,7 +75,7 @@ export function useChartCalculations({
       return acc;
     }, {} as Record<string, any>);
 
-    const colors = CHART_COLORS.SERIES;
+    const colors = [...CHART_COLORS.SERIES];
 
     // Process athlete datasets using utility function
     const datasets = processAthleteDatasets(athleteTrends, xMetric, yMetric, colors, highlightAthlete);

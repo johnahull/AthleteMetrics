@@ -49,6 +49,13 @@ export const CHART_COLORS = {
   // Personal best indicator
   PERSONAL_BEST: 'rgba(255, 215, 0, 1)',   // Gold
 
+  // Opacity constants for styling
+  OPACITY_RANGES: {
+    MIN: 0.6,           // Minimum opacity for older data points
+    MAX: 1.0,           // Maximum opacity for newest data points
+    INTERPOLATED: 0.4,  // Opacity for interpolated data points
+  },
+
   // Border colors
   WHITE: '#fff',
   TRANSPARENT: 'transparent',
@@ -206,6 +213,51 @@ export const ACCESSIBILITY_CONFIG = {
 } as const;
 
 // =============================================================================
+// BROWSER COMPATIBILITY
+// =============================================================================
+
+export const BROWSER_COMPATIBILITY = {
+  // Fallback fonts for different operating systems
+  FONT_STACKS: {
+    SYSTEM: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    MONOSPACE: '"SF Mono", Monaco, Inconsolata, "Roboto Mono", Consolas, "Courier New", monospace',
+  },
+
+  // Canvas-related browser feature detection
+  CANVAS_SUPPORT: {
+    HAS_CANVAS: typeof document !== 'undefined' && !!document.createElement('canvas').getContext,
+    SUPPORTS_PIXEL_RATIO: typeof window !== 'undefined' && window.devicePixelRatio !== undefined,
+  },
+
+  // CSS features support detection
+  CSS_SUPPORT: {
+    SUPPORTS_BACKDROP_FILTER: typeof CSS !== 'undefined' && CSS.supports && CSS.supports('backdrop-filter', 'blur(1px)'),
+    SUPPORTS_GRID: typeof CSS !== 'undefined' && CSS.supports && CSS.supports('display', 'grid'),
+    SUPPORTS_FLEXBOX: typeof CSS !== 'undefined' && CSS.supports && CSS.supports('display', 'flex'),
+  },
+
+  // Browser-specific animation preferences
+  ANIMATION_PREFERENCES: {
+    REDUCE_MOTION_QUERY: typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null,
+    SUPPORTS_INTERSECTION_OBSERVER: typeof window !== 'undefined' && 'IntersectionObserver' in window,
+  },
+
+  // Legacy browser fallbacks
+  FALLBACKS: {
+    // Array methods with polyfill-like behavior
+    ARRAY_FROM: typeof Array.from === 'function',
+    OBJECT_ASSIGN: typeof Object.assign === 'function',
+    PROMISE_SUPPORT: typeof Promise === 'function',
+
+    // Math methods
+    MATH_TRUNC: typeof Math.trunc === 'function',
+
+    // Date methods
+    DATE_NOW: typeof Date.now === 'function',
+  },
+} as const;
+
+// =============================================================================
 // ALGORITHM CONSTANTS
 // =============================================================================
 
@@ -221,6 +273,10 @@ export const ALGORITHM_CONFIG = {
     MIN_AGE: 10,
     MAX_AGE: 25,
   },
+
+  // Chart performance limits
+  MAX_ATHLETES_DEFAULT: 10,    // Default maximum athletes displayed for performance
+  MAX_DATA_POINTS: 1000,       // Maximum data points before optimization needed
 
   // Search result limits
   SEARCH_RESULT_LIMIT: 100, // Maximum search results to prevent performance issues
@@ -253,6 +309,7 @@ export const CHART_CONFIG = {
   DISTRIBUTION: DISTRIBUTION_CONFIG,
   RESPONSIVE: RESPONSIVE_CONFIG,
   ACCESSIBILITY: ACCESSIBILITY_CONFIG,
+  BROWSER: BROWSER_COMPATIBILITY,
   ALGORITHM: ALGORITHM_CONFIG,
 } as const;
 

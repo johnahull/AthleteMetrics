@@ -8,7 +8,108 @@
 
 import type { TrendData, StatisticalSummary } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import type {
+  ChartPoint,
+  ChartDataset,
+  ChartAnalytics,
+  ProcessedAthleteData,
+  PerformanceQuadrantLabels,
+  PerformanceQuadrantLabel
+} from '@/types/chart-types';
 import { CHART_COLORS } from '@/constants/chart-config';
+
+// =============================================================================
+// PERFORMANCE QUADRANT CALCULATIONS
+// =============================================================================
+
+/**
+ * Generate performance quadrant labels based on metric types
+ *
+ * @param xMetric - X-axis metric key
+ * @param yMetric - Y-axis metric key
+ * @returns Object with quadrant labels and colors based on metric interpretation
+ */
+export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): PerformanceQuadrantLabels {
+  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
+  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
+  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
+  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
+
+  // Get clean metric names (remove common suffixes)
+  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
+  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // Generate contextual descriptions based on metric combination
+  const getDescriptions = () => {
+    // Speed vs Power combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
+    }
+
+    // Agility vs Power combinations
+    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
+    }
+    if ((yMetric.includes('AGILITY') || yMetric.includes('T_TEST')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
+    }
+
+    // Speed vs Agility combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
+    }
+
+    // Default generic descriptions
+    return {
+      elite: 'Elite Performance',
+      xGood: `Strong ${xName}`,
+      yGood: `Strong ${yName}`,
+      development: 'Needs Development'
+    };
+  };
+
+  const descriptions = getDescriptions();
+
+  if (!xLowerIsBetter && !yLowerIsBetter) {
+    // Both higher is better (e.g., vertical jump vs RSI)
+    return {
+      topRight: { label: descriptions.elite, color: 'green' as const },
+      topLeft: { label: descriptions.yGood, color: 'yellow' as const },
+      bottomRight: { label: descriptions.xGood, color: 'orange' as const },
+      bottomLeft: { label: descriptions.development, color: 'red' as const }
+    };
+  } else if (xLowerIsBetter && !yLowerIsBetter) {
+    // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
+    return {
+      topLeft: { label: descriptions.elite, color: 'green' as const },
+      topRight: { label: descriptions.yGood, color: 'orange' as const },
+      bottomLeft: { label: descriptions.xGood, color: 'yellow' as const },
+      bottomRight: { label: descriptions.development, color: 'red' as const }
+    };
+  } else if (!xLowerIsBetter && yLowerIsBetter) {
+    // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
+    return {
+      bottomRight: { label: descriptions.elite, color: 'green' as const },
+      bottomLeft: { label: descriptions.yGood, color: 'orange' as const },
+      topRight: { label: descriptions.xGood, color: 'yellow' as const },
+      topLeft: { label: descriptions.development, color: 'red' as const }
+    };
+  } else {
+    // Both lower is better (e.g., 40-yard dash vs agility time)
+    return {
+      bottomLeft: { label: descriptions.elite, color: 'green' as const },
+      bottomRight: { label: descriptions.yGood, color: 'yellow' as const },
+      topLeft: { label: descriptions.xGood, color: 'orange' as const },
+      topRight: { label: descriptions.development, color: 'red' as const }
+    };
+  }
+}
 
 // =============================================================================
 // CORRELATION CALCULATIONS
@@ -66,111 +167,86 @@ export function calculateImprovement(values: {value: number, date: Date}[]): num
   return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
 }
 
+
 // =============================================================================
-// PERFORMANCE QUADRANT MAPPING
+// PERFORMANCE OPTIMIZATIONS
 // =============================================================================
 
 /**
- * Generate contextual performance quadrant labels based on metric combinations
+ * Limit dataset size for performance optimization
  *
- * @param xMetric - X-axis metric key
- * @param yMetric - Y-axis metric key
- * @returns Object with quadrant labels and colors for performance zones
- *
- * Algorithm: Uses metric properties (lowerIsBetter) and semantic combinations
- * to generate contextually appropriate quadrant descriptions
+ * @param data - Array of data points to limit
+ * @param maxPoints - Maximum number of points to keep
+ * @returns Optimized dataset with most recent points prioritized
  */
-export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
-  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
-  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
-  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
-  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
-
-  // Get clean metric names (remove common suffixes)
-  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
-  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
-
-  /**
-   * Generate contextual descriptions based on metric combination
-   * Uses semantic understanding of common athletic metric combinations
-   */
-  const getDescriptions = () => {
-    // Speed vs Power combinations
-    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
-      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
-    }
-    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
-      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
-    }
-
-    // Agility vs Power combinations
-    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && yMetric.includes('VERTICAL')) {
-      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
-    }
-    if ((yMetric.includes('AGILITY') || yMetric.includes('T_TEST')) && xMetric.includes('VERTICAL')) {
-      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
-    }
-
-    // Speed vs Agility combinations
-    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
-      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
-    }
-    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
-      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
-    }
-
-    // Default generic descriptions
-    return {
-      elite: 'Elite Performance',
-      xGood: `Strong ${xName}`,
-      yGood: `Strong ${yName}`,
-      development: 'Needs Development'
-    };
-  };
-
-  const descriptions = getDescriptions();
-
-  /**
-   * Map quadrant positions based on metric improvement directions
-   *
-   * Quadrant mapping logic:
-   * - Elite performance: Both metrics in optimal direction
-   * - Single strength: One metric optimal, other average
-   * - Development needed: Both metrics below average
-   */
-  if (!xLowerIsBetter && !yLowerIsBetter) {
-    // Both higher is better (e.g., vertical jump vs RSI)
-    return {
-      topRight: { label: descriptions.elite, color: 'green' },
-      topLeft: { label: descriptions.yGood, color: 'yellow' },
-      bottomRight: { label: descriptions.xGood, color: 'orange' },
-      bottomLeft: { label: descriptions.development, color: 'red' }
-    };
-  } else if (xLowerIsBetter && !yLowerIsBetter) {
-    // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
-    return {
-      topLeft: { label: descriptions.elite, color: 'green' },
-      topRight: { label: descriptions.yGood, color: 'orange' },
-      bottomLeft: { label: descriptions.xGood, color: 'yellow' },
-      bottomRight: { label: descriptions.development, color: 'red' }
-    };
-  } else if (!xLowerIsBetter && yLowerIsBetter) {
-    // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
-    return {
-      bottomRight: { label: descriptions.elite, color: 'green' },
-      bottomLeft: { label: descriptions.yGood, color: 'orange' },
-      topRight: { label: descriptions.xGood, color: 'yellow' },
-      topLeft: { label: descriptions.development, color: 'red' }
-    };
-  } else {
-    // Both lower is better (e.g., 40-yard dash vs agility time)
-    return {
-      bottomLeft: { label: descriptions.elite, color: 'green' },
-      bottomRight: { label: descriptions.yGood, color: 'yellow' },
-      topLeft: { label: descriptions.xGood, color: 'orange' },
-      topRight: { label: descriptions.development, color: 'red' }
-    };
+export function limitDatasetSize<T extends { date: Date | string }>(
+  data: T[],
+  maxPoints: number
+): T[] {
+  if (!Array.isArray(data) || data.length <= maxPoints) {
+    return data;
   }
+
+  // Sort by date (newest first) and take the most recent points
+  const sortedData = data.sort((a, b) => {
+    const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+    const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  return sortedData.slice(0, maxPoints);
+}
+
+/**
+ * Calculate total data points across all athletes for performance monitoring
+ *
+ * @param athletes - Array of athlete data
+ * @param xMetric - X-axis metric
+ * @param yMetric - Y-axis metric
+ * @returns Total number of data points
+ */
+export function calculateTotalDataPoints(
+  athletes: ProcessedAthleteData[],
+  xMetric: string,
+  yMetric: string
+): number {
+  return athletes.reduce((total, athlete) => {
+    const xData = athlete.metrics[xMetric] || [];
+    const yData = athlete.metrics[yMetric] || [];
+    return total + xData.length + yData.length;
+  }, 0);
+}
+
+/**
+ * Optimize point rendering by reducing density for large datasets
+ * Uses spatial sampling to maintain visual representation while reducing rendering load
+ *
+ * @param points - Array of chart points
+ * @param maxPoints - Maximum points to render
+ * @returns Optimized point array
+ */
+export function optimizePointRendering(points: ChartPoint[], maxPoints: number): ChartPoint[] {
+  if (!Array.isArray(points) || points.length <= maxPoints) {
+    return points;
+  }
+
+  // Sort by date to maintain temporal coherence
+  const sortedPoints = [...points].sort((a, b) => {
+    if (!a.date || !b.date) return 0;
+    const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+    const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  // Use systematic sampling to distribute points evenly across time
+  const step = Math.floor(sortedPoints.length / maxPoints);
+  const optimizedPoints: ChartPoint[] = [];
+
+  for (let i = 0; i < sortedPoints.length; i += step) {
+    optimizedPoints.push(sortedPoints[i]);
+  }
+
+  return optimizedPoints;
 }
 
 // =============================================================================
@@ -378,5 +454,579 @@ export function calculateAthleteAnalytics(
     yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
     dataPoints: matchedPoints.length,
     athleteName: targetAthlete.athleteName
+  };
+}
+
+// =============================================================================
+// TOOLTIP UTILITIES
+// =============================================================================
+
+/**
+ * Create tooltip title callback for scatter plot charts
+ */
+export function createTooltipTitleCallback() {
+  return (context: any[]) => {
+    const point = context[0].raw as any;
+    const datasetLabel = context[0].dataset.label;
+
+    if (datasetLabel === 'Group Average') {
+      return 'Group Average';
+    }
+
+    try {
+      if (point.date) {
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        return `${datasetLabel} - ${date.toLocaleDateString()}`;
+      }
+    } catch (error) {
+      console.warn('Date formatting error:', error, point.date);
+    }
+    return datasetLabel;
+  };
+}
+
+/**
+ * Create tooltip label callback for scatter plot charts
+ */
+export function createTooltipLabelCallback(xLabel: string, yLabel: string, xUnit: string, yUnit: string) {
+  return (context: any) => {
+    const point = context.raw as any;
+    return [
+      `${xLabel}: ${point.x?.toFixed(2)}${xUnit}`,
+      `${yLabel}: ${point.y?.toFixed(2)}${yUnit}`
+    ];
+  };
+}
+
+/**
+ * Create tooltip after-label callback for scatter plot charts
+ */
+export function createTooltipAfterLabelCallback() {
+  return (context: any) => {
+    const point = context.raw as any;
+    const labels = [];
+
+    if (point.isPersonalBest) {
+      labels.push('🏆 Personal Best!');
+    }
+
+    if (point.isInterpolated) {
+      labels.push('📊 Interpolated data point');
+    } else if (point.hasActualData) {
+      labels.push('📈 Actual measurement');
+    }
+
+    try {
+      if (point.date) {
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        labels.push(`Date: ${date.toLocaleDateString()}`);
+      }
+    } catch (error) {
+      console.warn('Date formatting error in afterLabel:', error, point.date);
+    }
+
+    return labels;
+  };
+}
+
+/**
+ * Create complete tooltip callbacks object for scatter plot charts
+ */
+export function createTooltipCallbacks(xLabel: string, yLabel: string, xUnit: string, yUnit: string) {
+  return {
+    title: createTooltipTitleCallback(),
+    label: createTooltipLabelCallback(xLabel, yLabel, xUnit, yUnit),
+    afterLabel: createTooltipAfterLabelCallback()
+  };
+}
+
+// =============================================================================
+// STATISTICAL CALCULATIONS
+// =============================================================================
+
+/**
+ * Calculate correlation coefficient between two datasets
+ *
+ * @param xValues - Array of x values
+ * @param yValues - Array of y values (must match xValues length)
+ * @returns Correlation coefficient between -1 and 1, or 0 if invalid input
+ */
+export function calculateCorrelation(xValues: number[], yValues: number[]): number {
+  if (xValues.length !== yValues.length || xValues.length < 2) return 0;
+
+  const n = xValues.length;
+  const sumX = xValues.reduce((a, b) => a + b, 0);
+  const sumY = yValues.reduce((a, b) => a + b, 0);
+  const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+  const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+  const sumYY = yValues.reduce((sum, y) => sum + y * y, 0);
+
+  const numerator = n * sumXY - sumX * sumY;
+  const denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
+
+  return denominator === 0 ? 0 : numerator / denominator;
+}
+
+/**
+ * Calculate rate of improvement (slope) over time
+ *
+ * @param values - Array of value-date pairs
+ * @returns Rate of improvement per day, or 0 if insufficient data
+ */
+export function calculateImprovement(values: {value: number, date: Date}[]): number {
+  if (values.length < 2) return 0;
+
+  const sortedValues = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const firstValue = sortedValues[0].value;
+  const lastValue = sortedValues[sortedValues.length - 1].value;
+  const timeSpan = sortedValues[sortedValues.length - 1].date.getTime() - sortedValues[0].date.getTime();
+  const daySpan = timeSpan / (1000 * 60 * 60 * 24); // Convert to days
+
+  return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
+}
+
+// =============================================================================
+// BROWSER COMPATIBILITY UTILITIES
+// =============================================================================
+
+/**
+ * Cross-browser safe Math.trunc polyfill
+ * @param value - Number to truncate
+ * @returns Truncated number
+ */
+export function safeMathTrunc(value: number): number {
+  if (typeof Math.trunc === 'function') {
+    return Math.trunc(value);
+  }
+  // Polyfill for older browsers
+  return value < 0 ? Math.ceil(value) : Math.floor(value);
+}
+
+/**
+ * Cross-browser safe Date.now polyfill
+ * @returns Current timestamp in milliseconds
+ */
+export function safeDateNow(): number {
+  if (typeof Date.now === 'function') {
+    return Date.now();
+  }
+  // Polyfill for older browsers
+  return new Date().getTime();
+}
+
+/**
+ * Cross-browser safe Object.assign polyfill
+ * @param target - Target object
+ * @param sources - Source objects
+ * @returns Merged object
+ */
+export function safeObjectAssign<T, U>(target: T, ...sources: U[]): T & U {
+  if (typeof Object.assign === 'function') {
+    return Object.assign(target, ...sources);
+  }
+
+  // Polyfill for older browsers
+  const result = target as T & U;
+  for (const source of sources) {
+    if (source != null) {
+      for (const key in source) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
+          (result as any)[key] = (source as any)[key];
+        }
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Check if browser supports canvas
+ * @returns true if canvas is supported
+ */
+export function supportsCanvas(): boolean {
+  if (typeof document === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext && canvas.getContext('2d'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get device pixel ratio with fallback
+ * @returns Device pixel ratio or 1 if not supported
+ */
+export function getDevicePixelRatio(): number {
+  if (typeof window === 'undefined') return 1;
+  return window.devicePixelRatio || 1;
+}
+
+/**
+ * Check if user prefers reduced motion
+ * @returns true if user prefers reduced motion
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+// =============================================================================
+// SCATTER DATA PROCESSING
+// =============================================================================
+
+/**
+ * Process scatter plot data for ConnectedScatterChart
+ * This function handles all the complex data processing for scatter plots including:
+ * - Data validation and filtering
+ * - Performance optimization for large datasets
+ * - Group average calculations
+ * - Analytics generation
+ * - Dataset creation for Chart.js
+ */
+export function processScatterData(params: {
+  data: any[]; // TrendData[]
+  displayedAthletes: Array<{ id: string; name: string; color: number }>;
+  highlightAthlete?: string;
+  statistics?: Record<string, any>; // StatisticalSummary
+}) {
+  const { data, displayedAthletes, highlightAthlete, statistics } = params;
+
+  // Data validation already done at component level, safe to proceed
+  const metrics = Array.from(new Set(data.map((trend: any) => trend.metric)));
+  const [xMetric, yMetric] = metrics;
+
+  // Import required types and utilities (will be available at runtime)
+  const { METRIC_CONFIG } = require('@shared/analytics-types');
+  const { CHART_COLORS, ALGORITHM_CONFIG } = require('@/constants/chart-config');
+  const { getDateKey } = require('@/utils/date-utils');
+
+  // Group ALL trends by athlete FIRST
+  const allAthleteTrends = data.reduce((acc: any, trend: any) => {
+    if (!acc[trend.athleteId]) {
+      acc[trend.athleteId] = {
+        athleteId: trend.athleteId,
+        athleteName: trend.athleteName,
+        metrics: {}
+      };
+    }
+    acc[trend.athleteId].metrics[trend.metric] = trend.data;
+    return acc;
+  }, {} as Record<string, any>);
+
+  // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
+  const athletesToShow = highlightAthlete ?
+    [allAthleteTrends[highlightAthlete]].filter(Boolean) :
+    displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean);
+
+  // Keep all athletes for group average calculations
+  const allAthletesForGroupCalc = Object.values(allAthleteTrends);
+
+  // Ensure we have athletes with both metrics and valid data
+  const validAthletes = athletesToShow.filter((athlete: any) => {
+    if (!athlete) return false;
+
+    // Only require the specific two metrics being used for X and Y axes
+    const hasXMetric = athlete.metrics[xMetric]?.length > 0;
+    const hasYMetric = athlete.metrics[yMetric]?.length > 0;
+
+    return hasXMetric && hasYMetric;
+  });
+
+  // Performance optimization: Check total data points and limit if necessary
+  const totalDataPoints = calculateTotalDataPoints(validAthletes, xMetric, yMetric);
+  const isLargeDataset = totalDataPoints > ALGORITHM_CONFIG.MAX_DATA_POINTS;
+
+  // Apply data limiting for performance if dataset is large
+  const optimizedAthletes = isLargeDataset ? validAthletes.map((athlete: any) => ({
+    ...athlete,
+    metrics: {
+      ...athlete.metrics,
+      [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2)),
+      [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2))
+    }
+  })) : validAthletes;
+
+  if (optimizedAthletes.length === 0) {
+    return null;
+  }
+
+  const colors = [...CHART_COLORS.SERIES];
+  const datasets: any[] = [];
+
+  // Create dataset for each athlete
+  optimizedAthletes.forEach((athlete: any, athleteIndex: number) => {
+    const xData = athlete.metrics[xMetric] || [];
+    const yData = athlete.metrics[yMetric] || [];
+
+    // Match points by date for scatter plot
+    const scatterPoints: any[] = xData
+      .map((xPoint: any) => {
+        const yPoint = yData.find((y: any) => {
+          return getDateKey(y.date) === getDateKey(xPoint.date);
+        });
+
+        if (!yPoint) return null;
+
+        return {
+          x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+          y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
+          date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
+          isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest || false,
+          hasActualData: !xPoint.isInterpolated && !yPoint.isInterpolated,
+          isInterpolated: xPoint.isInterpolated || yPoint.isInterpolated || false
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+    if (scatterPoints.length === 0) return;
+
+    const athleteColor = colors[athleteIndex % colors.length];
+    const isHighlighted = highlightAthlete === athlete.athleteId;
+
+    datasets.push({
+      label: athlete.athleteName,
+      data: scatterPoints,
+      backgroundColor: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return CHART_COLORS.PERSONAL_BEST;
+        if (isHighlighted) return CHART_COLORS.HIGHLIGHT;
+        return athleteColor;
+      },
+      borderColor: athleteColor,
+      borderWidth: 2,
+      pointRadius: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return 6;
+        if (isHighlighted) return 8;
+        return 5;
+      },
+      pointHoverRadius: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return 8;
+        if (isHighlighted) return 10;
+        return 7;
+      },
+      pointBackgroundColor: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return CHART_COLORS.PERSONAL_BEST;
+        if (isHighlighted) return CHART_COLORS.HIGHLIGHT_ALPHA;
+        return athleteColor;
+      },
+      pointBorderColor: '#fff',
+      pointBorderWidth: 2,
+      showLine: true,
+      fill: false,
+      tension: 0.1,
+    });
+  });
+
+  // Calculate analytics for highlighted athlete
+  const analytics = highlightAthlete ? (() => {
+    const targetAthlete = optimizedAthletes.find((a: any) => a.athleteId === highlightAthlete);
+    if (!targetAthlete) return null;
+
+    const xData = targetAthlete.metrics[xMetric] || [];
+    const yData = targetAthlete.metrics[yMetric] || [];
+
+    // Match points by date for correlation calculation - only use actual measurement points
+    const matchedPoints = xData
+      .map((xPoint: any) => {
+        const yPoint = yData.find((y: any) => {
+          return getDateKey(y.date) === getDateKey(xPoint.date);
+        });
+        return yPoint ? {
+          x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+          y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
+          date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
+        } : null;
+      })
+      .filter(Boolean);
+
+    const xValues = matchedPoints.map((p: any) => p.x);
+    const yValues = matchedPoints.map((p: any) => p.y);
+
+    return {
+      correlation: calculateCorrelation(xValues, yValues),
+      xImprovement: calculateImprovement(xData.map((p: any) => ({
+        value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
+        date: p.date instanceof Date ? p.date : new Date(p.date)
+      }))),
+      yImprovement: calculateImprovement(yData.map((p: any) => ({
+        value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
+        date: p.date instanceof Date ? p.date : new Date(p.date)
+      }))),
+      xMean: statistics?.[xMetric]?.mean ?? (xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0),
+      yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
+      dataPoints: matchedPoints.length,
+      athleteName: targetAthlete.athleteName
+    };
+  })() : null;
+
+  // Add group average trend line using groupAverage data from TrendDataPoints
+  if (optimizedAthletes.length > 0) {
+    const athlete = optimizedAthletes[0];
+    const xData = athlete.metrics[xMetric] || [];
+    const yData = athlete.metrics[yMetric] || [];
+
+    // Create group average points for dates where both metrics have group averages
+    const groupAveragePoints: any[] = xData
+      .map((xPoint: any) => {
+        const yPoint = yData.find((y: any) => {
+          return getDateKey(y.date) === getDateKey(xPoint.date);
+        });
+
+        // Only include if both points exist and have group averages
+        if (yPoint && xPoint.groupAverage !== undefined && yPoint.groupAverage !== undefined) {
+          return {
+            x: xPoint.groupAverage,
+            y: yPoint.groupAverage,
+            date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
+            isPersonalBest: false,
+            hasActualData: true,
+            isInterpolated: false
+          };
+        }
+        return null;
+      })
+      .filter((point): point is any => point !== null)
+      .sort((a: any, b: any) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+    // Add group average trend line if we have data points
+    if (groupAveragePoints.length > 0) {
+      datasets.push({
+        label: 'Group Average Trend',
+        data: groupAveragePoints,
+        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+        borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 3,
+        pointRadius: () => 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        showLine: true,
+        fill: false,
+        tension: 0.1,
+      });
+    } else {
+      // Fallback: Create synthetic group average trend line from all athlete data
+      if (allAthletesForGroupCalc.length > 1) {
+        // Collect all unique dates across all athletes
+        const allDatesSet = new Set<string>();
+        allAthletesForGroupCalc.forEach((athlete: any) => {
+          const xData = athlete.metrics[xMetric] || [];
+          const yData = athlete.metrics[yMetric] || [];
+          [...xData, ...yData].forEach((point: any) => {
+            try {
+              const dateKey = getDateKey(point.date);
+              if (dateKey) allDatesSet.add(dateKey);
+            } catch (error) {
+              console.warn('Error processing date for group average:', error);
+            }
+          });
+        });
+
+        const sortedDates = Array.from(allDatesSet).sort();
+
+        // Calculate group averages for each date
+        const syntheticGroupPoints: any[] = [];
+        for (const dateKey of sortedDates) {
+          const xValues: number[] = [];
+          const yValues: number[] = [];
+
+          allAthletesForGroupCalc.forEach((athlete: any) => {
+            const xData = athlete.metrics[xMetric] || [];
+            const yData = athlete.metrics[yMetric] || [];
+
+            const xPoint = xData.find((p: any) => getDateKey(p.date) === dateKey);
+            const yPoint = yData.find((p: any) => getDateKey(p.date) === dateKey);
+
+            if (xPoint && yPoint) {
+              const xVal = typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value;
+              const yVal = typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value;
+              if (!isNaN(xVal) && !isNaN(yVal)) {
+                xValues.push(xVal);
+                yValues.push(yVal);
+              }
+            }
+          });
+
+          // Only add point if we have data from at least 2 athletes
+          if (xValues.length >= 2 && yValues.length >= 2) {
+            const avgX = xValues.reduce((sum, val) => sum + val, 0) / xValues.length;
+            const avgY = yValues.reduce((sum, val) => sum + val, 0) / yValues.length;
+
+            syntheticGroupPoints.push({
+              x: avgX,
+              y: avgY,
+              date: new Date(dateKey),
+              isPersonalBest: false,
+              hasActualData: true,
+              isInterpolated: false
+            });
+          }
+        }
+
+        if (syntheticGroupPoints.length > 0) {
+          datasets.push({
+            label: 'Group Average Trend',
+            data: syntheticGroupPoints,
+            backgroundColor: 'rgba(99, 102, 241, 0.2)',
+            borderColor: 'rgba(99, 102, 241, 1)',
+            borderWidth: 3,
+            pointRadius: () => 6,
+            pointHoverRadius: 8,
+            pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            showLine: true,
+            fill: false,
+            tension: 0.1,
+          });
+        }
+      }
+    }
+  }
+
+  // Get metric configuration
+  const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
+  const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
+  const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
+  const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+
+  const athleteTrends = optimizedAthletes.reduce((acc: any, athlete: any) => {
+    acc[athlete.athleteId] = athlete;
+    return acc;
+  }, {} as Record<string, any>);
+
+  return {
+    datasets,
+    xMetric,
+    yMetric,
+    xUnit,
+    yUnit,
+    xLabel,
+    yLabel,
+    athleteTrends,
+    analytics,
+    // Add analytics to chart data for plugin access
+    chartData: {
+      datasets,
+      analytics
+    }
   };
 }
