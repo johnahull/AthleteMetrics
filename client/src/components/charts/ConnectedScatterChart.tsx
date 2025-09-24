@@ -133,6 +133,42 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   selectedAthleteIds,
   onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
+  // Early validation before any hooks to prevent hooks order violation
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            No data provided
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Get unique metrics from all data for early validation
+  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
+  
+  if (availableMetrics.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            Not enough metrics: {availableMetrics.length} (need 2)
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Internal state for athlete selection and toggles
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
@@ -144,8 +180,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Process all athletes from data
   const allAthletes = useMemo(() => {
-    if (!data || data.length === 0) return [];
-
     const athleteMap = new Map();
     data.forEach(trend => {
       if (!athleteMap.has(trend.athleteId)) {
@@ -217,44 +251,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
-
-    // Early validation but don't return null yet - we need to maintain hook consistency
-    let hasValidData = true;
-    let validationMessage = '';
-    let metrics: string[] = [];
-
-    if (!data || data.length === 0) {
-      hasValidData = false;
-      validationMessage = 'No data provided';
-      metrics = []; // Ensure metrics is always defined
-    } else {
-      // Get unique metrics from all data
-      metrics = Array.from(new Set(data.map(trend => trend.metric)));
-
-      // For connected scatter plot, we need exactly 2 metrics
-      if (metrics.length < 2) {
-        hasValidData = false;
-        validationMessage = `Not enough metrics: ${metrics.length} (need 2)`;
-      }
-    }
-
-    // Return early if validation failed, but with a consistent structure
-    if (!hasValidData) {
-      return {
-        isValid: false,
-        validationMessage,
-        datasets: [],
-        xMetric: metrics[0] || '',
-        yMetric: metrics[1] || '',
-        xUnit: '',
-        yUnit: '',
-        xLabel: metrics[0] || '',
-        yLabel: metrics[1] || '',
-        athleteTrends: {},
-        analytics: null,
-        chartData: { datasets: [], analytics: null }
-      };
-    }
+    // Data validation already done at component level, safe to proceed
+    const metrics = Array.from(new Set(data.map(trend => trend.metric)));
 
     const [xMetric, yMetric] = metrics;
 
@@ -645,8 +643,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     }
 
     return {
-      isValid: true,
-      validationMessage: '',
       datasets,
       xMetric,
       yMetric,
@@ -664,17 +660,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     };
   }, [data, statistics, highlightAthlete, displayedAthletes]);
 
-  // Chart options (always define this hook to maintain consistent hook order)
+  // Chart options
   const options = useMemo(() => {
-    // Ensure we have fallback values for invalid data to maintain hook consistency
-    const safeScatterData = scatterData || {
-      xLabel: 'X Axis',
-      yLabel: 'Y Axis', 
-      xUnit: '',
-      yUnit: '',
-      analytics: null,
-      chartData: { datasets: [], analytics: null }
-    };
     
     return {
     responsive: true,
@@ -715,8 +702,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           label: (context: TooltipItem<'line'>) => {
             const point = context.raw as any;
             return [
-              `${scatterData?.xLabel || 'X'}: ${point.x?.toFixed(2)}${scatterData?.xUnit || ''}`,
-              `${scatterData?.yLabel || 'Y'}: ${point.y?.toFixed(2)}${scatterData?.yUnit || ''}`
+              `${scatterData.xLabel}: ${point.x?.toFixed(2)}${scatterData.xUnit}`,
+              `${scatterData.yLabel}: ${point.y?.toFixed(2)}${scatterData.yUnit}`
             ];
           },
           afterLabel: (context: TooltipItem<'line'>) => {
@@ -750,16 +737,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: safeScatterData.analytics ? {
+      annotation: scatterData.analytics ? {
         annotations: (() => {
-          const xMean = safeScatterData.analytics.xMean;
-          const yMean = safeScatterData.analytics.yMean;
+          const xMean = scatterData.analytics.xMean;
+          const yMean = scatterData.analytics.yMean;
 
           // Get dynamic quadrant labels based on metric types
-          const labels = getPerformanceQuadrantLabels(scatterData?.xMetric || '', scatterData?.yMetric || '');
+          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
 
           // Calculate chart bounds for full background coverage
-          const datasets = safeScatterData.chartData.datasets;
+          const datasets = scatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           const allPoints = datasets.flatMap(dataset => dataset.data || []);
@@ -770,10 +757,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
           if (xValues.length === 0 || yValues.length === 0) return {};
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
+          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
+          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
+          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
 
           // Color mapping for dynamic colors
           const colorMap = {
@@ -862,23 +849,23 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         position: 'bottom',
         title: {
           display: true,
-          text: `${safeScatterData.xLabel || 'X Axis'} (${safeScatterData.xUnit || ''})`
+          text: `${scatterData.xLabel} (${scatterData.xUnit})`
         },
         grid: {
           display: true,
           color: 'rgba(0, 0, 0, 0.1)'
         },
         // Set explicit bounds to match quadrant coverage
-        ...(safeScatterData?.analytics ? (() => {
-          const datasets = safeScatterData.chartData.datasets;
+        ...(scatterData.analytics ? (() => {
+          const datasets = scatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           const allPoints = datasets.flatMap(dataset => dataset.data || []);
           const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
 
           if (xValues.length > 0) {
-            const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-            const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
+            const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
             return { min: xMin, max: xMax };
           }
           return {};
@@ -888,31 +875,31 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         type: 'linear',
         title: {
           display: true,
-          text: `${safeScatterData.yLabel || 'Y Axis'} (${safeScatterData.yUnit || ''})`
+          text: `${scatterData.yLabel} (${scatterData.yUnit})`
         },
         grid: {
           display: true,
           color: (context: any) => {
             // Highlight mean line
-            const yMean = safeScatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData?.yMetric]?.mean) || 0;
+            const yMean = scatterData.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
           },
           lineWidth: (context: any) => {
-            const yMean = safeScatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData?.yMetric]?.mean) || 0;
+            const yMean = scatterData.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
         },
         // Set explicit bounds to match quadrant coverage
-        ...(safeScatterData?.analytics ? (() => {
-          const datasets = safeScatterData.chartData.datasets;
+        ...(scatterData.analytics ? (() => {
+          const datasets = scatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           const allPoints = datasets.flatMap(dataset => dataset.data || []);
           const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
 
           if (yValues.length > 0) {
-            const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-            const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
+            const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
             return { min: yMin, max: yMax };
           }
           return {};
@@ -959,23 +946,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   };
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
-
-  // Early return check - moved after all hooks are defined to maintain hook order
-  if (!scatterData?.isValid) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            {scatterData?.validationMessage || 'Please ensure both primary and additional metrics have measurement data for the selected time period.'}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full h-full">
