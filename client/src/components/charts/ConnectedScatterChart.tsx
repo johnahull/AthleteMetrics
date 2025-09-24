@@ -155,9 +155,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     return Array.from(athleteMap.values());
   }, [data]);
 
-  // For multi-athlete trends, show all athletes
+  // For multi-athlete trends, show first 10 athletes by default to avoid performance issues
   const effectiveSelectedIds = useMemo(() => {
-    return allAthletes.map(athlete => athlete.id);
+    return allAthletes.slice(0, 10).map(athlete => athlete.id);
   }, [allAthletes]);
 
   // Initialize toggles when selected athletes change
@@ -1046,7 +1046,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const yRange = yMax - yMin;
             // Use larger padding for better visualization, ensure minimum meaningful padding
             const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
-            const yPadding = yRange > 0 ? yRange * padding : Math.max(1, yMin * 0.1);
+            const yPadding = yRange > 0 ? Math.max(yRange * padding, 0.5) : Math.max(Math.abs(yMin) * 0.2, 2);
             
             return { 
               min: Math.max(0, yMin - yPadding), 
