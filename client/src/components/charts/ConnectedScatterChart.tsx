@@ -72,42 +72,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   selectedAthleteIds,
   onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
-  // Early validation before any hooks to prevent hooks order violation
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            No data provided
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Get unique metrics from all data for early validation
-  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
-  
-  if (availableMetrics.length < 2) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            Not enough metrics: {availableMetrics.length} (need 2)
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   // Track mounted state to prevent memory leaks
   const isMountedRef = useRef(true);
 
@@ -127,8 +92,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
   const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
 
-  // Process all athletes from data
+  // Process all athletes from data - safe even if data is null/undefined
   const allAthletes = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
     const athleteMap = new Map();
     data.forEach(trend => {
       if (!athleteMap.has(trend.athleteId)) {
@@ -175,6 +142,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Transform trend data for connected scatter plot using extracted utility
   const scatterData = useMemo(() => {
+    if (!data || data.length === 0) return null;
+
     return processScatterData({
       data,
       displayedAthletes,
@@ -213,6 +182,42 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [allAthletes]);
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+
+  // Validation logic - moved AFTER all hooks to prevent hooks order violations
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            No data provided
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Get unique metrics from all data for validation
+  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
+
+  if (availableMetrics.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            Not enough metrics: {availableMetrics.length} (need 2)
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full">
