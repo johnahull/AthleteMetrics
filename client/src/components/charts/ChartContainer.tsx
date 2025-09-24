@@ -88,6 +88,7 @@ export function ChartContainer({
   onFullscreen,
   className
 }: ChartContainerProps) {
+  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   // Memoize chart component selection
   const ChartComponent = useMemo(() => {
     switch (chartType) {
@@ -145,6 +146,7 @@ export function ChartContainer({
     }
   }, [chartType, data, trends, multiMetric]);
 
+  // Conditional rendering AFTER all hooks
   if (isLoading) {
     return (
       <Card className={className}>
