@@ -858,7 +858,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           // Apply padding only if we have meaningful ranges
           const padding = CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1;
           const xPadding = xRange > 0 ? xRange * padding : 0.1;
-          const yPadding = yRange > 0 ? yRange * padding : 1;
+          const yPadding = yRange > 0 ? Math.max(yRange * padding, 0.5) : Math.max(Math.abs(yMin) * 0.2, 2);
 
           const finalXMin = xMin - xPadding;
           const finalXMax = xMax + xPadding;
