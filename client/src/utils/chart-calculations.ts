@@ -539,3 +539,138 @@ export function createTooltipCallbacks(xLabel: string, yLabel: string, xUnit: st
     afterLabel: createTooltipAfterLabelCallback()
   };
 }
+
+// =============================================================================
+// STATISTICAL CALCULATIONS
+// =============================================================================
+
+/**
+ * Calculate correlation coefficient between two datasets
+ *
+ * @param xValues - Array of x values
+ * @param yValues - Array of y values (must match xValues length)
+ * @returns Correlation coefficient between -1 and 1, or 0 if invalid input
+ */
+export function calculateCorrelation(xValues: number[], yValues: number[]): number {
+  if (xValues.length !== yValues.length || xValues.length < 2) return 0;
+
+  const n = xValues.length;
+  const sumX = xValues.reduce((a, b) => a + b, 0);
+  const sumY = yValues.reduce((a, b) => a + b, 0);
+  const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+  const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+  const sumYY = yValues.reduce((sum, y) => sum + y * y, 0);
+
+  const numerator = n * sumXY - sumX * sumY;
+  const denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
+
+  return denominator === 0 ? 0 : numerator / denominator;
+}
+
+/**
+ * Calculate rate of improvement (slope) over time
+ *
+ * @param values - Array of value-date pairs
+ * @returns Rate of improvement per day, or 0 if insufficient data
+ */
+export function calculateImprovement(values: {value: number, date: Date}[]): number {
+  if (values.length < 2) return 0;
+
+  const sortedValues = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const firstValue = sortedValues[0].value;
+  const lastValue = sortedValues[sortedValues.length - 1].value;
+  const timeSpan = sortedValues[sortedValues.length - 1].date.getTime() - sortedValues[0].date.getTime();
+  const daySpan = timeSpan / (1000 * 60 * 60 * 24); // Convert to days
+
+  return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
+}
+
+// =============================================================================
+// BROWSER COMPATIBILITY UTILITIES
+// =============================================================================
+
+/**
+ * Cross-browser safe Math.trunc polyfill
+ * @param value - Number to truncate
+ * @returns Truncated number
+ */
+export function safeMathTrunc(value: number): number {
+  if (typeof Math.trunc === 'function') {
+    return Math.trunc(value);
+  }
+  // Polyfill for older browsers
+  return value < 0 ? Math.ceil(value) : Math.floor(value);
+}
+
+/**
+ * Cross-browser safe Date.now polyfill
+ * @returns Current timestamp in milliseconds
+ */
+export function safeDateNow(): number {
+  if (typeof Date.now === 'function') {
+    return Date.now();
+  }
+  // Polyfill for older browsers
+  return new Date().getTime();
+}
+
+/**
+ * Cross-browser safe Object.assign polyfill
+ * @param target - Target object
+ * @param sources - Source objects
+ * @returns Merged object
+ */
+export function safeObjectAssign<T, U>(target: T, ...sources: U[]): T & U {
+  if (typeof Object.assign === 'function') {
+    return Object.assign(target, ...sources);
+  }
+
+  // Polyfill for older browsers
+  const result = target as T & U;
+  for (const source of sources) {
+    if (source != null) {
+      for (const key in source) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
+          (result as any)[key] = (source as any)[key];
+        }
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Check if browser supports canvas
+ * @returns true if canvas is supported
+ */
+export function supportsCanvas(): boolean {
+  if (typeof document === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext && canvas.getContext('2d'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get device pixel ratio with fallback
+ * @returns Device pixel ratio or 1 if not supported
+ */
+export function getDevicePixelRatio(): number {
+  if (typeof window === 'undefined') return 1;
+  return window.devicePixelRatio || 1;
+}
+
+/**
+ * Check if user prefers reduced motion
+ * @returns true if user prefers reduced motion
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}

@@ -36,7 +36,9 @@ import {
   getPerformanceQuadrantLabels,
   createTooltipCallbacks,
   limitDatasetSize,
-  calculateTotalDataPoints
+  calculateTotalDataPoints,
+  calculateCorrelation,
+  calculateImprovement
 } from '@/utils/chart-calculations';
 import { getDateKey, safeParseDate } from '@/utils/date-utils';
 
@@ -168,35 +170,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     );
   }, [allAthletes, effectiveSelectedIds, athleteToggles]);
 
-  // Helper function to calculate correlation coefficient - memoized to prevent recalculations
-  const calculateCorrelation = useCallback((xValues: number[], yValues: number[]): number => {
-    if (xValues.length !== yValues.length || xValues.length < 2) return 0;
-
-    const n = xValues.length;
-    const sumX = xValues.reduce((a, b) => a + b, 0);
-    const sumY = yValues.reduce((a, b) => a + b, 0);
-    const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
-    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
-    const sumYY = yValues.reduce((sum, y) => sum + y * y, 0);
-
-    const numerator = n * sumXY - sumX * sumY;
-    const denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
-
-    return denominator === 0 ? 0 : numerator / denominator;
-  }, []);
-
-  // Helper function to calculate rate of improvement (slope) - memoized to prevent recalculations
-  const calculateImprovement = useCallback((values: {value: number, date: Date}[]): number => {
-    if (values.length < 2) return 0;
-
-    const sortedValues = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
-    const firstValue = sortedValues[0].value;
-    const lastValue = sortedValues[sortedValues.length - 1].value;
-    const timeSpan = sortedValues[sortedValues.length - 1].date.getTime() - sortedValues[0].date.getTime();
-    const daySpan = timeSpan / (1000 * 60 * 60 * 24); // Convert to days
-
-    return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
-  }, []);
 
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
