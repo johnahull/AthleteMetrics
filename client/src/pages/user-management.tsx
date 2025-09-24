@@ -114,11 +114,6 @@ export default function UserManagement() {
     }
   }, [isSiteAdmin, userRole, user?.id, setLocation]);
 
-  // Don't render management UI for athletes
-  if (!isSiteAdmin && userRole === "athlete") {
-    return null;
-  }
-
   // Force cache invalidation on component mount
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
@@ -482,6 +477,12 @@ export default function UserManagement() {
       });
     },
   });
+
+  // Conditional rendering AFTER all hooks - prevents hooks order violations
+  // Don't render management UI for athletes
+  if (!isSiteAdmin && userRole === "athlete") {
+    return null;
+  }
 
   const handleDeleteInvitation = (invitationId: string, email: string) => {
     confirm({
