@@ -171,9 +171,19 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Filter displayed athletes based on selection AND visibility toggles
   const displayedAthletes = useMemo(() => {
-    return allAthletes.filter(athlete =>
-      effectiveSelectedIds.includes(athlete.id) && athleteToggles[athlete.id]
-    );
+    // If toggles haven't been initialized yet, show all selected athletes
+    const hasAnyToggles = Object.keys(athleteToggles).length > 0;
+
+    return allAthletes.filter(athlete => {
+      const isSelected = effectiveSelectedIds.includes(athlete.id);
+      if (!isSelected) return false;
+
+      // If toggles aren't initialized yet, show all selected athletes
+      if (!hasAnyToggles) return true;
+
+      // Otherwise use the toggle state
+      return athleteToggles[athlete.id];
+    });
   }, [allAthletes, effectiveSelectedIds, athleteToggles]);
 
   // Helper function to calculate correlation coefficient
@@ -314,12 +324,19 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       firstAthlete: Object.values(allAthleteTrends)[0]
     });
 
+    // First, find all athletes with both required metrics
+    const athletesWithBothMetrics = Object.values(allAthleteTrends).filter((athlete: any) => {
+      const hasXMetric = athlete.metrics[xMetric]?.length > 0;
+      const hasYMetric = athlete.metrics[yMetric]?.length > 0;
+      return hasXMetric && hasYMetric;
+    });
+
     // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
     const athletesToShow = highlightAthlete ?
       [allAthleteTrends[highlightAthlete]].filter(Boolean) :
       displayedAthletes.length > 0 
         ? displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean)
-        : Object.values(allAthleteTrends).slice(0, 10); // Show first 10 athletes if none selected
+        : athletesWithBothMetrics.slice(0, 10); // Show first 10 athletes with both metrics if none selected
 
     // Keep all athletes for group average calculations
     const allAthletesForGroupCalc = Object.values(allAthleteTrends);
@@ -327,7 +344,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     console.log('ConnectedScatterChart: Athletes to show:', {
       highlightAthlete,
       displayedAthletesCount: displayedAthletes.length,
-      athletesToShowCount: athletesToShow.length
+      athletesToShowCount: athletesToShow.length,
+      athletesWithBothMetricsCount: athletesWithBothMetrics.length,
+      allAthleteTrendsCount: Object.keys(allAthleteTrends).length
     });
 
 
