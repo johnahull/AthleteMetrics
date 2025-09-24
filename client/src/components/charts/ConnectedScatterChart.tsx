@@ -419,18 +419,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         const currentDate = new Date(dateStr);
 
         // Find exact matches for this date
-        const xPoint = xData.find((x: any) => {
+        const xPoint = xData.find((xPoint: any) => {
           try {
-            const xDate = x.date instanceof Date ? x.date : new Date(x.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return xDate.toISOString().split('T')[0] === dateStr;
           } catch {
             return false;
           }
         });
 
-        const yPoint = yData.find((y: any) => {
+        const yPoint = yData.find((yPoint: any) => {
           try {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+            const yDate = yPoint.date instanceof Date ? yPoint.date : new Date(yPoint.date);
             return yDate.toISOString().split('T')[0] === dateStr;
           } catch {
             return false;
@@ -528,9 +528,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       // Match points by date for correlation calculation - only use actual measurement points
       const matchedPoints = xData
         .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? x.date : new Date(xPoint.date);
+          const yPoint = yData.find((yPoint: any) => {
+            const yDate = yPoint.date instanceof Date ? yPoint.date : new Date(yPoint.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
           return yPoint ? {
@@ -571,9 +571,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       // Create group average points for dates where both metrics have group averages
       const groupAveragePoints = xData
         .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? x.date : new Date(x.date);
+          const yPoint = yData.find((yPoint: any) => {
+            const yDate = yPoint.date instanceof Date ? yPoint.date : new Date(yPoint.date);
+            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
 
@@ -583,7 +583,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             return {
               x: xPoint.groupAverage,
               y: yPoint.groupAverage,
-              date: xPoint.date instanceof Date ? x.date : new Date(xPoint.date)
+              date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
             };
           }
           return null;
@@ -642,18 +642,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 const xData = athlete.metrics[xMetric] || [];
                 const yData = athlete.metrics[yMetric] || [];
 
-                const xPoint = xData.find((x: any) => {
+                const xPoint = xData.find((xDataPoint: any) => {
                   try {
-                    const xDate = x.date instanceof Date ? x.date : new Date(x.date);
+                    const xDate = xDataPoint.date instanceof Date ? xDataPoint.date : new Date(xDataPoint.date);
                     return xDate.toISOString().split('T')[0] === dateStr;
                   } catch {
                     return false;
                   }
                 });
 
-                const yPoint = yData.find((y: any) => {
+                const yPoint = yData.find((yDataPoint: any) => {
                   try {
-                    const yDate = y.date instanceof Date ? y.date : new Date(y.date);
+                    const yDate = yDataPoint.date instanceof Date ? yDataPoint.date : new Date(yDataPoint.date);
                     return yDate.toISOString().split('T')[0] === dateStr;
                   } catch {
                     return false;
