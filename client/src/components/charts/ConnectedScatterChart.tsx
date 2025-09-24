@@ -1001,11 +1001,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           })(),
           maxTicksLimit: 8 // Prevent overcrowding
         },
-        // Apply calculated bounds directly to prevent Chart.js auto-scaling compression
+        // Force X-axis scale bounds to prevent Chart.js auto-scaling compression
         ...(() => {
-          // Always apply bounds calculation regardless of analytics availability
-          // if (!safeScatterData?.analytics) return {};
-
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
@@ -1035,22 +1032,42 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             
             // Get metric-specific minimum range for better visualization
             const xMetric = scatterData?.xMetric || '';
-            const minRange = METRIC_MINIMUM_RANGES[xMetric as keyof typeof METRIC_MINIMUM_RANGES] || 2.0;
+            const minRange = METRIC_MINIMUM_RANGES[xMetric as keyof typeof METRIC_MINIMUM_RANGES] || 0.3;
             
-            // Use the larger of actual range or minimum meaningful range
+            // Force a minimum range that's visually meaningful
             const effectiveRange = Math.max(xRange, minRange);
             
-            // Apply padding based on effective range for better visualization
-            const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
+            // Use generous padding for better visualization
+            const padding = 0.25; // 25% padding for better spread
             const xPadding = effectiveRange * padding;
             
             // Calculate bounds ensuring they encompass the data with meaningful scale
             const rangeCenter = (xMin + xMax) / 2;
             const halfEffectiveRange = effectiveRange / 2;
 
+            const calculatedMin = rangeCenter - halfEffectiveRange - xPadding;
+            const calculatedMax = rangeCenter + halfEffectiveRange + xPadding;
+
+            console.log('ConnectedScatterChart X-axis FORCED bounds:', {
+              xMetric,
+              xMin,
+              xMax,
+              xRange,
+              minRange,
+              effectiveRange,
+              calculatedMin,
+              calculatedMax,
+              finalRange: calculatedMax - calculatedMin
+            });
+
             return { 
-              min: rangeCenter - halfEffectiveRange - xPadding, 
-              max: rangeCenter + halfEffectiveRange + xPadding 
+              min: calculatedMin, 
+              max: calculatedMax,
+              // Force Chart.js to respect these bounds
+              beginAtZero: false,
+              // Prevent auto-scaling
+              suggestedMin: calculatedMin,
+              suggestedMax: calculatedMax
             };
           }
           return {};
@@ -1085,11 +1102,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           })(),
           maxTicksLimit: 8 // Prevent overcrowding
         },
-        // Apply calculated bounds directly to prevent Chart.js auto-scaling compression
+        // Force Y-axis scale bounds to prevent Chart.js auto-scaling compression
         ...(() => {
-          // Always apply bounds calculation regardless of analytics availability
-          // if (!safeScatterData?.analytics) return {};
-
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
@@ -1121,11 +1135,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const yMetric = scatterData?.yMetric || '';
             const minRange = METRIC_MINIMUM_RANGES[yMetric as keyof typeof METRIC_MINIMUM_RANGES] || 2.0;
             
-            // Use the larger of actual range or minimum meaningful range
+            // Force a minimum range that's visually meaningful
             const effectiveRange = Math.max(yRange, minRange);
             
-            // Apply padding based on effective range for better visualization
-            const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
+            // Use generous padding for better visualization
+            const padding = 0.25; // 25% padding for better spread
             const yPadding = effectiveRange * padding;
             
             // Calculate bounds ensuring they encompass the data with meaningful scale
@@ -1135,21 +1149,29 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const calculatedMin = rangeCenter - halfEffectiveRange - yPadding;
             const calculatedMax = rangeCenter + halfEffectiveRange + yPadding;
             
-            console.log('ConnectedScatterChart Y-axis bounds (applying directly):', {
+            console.log('ConnectedScatterChart Y-axis FORCED bounds:', {
               yMetric,
               yMin,
               yMax,
               yRange,
               minRange,
               effectiveRange,
+              padding,
+              yPadding,
               calculatedMin,
-              calculatedMax
+              calculatedMax,
+              finalRange: calculatedMax - calculatedMin
             });
             
-            // Apply bounds directly to Chart.js configuration
+            // FORCE these bounds with hard limits and ensure they're applied
             return {
               min: calculatedMin,
-              max: calculatedMax
+              max: calculatedMax,
+              // Force Chart.js to respect these bounds
+              beginAtZero: false,
+              // Prevent auto-scaling
+              suggestedMin: calculatedMin,
+              suggestedMax: calculatedMax
             };
           }
           return {};
