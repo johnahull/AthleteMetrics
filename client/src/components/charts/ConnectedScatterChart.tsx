@@ -530,7 +530,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         .map((xPoint: any) => {
           const yPoint = yData.find((y: any) => {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            const xDate = xPoint.date instanceof Date ? x.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
           return yPoint ? {
@@ -573,7 +573,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         .map((xPoint: any) => {
           const yPoint = yData.find((y: any) => {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+            const xDate = xPoint.date instanceof Date ? x.date : new Date(x.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
           });
 
@@ -583,7 +583,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             return {
               x: xPoint.groupAverage,
               y: yPoint.groupAverage,
-              date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
+              date: xPoint.date instanceof Date ? x.date : new Date(xPoint.date)
             };
           }
           return null;
@@ -1029,18 +1029,18 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (!isFinite(xMin) || !isFinite(xMax)) return {};
 
             const xRange = xMax - xMin;
-            
+
             // Get metric-specific minimum range for better visualization
             const xMetric = scatterData?.xMetric || '';
             const minRange = METRIC_MINIMUM_RANGES[xMetric as keyof typeof METRIC_MINIMUM_RANGES] || 0.3;
-            
+
             // Force a minimum range that's visually meaningful
             const effectiveRange = Math.max(xRange, minRange);
-            
+
             // Use generous padding for better visualization
             const padding = 0.25; // 25% padding for better spread
             const xPadding = effectiveRange * padding;
-            
+
             // Calculate bounds ensuring they encompass the data with meaningful scale
             const rangeCenter = (xMin + xMax) / 2;
             const halfEffectiveRange = effectiveRange / 2;
@@ -1102,7 +1102,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           })(),
           maxTicksLimit: 8 // Prevent overcrowding
         },
-        // Force Y-axis scale bounds to prevent Chart.js auto-scaling compression
+        // AGGRESSIVE Y-axis scale bounds to prevent Chart.js auto-scaling compression
         ...(() => {
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
@@ -1130,48 +1130,59 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (!isFinite(yMin) || !isFinite(yMax)) return {};
 
             const yRange = yMax - yMin;
-            
+
             // Get metric-specific minimum range for better visualization
             const yMetric = scatterData?.yMetric || '';
-            const minRange = METRIC_MINIMUM_RANGES[yMetric as keyof typeof METRIC_MINIMUM_RANGES] || 2.0;
-            
-            // Force a minimum range that's visually meaningful
+            const minRange = METRIC_MINIMUM_RANGES[yMetric as keyof typeof METRIC_MINIMUM_RANGES] || 4.0;
+
+            // Force a minimum range that's visually meaningful - be even more aggressive
             const effectiveRange = Math.max(yRange, minRange);
-            
-            // Use generous padding for better visualization
-            const padding = 0.25; // 25% padding for better spread
+
+            // Use very generous padding for better visualization
+            const padding = 0.4; // 40% padding for maximum spread
             const yPadding = effectiveRange * padding;
-            
+
             // Calculate bounds ensuring they encompass the data with meaningful scale
             const rangeCenter = (yMin + yMax) / 2;
             const halfEffectiveRange = effectiveRange / 2;
-            
+
             const calculatedMin = rangeCenter - halfEffectiveRange - yPadding;
             const calculatedMax = rangeCenter + halfEffectiveRange + yPadding;
-            
-            console.log('ConnectedScatterChart Y-axis FORCED bounds:', {
+
+            console.log('ConnectedScatterChart Y-axis AGGRESSIVE bounds:', {
               yMetric,
               yMin,
               yMax,
               yRange,
               minRange,
               effectiveRange,
-              padding,
-              yPadding,
               calculatedMin,
               calculatedMax,
-              finalRange: calculatedMax - calculatedMin
+              finalRange: calculatedMax - calculatedMin,
+              padding: `${padding * 100}%`
             });
-            
-            // FORCE these bounds with hard limits and ensure they're applied
+
+            // EXTREMELY AGGRESSIVE bounds forcing - override ALL Chart.js auto-scaling
             return {
+              type: 'linear',
               min: calculatedMin,
               max: calculatedMax,
-              // Force Chart.js to respect these bounds
+              // Completely disable auto-scaling
               beginAtZero: false,
-              // Prevent auto-scaling
+              grace: 0,
+              // Force these exact bounds
               suggestedMin: calculatedMin,
-              suggestedMax: calculatedMax
+              suggestedMax: calculatedMax,
+              // Prevent any automatic adjustments
+              afterBuildTicks: function(scale: any) {
+                scale.min = calculatedMin;
+                scale.max = calculatedMax;
+              },
+              // Override any internal scaling logic
+              afterFit: function(scale: any) {
+                scale.min = calculatedMin;
+                scale.max = calculatedMax;
+              }
             };
           }
           return {};
