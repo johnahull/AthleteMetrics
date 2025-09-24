@@ -142,7 +142,8 @@ export function ChartContainer({
       case 'time_series_box_swarm':
         return trends;
       case 'radar_chart':
-        return multiMetric;
+        // For radar chart, prefer multiMetric data, but fallback to regular data if available
+        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
       default:
         return data;
     }

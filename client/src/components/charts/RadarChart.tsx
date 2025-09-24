@@ -46,9 +46,46 @@ export function RadarChart({
   const radarData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    // Get all metrics from the data
+    // Check if data is MultiMetricData or ChartDataPoint
+    const isMultiMetric = data.length > 0 && 'metrics' in data[0];
+    
+    let processedData: MultiMetricData[] = [];
+    
+    if (isMultiMetric) {
+      // Data is already MultiMetricData
+      processedData = data as MultiMetricData[];
+    } else {
+      // Convert ChartDataPoint data to MultiMetricData format
+      const chartData = data as any[];
+      const athleteMap = new Map<string, any>();
+      
+      chartData.forEach(point => {
+        if (!athleteMap.has(point.athleteId)) {
+          athleteMap.set(point.athleteId, {
+            athleteId: point.athleteId,
+            athleteName: point.athleteName,
+            metrics: {},
+            percentileRanks: {}
+          });
+        }
+        
+        const athlete = athleteMap.get(point.athleteId);
+        athlete.metrics[point.metric] = point.value;
+        
+        // Calculate percentile rank if statistics are available
+        if (statistics && statistics[point.metric]) {
+          const stats = statistics[point.metric];
+          const percentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
+          athlete.percentileRanks[point.metric] = Math.max(0, Math.min(100, percentile));
+        }
+      });
+      
+      processedData = Array.from(athleteMap.values());
+    }
+
+    // Get all metrics from the processed data
     const allMetrics = new Set<string>();
-    data.forEach(athlete => {
+    processedData.forEach(athlete => {
       Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
     });
 
@@ -62,7 +99,7 @@ export function RadarChart({
 
     // Calculate group averages for comparison
     const groupAverages = metrics.map(metric => {
-      const values = data
+      const values = processedData
         .map(athlete => athlete.metrics[metric])
         .filter(value => value !== undefined);
       
@@ -76,7 +113,7 @@ export function RadarChart({
       if (!stats) return 50; // Default to middle if no stats
 
       // Use percentile rank (0-100)
-      const allValues = data
+      const allValues = processedData
         .map(athlete => athlete.metrics[metric])
         .filter(val => val !== undefined)
         .sort((a, b) => a - b);
@@ -107,8 +144,8 @@ export function RadarChart({
 
     // Individual athlete datasets
     const athletesToShow = highlightAthlete ? 
-      data.filter(athlete => athlete.athleteId === highlightAthlete) :
-      data.slice(0, 5); // Show top 5 if no specific athlete
+      processedData.filter(athlete => athlete.athleteId === highlightAthlete) :
+      processedData.slice(0, 5); // Show top 5 if no specific athlete
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
@@ -184,7 +221,7 @@ export function RadarChart({
             if (athleteName === 'Group Average') {
               actualValue = radarData?.groupAverages[metricIndex] || 0;
             } else {
-              const athlete = data.find(a => a.athleteName === athleteName);
+              const athlete = processedData.find(a => a.athleteName === athleteName);
               actualValue = athlete?.metrics[metric] || 0;
             }
 
@@ -264,9 +301,9 @@ export function RadarChart({
         {highlightAthlete && (
           <div className="grid grid-cols-3 gap-4 text-center">
             {radarData.metrics.slice(0, 3).map((metric, index) => {
-              const athlete = data.find(a => a.athleteId === highlightAthlete);
+              const athlete = processedData.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
-              const percentile = athlete?.percentileRanks[metric];
+              const percentile = athlete?.percentileRanks?.[metric];
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
               const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
               
