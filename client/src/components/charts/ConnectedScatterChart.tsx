@@ -39,7 +39,8 @@ import {
   calculateTotalDataPoints,
   calculateCorrelation,
   calculateImprovement,
-  processScatterData
+  processScatterData,
+  createChartOptions
 } from '@/utils/chart-calculations';
 import { getDateKey, safeParseDate } from '@/utils/date-utils';
 
@@ -71,51 +72,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   selectedAthleteIds,
   onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
-  // Early validation before any hooks to prevent hooks order violation
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            No data provided
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Get unique metrics from all data for early validation
-  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
-  
-  if (availableMetrics.length < 2) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        <div className="text-center">
-          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
-          <div className="text-sm">
-            This chart requires exactly 2 metrics with time series data.
-          </div>
-          <div className="text-sm mt-1">
-            Not enough metrics: {availableMetrics.length} (need 2)
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Track mounted state to prevent memory leaks
+  // Track mounted state to prevent memory leaks - must be first
   const isMountedRef = useRef(true);
-
-  // Cleanup on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
 
   // Internal state for athlete selection and toggles
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -126,8 +84,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
   const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
 
-  // Process all athletes from data
+  // Process all athletes from data - handle empty data case
   const allAthletes = useMemo(() => {
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
     const athleteMap = new Map();
     data.forEach(trend => {
       if (!athleteMap.has(trend.athleteId)) {
@@ -141,6 +103,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
     return Array.from(athleteMap.values());
   }, [data]);
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Set up initial athlete selection
   const maxAthletes = ALGORITHM_CONFIG.MAX_ATHLETES_DEFAULT;
@@ -172,650 +141,19 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [allAthletes, effectiveSelectedIds, athleteToggles]);
 
 
-  // Transform trend data for connected scatter plot
+  // Transform trend data for connected scatter plot using extracted utility
   const scatterData = useMemo(() => {
-    // Data validation already done at component level, safe to proceed
-    const metrics = Array.from(new Set(data.map(trend => trend.metric)));
-
-    const [xMetric, yMetric] = metrics;
-
-    // Group ALL trends by athlete FIRST
-    const allAthleteTrends = data.reduce((acc, trend) => {
-      if (!acc[trend.athleteId]) {
-        acc[trend.athleteId] = {
-          athleteId: trend.athleteId,
-          athleteName: trend.athleteName,
-          metrics: {}
-        };
-      }
-      acc[trend.athleteId].metrics[trend.metric] = trend.data;
-      return acc;
-    }, {} as Record<string, ProcessedAthleteData>);
-
-    // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
-    const athletesToShow = highlightAthlete ?
-      [allAthleteTrends[highlightAthlete]].filter(Boolean) :
-      displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean);
-
-    // Keep all athletes for group average calculations
-    const allAthletesForGroupCalc = Object.values(allAthleteTrends);
-
-
-    // Ensure we have athletes with both metrics and valid data
-    const validAthletes = athletesToShow.filter((athlete: ProcessedAthleteData) => {
-      if (!athlete) return false;
-
-      // Only require the specific two metrics being used for X and Y axes
-      const hasXMetric = athlete.metrics[xMetric]?.length > 0;
-      const hasYMetric = athlete.metrics[yMetric]?.length > 0;
-
-      return hasXMetric && hasYMetric;
+    return processScatterData({
+      data,
+      displayedAthletes,
+      highlightAthlete,
+      statistics
     });
+  }, [data, displayedAthletes, highlightAthlete, statistics]);
 
-    // Performance optimization: Check total data points and limit if necessary
-    const totalDataPoints = calculateTotalDataPoints(validAthletes, xMetric, yMetric);
-    const isLargeDataset = totalDataPoints > ALGORITHM_CONFIG.MAX_DATA_POINTS;
-
-    // Apply data limiting for performance if dataset is large
-    const optimizedAthletes = isLargeDataset ? validAthletes.map(athlete => ({
-      ...athlete,
-      metrics: {
-        ...athlete.metrics,
-        [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2)),
-        [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2))
-      }
-    })) : validAthletes;
-
-    // Performance monitoring warning for development
-    if (process.env.NODE_ENV === 'development' && isLargeDataset) {
-      console.warn(`ConnectedScatterChart: Large dataset detected (${totalDataPoints} points). Applied data limiting for performance.`);
-    }
-
-    if (optimizedAthletes.length === 0) {
-      return null;
-    }
-
-    // Use optimized athletes for chart data
-    const athleteTrends = optimizedAthletes.reduce((acc, athlete: ProcessedAthleteData) => {
-      acc[athlete.athleteId] = athlete;
-      return acc;
-    }, {} as Record<string, ProcessedAthleteData>);
-
-    const colors = [
-      'rgba(59, 130, 246, 1)',
-      'rgba(16, 185, 129, 1)',
-      'rgba(239, 68, 68, 1)'
-    ];
-
-    const datasets = Object.values(athleteTrends).map((athlete: ProcessedAthleteData, index) => {
-      const xData = athlete.metrics[xMetric] || [];
-      const yData = athlete.metrics[yMetric] || [];
-
-      // Create all points from both metrics, using last known values for missing data
-      const allDataPoints: ChartPoint[] = [];
-
-      // Combine all unique dates from both metrics
-      const allDates = new Set<string>();
-
-      [...xData, ...yData].forEach((point: TrendDataPoint) => {
-        const dateKey = getDateKey(point.date);
-        if (dateKey) {
-          allDates.add(dateKey);
-        }
-      });
-
-      const sortedDates = Array.from(allDates).sort();
-
-      let lastXValue: number | null = null;
-      let lastYValue: number | null = null;
-
-      // Create connected points for each date, using interpolation/last known values
-      sortedDates.forEach(dateStr => {
-        const currentDate = new Date(dateStr);
-
-        // Find exact matches for this date
-        const xPoint = xData.find((x: TrendDataPoint) => {
-          return getDateKey(x.date) === dateStr;
-        });
-
-        const yPoint = yData.find((y: TrendDataPoint) => {
-          return getDateKey(y.date) === dateStr;
-        });
-
-        // Update last known values
-        if (xPoint) {
-          lastXValue = typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value;
-        }
-        if (yPoint) {
-          lastYValue = typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value;
-        }
-
-        // Only add point if we have both values (either current or last known)
-        if (lastXValue !== null && lastYValue !== null) {
-          allDataPoints.push({
-            x: lastXValue,
-            y: lastYValue,
-            date: currentDate,
-            isPersonalBest: xPoint?.isPersonalBest || yPoint?.isPersonalBest || false,
-            hasActualData: !!xPoint && !!yPoint, // Track if this point has real data for both metrics
-            isInterpolated: !xPoint || !yPoint // Track if this point uses interpolated/last known values
-          });
-        }
-      });
-
-      const connectedPoints = allDataPoints;
-
-      const color = colors[index % colors.length] || 'rgba(75, 85, 99, 1)';
-      const isHighlighted = athlete.athleteId === highlightAthlete;
-
-      return {
-        label: athlete.athleteName,
-        data: connectedPoints,
-        backgroundColor: color.replace('1)', '0.6)'),
-        borderColor: color,
-        borderWidth: isHighlighted ? 3 : 2,
-        pointHoverRadius: isHighlighted ? 10 : 8,
-        pointBackgroundColor: (context: ScriptableContext<'line'>) => {
-          const point = context.raw as ChartPoint;
-          if (point?.isPersonalBest) return 'rgba(255, 215, 0, 1)';
-
-          // Different styling for interpolated vs actual data points
-          if (point?.isInterpolated) {
-            // Interpolated points are more transparent
-            return color.replace('1)', `${CHART_COLORS.OPACITY_RANGES.INTERPOLATED})`);
-          }
-
-          // Time-based color coding - newer points are more saturated
-          if (point?.date && connectedPoints.length > 1) {
-            const pointDate = new Date(point.date).getTime();
-            const oldestDate = Math.min(...connectedPoints.map((p: ChartPoint) => new Date(p.date).getTime()));
-            const newestDate = Math.max(...connectedPoints.map((p: any) => new Date(p.date).getTime()));
-            const dateRange = newestDate - oldestDate;
-
-            if (dateRange > 0) {
-              const recency = (pointDate - oldestDate) / dateRange;
-              const opacityRange = CHART_COLORS.OPACITY_RANGES.MAX - CHART_COLORS.OPACITY_RANGES.MIN;
-              const opacity = CHART_COLORS.OPACITY_RANGES.MIN + (recency * opacityRange);
-              return color.replace('1)', `${opacity})`);
-            }
-          }
-
-          return color;
-        },
-        pointRadius: (context: ScriptableContext<'line'>) => {
-          const point = context.raw as ChartPoint;
-          if (point?.isPersonalBest) return isHighlighted ? 8 : 6;
-          if (point?.isInterpolated) return isHighlighted ? 3 : 2; // Smaller for interpolated points
-          return isHighlighted ? 6 : 4; // Normal size for actual data
-        },
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
-        showLine: true,
-        fill: false,
-        tension: 0.1
-      };
-    });
-
-    const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
-    const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
-
-    // Calculate analytics for the highlighted athlete or first available athlete
-    const analytics = validAthletes.length > 0 ? (() => {
-      // Use highlighted athlete if available, otherwise first athlete
-      const targetAthlete = highlightAthlete ?
-        validAthletes.find((a: any) => a.athleteId === highlightAthlete) || validAthletes[0] :
-        validAthletes[0];
-
-      const xData = targetAthlete.metrics[xMetric] || [];
-      const yData = targetAthlete.metrics[yMetric] || [];
-
-      // Match points by date for correlation calculation - only use actual measurement points
-      const matchedPoints = xData
-        .map((xPoint: any) => {
-          const yPoint = yData.find((y: TrendDataPoint) => {
-            return getDateKey(y.date) === getDateKey(xPoint.date);
-          });
-          return yPoint ? {
-            x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
-            y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
-            date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
-          } : null;
-        })
-        .filter(Boolean);
-
-      const xValues = matchedPoints.map((p: any) => p.x);
-      const yValues = matchedPoints.map((p: any) => p.y);
-
-      return {
-        correlation: calculateCorrelation(xValues, yValues),
-        xImprovement: calculateImprovement(xData.map((p: any) => ({
-          value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
-          date: p.date instanceof Date ? p.date : new Date(p.date)
-        }))),
-        yImprovement: calculateImprovement(yData.map((p: any) => ({
-          value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
-          date: p.date instanceof Date ? p.date : new Date(p.date)
-        }))),
-        xMean: statistics?.[xMetric]?.mean ?? (xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0),
-        yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
-        dataPoints: matchedPoints.length,
-        athleteName: targetAthlete.athleteName
-      };
-    })() : null;
-
-    // Add group average trend line using groupAverage data from TrendDataPoints
-    if (validAthletes.length > 0) {
-      const athlete = validAthletes[0];
-      const xData = athlete.metrics[xMetric] || [];
-      const yData = athlete.metrics[yMetric] || [];
-
-
-      // Create group average points for dates where both metrics have group averages
-      const groupAveragePoints: ChartPoint[] = xData
-        .map((xPoint: TrendDataPoint) => {
-          const yPoint = yData.find((y: TrendDataPoint) => {
-            return getDateKey(y.date) === getDateKey(xPoint.date);
-          });
-
-
-          // Only include if both points exist and have group averages
-          if (yPoint && xPoint.groupAverage !== undefined && yPoint.groupAverage !== undefined) {
-            return {
-              x: xPoint.groupAverage,
-              y: yPoint.groupAverage,
-              date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
-              isPersonalBest: false,
-              hasActualData: true,
-              isInterpolated: false
-            };
-          }
-          return null;
-        })
-        .filter((point): point is ChartPoint => point !== null)
-        .sort((a: ChartPoint, b: ChartPoint) => {
-          const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-          const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-          return dateA.getTime() - dateB.getTime();
-        });
-
-
-      // Add group average trend line if we have data points
-      if (groupAveragePoints.length > 0) {
-        datasets.push({
-          label: 'Group Average Trend',
-          data: groupAveragePoints,
-          backgroundColor: 'rgba(99, 102, 241, 0.2)',
-          borderColor: 'rgba(99, 102, 241, 1)',
-          borderWidth: 3,
-          pointRadius: () => 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          showLine: true,
-          fill: false,
-          tension: 0.1,
-        });
-      } else {
-
-        // Fallback: Create synthetic group average trend line from all athlete data
-        if (allAthletesForGroupCalc.length > 1) {
-          // Collect all unique dates across all athletes
-          const allDatesSet = new Set<string>();
-          allAthletesForGroupCalc.forEach((athlete: any) => {
-            const xData = athlete.metrics[xMetric] || [];
-            const yData = athlete.metrics[yMetric] || [];
-            [...xData, ...yData].forEach((point: TrendDataPoint) => {
-              try {
-                const dateKey = getDateKey(point.date);
-                if (dateKey) allDatesSet.add(dateKey);
-              } catch (error) {
-                console.warn('Date parsing error in synthetic trend:', error);
-              }
-            });
-          });
-
-          const syntheticGroupPoints: ChartPoint[] = Array.from(allDatesSet)
-            .sort()
-            .map(dateStr => {
-              // For each date, calculate group average from all athletes who have data for both metrics
-              const athleteValuesForDate: Array<{x: number, y: number}> = [];
-
-              allAthletesForGroupCalc.forEach((athlete: any) => {
-                const xData = athlete.metrics[xMetric] || [];
-                const yData = athlete.metrics[yMetric] || [];
-
-                const xPoint = xData.find((x: TrendDataPoint) => {
-                  return getDateKey(x.date) === dateStr;
-                });
-
-                const yPoint = yData.find((y: TrendDataPoint) => {
-                  return getDateKey(y.date) === dateStr;
-                });
-
-                if (xPoint && yPoint) {
-                  athleteValuesForDate.push({
-                    x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
-                    y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value
-                  });
-                }
-              });
-
-              // Calculate group average for this date if we have at least 2 athletes
-              if (athleteValuesForDate.length >= 2) {
-                const avgX = athleteValuesForDate.reduce((sum, val) => sum + val.x, 0) / athleteValuesForDate.length;
-                const avgY = athleteValuesForDate.reduce((sum, val) => sum + val.y, 0) / athleteValuesForDate.length;
-
-                return {
-                  x: avgX,
-                  y: avgY,
-                  date: new Date(dateStr),
-                  isPersonalBest: false,
-                  hasActualData: true,
-                  isInterpolated: false
-                };
-              }
-
-              return null;
-            })
-            .filter((point): point is ChartPoint => point !== null);
-
-          if (syntheticGroupPoints.length > 0) {
-            datasets.push({
-              label: 'Group Average Trend',
-              data: syntheticGroupPoints,
-              backgroundColor: 'rgba(99, 102, 241, 0.2)',
-              borderColor: 'rgba(99, 102, 241, 1)',
-              borderWidth: 3,
-              pointRadius: () => 6,
-              pointHoverRadius: 8,
-              pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
-              pointBorderColor: '#fff',
-              pointBorderWidth: 2,
-              showLine: true,
-              fill: false,
-              tension: 0.1,
-            });
-          }
-        }
-      }
-    }
-
-    // Add overall group average point if statistics available
-    if (statistics && statistics[xMetric]?.mean && statistics[yMetric]?.mean) {
-      datasets.push({
-        label: 'Overall Group Average',
-        data: [{
-          x: statistics[xMetric].mean,
-          y: statistics[yMetric].mean,
-          date: new Date(),
-          isPersonalBest: false,
-          hasActualData: true,
-          isInterpolated: false
-        }],
-        backgroundColor: 'rgba(156, 163, 175, 1)',
-        borderColor: 'rgba(156, 163, 175, 1)',
-        borderWidth: 3,
-        pointRadius: () => 8,
-        pointHoverRadius: 10,
-        pointBackgroundColor: () => 'rgba(156, 163, 175, 1)',
-        pointBorderColor: 'rgba(156, 163, 175, 1)',
-        pointBorderWidth: 2,
-        showLine: false,
-        fill: false,
-        tension: 0
-      });
-    }
-
-    return {
-      datasets,
-      xMetric,
-      yMetric,
-      xUnit,
-      yUnit,
-      xLabel,
-      yLabel,
-      athleteTrends,
-      analytics,
-      // Add analytics to chart data for plugin access
-      chartData: {
-        datasets,
-        analytics
-      }
-    };
-  }, [data, statistics, highlightAthlete, displayedAthletes]);
-
-  // Chart options
+  // Chart options using extracted configuration utility
   const options = useMemo(() => {
-    if (!scatterData) {
-      return {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          title: {
-            display: true,
-            text: config.title || 'Chart Loading...',
-            font: {
-              size: 16,
-              weight: 'bold'
-            }
-          }
-        }
-      } satisfies ChartOptions<'line'>;
-    }
-    
-    return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      title: {
-        display: true,
-        text: config.title,
-        font: {
-          size: 16,
-          weight: 'bold'
-        }
-      },
-      subtitle: {
-        display: !!config.subtitle,
-        text: config.subtitle
-      },
-      tooltip: {
-        callbacks: createTooltipCallbacks(
-          scatterData.xLabel,
-          scatterData.yLabel,
-          scatterData.xUnit,
-          scatterData.yUnit
-        )
-      },
-      legend: {
-        display: config.showLegend,
-        position: 'top' as const
-      },
-      annotation: scatterData?.analytics ? {
-        annotations: (() => {
-          const xMean = scatterData.analytics.xMean;
-          const yMean = scatterData.analytics.yMean;
-
-          // Get dynamic quadrant labels based on metric types
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
-
-          // Calculate chart bounds for full background coverage
-          const datasets = scatterData.chartData.datasets;
-          if (!datasets || datasets.length === 0) return {};
-
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
-          if (allPoints.length === 0) return {};
-
-          const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
-          const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
-
-          if (xValues.length === 0 || yValues.length === 0) return {};
-
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
-
-          // Color mapping for dynamic colors
-          const colorMap = {
-            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
-            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            orange: 'rgba(249, 115, 22, 0.1)', // Orange color for distinction
-            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
-          };
-
-          return {
-            // Top Right Quadrant
-            topRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Top Left Quadrant
-            topLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Right Quadrant
-            bottomRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Left Quadrant
-            bottomLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Vertical line at x mean
-            xMeanLine: {
-              type: 'line' as const,
-              xMin: xMean,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMax,
-              borderColor: 'rgba(75, 85, 99, 0.6)',
-              borderWidth: 1,
-              borderDash: [5, 5],
-              z: 1
-            },
-            // Horizontal line at y mean
-            yMeanLine: {
-              type: 'line' as const,
-              xMin: xMin,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMean,
-              borderColor: 'rgba(75, 85, 99, 0.6)',
-              borderWidth: 1,
-              borderDash: [5, 5],
-              z: 1
-            }
-          };
-        })()
-      } : undefined
-    },
-    scales: {
-      x: {
-        type: 'linear',
-        position: 'bottom',
-        title: {
-          display: true,
-          text: `${scatterData.xLabel} (${scatterData.xUnit})`
-        },
-        grid: {
-          display: true,
-          color: 'rgba(0, 0, 0, 0.1)'
-        },
-        // Set explicit bounds to match quadrant coverage
-        ...(scatterData?.analytics ? (() => {
-          const datasets = scatterData.chartData.datasets;
-          if (!datasets || datasets.length === 0) return {};
-
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
-          const xValues = allPoints.map((p: any) => p.x).filter(x => typeof x === 'number' && !isNaN(x));
-
-          if (xValues.length > 0) {
-            const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
-            const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.2;
-            return { min: xMin, max: xMax };
-          }
-          return {};
-        })() : {})
-      },
-      y: {
-        type: 'linear',
-        title: {
-          display: true,
-          text: `${scatterData.yLabel} (${scatterData.yUnit})`
-        },
-        grid: {
-          display: true,
-          color: (context: any) => {
-            // Highlight mean line
-            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
-            return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
-          },
-          lineWidth: (context: any) => {
-            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
-            return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
-          }
-        },
-        // Set explicit bounds to match quadrant coverage
-        ...(scatterData?.analytics ? (() => {
-          const datasets = scatterData.chartData.datasets;
-          if (!datasets || datasets.length === 0) return {};
-
-          const allPoints = datasets.flatMap(dataset => dataset.data || []);
-          const yValues = allPoints.map((p: any) => p.y).filter(y => typeof y === 'number' && !isNaN(y));
-
-          if (yValues.length > 0) {
-            const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
-            const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.2;
-            return { min: yMin, max: yMax };
-          }
-          return {};
-        })() : {})
-      }
-    },
-    elements: {
-      point: {
-        hoverRadius: 10
-      },
-      line: {
-        tension: 0.1
-      }
-    },
-    interaction: {
-      intersect: false,
-      mode: 'point'
-    }
-  } satisfies ChartOptions<'line'>;
+    return createChartOptions(scatterData, config, statistics);
   }, [scatterData, config, statistics]);
 
   // Helper functions for athlete toggles - wrapped in useCallback to prevent memory leaks
@@ -843,6 +181,45 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [allAthletes]);
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+
+  // Get unique metrics from all data for validation - handle empty data case
+  const availableMetrics = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return Array.from(new Set(data.map(trend => trend.metric)));
+  }, [data]);
+
+  // Data validation after all hooks are initialized
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            No data provided
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (availableMetrics.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Connected Scatter Plot Unavailable</div>
+          <div className="text-sm">
+            This chart requires exactly 2 metrics with time series data.
+          </div>
+          <div className="text-sm mt-1">
+            Not enough metrics: {availableMetrics.length} (need 2)
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full">

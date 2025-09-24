@@ -6,8 +6,9 @@
  * that can be easily memoized and tested.
  */
 
-import type { TrendData, StatisticalSummary } from '@shared/analytics-types';
+import type { TrendData, StatisticalSummary, ChartConfiguration } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import type { ChartOptions } from 'chart.js';
 import type {
   ChartPoint,
   ChartDataset,
@@ -16,7 +17,7 @@ import type {
   PerformanceQuadrantLabels,
   PerformanceQuadrantLabel
 } from '@/types/chart-types';
-import { CHART_COLORS } from '@/constants/chart-config';
+import { CHART_COLORS, CHART_CONFIG } from '@/constants/chart-config';
 
 // =============================================================================
 // PERFORMANCE QUADRANT CALCULATIONS
@@ -541,51 +542,6 @@ export function createTooltipCallbacks(xLabel: string, yLabel: string, xUnit: st
 }
 
 // =============================================================================
-// STATISTICAL CALCULATIONS
-// =============================================================================
-
-/**
- * Calculate correlation coefficient between two datasets
- *
- * @param xValues - Array of x values
- * @param yValues - Array of y values (must match xValues length)
- * @returns Correlation coefficient between -1 and 1, or 0 if invalid input
- */
-export function calculateCorrelation(xValues: number[], yValues: number[]): number {
-  if (xValues.length !== yValues.length || xValues.length < 2) return 0;
-
-  const n = xValues.length;
-  const sumX = xValues.reduce((a, b) => a + b, 0);
-  const sumY = yValues.reduce((a, b) => a + b, 0);
-  const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
-  const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
-  const sumYY = yValues.reduce((sum, y) => sum + y * y, 0);
-
-  const numerator = n * sumXY - sumX * sumY;
-  const denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
-
-  return denominator === 0 ? 0 : numerator / denominator;
-}
-
-/**
- * Calculate rate of improvement (slope) over time
- *
- * @param values - Array of value-date pairs
- * @returns Rate of improvement per day, or 0 if insufficient data
- */
-export function calculateImprovement(values: {value: number, date: Date}[]): number {
-  if (values.length < 2) return 0;
-
-  const sortedValues = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
-  const firstValue = sortedValues[0].value;
-  const lastValue = sortedValues[sortedValues.length - 1].value;
-  const timeSpan = sortedValues[sortedValues.length - 1].date.getTime() - sortedValues[0].date.getTime();
-  const daySpan = timeSpan / (1000 * 60 * 60 * 24); // Convert to days
-
-  return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
-}
-
-// =============================================================================
 // BROWSER COMPATIBILITY UTILITIES
 // =============================================================================
 
@@ -620,9 +576,9 @@ export function safeDateNow(): number {
  * @param sources - Source objects
  * @returns Merged object
  */
-export function safeObjectAssign<T, U>(target: T, ...sources: U[]): T & U {
+export function safeObjectAssign<T extends object, U extends object>(target: T, ...sources: U[]): T & U {
   if (typeof Object.assign === 'function') {
-    return Object.assign(target, ...sources);
+    return Object.assign(target, ...sources) as T & U;
   }
 
   // Polyfill for older browsers
@@ -898,7 +854,7 @@ export function processScatterData(params: {
         }
         return null;
       })
-      .filter((point): point is any => point !== null)
+      .filter((point: any): point is ChartPoint => point !== null)
       .sort((a: any, b: any) => {
         const dateA = a.date instanceof Date ? a.date : new Date(a.date);
         const dateB = b.date instanceof Date ? b.date : new Date(b.date);
@@ -1029,4 +985,250 @@ export function processScatterData(params: {
       analytics
     }
   };
+}
+
+// =============================================================================
+// CHART OPTIONS CONFIGURATION
+// =============================================================================
+
+/**
+ * Create chart options configuration for connected scatter chart
+ *
+ * @param scatterData - Processed scatter chart data
+ * @param config - Chart configuration from props
+ * @param statistics - Optional statistical summary data
+ * @returns Chart.js options configuration object
+ */
+export function createChartOptions(
+  scatterData: any | null,
+  config: ChartConfiguration,
+  statistics?: Record<string, StatisticalSummary>
+): ChartOptions<'line'> {
+  if (!scatterData) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: {
+          display: true,
+          text: config.title || 'Chart Loading...',
+          font: {
+            size: 16,
+            weight: 'bold'
+          }
+        }
+      }
+    } satisfies ChartOptions<'line'>;
+  }
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      title: {
+        display: true,
+        text: config.title,
+        font: {
+          size: 16,
+          weight: 'bold'
+        }
+      },
+      subtitle: {
+        display: !!config.subtitle,
+        text: config.subtitle
+      },
+      tooltip: {
+        callbacks: createTooltipCallbacks(
+          scatterData.xLabel,
+          scatterData.yLabel,
+          scatterData.xUnit,
+          scatterData.yUnit
+        )
+      },
+      legend: {
+        display: config.showLegend,
+        position: 'top' as const
+      },
+      annotation: scatterData?.analytics ? {
+        annotations: (() => {
+          const xMean = scatterData.analytics.xMean;
+          const yMean = scatterData.analytics.yMean;
+
+          // Get dynamic quadrant labels based on metric types
+          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+
+          // Calculate chart bounds for full background coverage
+          const datasets = scatterData.chartData.datasets;
+          if (!datasets || datasets.length === 0) return {};
+
+          const allPoints = datasets.flatMap((dataset: any) => dataset.data || []);
+          if (allPoints.length === 0) return {};
+
+          const xValues = allPoints.map((p: any) => p.x).filter((x: any) => typeof x === 'number' && !isNaN(x));
+          const yValues = allPoints.map((p: any) => p.y).filter((y: any) => typeof y === 'number' && !isNaN(y));
+
+          if (xValues.length === 0 || yValues.length === 0) return {};
+
+          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+
+          // Color mapping for dynamic colors
+          const colorMap = {
+            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+            orange: 'rgba(249, 115, 22, 0.1)', // Orange color for distinction
+            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
+          };
+
+          return {
+            // Top Right Quadrant
+            topRight: {
+              type: 'box' as const,
+              xMin: xMean,
+              xMax: xMax,
+              yMin: yMean,
+              yMax: yMax,
+              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Top Left Quadrant
+            topLeft: {
+              type: 'box' as const,
+              xMin: xMin,
+              xMax: xMean,
+              yMin: yMean,
+              yMax: yMax,
+              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Bottom Right Quadrant
+            bottomRight: {
+              type: 'box' as const,
+              xMin: xMean,
+              xMax: xMax,
+              yMin: yMin,
+              yMax: yMean,
+              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Bottom Left Quadrant
+            bottomLeft: {
+              type: 'box' as const,
+              xMin: xMin,
+              xMax: xMean,
+              yMin: yMin,
+              yMax: yMean,
+              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
+              borderWidth: 0,
+              z: 0
+            },
+            // Vertical line at x mean
+            xMeanLine: {
+              type: 'line' as const,
+              xMin: xMean,
+              xMax: xMean,
+              yMin: yMin,
+              yMax: yMax,
+              borderColor: 'rgba(75, 85, 99, 0.6)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              z: 1
+            },
+            // Horizontal line at y mean
+            yMeanLine: {
+              type: 'line' as const,
+              xMin: xMin,
+              xMax: xMax,
+              yMin: yMean,
+              yMax: yMean,
+              borderColor: 'rgba(75, 85, 99, 0.6)',
+              borderWidth: 1,
+              borderDash: [5, 5],
+              z: 1
+            }
+          };
+        })()
+      } : undefined
+    },
+    scales: {
+      x: {
+        type: 'linear',
+        position: 'bottom',
+        title: {
+          display: true,
+          text: `${scatterData.xLabel} (${scatterData.xUnit})`
+        },
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.1)'
+        },
+        // Set explicit bounds to match quadrant coverage
+        ...(scatterData?.analytics ? (() => {
+          const datasets = scatterData.chartData.datasets;
+          if (!datasets || datasets.length === 0) return {};
+
+          const allPoints = datasets.flatMap((dataset: any) => dataset.data || []);
+          const xValues = allPoints.map((p: any) => p.x).filter((x: any) => typeof x === 'number' && !isNaN(x));
+
+          if (xValues.length > 0) {
+            const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            return { min: xMin, max: xMax };
+          }
+          return {};
+        })() : {})
+      },
+      y: {
+        type: 'linear',
+        title: {
+          display: true,
+          text: `${scatterData.yLabel} (${scatterData.yUnit})`
+        },
+        grid: {
+          display: true,
+          color: (context: any) => {
+            // Highlight mean line
+            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
+            return Math.abs(context.tick.value - yMean) < 0.01 ? 'rgba(75, 85, 99, 0.8)' : 'rgba(0, 0, 0, 0.1)';
+          },
+          lineWidth: (context: any) => {
+            const yMean = scatterData?.analytics?.yMean || (statistics?.[scatterData.yMetric]?.mean) || 0;
+            return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
+          }
+        },
+        // Set explicit bounds to match quadrant coverage
+        ...(scatterData?.analytics ? (() => {
+          const datasets = scatterData.chartData.datasets;
+          if (!datasets || datasets.length === 0) return {};
+
+          const allPoints = datasets.flatMap((dataset: any) => dataset.data || []);
+          const yValues = allPoints.map((p: any) => p.y).filter((y: any) => typeof y === 'number' && !isNaN(y));
+
+          if (yValues.length > 0) {
+            const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+            return { min: yMin, max: yMax };
+          }
+          return {};
+        })() : {})
+      }
+    },
+    elements: {
+      point: {
+        hoverRadius: CHART_CONFIG.STYLING.POINT_HOVER_RADIUS.DEFAULT
+      },
+      line: {
+        tension: CHART_CONFIG.STYLING.LINE_TENSION
+      }
+    },
+    interaction: {
+      intersect: false,
+      mode: 'point'
+    }
+  } satisfies ChartOptions<'line'>;
 }
