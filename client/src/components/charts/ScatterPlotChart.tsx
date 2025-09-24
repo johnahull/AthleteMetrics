@@ -374,10 +374,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       });
     }
 
-    // Memoize regression calculation to avoid expensive recalculations
-    const regression = useMemo(() => {
-      return calculateRegression(scatterPoints);
-    }, [scatterPoints]);
+    // Calculate regression without nested useMemo
+    const regression = calculateRegression(scatterPoints);
 
     // Add regression line if enabled and we have enough points
     if (showRegressionLine && regression && scatterPoints.length >= 2) {
