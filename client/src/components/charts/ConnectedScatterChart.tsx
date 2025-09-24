@@ -72,7 +72,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   selectedAthleteIds,
   onAthleteSelectionChange
 }: ConnectedScatterChartProps) {
-  // Track mounted state to prevent memory leaks - must be first
+  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
+  // Track mounted state to prevent memory leaks
   const isMountedRef = useRef(true);
 
   // Internal state for athlete selection and toggles
@@ -84,12 +85,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
   const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
 
-  // Process all athletes from data - handle empty data case
+  // Process all athletes from data - safe even if data is null/undefined
   const allAthletes = useMemo(() => {
-    if (!data || data.length === 0) {
-      return [];
-    }
-    
+    if (!data || data.length === 0) return [];
+
     const athleteMap = new Map();
     data.forEach(trend => {
       if (!athleteMap.has(trend.athleteId)) {
@@ -143,6 +142,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Transform trend data for connected scatter plot using extracted utility
   const scatterData = useMemo(() => {
+    if (!data || data.length === 0) return null;
+
     return processScatterData({
       data,
       displayedAthletes,
@@ -182,13 +183,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
 
-  // Get unique metrics from all data for validation - handle empty data case
-  const availableMetrics = useMemo(() => {
-    if (!data || data.length === 0) return [];
-    return Array.from(new Set(data.map(trend => trend.metric)));
-  }, [data]);
-
-  // Data validation after all hooks are initialized
+  // Validation logic - moved AFTER all hooks to prevent hooks order violations
   if (!data || data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -204,7 +199,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       </div>
     );
   }
-  
+
+  // Get unique metrics from all data for validation
+  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
   if (availableMetrics.length < 2) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
