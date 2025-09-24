@@ -1046,10 +1046,21 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         </div>
       )}
 
-      <Line data={scatterData.chartData} options={options} />
+      {scatterData ? (
+        <Line data={scatterData.chartData} options={options} />
+      ) : (
+        <div className="flex items-center justify-center h-64 text-muted-foreground">
+          <div className="text-center">
+            <div className="text-lg font-medium mb-2">No Data Available</div>
+            <div className="text-sm">
+              No athletes have data for both selected metrics.
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Progress indicators */}
-      {scatterData.analytics && (
+      {scatterData && scatterData.analytics && (
         <div className="mt-4 text-sm">
           <div className="text-center text-muted-foreground mb-2">
             {highlightAthlete ?
