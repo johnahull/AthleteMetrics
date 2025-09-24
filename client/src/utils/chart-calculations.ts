@@ -8,6 +8,7 @@
 
 import type { TrendData, StatisticalSummary } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { CHART_COLORS } from '@/constants/chart-config';
 
 // =============================================================================
 // CORRELATION CALCULATIONS
@@ -266,7 +267,7 @@ export function processAthleteDatasets(
       }
     });
 
-    const color = colors[index % colors.length] || 'rgba(75, 85, 99, 1)';
+    const color = colors[index % colors.length] || CHART_COLORS.NEUTRAL;
     const isHighlighted = athlete.athleteId === highlightAthlete;
 
     return {
@@ -278,7 +279,7 @@ export function processAthleteDatasets(
       pointHoverRadius: isHighlighted ? 10 : 8,
       pointBackgroundColor: (context: any) => {
         const point = context.raw;
-        if (point?.isPersonalBest) return 'rgba(255, 215, 0, 1)';
+        if (point?.isPersonalBest) return CHART_COLORS.PERSONAL_BEST;
 
         // Different styling for interpolated vs actual data points
         if (point?.isInterpolated) {
@@ -308,7 +309,7 @@ export function processAthleteDatasets(
         if (point?.isInterpolated) return isHighlighted ? 3 : 2; // Smaller for interpolated points
         return isHighlighted ? 6 : 4; // Normal size for actual data
       },
-      pointBorderColor: '#fff',
+      pointBorderColor: CHART_COLORS.WHITE,
       pointBorderWidth: 2,
       showLine: true,
       fill: false,

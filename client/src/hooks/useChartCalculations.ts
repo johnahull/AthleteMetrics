@@ -12,6 +12,7 @@ import {
   processAthleteDatasets,
   calculateAthleteAnalytics
 } from '@/utils/chart-calculations';
+import { CHART_COLORS } from '@/constants/chart-config';
 
 interface UseChartCalculationsParams {
   data: TrendData[];
@@ -74,11 +75,7 @@ export function useChartCalculations({
       return acc;
     }, {} as Record<string, any>);
 
-    const colors = [
-      'rgba(59, 130, 246, 1)',
-      'rgba(16, 185, 129, 1)',
-      'rgba(239, 68, 68, 1)'
-    ];
+    const colors = CHART_COLORS.SERIES;
 
     // Process athlete datasets using utility function
     const datasets = processAthleteDatasets(athleteTrends, xMetric, yMetric, colors, highlightAthlete);
