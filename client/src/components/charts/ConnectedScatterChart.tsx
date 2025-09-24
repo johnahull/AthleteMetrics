@@ -988,6 +988,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           color: 'rgba(0, 0, 0, 0.1)'
         },
+        ticks: {
+          // Add reasonable tick step size for better readability
+          stepSize: (() => {
+            const xMetric = scatterData?.xMetric || '';
+            if (xMetric === 'VERTICAL_JUMP') return 1.0; // 1 inch increments
+            if (xMetric.includes('TIME') || xMetric.includes('DASH') || xMetric.includes('AGILITY')) return 0.1; // 0.1 second increments
+            if (xMetric === 'RSI') return 0.5; // 0.5 RSI increments
+            return undefined; // Auto for others
+          })(),
+          maxTicksLimit: 8 // Prevent overcrowding
+        },
         // Set explicit bounds to match quadrant coverage
         ...(safeScatterData?.analytics ? (() => {
           const datasets = safeScatterData.chartData.datasets;
@@ -1016,13 +1027,25 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (!isFinite(xMin) || !isFinite(xMax)) return {};
 
             const xRange = xMax - xMin;
-            // Use larger padding for better visualization, minimum padding of 0.1
+            
+            // Get metric-specific minimum range for better visualization
+            const xMetric = scatterData?.xMetric || '';
+            const minRange = METRIC_MINIMUM_RANGES[xMetric as keyof typeof METRIC_MINIMUM_RANGES] || 2.0;
+            
+            // Use the larger of actual range or minimum meaningful range
+            const effectiveRange = Math.max(xRange, minRange);
+            
+            // Apply padding based on effective range for better visualization
             const padding = Math.max(0.15, CHART_CONFIG.SCATTER?.CHART_PADDING || 0.1);
-            const xPadding = xRange > 0 ? xRange * padding : Math.max(0.1, xMin * 0.1);
+            const xPadding = effectiveRange * padding;
+            
+            // Calculate bounds ensuring they encompass the data with meaningful scale
+            const rangeCenter = (xMin + xMax) / 2;
+            const halfEffectiveRange = effectiveRange / 2;
 
             return { 
-              min: xMin - xPadding, 
-              max: xMax + xPadding 
+              min: rangeCenter - halfEffectiveRange - xPadding, 
+              max: rangeCenter + halfEffectiveRange + xPadding 
             };
           }
           return {};
@@ -1045,6 +1068,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const yMean = safeScatterData?.analytics?.yMean || (scatterData?.yMetric && statistics?.[scatterData?.yMetric]?.mean) || 0;
             return Math.abs(context.tick.value - yMean) < 0.01 ? 2 : 1;
           }
+        },
+        ticks: {
+          // Add reasonable tick step size for better readability
+          stepSize: (() => {
+            const yMetric = scatterData?.yMetric || '';
+            if (yMetric === 'VERTICAL_JUMP') return 1.0; // 1 inch increments
+            if (yMetric.includes('TIME') || yMetric.includes('DASH') || yMetric.includes('AGILITY')) return 0.1; // 0.1 second increments
+            if (yMetric === 'RSI') return 0.5; // 0.5 RSI increments
+            return undefined; // Auto for others
+          })(),
+          maxTicksLimit: 8 // Prevent overcrowding
         },
         // Set explicit bounds to match quadrant coverage
         ...(safeScatterData?.analytics ? (() => {
