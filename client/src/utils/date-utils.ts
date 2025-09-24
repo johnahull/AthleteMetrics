@@ -381,3 +381,26 @@ export function isNotInFuture(
 
   return parseResult.date.getTime() <= maxDate.getTime();
 }
+
+/**
+ * Get date key string for consistent date grouping
+ * Safely extracts YYYY-MM-DD string from any date input
+ *
+ * @param date - Date to convert to key string
+ * @returns Date string in YYYY-MM-DD format, or empty string if invalid
+ */
+export function getDateKey(date: Date | string | number | null | undefined): string {
+  const parseResult = safeParseDate(date);
+
+  if (!parseResult.success || !parseResult.date) {
+    return '';
+  }
+
+  try {
+    // Use toISOString and split to get consistent YYYY-MM-DD format
+    return parseResult.date.toISOString().split('T')[0];
+  } catch (error) {
+    console.warn('Error creating date key:', error);
+    return '';
+  }
+}

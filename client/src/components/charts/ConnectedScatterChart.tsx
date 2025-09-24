@@ -28,93 +28,17 @@ import type {
   GroupAveragePoint
 } from '@/types/chart-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
-import { CHART_CONFIG } from '@/constants/chart-config';
+import { CHART_CONFIG, CHART_COLORS, ALGORITHM_CONFIG } from '@/constants/chart-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import ChartErrorBoundary from './components/ChartErrorBoundary';
-
-// Performance quadrant labels based on metric types
-function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
-  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
-  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
-  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
-  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
-
-  // Get clean metric names (remove common suffixes)
-  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
-  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
-
-  // Generate contextual descriptions based on metric combination
-  const getDescriptions = () => {
-    // Speed vs Power combinations
-    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
-      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
-    }
-    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
-      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
-    }
-
-    // Agility vs Power combinations
-    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && yMetric.includes('VERTICAL')) {
-      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
-    }
-    if ((yMetric.includes('AGILITY') || yMetric.includes('T_TEST')) && xMetric.includes('VERTICAL')) {
-      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
-    }
-
-    // Speed vs Agility combinations
-    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
-      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
-    }
-    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
-      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
-    }
-
-    // Default generic descriptions
-    return {
-      elite: 'Elite Performance',
-      xGood: `Strong ${xName}`,
-      yGood: `Strong ${yName}`,
-      development: 'Needs Development'
-    };
-  };
-
-  const descriptions = getDescriptions();
-
-  if (!xLowerIsBetter && !yLowerIsBetter) {
-    // Both higher is better (e.g., vertical jump vs RSI)
-    return {
-      topRight: { label: descriptions.elite, color: 'green' },
-      topLeft: { label: descriptions.yGood, color: 'yellow' },
-      bottomRight: { label: descriptions.xGood, color: 'orange' },
-      bottomLeft: { label: descriptions.development, color: 'red' }
-    };
-  } else if (xLowerIsBetter && !yLowerIsBetter) {
-    // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
-    return {
-      topLeft: { label: descriptions.elite, color: 'green' },
-      topRight: { label: descriptions.yGood, color: 'orange' },
-      bottomLeft: { label: descriptions.xGood, color: 'yellow' },
-      bottomRight: { label: descriptions.development, color: 'red' }
-    };
-  } else if (!xLowerIsBetter && yLowerIsBetter) {
-    // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
-    return {
-      bottomRight: { label: descriptions.elite, color: 'green' },
-      bottomLeft: { label: descriptions.yGood, color: 'orange' },
-      topRight: { label: descriptions.xGood, color: 'yellow' },
-      topLeft: { label: descriptions.development, color: 'red' }
-    };
-  } else {
-    // Both lower is better (e.g., 40-yard dash vs agility time)
-    return {
-      bottomLeft: { label: descriptions.elite, color: 'green' },
-      bottomRight: { label: descriptions.yGood, color: 'yellow' },
-      topLeft: { label: descriptions.xGood, color: 'orange' },
-      topRight: { label: descriptions.development, color: 'red' }
-    };
-  }
-}
+import {
+  getPerformanceQuadrantLabels,
+  createTooltipCallbacks,
+  limitDatasetSize,
+  calculateTotalDataPoints
+} from '@/utils/chart-calculations';
+import { getDateKey, safeParseDate } from '@/utils/date-utils';
 
 // Register Chart.js components and annotation plugin
 ChartJS.register(
@@ -216,7 +140,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [data]);
 
   // Set up initial athlete selection
-  const maxAthletes = 10; // Limit for performance
+  const maxAthletes = ALGORITHM_CONFIG.MAX_ATHLETES_DEFAULT;
   useEffect(() => {
     if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0) {
       const initialSelection = allAthletes.slice(0, maxAthletes).map(a => a.id);
@@ -314,12 +238,31 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       return hasXMetric && hasYMetric;
     });
 
-    if (validAthletes.length === 0) {
+    // Performance optimization: Check total data points and limit if necessary
+    const totalDataPoints = calculateTotalDataPoints(validAthletes, xMetric, yMetric);
+    const isLargeDataset = totalDataPoints > ALGORITHM_CONFIG.MAX_DATA_POINTS;
+
+    // Apply data limiting for performance if dataset is large
+    const optimizedAthletes = isLargeDataset ? validAthletes.map(athlete => ({
+      ...athlete,
+      metrics: {
+        ...athlete.metrics,
+        [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2)),
+        [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2))
+      }
+    })) : validAthletes;
+
+    // Performance monitoring warning for development
+    if (process.env.NODE_ENV === 'development' && isLargeDataset) {
+      console.warn(`ConnectedScatterChart: Large dataset detected (${totalDataPoints} points). Applied data limiting for performance.`);
+    }
+
+    if (optimizedAthletes.length === 0) {
       return null;
     }
 
-    // Use valid athletes for chart data
-    const athleteTrends = validAthletes.reduce((acc, athlete: ProcessedAthleteData) => {
+    // Use optimized athletes for chart data
+    const athleteTrends = optimizedAthletes.reduce((acc, athlete: ProcessedAthleteData) => {
       acc[athlete.athleteId] = athlete;
       return acc;
     }, {} as Record<string, ProcessedAthleteData>);
@@ -341,11 +284,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const allDates = new Set<string>();
 
       [...xData, ...yData].forEach((point: TrendDataPoint) => {
-        try {
-          const date = point.date instanceof Date ? point.date : new Date(point.date);
-          allDates.add(date.toISOString().split('T')[0]);
-        } catch (error) {
-          console.warn('Date parsing error:', error);
+        const dateKey = getDateKey(point.date);
+        if (dateKey) {
+          allDates.add(dateKey);
         }
       });
 
@@ -360,21 +301,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
         // Find exact matches for this date
         const xPoint = xData.find((x: TrendDataPoint) => {
-          try {
-            const xDate = x.date instanceof Date ? x.date : new Date(x.date);
-            return xDate.toISOString().split('T')[0] === dateStr;
-          } catch {
-            return false;
-          }
+          return getDateKey(x.date) === dateStr;
         });
 
         const yPoint = yData.find((y: TrendDataPoint) => {
-          try {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            return yDate.toISOString().split('T')[0] === dateStr;
-          } catch {
-            return false;
-          }
+          return getDateKey(y.date) === dateStr;
         });
 
         // Update last known values
@@ -417,7 +348,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           // Different styling for interpolated vs actual data points
           if (point?.isInterpolated) {
             // Interpolated points are more transparent
-            return color.replace('1)', '0.4)');
+            return color.replace('1)', `${CHART_COLORS.OPACITY_RANGES.INTERPOLATED})`);
           }
 
           // Time-based color coding - newer points are more saturated
@@ -429,7 +360,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
             if (dateRange > 0) {
               const recency = (pointDate - oldestDate) / dateRange;
-              const opacity = 0.6 + (recency * 0.4); // Range from 0.6 to 1.0 for actual data
+              const opacityRange = CHART_COLORS.OPACITY_RANGES.MAX - CHART_COLORS.OPACITY_RANGES.MIN;
+              const opacity = CHART_COLORS.OPACITY_RANGES.MIN + (recency * opacityRange);
               return color.replace('1)', `${opacity})`);
             }
           }
@@ -469,9 +401,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const matchedPoints = xData
         .map((xPoint: any) => {
           const yPoint = yData.find((y: TrendDataPoint) => {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
-            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+            return getDateKey(y.date) === getDateKey(xPoint.date);
           });
           return yPoint ? {
             x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
@@ -512,9 +442,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       const groupAveragePoints: ChartPoint[] = xData
         .map((xPoint: TrendDataPoint) => {
           const yPoint = yData.find((y: TrendDataPoint) => {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
-            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+            return getDateKey(y.date) === getDateKey(xPoint.date);
           });
 
 
@@ -567,8 +495,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const yData = athlete.metrics[yMetric] || [];
             [...xData, ...yData].forEach((point: TrendDataPoint) => {
               try {
-                const date = point.date instanceof Date ? point.date : new Date(point.date);
-                allDatesSet.add(date.toISOString().split('T')[0]);
+                const dateKey = getDateKey(point.date);
+                if (dateKey) allDatesSet.add(dateKey);
               } catch (error) {
                 console.warn('Date parsing error in synthetic trend:', error);
               }
@@ -586,21 +514,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 const yData = athlete.metrics[yMetric] || [];
 
                 const xPoint = xData.find((x: TrendDataPoint) => {
-                  try {
-                    const xDate = x.date instanceof Date ? x.date : new Date(x.date);
-                    return xDate.toISOString().split('T')[0] === dateStr;
-                  } catch {
-                    return false;
-                  }
+                  return getDateKey(x.date) === dateStr;
                 });
 
                 const yPoint = yData.find((y: TrendDataPoint) => {
-                  try {
-                    const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-                    return yDate.toISOString().split('T')[0] === dateStr;
-                  } catch {
-                    return false;
-                  }
+                  return getDateKey(y.date) === dateStr;
                 });
 
                 if (xPoint && yPoint) {
@@ -731,58 +649,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         text: config.subtitle
       },
       tooltip: {
-        callbacks: {
-          title: (context: TooltipItem<'line'>[]) => {
-            const point = context[0].raw as any;
-            const datasetLabel = context[0].dataset.label;
-            
-            if (datasetLabel === 'Group Average') {
-              return 'Group Average';
-            }
-            
-            try {
-              if (point.date) {
-                const date = point.date instanceof Date ? point.date : new Date(point.date);
-                return `${datasetLabel} - ${date.toLocaleDateString()}`;
-              }
-            } catch (error) {
-              console.warn('Date formatting error:', error, point.date);
-            }
-            return datasetLabel;
-          },
-          label: (context: TooltipItem<'line'>) => {
-            const point = context.raw as any;
-            return [
-              `${scatterData.xLabel}: ${point.x?.toFixed(2)}${scatterData.xUnit}`,
-              `${scatterData.yLabel}: ${point.y?.toFixed(2)}${scatterData.yUnit}`
-            ];
-          },
-          afterLabel: (context: TooltipItem<'line'>) => {
-            const point = context.raw as any;
-            const labels = [];
-
-            if (point.isPersonalBest) {
-              labels.push('🏆 Personal Best!');
-            }
-
-            if (point.isInterpolated) {
-              labels.push('📊 Interpolated data point');
-            } else if (point.hasActualData) {
-              labels.push('📈 Actual measurement');
-            }
-
-            try {
-              if (point.date) {
-                const date = point.date instanceof Date ? point.date : new Date(point.date);
-                labels.push(`Date: ${date.toLocaleDateString()}`);
-              }
-            } catch (error) {
-              console.warn('Date formatting error in afterLabel:', error, point.date);
-            }
-
-            return labels;
-          }
-        }
+        callbacks: createTooltipCallbacks(
+          scatterData.xLabel,
+          scatterData.yLabel,
+          scatterData.xUnit,
+          scatterData.yUnit
+        )
       },
       legend: {
         display: config.showLegend,

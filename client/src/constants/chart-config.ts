@@ -49,6 +49,13 @@ export const CHART_COLORS = {
   // Personal best indicator
   PERSONAL_BEST: 'rgba(255, 215, 0, 1)',   // Gold
 
+  // Opacity constants for styling
+  OPACITY_RANGES: {
+    MIN: 0.6,           // Minimum opacity for older data points
+    MAX: 1.0,           // Maximum opacity for newest data points
+    INTERPOLATED: 0.4,  // Opacity for interpolated data points
+  },
+
   // Border colors
   WHITE: '#fff',
   TRANSPARENT: 'transparent',
@@ -221,6 +228,10 @@ export const ALGORITHM_CONFIG = {
     MIN_AGE: 10,
     MAX_AGE: 25,
   },
+
+  // Chart performance limits
+  MAX_ATHLETES_DEFAULT: 10,    // Default maximum athletes displayed for performance
+  MAX_DATA_POINTS: 1000,       // Maximum data points before optimization needed
 
   // Search result limits
   SEARCH_RESULT_LIMIT: 100, // Maximum search results to prevent performance issues

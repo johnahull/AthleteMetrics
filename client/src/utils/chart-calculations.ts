@@ -8,7 +8,108 @@
 
 import type { TrendData, StatisticalSummary } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import type {
+  ChartPoint,
+  ChartDataset,
+  ChartAnalytics,
+  ProcessedAthleteData,
+  PerformanceQuadrantLabels,
+  PerformanceQuadrantLabel
+} from '@/types/chart-types';
 import { CHART_COLORS } from '@/constants/chart-config';
+
+// =============================================================================
+// PERFORMANCE QUADRANT CALCULATIONS
+// =============================================================================
+
+/**
+ * Generate performance quadrant labels based on metric types
+ *
+ * @param xMetric - X-axis metric key
+ * @param yMetric - Y-axis metric key
+ * @returns Object with quadrant labels and colors based on metric interpretation
+ */
+export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): PerformanceQuadrantLabels {
+  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
+  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
+  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
+  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
+
+  // Get clean metric names (remove common suffixes)
+  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
+  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // Generate contextual descriptions based on metric combination
+  const getDescriptions = () => {
+    // Speed vs Power combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
+    }
+
+    // Agility vs Power combinations
+    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && yMetric.includes('VERTICAL')) {
+      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
+    }
+    if ((yMetric.includes('AGILITY') || yMetric.includes('T_TEST')) && xMetric.includes('VERTICAL')) {
+      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
+    }
+
+    // Speed vs Agility combinations
+    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
+      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
+    }
+    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
+      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
+    }
+
+    // Default generic descriptions
+    return {
+      elite: 'Elite Performance',
+      xGood: `Strong ${xName}`,
+      yGood: `Strong ${yName}`,
+      development: 'Needs Development'
+    };
+  };
+
+  const descriptions = getDescriptions();
+
+  if (!xLowerIsBetter && !yLowerIsBetter) {
+    // Both higher is better (e.g., vertical jump vs RSI)
+    return {
+      topRight: { label: descriptions.elite, color: 'green' as const },
+      topLeft: { label: descriptions.yGood, color: 'yellow' as const },
+      bottomRight: { label: descriptions.xGood, color: 'orange' as const },
+      bottomLeft: { label: descriptions.development, color: 'red' as const }
+    };
+  } else if (xLowerIsBetter && !yLowerIsBetter) {
+    // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
+    return {
+      topLeft: { label: descriptions.elite, color: 'green' as const },
+      topRight: { label: descriptions.yGood, color: 'orange' as const },
+      bottomLeft: { label: descriptions.xGood, color: 'yellow' as const },
+      bottomRight: { label: descriptions.development, color: 'red' as const }
+    };
+  } else if (!xLowerIsBetter && yLowerIsBetter) {
+    // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
+    return {
+      bottomRight: { label: descriptions.elite, color: 'green' as const },
+      bottomLeft: { label: descriptions.yGood, color: 'orange' as const },
+      topRight: { label: descriptions.xGood, color: 'yellow' as const },
+      topLeft: { label: descriptions.development, color: 'red' as const }
+    };
+  } else {
+    // Both lower is better (e.g., 40-yard dash vs agility time)
+    return {
+      bottomLeft: { label: descriptions.elite, color: 'green' as const },
+      bottomRight: { label: descriptions.yGood, color: 'yellow' as const },
+      topLeft: { label: descriptions.xGood, color: 'orange' as const },
+      topRight: { label: descriptions.development, color: 'red' as const }
+    };
+  }
+}
 
 // =============================================================================
 // CORRELATION CALCULATIONS
@@ -66,111 +167,86 @@ export function calculateImprovement(values: {value: number, date: Date}[]): num
   return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
 }
 
+
 // =============================================================================
-// PERFORMANCE QUADRANT MAPPING
+// PERFORMANCE OPTIMIZATIONS
 // =============================================================================
 
 /**
- * Generate contextual performance quadrant labels based on metric combinations
+ * Limit dataset size for performance optimization
  *
- * @param xMetric - X-axis metric key
- * @param yMetric - Y-axis metric key
- * @returns Object with quadrant labels and colors for performance zones
- *
- * Algorithm: Uses metric properties (lowerIsBetter) and semantic combinations
- * to generate contextually appropriate quadrant descriptions
+ * @param data - Array of data points to limit
+ * @param maxPoints - Maximum number of points to keep
+ * @returns Optimized dataset with most recent points prioritized
  */
-export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
-  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
-  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
-  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
-  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
-
-  // Get clean metric names (remove common suffixes)
-  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
-  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
-
-  /**
-   * Generate contextual descriptions based on metric combination
-   * Uses semantic understanding of common athletic metric combinations
-   */
-  const getDescriptions = () => {
-    // Speed vs Power combinations
-    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && yMetric.includes('VERTICAL')) {
-      return { elite: 'Fast + Explosive', xGood: 'Strong Speed', yGood: 'Strong Power', development: 'Needs Speed & Power' };
-    }
-    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && xMetric.includes('VERTICAL')) {
-      return { elite: 'Explosive + Fast', xGood: 'Strong Power', yGood: 'Strong Speed', development: 'Needs Power & Speed' };
-    }
-
-    // Agility vs Power combinations
-    if ((xMetric.includes('AGILITY') || xMetric.includes('T_TEST')) && yMetric.includes('VERTICAL')) {
-      return { elite: 'Agile + Explosive', xGood: 'Strong Agility', yGood: 'Strong Power', development: 'Needs Agility & Power' };
-    }
-    if ((yMetric.includes('AGILITY') || yMetric.includes('T_TEST')) && xMetric.includes('VERTICAL')) {
-      return { elite: 'Explosive + Agile', xGood: 'Strong Power', yGood: 'Strong Agility', development: 'Needs Power & Agility' };
-    }
-
-    // Speed vs Agility combinations
-    if ((xMetric.includes('DASH') || xMetric.includes('FLY')) && (yMetric.includes('AGILITY') || yMetric.includes('T_TEST'))) {
-      return { elite: 'Fast + Agile', xGood: 'Strong Speed', yGood: 'Strong Agility', development: 'Needs Speed & Agility' };
-    }
-    if ((yMetric.includes('DASH') || yMetric.includes('FLY')) && (xMetric.includes('AGILITY') || xMetric.includes('T_TEST'))) {
-      return { elite: 'Agile + Fast', xGood: 'Strong Agility', yGood: 'Strong Speed', development: 'Needs Agility & Speed' };
-    }
-
-    // Default generic descriptions
-    return {
-      elite: 'Elite Performance',
-      xGood: `Strong ${xName}`,
-      yGood: `Strong ${yName}`,
-      development: 'Needs Development'
-    };
-  };
-
-  const descriptions = getDescriptions();
-
-  /**
-   * Map quadrant positions based on metric improvement directions
-   *
-   * Quadrant mapping logic:
-   * - Elite performance: Both metrics in optimal direction
-   * - Single strength: One metric optimal, other average
-   * - Development needed: Both metrics below average
-   */
-  if (!xLowerIsBetter && !yLowerIsBetter) {
-    // Both higher is better (e.g., vertical jump vs RSI)
-    return {
-      topRight: { label: descriptions.elite, color: 'green' },
-      topLeft: { label: descriptions.yGood, color: 'yellow' },
-      bottomRight: { label: descriptions.xGood, color: 'orange' },
-      bottomLeft: { label: descriptions.development, color: 'red' }
-    };
-  } else if (xLowerIsBetter && !yLowerIsBetter) {
-    // X lower is better, Y higher is better (e.g., 40-yard dash vs vertical jump)
-    return {
-      topLeft: { label: descriptions.elite, color: 'green' },
-      topRight: { label: descriptions.yGood, color: 'orange' },
-      bottomLeft: { label: descriptions.xGood, color: 'yellow' },
-      bottomRight: { label: descriptions.development, color: 'red' }
-    };
-  } else if (!xLowerIsBetter && yLowerIsBetter) {
-    // X higher is better, Y lower is better (e.g., vertical jump vs 40-yard dash)
-    return {
-      bottomRight: { label: descriptions.elite, color: 'green' },
-      bottomLeft: { label: descriptions.yGood, color: 'orange' },
-      topRight: { label: descriptions.xGood, color: 'yellow' },
-      topLeft: { label: descriptions.development, color: 'red' }
-    };
-  } else {
-    // Both lower is better (e.g., 40-yard dash vs agility time)
-    return {
-      bottomLeft: { label: descriptions.elite, color: 'green' },
-      bottomRight: { label: descriptions.yGood, color: 'yellow' },
-      topLeft: { label: descriptions.xGood, color: 'orange' },
-      topRight: { label: descriptions.development, color: 'red' }
-    };
+export function limitDatasetSize<T extends { date: Date | string }>(
+  data: T[],
+  maxPoints: number
+): T[] {
+  if (!Array.isArray(data) || data.length <= maxPoints) {
+    return data;
   }
+
+  // Sort by date (newest first) and take the most recent points
+  const sortedData = data.sort((a, b) => {
+    const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+    const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  return sortedData.slice(0, maxPoints);
+}
+
+/**
+ * Calculate total data points across all athletes for performance monitoring
+ *
+ * @param athletes - Array of athlete data
+ * @param xMetric - X-axis metric
+ * @param yMetric - Y-axis metric
+ * @returns Total number of data points
+ */
+export function calculateTotalDataPoints(
+  athletes: ProcessedAthleteData[],
+  xMetric: string,
+  yMetric: string
+): number {
+  return athletes.reduce((total, athlete) => {
+    const xData = athlete.metrics[xMetric] || [];
+    const yData = athlete.metrics[yMetric] || [];
+    return total + xData.length + yData.length;
+  }, 0);
+}
+
+/**
+ * Optimize point rendering by reducing density for large datasets
+ * Uses spatial sampling to maintain visual representation while reducing rendering load
+ *
+ * @param points - Array of chart points
+ * @param maxPoints - Maximum points to render
+ * @returns Optimized point array
+ */
+export function optimizePointRendering(points: ChartPoint[], maxPoints: number): ChartPoint[] {
+  if (!Array.isArray(points) || points.length <= maxPoints) {
+    return points;
+  }
+
+  // Sort by date to maintain temporal coherence
+  const sortedPoints = [...points].sort((a, b) => {
+    if (!a.date || !b.date) return 0;
+    const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+    const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  // Use systematic sampling to distribute points evenly across time
+  const step = Math.floor(sortedPoints.length / maxPoints);
+  const optimizedPoints: ChartPoint[] = [];
+
+  for (let i = 0; i < sortedPoints.length; i += step) {
+    optimizedPoints.push(sortedPoints[i]);
+  }
+
+  return optimizedPoints;
 }
 
 // =============================================================================
@@ -378,5 +454,88 @@ export function calculateAthleteAnalytics(
     yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
     dataPoints: matchedPoints.length,
     athleteName: targetAthlete.athleteName
+  };
+}
+
+// =============================================================================
+// TOOLTIP UTILITIES
+// =============================================================================
+
+/**
+ * Create tooltip title callback for scatter plot charts
+ */
+export function createTooltipTitleCallback() {
+  return (context: any[]) => {
+    const point = context[0].raw as any;
+    const datasetLabel = context[0].dataset.label;
+
+    if (datasetLabel === 'Group Average') {
+      return 'Group Average';
+    }
+
+    try {
+      if (point.date) {
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        return `${datasetLabel} - ${date.toLocaleDateString()}`;
+      }
+    } catch (error) {
+      console.warn('Date formatting error:', error, point.date);
+    }
+    return datasetLabel;
+  };
+}
+
+/**
+ * Create tooltip label callback for scatter plot charts
+ */
+export function createTooltipLabelCallback(xLabel: string, yLabel: string, xUnit: string, yUnit: string) {
+  return (context: any) => {
+    const point = context.raw as any;
+    return [
+      `${xLabel}: ${point.x?.toFixed(2)}${xUnit}`,
+      `${yLabel}: ${point.y?.toFixed(2)}${yUnit}`
+    ];
+  };
+}
+
+/**
+ * Create tooltip after-label callback for scatter plot charts
+ */
+export function createTooltipAfterLabelCallback() {
+  return (context: any) => {
+    const point = context.raw as any;
+    const labels = [];
+
+    if (point.isPersonalBest) {
+      labels.push('🏆 Personal Best!');
+    }
+
+    if (point.isInterpolated) {
+      labels.push('📊 Interpolated data point');
+    } else if (point.hasActualData) {
+      labels.push('📈 Actual measurement');
+    }
+
+    try {
+      if (point.date) {
+        const date = point.date instanceof Date ? point.date : new Date(point.date);
+        labels.push(`Date: ${date.toLocaleDateString()}`);
+      }
+    } catch (error) {
+      console.warn('Date formatting error in afterLabel:', error, point.date);
+    }
+
+    return labels;
+  };
+}
+
+/**
+ * Create complete tooltip callbacks object for scatter plot charts
+ */
+export function createTooltipCallbacks(xLabel: string, yLabel: string, xUnit: string, yUnit: string) {
+  return {
+    title: createTooltipTitleCallback(),
+    label: createTooltipLabelCallback(xLabel, yLabel, xUnit, yUnit),
+    afterLabel: createTooltipAfterLabelCallback()
   };
 }
