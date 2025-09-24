@@ -576,7 +576,7 @@ export function safeDateNow(): number {
  * @param sources - Source objects
  * @returns Merged object
  */
-export function safeObjectAssign<T extends Record<string, any>, U extends Record<string, any>>(target: T, ...sources: U[]): T & U {
+export function safeObjectAssign<T extends object, U extends object>(target: T, ...sources: U[]): T & U {
   if (typeof Object.assign === 'function') {
     return Object.assign(target, ...sources) as T & U;
   }
