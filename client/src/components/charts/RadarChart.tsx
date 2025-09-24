@@ -273,6 +273,55 @@ export function RadarChart({
   };
 
   if (!radarData) {
+    // Check if we have data but it doesn't meet radar chart requirements
+    if (data && data.length > 0) {
+      const isMultiMetric = data.length > 0 && 'metrics' in data[0];
+      
+      if (isMultiMetric) {
+        const processedData = data as MultiMetricData[];
+        const allMetrics = new Set<string>();
+        processedData.forEach(athlete => {
+          Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
+        });
+        
+        if (allMetrics.size < 2) {
+          return (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              <div className="text-center">
+                <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+                <div className="text-sm">
+                  Radar charts require at least 2 metrics with data for each athlete.
+                </div>
+                <div className="text-sm mt-1 text-muted-foreground/80">
+                  Currently showing {allMetrics.size} metric{allMetrics.size !== 1 ? 's' : ''}. Try selecting more metrics.
+                </div>
+              </div>
+            </div>
+          );
+        }
+      } else {
+        // For ChartDataPoint data, check available metrics
+        const chartData = data as any[];
+        const availableMetrics = new Set(chartData.map(point => point.metric));
+        
+        if (availableMetrics.size < 2) {
+          return (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              <div className="text-center">
+                <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+                <div className="text-sm">
+                  Radar charts require at least 2 metrics with data for each athlete.
+                </div>
+                <div className="text-sm mt-1 text-muted-foreground/80">
+                  Currently showing {availableMetrics.size} metric{availableMetrics.size !== 1 ? 's' : ''}. Try selecting more metrics.
+                </div>
+              </div>
+            </div>
+          );
+        }
+      }
+    }
+    
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         <div className="text-center">
