@@ -372,12 +372,14 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       return hasXMetric && hasYMetric;
     });
 
-    if (validAthletes.length === 0) {
-      return null;
-    }
+    // Continue processing even if no validAthletes to ensure bounds calculation runs
+    // if (validAthletes.length === 0) {
+    //   return null;
+    // }
 
-    // Use valid athletes for chart data
-    const athleteTrends = validAthletes.reduce((acc, athlete: any) => {
+    // Use valid athletes for chart data, fallback to athletesWithBothMetrics if none
+    const athletesForChart = validAthletes.length > 0 ? validAthletes : athletesWithBothMetrics;
+    const athleteTrends = athletesForChart.reduce((acc, athlete: any) => {
       acc[athlete.athleteId] = athlete;
       return acc;
     }, {} as Record<string, any>);
@@ -514,11 +516,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
 
     // Calculate analytics for the highlighted athlete or first available athlete
-    const analytics = validAthletes.length > 0 ? (() => {
+    const analytics = athletesForChart.length > 0 ? (() => {
       // Use highlighted athlete if available, otherwise first athlete
       const targetAthlete = highlightAthlete ?
-        validAthletes.find((a: any) => a.athleteId === highlightAthlete) || validAthletes[0] :
-        validAthletes[0];
+        athletesForChart.find((a: any) => a.athleteId === highlightAthlete) || athletesForChart[0] :
+        athletesForChart[0];
 
       const xData = targetAthlete.metrics[xMetric] || [];
       const yData = targetAthlete.metrics[yMetric] || [];
@@ -560,8 +562,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     })() : null;
 
     // Add group average trend line using groupAverage data from TrendDataPoints
-    if (validAthletes.length > 0) {
-      const athlete = validAthletes[0];
+    if (athletesForChart.length > 0) {
+      const athlete = athletesForChart[0];
       const xData = athlete.metrics[xMetric] || [];
       const yData = athlete.metrics[yMetric] || [];
 
@@ -1001,8 +1003,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         },
         // Apply calculated bounds directly to prevent Chart.js auto-scaling compression
         ...(() => {
-          if (!safeScatterData?.analytics) return {};
-          
+          // Always apply bounds calculation regardless of analytics availability
+          // if (!safeScatterData?.analytics) return {};
+
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
@@ -1084,14 +1087,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         },
         // Apply calculated bounds directly to prevent Chart.js auto-scaling compression
         ...(() => {
-          if (!safeScatterData?.analytics) return {};
-          
+          // Always apply bounds calculation regardless of analytics availability
+          // if (!safeScatterData?.analytics) return {};
+
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
           // Only get data from athlete datasets, not from average lines
-          const athleteDatasets = datasets.filter(dataset => 
-            dataset.data && Array.isArray(dataset.data) && 
+          const athleteDatasets = datasets.filter(dataset =>
+            dataset.data && Array.isArray(dataset.data) &&
             !dataset.label?.includes('Group Average') &&
             !dataset.label?.includes('Overall Group Average')
           );
