@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -8,7 +8,8 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
-  TooltipItem
+  TooltipItem,
+  ScriptableContext
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
@@ -17,10 +18,20 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
+import type {
+  AthleteData,
+  ChartPoint,
+  ProcessedAthleteData,
+  AthleteInfo,
+  ChartAnalytics,
+  TrendDataPoint,
+  GroupAveragePoint
+} from '@/types/chart-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import ChartErrorBoundary from './components/ChartErrorBoundary';
 
 // Performance quadrant labels based on metric types
 function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
@@ -169,6 +180,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     );
   }
 
+  // Track mounted state to prevent memory leaks
+  const isMountedRef = useRef(true);
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Internal state for athlete selection and toggles
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
@@ -199,9 +220,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   useEffect(() => {
     if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0) {
       const initialSelection = allAthletes.slice(0, maxAthletes).map(a => a.id);
-      handleSelectionChange(initialSelection);
+      if (isMountedRef.current) {
+        handleSelectionChange(initialSelection);
+      }
     }
-  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
+  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length, handleSelectionChange]);
 
   // Initialize athlete toggles when athletes change
   useEffect(() => {
@@ -209,7 +232,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     allAthletes.forEach(athlete => {
       newToggles[athlete.id] = effectiveSelectedIds.includes(athlete.id);
     });
-    setAthleteToggles(newToggles);
+    if (isMountedRef.current) {
+      setAthleteToggles(newToggles);
+    }
   }, [allAthletes, effectiveSelectedIds]);
 
   // Filter displayed athletes based on selection and toggles
@@ -219,8 +244,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     );
   }, [allAthletes, effectiveSelectedIds, athleteToggles]);
 
-  // Helper function to calculate correlation coefficient
-  const calculateCorrelation = (xValues: number[], yValues: number[]): number => {
+  // Helper function to calculate correlation coefficient - memoized to prevent recalculations
+  const calculateCorrelation = useCallback((xValues: number[], yValues: number[]): number => {
     if (xValues.length !== yValues.length || xValues.length < 2) return 0;
 
     const n = xValues.length;
@@ -234,10 +259,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     const denominator = Math.sqrt((n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY));
 
     return denominator === 0 ? 0 : numerator / denominator;
-  };
+  }, []);
 
-  // Helper function to calculate rate of improvement (slope)
-  const calculateImprovement = (values: {value: number, date: Date}[]): number => {
+  // Helper function to calculate rate of improvement (slope) - memoized to prevent recalculations
+  const calculateImprovement = useCallback((values: {value: number, date: Date}[]): number => {
     if (values.length < 2) return 0;
 
     const sortedValues = [...values].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -247,7 +272,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     const daySpan = timeSpan / (1000 * 60 * 60 * 24); // Convert to days
 
     return daySpan > 0 ? (lastValue - firstValue) / daySpan : 0;
-  };
+  }, []);
 
   // Transform trend data for connected scatter plot
   const scatterData = useMemo(() => {
@@ -267,7 +292,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       }
       acc[trend.athleteId].metrics[trend.metric] = trend.data;
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, ProcessedAthleteData>);
 
     // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
     const athletesToShow = highlightAthlete ?
@@ -279,7 +304,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
 
     // Ensure we have athletes with both metrics and valid data
-    const validAthletes = athletesToShow.filter((athlete: any) => {
+    const validAthletes = athletesToShow.filter((athlete: ProcessedAthleteData) => {
       if (!athlete) return false;
 
       // Only require the specific two metrics being used for X and Y axes
@@ -294,10 +319,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     }
 
     // Use valid athletes for chart data
-    const athleteTrends = validAthletes.reduce((acc, athlete: any) => {
+    const athleteTrends = validAthletes.reduce((acc, athlete: ProcessedAthleteData) => {
       acc[athlete.athleteId] = athlete;
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, ProcessedAthleteData>);
 
     const colors = [
       'rgba(59, 130, 246, 1)',
@@ -305,17 +330,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       'rgba(239, 68, 68, 1)'
     ];
 
-    const datasets = Object.values(athleteTrends).map((athlete: any, index) => {
+    const datasets = Object.values(athleteTrends).map((athlete: ProcessedAthleteData, index) => {
       const xData = athlete.metrics[xMetric] || [];
       const yData = athlete.metrics[yMetric] || [];
 
       // Create all points from both metrics, using last known values for missing data
-      const allDataPoints: any[] = [];
+      const allDataPoints: ChartPoint[] = [];
 
       // Combine all unique dates from both metrics
       const allDates = new Set<string>();
 
-      [...xData, ...yData].forEach((point: any) => {
+      [...xData, ...yData].forEach((point: TrendDataPoint) => {
         try {
           const date = point.date instanceof Date ? point.date : new Date(point.date);
           allDates.add(date.toISOString().split('T')[0]);
@@ -334,7 +359,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         const currentDate = new Date(dateStr);
 
         // Find exact matches for this date
-        const xPoint = xData.find((x: any) => {
+        const xPoint = xData.find((x: TrendDataPoint) => {
           try {
             const xDate = x.date instanceof Date ? x.date : new Date(x.date);
             return xDate.toISOString().split('T')[0] === dateStr;
@@ -343,7 +368,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           }
         });
 
-        const yPoint = yData.find((y: any) => {
+        const yPoint = yData.find((y: TrendDataPoint) => {
           try {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
             return yDate.toISOString().split('T')[0] === dateStr;
@@ -385,8 +410,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         borderColor: color,
         borderWidth: isHighlighted ? 3 : 2,
         pointHoverRadius: isHighlighted ? 10 : 8,
-        pointBackgroundColor: (context: any) => {
-          const point = context.raw;
+        pointBackgroundColor: (context: ScriptableContext<'line'>) => {
+          const point = context.raw as ChartPoint;
           if (point?.isPersonalBest) return 'rgba(255, 215, 0, 1)';
 
           // Different styling for interpolated vs actual data points
@@ -398,7 +423,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           // Time-based color coding - newer points are more saturated
           if (point?.date && connectedPoints.length > 1) {
             const pointDate = new Date(point.date).getTime();
-            const oldestDate = Math.min(...connectedPoints.map((p: any) => new Date(p.date).getTime()));
+            const oldestDate = Math.min(...connectedPoints.map((p: ChartPoint) => new Date(p.date).getTime()));
             const newestDate = Math.max(...connectedPoints.map((p: any) => new Date(p.date).getTime()));
             const dateRange = newestDate - oldestDate;
 
@@ -411,8 +436,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
           return color;
         },
-        pointRadius: (context: any) => {
-          const point = context.raw;
+        pointRadius: (context: ScriptableContext<'line'>) => {
+          const point = context.raw as ChartPoint;
           if (point?.isPersonalBest) return isHighlighted ? 8 : 6;
           if (point?.isInterpolated) return isHighlighted ? 3 : 2; // Smaller for interpolated points
           return isHighlighted ? 6 : 4; // Normal size for actual data
@@ -443,7 +468,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       // Match points by date for correlation calculation - only use actual measurement points
       const matchedPoints = xData
         .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => {
+          const yPoint = yData.find((y: TrendDataPoint) => {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
             const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
@@ -484,9 +509,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
 
       // Create group average points for dates where both metrics have group averages
-      const groupAveragePoints = xData
-        .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => {
+      const groupAveragePoints: ChartPoint[] = xData
+        .map((xPoint: TrendDataPoint) => {
+          const yPoint = yData.find((y: TrendDataPoint) => {
             const yDate = y.date instanceof Date ? y.date : new Date(y.date);
             const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
             return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
@@ -498,13 +523,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             return {
               x: xPoint.groupAverage,
               y: yPoint.groupAverage,
-              date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
+              date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
+              isPersonalBest: false,
+              hasActualData: true,
+              isInterpolated: false
             };
           }
           return null;
         })
-        .filter(Boolean)
-        .sort((a: any, b: any) => {
+        .filter((point): point is ChartPoint => point !== null)
+        .sort((a: ChartPoint, b: ChartPoint) => {
           const dateA = a.date instanceof Date ? a.date : new Date(a.date);
           const dateB = b.date instanceof Date ? b.date : new Date(b.date);
           return dateA.getTime() - dateB.getTime();
@@ -537,7 +565,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           allAthletesForGroupCalc.forEach((athlete: any) => {
             const xData = athlete.metrics[xMetric] || [];
             const yData = athlete.metrics[yMetric] || [];
-            [...xData, ...yData].forEach((point: any) => {
+            [...xData, ...yData].forEach((point: TrendDataPoint) => {
               try {
                 const date = point.date instanceof Date ? point.date : new Date(point.date);
                 allDatesSet.add(date.toISOString().split('T')[0]);
@@ -547,7 +575,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             });
           });
 
-          const syntheticGroupPoints = Array.from(allDatesSet)
+          const syntheticGroupPoints: ChartPoint[] = Array.from(allDatesSet)
             .sort()
             .map(dateStr => {
               // For each date, calculate group average from all athletes who have data for both metrics
@@ -557,7 +585,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 const xData = athlete.metrics[xMetric] || [];
                 const yData = athlete.metrics[yMetric] || [];
 
-                const xPoint = xData.find((x: any) => {
+                const xPoint = xData.find((x: TrendDataPoint) => {
                   try {
                     const xDate = x.date instanceof Date ? x.date : new Date(x.date);
                     return xDate.toISOString().split('T')[0] === dateStr;
@@ -566,7 +594,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                   }
                 });
 
-                const yPoint = yData.find((y: any) => {
+                const yPoint = yData.find((y: TrendDataPoint) => {
                   try {
                     const yDate = y.date instanceof Date ? y.date : new Date(y.date);
                     return yDate.toISOString().split('T')[0] === dateStr;
@@ -591,13 +619,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                 return {
                   x: avgX,
                   y: avgY,
-                  date: new Date(dateStr)
+                  date: new Date(dateStr),
+                  isPersonalBest: false,
+                  hasActualData: true,
+                  isInterpolated: false
                 };
               }
 
               return null;
             })
-            .filter(Boolean);
+            .filter((point): point is ChartPoint => point !== null);
 
           if (syntheticGroupPoints.length > 0) {
             datasets.push({
@@ -626,7 +657,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         label: 'Overall Group Average',
         data: [{
           x: statistics[xMetric].mean,
-          y: statistics[yMetric].mean
+          y: statistics[yMetric].mean,
+          date: new Date(),
+          isPersonalBest: false,
+          hasActualData: true,
+          isInterpolated: false
         }],
         backgroundColor: 'rgba(156, 163, 175, 1)',
         borderColor: 'rgba(156, 163, 175, 1)',
@@ -937,29 +972,29 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   } satisfies ChartOptions<'line'>;
   }, [scatterData, config, statistics]);
 
-  // Helper functions for athlete toggles
-  const toggleAthlete = (athleteId: string) => {
+  // Helper functions for athlete toggles - wrapped in useCallback to prevent memory leaks
+  const toggleAthlete = useCallback((athleteId: string) => {
     setAthleteToggles(prev => ({
       ...prev,
       [athleteId]: !prev[athleteId]
     }));
-  };
+  }, []);
 
-  const selectAllAthletes = () => {
+  const selectAllAthletes = useCallback(() => {
     const allEnabled: Record<string, boolean> = {};
     allAthletes.forEach(athlete => {
       allEnabled[athlete.id] = true;
     });
     setAthleteToggles(allEnabled);
-  };
+  }, [allAthletes]);
 
-  const clearAllAthletes = () => {
+  const clearAllAthletes = useCallback(() => {
     const allDisabled: Record<string, boolean> = {};
     allAthletes.forEach(athlete => {
       allDisabled[athlete.id] = false;
     });
     setAthleteToggles(allDisabled);
-  };
+  }, [allAthletes]);
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
 
@@ -1047,7 +1082,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       )}
 
       {scatterData ? (
-        <Line data={scatterData.chartData} options={options} />
+        <ChartErrorBoundary>
+          <Line data={scatterData.chartData} options={options} />
+        </ChartErrorBoundary>
       ) : (
         <div className="flex items-center justify-center h-64 text-muted-foreground">
           <div className="text-center">
