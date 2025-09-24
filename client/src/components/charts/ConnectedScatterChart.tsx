@@ -75,13 +75,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   // Track mounted state to prevent memory leaks - must be first
   const isMountedRef = useRef(true);
 
-  // Cleanup on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
   // Internal state for athlete selection and toggles
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
@@ -91,8 +84,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
   const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
 
-  // Process all athletes from data
+  // Process all athletes from data - handle empty data case
   const allAthletes = useMemo(() => {
+    if (!data || data.length === 0) {
+      return [];
+    }
+    
     const athleteMap = new Map();
     data.forEach(trend => {
       if (!athleteMap.has(trend.athleteId)) {
@@ -106,6 +103,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
     return Array.from(athleteMap.values());
   }, [data]);
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Set up initial athlete selection
   const maxAthletes = ALGORITHM_CONFIG.MAX_ATHLETES_DEFAULT;
@@ -178,6 +182,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
 
+  // Get unique metrics from all data for validation - handle empty data case
+  const availableMetrics = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return Array.from(new Set(data.map(trend => trend.metric)));
+  }, [data]);
+
   // Data validation after all hooks are initialized
   if (!data || data.length === 0) {
     return (
@@ -194,9 +204,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       </div>
     );
   }
-
-  // Get unique metrics from all data for validation
-  const availableMetrics = Array.from(new Set(data.map(trend => trend.metric)));
   
   if (availableMetrics.length < 2) {
     return (
