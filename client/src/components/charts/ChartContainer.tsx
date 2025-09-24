@@ -35,7 +35,10 @@ function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | Trend
   return data !== null && Array.isArray(data);
 }
 
-// Lazy load chart components to reduce bundle size
+// TEMPORARY FIX: Import ConnectedScatterChart directly to test if lazy loading is causing hooks issues
+import { ConnectedScatterChart } from './ConnectedScatterChart';
+
+// Lazy load other chart components to reduce bundle size
 const BoxPlotChart = React.lazy(() => import('./BoxPlotChart').then(m => ({ default: m.BoxPlotChart })));
 const DistributionChart = React.lazy(() => import('./DistributionChart').then(m => ({ default: m.DistributionChart })));
 const BarChart = React.lazy(() => import('./BarChart').then(m => ({ default: m.BarChart })));
@@ -43,7 +46,6 @@ const LineChart = React.lazy(() => import('./LineChart').then(m => ({ default: m
 const ScatterPlotChart = React.lazy(() => import('./ScatterPlotChart').then(m => ({ default: m.ScatterPlotChart })));
 const RadarChart = React.lazy(() => import('./RadarChart').then(m => ({ default: m.RadarChart })));
 const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default: m.SwarmChart })));
-const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 
@@ -250,19 +252,31 @@ export function ChartContainer({
         <div className="w-full" style={{ height: chartType === 'connected_scatter' ? '650px' : '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
-              <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
-                <ChartComponent
+              chartType === 'connected_scatter' ? (
+                // ConnectedScatterChart is not lazy loaded, render directly
+                <ConnectedScatterChart
                   data={chartData as any}
                   config={chartConfig}
                   statistics={statistics || {}}
                   highlightAthlete={highlightAthlete}
                   selectedAthleteIds={selectedAthleteIds}
                   onAthleteSelectionChange={onAthleteSelectionChange}
-                  showAllPoints={chartType === 'box_swarm_combo'}
-                  selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
-                  metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
                 />
-              </React.Suspense>
+              ) : (
+                <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
+                  <ChartComponent
+                    data={chartData as any}
+                    config={chartConfig}
+                    statistics={statistics || {}}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    showAllPoints={chartType === 'box_swarm_combo'}
+                    selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
+                    metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
+                  />
+                </React.Suspense>
+              )
             ) : (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
                 No data available to display
