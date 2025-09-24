@@ -999,8 +999,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           })(),
           maxTicksLimit: 8 // Prevent overcrowding
         },
-        // Set explicit bounds to match quadrant coverage
-        ...(safeScatterData?.analytics ? (() => {
+        // Apply calculated bounds directly to prevent Chart.js auto-scaling compression
+        ...(() => {
+          if (!safeScatterData?.analytics) return {};
+          
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
@@ -1049,7 +1051,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             };
           }
           return {};
-        })() : {})
+        })()
       },
       y: {
         type: 'linear',
@@ -1080,8 +1082,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           })(),
           maxTicksLimit: 8 // Prevent overcrowding
         },
-        // Set explicit bounds to match quadrant coverage
-        ...(safeScatterData?.analytics ? (() => {
+        // Apply calculated bounds directly to prevent Chart.js auto-scaling compression
+        ...(() => {
+          if (!safeScatterData?.analytics) return {};
+          
           const datasets = safeScatterData.chartData.datasets;
           if (!datasets || datasets.length === 0) return {};
 
@@ -1124,13 +1128,28 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const rangeCenter = (yMin + yMax) / 2;
             const halfEffectiveRange = effectiveRange / 2;
             
-            return { 
-              min: rangeCenter - halfEffectiveRange - yPadding, 
-              max: rangeCenter + halfEffectiveRange + yPadding 
+            const calculatedMin = rangeCenter - halfEffectiveRange - yPadding;
+            const calculatedMax = rangeCenter + halfEffectiveRange + yPadding;
+            
+            console.log('ConnectedScatterChart Y-axis bounds (applying directly):', {
+              yMetric,
+              yMin,
+              yMax,
+              yRange,
+              minRange,
+              effectiveRange,
+              calculatedMin,
+              calculatedMax
+            });
+            
+            // Apply bounds directly to Chart.js configuration
+            return {
+              min: calculatedMin,
+              max: calculatedMax
             };
           }
           return {};
-        })() : {})
+        })()
       }
     },
     elements: {
