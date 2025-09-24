@@ -674,3 +674,359 @@ export function prefersReducedMotion(): boolean {
     return false;
   }
 }
+
+// =============================================================================
+// SCATTER DATA PROCESSING
+// =============================================================================
+
+/**
+ * Process scatter plot data for ConnectedScatterChart
+ * This function handles all the complex data processing for scatter plots including:
+ * - Data validation and filtering
+ * - Performance optimization for large datasets
+ * - Group average calculations
+ * - Analytics generation
+ * - Dataset creation for Chart.js
+ */
+export function processScatterData(params: {
+  data: any[]; // TrendData[]
+  displayedAthletes: Array<{ id: string; name: string; color: number }>;
+  highlightAthlete?: string;
+  statistics?: Record<string, any>; // StatisticalSummary
+}) {
+  const { data, displayedAthletes, highlightAthlete, statistics } = params;
+
+  // Data validation already done at component level, safe to proceed
+  const metrics = Array.from(new Set(data.map((trend: any) => trend.metric)));
+  const [xMetric, yMetric] = metrics;
+
+  // Import required types and utilities (will be available at runtime)
+  const { METRIC_CONFIG } = require('@shared/analytics-types');
+  const { CHART_COLORS, ALGORITHM_CONFIG } = require('@/constants/chart-config');
+  const { getDateKey } = require('@/utils/date-utils');
+
+  // Group ALL trends by athlete FIRST
+  const allAthleteTrends = data.reduce((acc: any, trend: any) => {
+    if (!acc[trend.athleteId]) {
+      acc[trend.athleteId] = {
+        athleteId: trend.athleteId,
+        athleteName: trend.athleteName,
+        metrics: {}
+      };
+    }
+    acc[trend.athleteId].metrics[trend.metric] = trend.data;
+    return acc;
+  }, {} as Record<string, any>);
+
+  // Filter to highlighted athlete or use displayedAthletes for multi-athlete selection
+  const athletesToShow = highlightAthlete ?
+    [allAthleteTrends[highlightAthlete]].filter(Boolean) :
+    displayedAthletes.map(athlete => allAthleteTrends[athlete.id]).filter(Boolean);
+
+  // Keep all athletes for group average calculations
+  const allAthletesForGroupCalc = Object.values(allAthleteTrends);
+
+  // Ensure we have athletes with both metrics and valid data
+  const validAthletes = athletesToShow.filter((athlete: any) => {
+    if (!athlete) return false;
+
+    // Only require the specific two metrics being used for X and Y axes
+    const hasXMetric = athlete.metrics[xMetric]?.length > 0;
+    const hasYMetric = athlete.metrics[yMetric]?.length > 0;
+
+    return hasXMetric && hasYMetric;
+  });
+
+  // Performance optimization: Check total data points and limit if necessary
+  const totalDataPoints = calculateTotalDataPoints(validAthletes, xMetric, yMetric);
+  const isLargeDataset = totalDataPoints > ALGORITHM_CONFIG.MAX_DATA_POINTS;
+
+  // Apply data limiting for performance if dataset is large
+  const optimizedAthletes = isLargeDataset ? validAthletes.map((athlete: any) => ({
+    ...athlete,
+    metrics: {
+      ...athlete.metrics,
+      [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2)),
+      [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2))
+    }
+  })) : validAthletes;
+
+  if (optimizedAthletes.length === 0) {
+    return null;
+  }
+
+  const colors = [...CHART_COLORS.SERIES];
+  const datasets: any[] = [];
+
+  // Create dataset for each athlete
+  optimizedAthletes.forEach((athlete: any, athleteIndex: number) => {
+    const xData = athlete.metrics[xMetric] || [];
+    const yData = athlete.metrics[yMetric] || [];
+
+    // Match points by date for scatter plot
+    const scatterPoints: any[] = xData
+      .map((xPoint: any) => {
+        const yPoint = yData.find((y: any) => {
+          return getDateKey(y.date) === getDateKey(xPoint.date);
+        });
+
+        if (!yPoint) return null;
+
+        return {
+          x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+          y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
+          date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
+          isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest || false,
+          hasActualData: !xPoint.isInterpolated && !yPoint.isInterpolated,
+          isInterpolated: xPoint.isInterpolated || yPoint.isInterpolated || false
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+    if (scatterPoints.length === 0) return;
+
+    const athleteColor = colors[athleteIndex % colors.length];
+    const isHighlighted = highlightAthlete === athlete.athleteId;
+
+    datasets.push({
+      label: athlete.athleteName,
+      data: scatterPoints,
+      backgroundColor: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return CHART_COLORS.PERSONAL_BEST;
+        if (isHighlighted) return CHART_COLORS.HIGHLIGHT;
+        return athleteColor;
+      },
+      borderColor: athleteColor,
+      borderWidth: 2,
+      pointRadius: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return 6;
+        if (isHighlighted) return 8;
+        return 5;
+      },
+      pointHoverRadius: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return 8;
+        if (isHighlighted) return 10;
+        return 7;
+      },
+      pointBackgroundColor: (context: any) => {
+        const point = context.raw;
+        if (point?.isPersonalBest) return CHART_COLORS.PERSONAL_BEST;
+        if (isHighlighted) return CHART_COLORS.HIGHLIGHT_ALPHA;
+        return athleteColor;
+      },
+      pointBorderColor: '#fff',
+      pointBorderWidth: 2,
+      showLine: true,
+      fill: false,
+      tension: 0.1,
+    });
+  });
+
+  // Calculate analytics for highlighted athlete
+  const analytics = highlightAthlete ? (() => {
+    const targetAthlete = optimizedAthletes.find((a: any) => a.athleteId === highlightAthlete);
+    if (!targetAthlete) return null;
+
+    const xData = targetAthlete.metrics[xMetric] || [];
+    const yData = targetAthlete.metrics[yMetric] || [];
+
+    // Match points by date for correlation calculation - only use actual measurement points
+    const matchedPoints = xData
+      .map((xPoint: any) => {
+        const yPoint = yData.find((y: any) => {
+          return getDateKey(y.date) === getDateKey(xPoint.date);
+        });
+        return yPoint ? {
+          x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
+          y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
+          date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date)
+        } : null;
+      })
+      .filter(Boolean);
+
+    const xValues = matchedPoints.map((p: any) => p.x);
+    const yValues = matchedPoints.map((p: any) => p.y);
+
+    return {
+      correlation: calculateCorrelation(xValues, yValues),
+      xImprovement: calculateImprovement(xData.map((p: any) => ({
+        value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
+        date: p.date instanceof Date ? p.date : new Date(p.date)
+      }))),
+      yImprovement: calculateImprovement(yData.map((p: any) => ({
+        value: typeof p.value === 'string' ? parseFloat(p.value) : p.value,
+        date: p.date instanceof Date ? p.date : new Date(p.date)
+      }))),
+      xMean: statistics?.[xMetric]?.mean ?? (xValues.length > 0 ? xValues.reduce((a: number, b: number) => a + b, 0) / xValues.length : 0),
+      yMean: statistics?.[yMetric]?.mean ?? (yValues.length > 0 ? yValues.reduce((a: number, b: number) => a + b, 0) / yValues.length : 0),
+      dataPoints: matchedPoints.length,
+      athleteName: targetAthlete.athleteName
+    };
+  })() : null;
+
+  // Add group average trend line using groupAverage data from TrendDataPoints
+  if (optimizedAthletes.length > 0) {
+    const athlete = optimizedAthletes[0];
+    const xData = athlete.metrics[xMetric] || [];
+    const yData = athlete.metrics[yMetric] || [];
+
+    // Create group average points for dates where both metrics have group averages
+    const groupAveragePoints: any[] = xData
+      .map((xPoint: any) => {
+        const yPoint = yData.find((y: any) => {
+          return getDateKey(y.date) === getDateKey(xPoint.date);
+        });
+
+        // Only include if both points exist and have group averages
+        if (yPoint && xPoint.groupAverage !== undefined && yPoint.groupAverage !== undefined) {
+          return {
+            x: xPoint.groupAverage,
+            y: yPoint.groupAverage,
+            date: xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date),
+            isPersonalBest: false,
+            hasActualData: true,
+            isInterpolated: false
+          };
+        }
+        return null;
+      })
+      .filter((point): point is any => point !== null)
+      .sort((a: any, b: any) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+    // Add group average trend line if we have data points
+    if (groupAveragePoints.length > 0) {
+      datasets.push({
+        label: 'Group Average Trend',
+        data: groupAveragePoints,
+        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+        borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 3,
+        pointRadius: () => 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        showLine: true,
+        fill: false,
+        tension: 0.1,
+      });
+    } else {
+      // Fallback: Create synthetic group average trend line from all athlete data
+      if (allAthletesForGroupCalc.length > 1) {
+        // Collect all unique dates across all athletes
+        const allDatesSet = new Set<string>();
+        allAthletesForGroupCalc.forEach((athlete: any) => {
+          const xData = athlete.metrics[xMetric] || [];
+          const yData = athlete.metrics[yMetric] || [];
+          [...xData, ...yData].forEach((point: any) => {
+            try {
+              const dateKey = getDateKey(point.date);
+              if (dateKey) allDatesSet.add(dateKey);
+            } catch (error) {
+              console.warn('Error processing date for group average:', error);
+            }
+          });
+        });
+
+        const sortedDates = Array.from(allDatesSet).sort();
+
+        // Calculate group averages for each date
+        const syntheticGroupPoints: any[] = [];
+        for (const dateKey of sortedDates) {
+          const xValues: number[] = [];
+          const yValues: number[] = [];
+
+          allAthletesForGroupCalc.forEach((athlete: any) => {
+            const xData = athlete.metrics[xMetric] || [];
+            const yData = athlete.metrics[yMetric] || [];
+
+            const xPoint = xData.find((p: any) => getDateKey(p.date) === dateKey);
+            const yPoint = yData.find((p: any) => getDateKey(p.date) === dateKey);
+
+            if (xPoint && yPoint) {
+              const xVal = typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value;
+              const yVal = typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value;
+              if (!isNaN(xVal) && !isNaN(yVal)) {
+                xValues.push(xVal);
+                yValues.push(yVal);
+              }
+            }
+          });
+
+          // Only add point if we have data from at least 2 athletes
+          if (xValues.length >= 2 && yValues.length >= 2) {
+            const avgX = xValues.reduce((sum, val) => sum + val, 0) / xValues.length;
+            const avgY = yValues.reduce((sum, val) => sum + val, 0) / yValues.length;
+
+            syntheticGroupPoints.push({
+              x: avgX,
+              y: avgY,
+              date: new Date(dateKey),
+              isPersonalBest: false,
+              hasActualData: true,
+              isInterpolated: false
+            });
+          }
+        }
+
+        if (syntheticGroupPoints.length > 0) {
+          datasets.push({
+            label: 'Group Average Trend',
+            data: syntheticGroupPoints,
+            backgroundColor: 'rgba(99, 102, 241, 0.2)',
+            borderColor: 'rgba(99, 102, 241, 1)',
+            borderWidth: 3,
+            pointRadius: () => 6,
+            pointHoverRadius: 8,
+            pointBackgroundColor: () => 'rgba(99, 102, 241, 1)',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            showLine: true,
+            fill: false,
+            tension: 0.1,
+          });
+        }
+      }
+    }
+  }
+
+  // Get metric configuration
+  const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
+  const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
+  const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
+  const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+
+  const athleteTrends = optimizedAthletes.reduce((acc: any, athlete: any) => {
+    acc[athlete.athleteId] = athlete;
+    return acc;
+  }, {} as Record<string, any>);
+
+  return {
+    datasets,
+    xMetric,
+    yMetric,
+    xUnit,
+    yUnit,
+    xLabel,
+    yLabel,
+    athleteTrends,
+    analytics,
+    // Add analytics to chart data for plugin access
+    chartData: {
+      datasets,
+      analytics
+    }
+  };
+}

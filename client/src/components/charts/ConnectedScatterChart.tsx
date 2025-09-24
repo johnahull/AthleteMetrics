@@ -38,7 +38,8 @@ import {
   limitDatasetSize,
   calculateTotalDataPoints,
   calculateCorrelation,
-  calculateImprovement
+  calculateImprovement,
+  processScatterData
 } from '@/utils/chart-calculations';
 import { getDateKey, safeParseDate } from '@/utils/date-utils';
 
