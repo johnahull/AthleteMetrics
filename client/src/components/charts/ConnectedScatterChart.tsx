@@ -991,7 +991,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const xPadding = xRange > 0 ? xRange * padding : Math.max(0.1, xMin * 0.1);
 
             return { 
-              min: Math.max(0, xMin - xPadding), 
+              min: xMin - xPadding, 
               max: xMax + xPadding 
             };
           }
@@ -1049,7 +1049,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             const yPadding = yRange > 0 ? Math.max(yRange * padding, 0.5) : Math.max(Math.abs(yMin) * 0.2, 2);
             
             return { 
-              min: Math.max(0, yMin - yPadding), 
+              min: yMin - yPadding, 
               max: yMax + yPadding 
             };
           }
