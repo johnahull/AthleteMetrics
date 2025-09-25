@@ -144,11 +144,11 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       
       // Auto-switch timeframe type for trends-based charts
       const updatedTimeframe = requiresTrends && state.timeframe.type !== 'trends'
-        ? { 
-            ...state.timeframe, 
+        ? {
+            ...state.timeframe,
             type: 'trends' as const,
-            // Set a sensible default period for trends if current period is 'all_time'
-            period: state.timeframe.period === 'all_time' ? 'last_90_days' as const : state.timeframe.period
+            // Default to 'all_time' for trends to show maximum data
+            period: 'all_time' as const
           }
         : state.timeframe;
 
