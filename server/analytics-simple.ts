@@ -331,14 +331,6 @@ export class AnalyticsService {
 
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
-      console.log(`🔍 Analytics Request Received:`, {
-        analysisType: request.analysisType,
-        athleteId: request.athleteId,
-        organizationId: request.filters.organizationId,
-        timeframeType: request.timeframe?.type,
-        primaryMetric: request.metrics?.primary
-      });
-
       // Validate request
       const validation = validateAnalyticsFilters(request.filters);
       if (!validation.isValid) {
@@ -428,17 +420,6 @@ export class AnalyticsService {
         .limit(10000); // Increased limit with proper safeguards
 
       // Database query completed, processing results
-      console.log(`Analytics Debug: Found ${data.length} raw measurements from database`);
-      console.log('Analytics Debug: Request details:', {
-        organizationId: request.filters.organizationId,
-        analysisType: request.analysisType,
-        athleteId: request.athleteId,
-        timeframeType: request.timeframe?.type,
-        timeframePeriod: request.timeframe?.period,
-        athleteIds: request.filters.athleteIds?.length || 0,
-        teams: request.filters.teams?.length || 0,
-        dateRange: startDate && endDate ? `${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}` : 'No range'
-      });
       
       // Transform to chart data format with input sanitization
       let chartData: ChartDataPoint[] = data.map((row: QueryResult) => ({
@@ -451,13 +432,10 @@ export class AnalyticsService {
       }));
 
       // Apply filtering based on timeframe type
-      console.log(`Analytics Debug: Before filtering - ${chartData.length} chart data points`);
       if (request.timeframe.type === 'best') {
         chartData = filterToBestMeasurements(chartData);
-        console.log(`Analytics Debug: After 'best' filtering - ${chartData.length} chart data points`);
       } else if (request.timeframe.type === 'trends') {
         chartData = filterToBestMeasurementsPerDate(chartData);
-        console.log(`Analytics Debug: After 'trends' filtering - ${chartData.length} chart data points`);
       }
 
       // Robust statistics calculation using utility functions
