@@ -23,10 +23,15 @@ export interface GroupingDimensions {
   schoolGrades?: string[];
 }
 
-// Enhanced analytics filters
-export interface AnalyticsFilters extends GroupingDimensions {
+// Simplified analytics filters - only essential fields used by the system
+export interface AnalyticsFilters {
   organizationId: string;
   athleteIds?: string[]; // For specific athlete selection
+  teams?: string[]; // Filter by team membership
+  genders?: ('Male' | 'Female' | 'Not Specified')[];
+  birthYears?: number[]; // Birth year filtering
+  sports?: string[]; // Filter by sport participation
+  positions?: string[]; // Filter by player positions
 }
 
 // Metrics selection with priority
