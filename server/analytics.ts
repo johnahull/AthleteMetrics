@@ -318,8 +318,13 @@ export class AnalyticsService {
     const allMetrics = [metrics.primary, ...metrics.additional];
     const multiMetricData: MultiMetricData[] = [];
 
+    console.log('getMultiMetricData: Starting with data length:', data.length);
+    console.log('getMultiMetricData: All metrics:', allMetrics);
+    console.log('getMultiMetricData: Sample data points:', data.slice(0, 3));
+
     // Group by athlete
     const athleteGroups = this.groupBy(data, ['athleteId']);
+    console.log('getMultiMetricData: Athlete groups:', Object.keys(athleteGroups).length);
 
     for (const [athleteId, points] of Object.entries(athleteGroups)) {
       const athleteName = points[0].athleteName;
@@ -358,6 +363,10 @@ export class AnalyticsService {
       });
     }
 
+    console.log('getMultiMetricData: Returning', multiMetricData.length, 'items');
+    if (multiMetricData.length > 0) {
+      console.log('getMultiMetricData: Sample multiMetric item:', multiMetricData[0]);
+    }
     return multiMetricData;
   }
 
