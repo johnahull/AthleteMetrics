@@ -181,7 +181,8 @@ export function RadarChart({
       labels,
       datasets,
       metrics,
-      groupAverages
+      groupAverages,
+      data: processedData // Added for context in the tooltip logic
     };
   }, [data, statistics, highlightAthlete]);
 
@@ -221,7 +222,8 @@ export function RadarChart({
             if (athleteName === 'Group Average') {
               actualValue = radarData?.groupAverages[metricIndex] || 0;
             } else {
-              const athlete = data.find(a => a.athleteName === athleteName);
+              // Corrected reference to radarData.data
+              const athlete = radarData?.data.find(a => a.athleteName === athleteName);
               actualValue = athlete?.metrics[metric] || 0;
             }
 
@@ -350,7 +352,7 @@ export function RadarChart({
         {highlightAthlete && (
           <div className="grid grid-cols-3 gap-4 text-center">
             {radarData.metrics.slice(0, 3).map((metric, index) => {
-              const athlete = processedData.find(a => a.athleteId === highlightAthlete);
+              const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
               const percentile = athlete?.percentileRanks?.[metric];
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
