@@ -64,8 +64,10 @@ export class AnalyticsService {
       await this.getTrendData(data, metrics, timeframe) : undefined;
 
     // Get multi-metric data for radar charts
+    console.log('RADAR CHART DEBUG: additional metrics count:', metrics.additional.length);
     const multiMetric = metrics.additional.length > 0 ?
       await this.getMultiMetricData(data, metrics, filters) : undefined;
+    console.log('RADAR CHART DEBUG: multiMetric result:', multiMetric?.length || 0, 'items');
 
     // Group data by relevant dimensions
     const groupings = await this.createGroupings(data, filters);
