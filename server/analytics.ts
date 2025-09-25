@@ -119,28 +119,12 @@ export class AnalyticsService {
       allConditions.push(inArray(measurements.userId, filters.athleteIds));
     }
 
-    // Add birth year filtering
-    if (filters.birthYears?.length) {
-      const birthYearConditions = filters.birthYears.map(year =>
-        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${year}`
-      );
-      allConditions.push(sql`(${sql.join(birthYearConditions, sql` OR `)})`);
+    // Add birth year range filtering
+    if (filters.birthYearFrom) {
+      allConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${filters.birthYearFrom}`);
     }
-
-    // Add sports filtering
-    if (filters.sports?.length) {
-      const sportsConditions = filters.sports.map(sport =>
-        sql`${users.sports} @> ${JSON.stringify([sport])}`
-      );
-      allConditions.push(sql`(${sql.join(sportsConditions, sql` OR `)})`);
-    }
-
-    // Add positions filtering
-    if (filters.positions?.length) {
-      const positionsConditions = filters.positions.map(position =>
-        sql`${users.positions} @> ${JSON.stringify([position])}`
-      );
-      allConditions.push(sql`(${sql.join(positionsConditions, sql` OR `)})`);
+    if (filters.birthYearTo) {
+      allConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${filters.birthYearTo}`);
     }
 
     // Return the complete query with all conditions applied

@@ -29,9 +29,8 @@ export interface AnalyticsFilters {
   athleteIds?: string[]; // For specific athlete selection
   teams?: string[]; // Filter by team membership
   genders?: ('Male' | 'Female' | 'Not Specified')[];
-  birthYears?: number[]; // Birth year filtering
-  sports?: string[]; // Filter by sport participation
-  positions?: string[]; // Filter by player positions
+  birthYearFrom?: number; // Birth year range start
+  birthYearTo?: number; // Birth year range end
 }
 
 // Metrics selection with priority

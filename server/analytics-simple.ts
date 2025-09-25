@@ -275,28 +275,12 @@ export class AnalyticsService {
         whereConditions.push(inArray(users.gender, request.filters.genders));
       }
 
-      // Add birth year filtering if specified
-      if (request.filters.birthYears && request.filters.birthYears.length > 0) {
-        const birthYearConditions = request.filters.birthYears.map(year =>
-          sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${year}`
-        );
-        whereConditions.push(sql`(${sql.join(birthYearConditions, sql` OR `)})`);
+      // Add birth year range filtering if specified
+      if (request.filters.birthYearFrom) {
+        whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom}`);
       }
-
-      // Add sports filtering if specified
-      if (request.filters.sports && request.filters.sports.length > 0) {
-        const sportsConditions = request.filters.sports.map(sport =>
-          sql`${users.sports} @> ${JSON.stringify([sport])}`
-        );
-        whereConditions.push(sql`(${sql.join(sportsConditions, sql` OR `)})`);
-      }
-
-      // Add positions filtering if specified
-      if (request.filters.positions && request.filters.positions.length > 0) {
-        const positionsConditions = request.filters.positions.map(position =>
-          sql`${users.positions} @> ${JSON.stringify([position])}`
-        );
-        whereConditions.push(sql`(${sql.join(positionsConditions, sql` OR `)})`);
+      if (request.filters.birthYearTo) {
+        whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo}`);
       }
 
       // Add date range filtering if specified
