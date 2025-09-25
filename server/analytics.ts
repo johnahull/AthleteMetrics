@@ -178,7 +178,6 @@ export class AnalyticsService {
     filters: AnalyticsFilters
   ): Promise<ChartDataPoint[]> {
     const allMetrics = [metrics.primary, ...metrics.additional];
-    console.log('Analytics: Group data requested for metrics:', allMetrics);
     
     const query = this.buildBaseQuery(filters, timeframe, allMetrics);
     
@@ -186,8 +185,6 @@ export class AnalyticsService {
     
     // Execute the query
     results = await query.execute();
-    console.log('Analytics: Raw query results count:', results.length);
-    console.log('Analytics: Raw query result metrics:', Array.from(new Set(results.map((r: any) => r.metric))));
 
     if (timeframe.type === 'best') {
       // Filter and group by athlete+metric and take best
@@ -197,8 +194,6 @@ export class AnalyticsService {
       results = results.filter((r: QueryResult) => allMetrics.includes(r.metric));
     }
 
-    console.log('Analytics: Filtered results count:', results.length);
-    console.log('Analytics: Filtered result metrics:', Array.from(new Set(results.map((r: any) => r.metric))));
 
     return this.transformToChartData(results);
   }
@@ -267,9 +262,6 @@ export class AnalyticsService {
     const trends: TrendData[] = [];
     const allMetrics = [metrics.primary, ...metrics.additional];
 
-    console.log('Analytics: Creating trend data for metrics:', allMetrics);
-    console.log('Analytics: Raw data count:', data.length);
-    console.log('Analytics: Data metrics available:', Array.from(new Set(data.map(d => d.metric))));
 
     // Group by athlete and metric
     const athleteMetricGroups = this.groupBy(data, ['athleteId', 'metric']);
@@ -350,12 +342,17 @@ export class AnalyticsService {
         }
       }
 
-      multiMetricData.push({
-        athleteId,
-        athleteName,
-        metrics: athleteMetrics,
-        percentileRanks
-      });
+      // Include athlete if they have data for at least 2 metrics (primary + 1 additional)
+      const hasMinimumMetrics = Object.keys(athleteMetrics).length >= 2;
+
+      if (hasMinimumMetrics) {
+        multiMetricData.push({
+          athleteId,
+          athleteName,
+          metrics: athleteMetrics,
+          percentileRanks
+        });
+      }
     }
 
     return multiMetricData;

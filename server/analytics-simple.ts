@@ -350,21 +350,14 @@ export class AnalyticsService {
       // Generate trends data if timeframe type is trends
       let trends: TrendData[] = [];
       if (request.timeframe.type === 'trends') {
-        console.log('AnalyticsService: Generating trends for metrics:', allMetrics);
-        console.log('AnalyticsService: Chart data available:', chartData.length, 'points');
-
         // Check what metrics actually exist in the chart data
         const availableMetrics = Array.from(new Set(chartData.map(point => point.metric)));
-        console.log('AnalyticsService: Metrics found in chart data:', availableMetrics);
 
         // Generate trends for all metrics (primary + additional)
         for (const metric of allMetrics) {
-          console.log(`AnalyticsService: Generating trends for metric: ${metric}`);
           const metricTrends = this.generateTrendsData(chartData, metric);
-          console.log(`AnalyticsService: Generated ${metricTrends.length} trends for ${metric}`);
           trends.push(...metricTrends);
         }
-        console.log('AnalyticsService: Total trends generated:', trends.length);
       }
 
       // Calculate total metric count (primary + additional)
@@ -377,10 +370,15 @@ export class AnalyticsService {
         request.timeframe.type
       );
 
+      // Generate multiMetric data for radar charts when multiple metrics are selected
+      const multiMetric = request.metrics.additional.length > 0 
+        ? this.generateMultiMetricData(chartData, request.metrics)
+        : [];
+
       return {
         data: chartData,
         trends,
-        multiMetric: [],
+        multiMetric,
         statistics,
         groupings: {},
         meta: {
@@ -402,5 +400,82 @@ export class AnalyticsService {
       console.error('Analytics service error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate multi-metric data for radar charts
+   */
+  private generateMultiMetricData(data: ChartDataPoint[], metrics: any): any[] {
+    const allMetrics = [metrics.primary, ...metrics.additional];
+    const multiMetricData: any[] = [];
+
+
+    // Group by athlete
+    const athleteGroups: Record<string, ChartDataPoint[]> = {};
+    for (const point of data) {
+      if (!athleteGroups[point.athleteId]) {
+        athleteGroups[point.athleteId] = [];
+      }
+      athleteGroups[point.athleteId].push(point);
+    }
+
+
+    for (const [athleteId, points] of Object.entries(athleteGroups)) {
+      const athleteName = points[0].athleteName;
+      const athleteMetrics: Record<string, number> = {};
+      const percentileRanks: Record<string, number> = {};
+
+      // Get best value for each metric
+      for (const metric of allMetrics) {
+        const metricPoints = points.filter(p => p.metric === metric);
+        if (metricPoints.length > 0) {
+          const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+          const values = metricPoints.map(p => p.value);
+
+          athleteMetrics[metric] = metricConfig?.lowerIsBetter
+            ? Math.min(...values)
+            : Math.max(...values);
+          
+          // Calculate percentile rank within group
+          const allMetricValues = data
+            .filter(d => d.metric === metric)
+            .map(d => d.value)
+            .sort((a, b) => a - b);
+          
+          percentileRanks[metric] = this.calculatePercentileRank(
+            athleteMetrics[metric], 
+            allMetricValues
+          );
+        }
+      }
+
+      // Include athlete if they have data for at least 2 metrics
+      const hasMinimumMetrics = Object.keys(athleteMetrics).length >= 2;
+      
+      if (hasMinimumMetrics) {
+        multiMetricData.push({
+          athleteId,
+          athleteName,
+          metrics: athleteMetrics,
+          percentileRanks
+        });
+      }
+    }
+
+    return multiMetricData;
+  }
+
+  /**
+   * Calculate percentile rank for a value within a sorted array
+   */
+  private calculatePercentileRank(value: number, sortedValues: number[]): number {
+    if (sortedValues.length === 0) return 0;
+    
+    let rank = 0;
+    for (const val of sortedValues) {
+      if (val < value) rank++;
+    }
+    
+    return (rank / sortedValues.length) * 100;
   }
 }

@@ -11,10 +11,11 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import type { 
-  MultiMetricData, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  MultiMetricData,
+  ChartConfiguration,
+  StatisticalSummary,
+  ChartDataPoint
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
@@ -46,14 +47,53 @@ export function RadarChart({
   const radarData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
-    // Get all metrics from the data
+    // Check if data is MultiMetricData or ChartDataPoint
+    const isMultiMetric = data.length > 0 && 'metrics' in data[0];
+
+    let processedData: MultiMetricData[] = [];
+
+    if (isMultiMetric) {
+      // Data is already MultiMetricData
+      processedData = data as MultiMetricData[];
+    } else {
+      // Convert ChartDataPoint data to MultiMetricData format
+      const chartData = data as ChartDataPoint[];
+      const athleteMap = new Map<string, Partial<MultiMetricData>>();
+
+      chartData.forEach(point => {
+        if (!athleteMap.has(point.athleteId)) {
+          athleteMap.set(point.athleteId, {
+            athleteId: point.athleteId,
+            athleteName: point.athleteName,
+            metrics: {},
+            percentileRanks: {}
+          });
+        }
+
+        const athlete = athleteMap.get(point.athleteId);
+        athlete.metrics[point.metric] = point.value;
+
+        // Calculate percentile rank if statistics are available
+        if (statistics && statistics[point.metric]) {
+          const stats = statistics[point.metric];
+          const percentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
+          athlete.percentileRanks[point.metric] = Math.max(0, Math.min(100, percentile));
+        }
+      });
+
+      processedData = Array.from(athleteMap.values());
+    }
+
+    // Get all metrics from the processed data
     const allMetrics = new Set<string>();
-    data.forEach(athlete => {
+    processedData.forEach(athlete => {
       Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
     });
 
     const metrics = Array.from(allMetrics);
-    if (metrics.length < 3) return null;
+    // Require at least 2 metrics for meaningful radar chart visualization
+    // (reduced from 3+ to support more chart scenarios while maintaining utility)
+    if (metrics.length < 2) return null;
 
     // Create labels from metric config
     const labels = metrics.map(metric => 
@@ -62,10 +102,10 @@ export function RadarChart({
 
     // Calculate group averages for comparison
     const groupAverages = metrics.map(metric => {
-      const values = data
+      const values = processedData
         .map(athlete => athlete.metrics[metric])
         .filter(value => value !== undefined);
-      
+
       return values.length > 0 ? 
         values.reduce((sum, val) => sum + val, 0) / values.length : 0;
     });
@@ -76,11 +116,11 @@ export function RadarChart({
       if (!stats) return 50; // Default to middle if no stats
 
       // Use percentile rank (0-100)
-      const allValues = data
+      const allValues = processedData
         .map(athlete => athlete.metrics[metric])
         .filter(val => val !== undefined)
         .sort((a, b) => a - b);
-      
+
       const rank = allValues.filter(v => v < value).length;
       return (rank / allValues.length) * 100;
     };
@@ -107,8 +147,8 @@ export function RadarChart({
 
     // Individual athlete datasets
     const athletesToShow = highlightAthlete ? 
-      data.filter(athlete => athlete.athleteId === highlightAthlete) :
-      data.slice(0, 5); // Show top 5 if no specific athlete
+      processedData.filter(athlete => athlete.athleteId === highlightAthlete) :
+      processedData.slice(0, 5); // Show top 5 if no specific athlete
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
@@ -125,7 +165,7 @@ export function RadarChart({
       });
 
       const color = colors[index % colors.length];
-      
+
       datasets.push({
         label: athlete.athleteName,
         data: athleteValues,
@@ -144,7 +184,8 @@ export function RadarChart({
       labels,
       datasets,
       metrics,
-      groupAverages
+      groupAverages,
+      data: processedData // Added for context in the tooltip logic
     };
   }, [data, statistics, highlightAthlete]);
 
@@ -174,23 +215,24 @@ export function RadarChart({
             const metricIndex = context.dataIndex;
             const metric = radarData?.metrics[metricIndex];
             const rawValue = context.parsed.r;
-            
+
             if (!metric) return '';
 
             // Find the actual value for this athlete and metric
             const athleteName = context.dataset.label;
             let actualValue = 0;
-            
+
             if (athleteName === 'Group Average') {
               actualValue = radarData?.groupAverages[metricIndex] || 0;
             } else {
-              const athlete = data.find(a => a.athleteName === athleteName);
+              // Corrected reference to radarData.data
+              const athlete = radarData?.data.find(a => a.athleteName === athleteName);
               actualValue = athlete?.metrics[metric] || 0;
             }
 
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-            
+
             return [
               `${label}: ${actualValue.toFixed(2)}${unit}`,
               `Percentile: ${rawValue.toFixed(0)}%`
@@ -236,9 +278,66 @@ export function RadarChart({
   };
 
   if (!radarData) {
+    // Check if we have data but it doesn't meet radar chart requirements
+    if (data && data.length > 0) {
+      const isMultiMetric = data.length > 0 && 'metrics' in data[0];
+
+      if (isMultiMetric) {
+        const processedData = data as MultiMetricData[];
+        const allMetrics = new Set<string>();
+        processedData.forEach(athlete => {
+          Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
+        });
+
+        if (allMetrics.size < 2) {
+          return (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              <div className="text-center">
+                <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+                <div className="text-sm">
+                  Radar charts require at least 2 metrics with data for each athlete.
+                </div>
+                <div className="text-sm mt-1 text-muted-foreground/80">
+                  Currently showing {allMetrics.size} metric{allMetrics.size !== 1 ? 's' : ''}. Try selecting more metrics.
+                </div>
+              </div>
+            </div>
+          );
+        }
+      } else {
+        // For ChartDataPoint data, check available metrics
+        const chartData = data as ChartDataPoint[];
+        const availableMetrics = new Set(chartData.map(point => point.metric));
+
+        if (availableMetrics.size < 2) {
+          return (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              <div className="text-center">
+                <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+                <div className="text-sm">
+                  Radar charts require at least 2 metrics with data for each athlete.
+                </div>
+                <div className="text-sm mt-1 text-muted-foreground/80">
+                  Currently showing {availableMetrics.size} metric{availableMetrics.size !== 1 ? 's' : ''}. Try selecting more metrics.
+                </div>
+              </div>
+            </div>
+          );
+        }
+      }
+    }
+
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No data available for radar chart (requires 3+ metrics and multi-metric data)
+        <div className="text-center">
+          <div className="text-lg font-medium mb-2">Radar Chart Unavailable</div>
+          <div className="text-sm">
+            Radar charts require at least 2 metrics with data for each athlete.
+          </div>
+          <div className="text-sm mt-1 text-muted-foreground/80">
+            Try selecting more metrics or adjusting your filters.
+          </div>
+        </div>
       </div>
     );
   }
@@ -246,22 +345,22 @@ export function RadarChart({
   return (
     <div className="w-full h-full">
       <Radar data={radarData} options={options} />
-      
+
       {/* Performance summary */}
       <div className="mt-4 text-sm">
         <div className="text-center text-muted-foreground mb-2">
           Values shown as percentile ranks (0-100%) relative to group
         </div>
-        
+
         {highlightAthlete && (
           <div className="grid grid-cols-3 gap-4 text-center">
             {radarData.metrics.slice(0, 3).map((metric, index) => {
-              const athlete = data.find(a => a.athleteId === highlightAthlete);
+              const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
-              const percentile = athlete?.percentileRanks[metric];
+              const percentile = athlete?.percentileRanks?.[metric];
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
               const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-              
+
               return (
                 <div key={metric} className="space-y-1">
                   <div className="font-medium text-xs">{label}</div>

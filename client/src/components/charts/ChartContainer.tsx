@@ -35,7 +35,13 @@ function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | Trend
   return data !== null && Array.isArray(data);
 }
 
-// Lazy load chart components to reduce bundle size
+// Import ConnectedScatterChart directly to prevent hooks order violations during lazy loading
+// ConnectedScatterChart cannot be lazy loaded because it uses hooks that depend on data state,
+// and React.Suspense can cause hooks to be called in different orders during component switching,
+// violating the Rules of Hooks and causing runtime errors.
+import { ConnectedScatterChart } from './ConnectedScatterChart';
+
+// Lazy load other chart components to reduce bundle size
 const BoxPlotChart = React.lazy(() => import('./BoxPlotChart').then(m => ({ default: m.BoxPlotChart })));
 const DistributionChart = React.lazy(() => import('./DistributionChart').then(m => ({ default: m.DistributionChart })));
 const BarChart = React.lazy(() => import('./BarChart').then(m => ({ default: m.BarChart })));
@@ -43,7 +49,6 @@ const LineChart = React.lazy(() => import('./LineChart').then(m => ({ default: m
 const ScatterPlotChart = React.lazy(() => import('./ScatterPlotChart').then(m => ({ default: m.ScatterPlotChart })));
 const RadarChart = React.lazy(() => import('./RadarChart').then(m => ({ default: m.RadarChart })));
 const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default: m.SwarmChart })));
-const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 
@@ -88,6 +93,7 @@ export function ChartContainer({
   onFullscreen,
   className
 }: ChartContainerProps) {
+  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   // Memoize chart component selection
   const ChartComponent = useMemo(() => {
     switch (chartType) {
@@ -139,12 +145,18 @@ export function ChartContainer({
       case 'time_series_box_swarm':
         return trends;
       case 'radar_chart':
-        return multiMetric;
+        // For radar chart, prefer multiMetric data, but fallback to regular data if available
+        // Ensure we have valid data before returning
+        if (multiMetric && Array.isArray(multiMetric) && multiMetric.length > 0) {
+          return multiMetric;
+        }
+        return data && Array.isArray(data) && data.length > 0 ? data : null;
       default:
         return data;
     }
   }, [chartType, data, trends, multiMetric]);
 
+  // Conditional rendering AFTER all hooks
   if (isLoading) {
     return (
       <Card className={className}>
@@ -248,19 +260,31 @@ export function ChartContainer({
         <div className="w-full" style={{ height: chartType === 'connected_scatter' ? '650px' : '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
-              <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
-                <ChartComponent
-                  data={chartData as any}
+              chartType === 'connected_scatter' ? (
+                // ConnectedScatterChart is not lazy loaded to prevent hooks order violations
+                <ConnectedScatterChart
+                  data={chartData as TrendData[]}
                   config={chartConfig}
                   statistics={statistics || {}}
                   highlightAthlete={highlightAthlete}
                   selectedAthleteIds={selectedAthleteIds}
                   onAthleteSelectionChange={onAthleteSelectionChange}
-                  showAllPoints={chartType === 'box_swarm_combo'}
-                  selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
-                  metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
                 />
-              </React.Suspense>
+              ) : (
+                <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
+                  <ChartComponent
+                    data={chartData as ChartDataPoint[] | TrendData[] | MultiMetricData[]}
+                    config={chartConfig}
+                    statistics={statistics || {}}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    showAllPoints={chartType === 'box_swarm_combo'}
+                    selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
+                    metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
+                  />
+                </React.Suspense>
+              )
             ) : (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
                 No data available to display

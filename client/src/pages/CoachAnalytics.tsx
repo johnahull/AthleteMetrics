@@ -52,6 +52,7 @@ function formatChartTypeName(chartType: string): string {
 }
 
 export function CoachAnalytics() {
+  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   const { user, organizationContext } = useAuth();
 
   // Get user's organizations for fallback when organizationContext is null
@@ -60,39 +61,6 @@ export function CoachAnalytics() {
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
 
-  // Role-based access control - only coaches and org admins
-  if (!user) {
-    return <div className="p-6">Loading...</div>;
-  }
-
-  const userRole = user?.role;
-  const isUserSiteAdmin = isSiteAdmin(user);
-
-  if (!isUserSiteAdmin && !hasRole(user as EnhancedUser, 'coach') && !hasRole(user as EnhancedUser, 'org_admin')) {
-    return (
-      <div className="p-6">
-        <div className="max-w-md mx-auto mt-20 text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-            </div>
-            <h2 className="text-lg font-semibold text-red-800 mb-2">Access Restricted</h2>
-            <p className="text-red-700 mb-4">
-              Coach Analytics is only available to coaches and organization administrators.
-            </p>
-            <p className="text-sm text-red-600">
-              Your current role: <span className="font-medium">{userRole || 'athlete'}</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
   // Core state
   const [analysisType, setAnalysisType] = useState<AnalysisType>('individual');
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
@@ -360,6 +328,40 @@ export function CoachAnalytics() {
       aspectRatio: 2
     };
   }, [analysisType, selectedChartType, metrics, timeframe, selectedAthleteId, availableAthletes]);
+
+  // Conditional rendering AFTER all hooks - prevents hooks order violations
+  // Role-based access control - only coaches and org admins
+  if (!user) {
+    return <div className="p-6">Loading...</div>;
+  }
+
+  const userRole = user?.role;
+  const isUserSiteAdmin = isSiteAdmin(user);
+
+  if (!isUserSiteAdmin && !hasRole(user as EnhancedUser, 'coach') && !hasRole(user as EnhancedUser, 'org_admin')) {
+    return (
+      <div className="p-6">
+        <div className="max-w-md mx-auto mt-20 text-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="flex justify-center mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+            </div>
+            <h2 className="text-lg font-semibold text-red-800 mb-2">Access Restricted</h2>
+            <p className="text-red-700 mb-4">
+              Coach Analytics is only available to coaches and organization administrators.
+            </p>
+            <p className="text-sm text-red-600">
+              Your current role: <span className="font-medium">{userRole || 'athlete'}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -658,6 +660,8 @@ export function CoachAnalytics() {
               multiMetric={analyticsData.multiMetric}
               statistics={analyticsData.statistics}
               config={chartConfig}
+              isLoading={isLoading}
+              error={error}
               highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
               selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
               onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}

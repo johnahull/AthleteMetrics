@@ -8,6 +8,7 @@
 
 import type { TrendData, StatisticalSummary, ChartConfiguration } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { CHART_CONFIG } from '@/constants/chart-config';
 import type { ChartOptions } from 'chart.js';
 import type {
   ChartPoint,
@@ -18,6 +19,7 @@ import type {
   PerformanceQuadrantLabel
 } from '@/types/chart-types';
 import { CHART_COLORS, CHART_CONFIG } from '@/constants/chart-config';
+import { getDateKey } from '@/utils/date-utils'; // Added this import
 
 // =============================================================================
 // PERFORMANCE QUADRANT CALCULATIONS
@@ -656,10 +658,7 @@ export function processScatterData(params: {
   const metrics = Array.from(new Set(data.map((trend: any) => trend.metric)));
   const [xMetric, yMetric] = metrics;
 
-  // Import required types and utilities (will be available at runtime)
-  const { METRIC_CONFIG } = require('@shared/analytics-types');
-  const { CHART_COLORS, ALGORITHM_CONFIG } = require('@/constants/chart-config');
-  const { getDateKey } = require('@/utils/date-utils');
+  // All required utilities are now imported at the top of the file
 
   // Group ALL trends by athlete FIRST
   const allAthleteTrends = data.reduce((acc: any, trend: any) => {
@@ -695,15 +694,15 @@ export function processScatterData(params: {
 
   // Performance optimization: Check total data points and limit if necessary
   const totalDataPoints = calculateTotalDataPoints(validAthletes, xMetric, yMetric);
-  const isLargeDataset = totalDataPoints > ALGORITHM_CONFIG.MAX_DATA_POINTS;
+  const isLargeDataset = totalDataPoints > CHART_CONFIG.ALGORITHM.MAX_DATA_POINTS;
 
   // Apply data limiting for performance if dataset is large
   const optimizedAthletes = isLargeDataset ? validAthletes.map((athlete: any) => ({
     ...athlete,
     metrics: {
       ...athlete.metrics,
-      [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2)),
-      [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2))
+      [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(CHART_CONFIG.ALGORITHM.MAX_DATA_POINTS / validAthletes.length / 2)),
+      [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(CHART_CONFIG.ALGORITHM.MAX_DATA_POINTS / validAthletes.length / 2))
     }
   })) : validAthletes;
 
@@ -992,7 +991,7 @@ export function processScatterData(params: {
 // =============================================================================
 
 /**
- * Create chart options configuration for connected scatter chart
+ * Create chart options configuration for connected scatter plot
  *
  * @param scatterData - Processed scatter chart data
  * @param config - Chart configuration from props
