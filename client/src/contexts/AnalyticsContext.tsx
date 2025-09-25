@@ -137,11 +137,27 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
         timeframe: { ...state.timeframe, ...action.payload }
       };
 
-    case 'SET_CHART_TYPE':
+    case 'SET_CHART_TYPE': {
+      // Chart types that require trends data (time-series charts)
+      const trendsChartTypes = ['line_chart', 'multi_line', 'connected_scatter'];
+      const requiresTrends = trendsChartTypes.includes(action.payload);
+      
+      // Auto-switch timeframe type for trends-based charts
+      const updatedTimeframe = requiresTrends && state.timeframe.type !== 'trends'
+        ? { 
+            ...state.timeframe, 
+            type: 'trends' as const,
+            // Set a sensible default period for trends if current period is 'all_time'
+            period: state.timeframe.period === 'all_time' ? 'last_90_days' as const : state.timeframe.period
+          }
+        : state.timeframe;
+
       return {
         ...state,
-        selectedChartType: action.payload
+        selectedChartType: action.payload,
+        timeframe: updatedTimeframe
       };
+    }
 
     case 'SET_SHOW_ALL_CHARTS':
       return {
