@@ -19,9 +19,7 @@ import {
   Settings,
   Users,
   Calendar,
-  TrendingUp,
-  Star,
-  Zap
+  TrendingUp
 } from 'lucide-react';
 
 import { MetricsSelector } from './MetricsSelector';
@@ -35,16 +33,6 @@ import type {
   GroupingDimensions
 } from '@shared/analytics-types';
 
-// Filter preset definitions
-interface FilterPreset {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  filters: Partial<AnalyticsFilters>;
-  metrics?: Partial<MetricSelection>;
-  timeframe?: Partial<TimeframeConfig>;
-}
 
 // Grouping option definitions
 interface GroupingOption {
@@ -140,64 +128,6 @@ export function FilterPanel({
     }
   ];
 
-  // Define filter presets
-  const filterPresets: FilterPreset[] = useMemo(() => [
-    {
-      id: 'my_team',
-      name: 'My Team Only',
-      description: 'Show only athletes from your primary team',
-      icon: <Users className="h-4 w-4" />,
-      filters: {
-        teams: availableTeams.length > 0 ? [availableTeams[0].id] : []
-      }
-    },
-    {
-      id: 'top_performers',
-      name: 'Top Performers',
-      description: 'Focus on best performers this season',
-      icon: <Star className="h-4 w-4" />,
-      timeframe: {
-        type: 'best',
-        period: 'this_year'
-      },
-      filters: {}
-    },
-    {
-      id: 'recent_improvements',
-      name: 'Recent Progress',
-      description: 'Athletes with recent improvements',
-      icon: <TrendingUp className="h-4 w-4" />,
-      timeframe: {
-        type: 'trends',
-        period: 'last_30_days'
-      },
-      filters: {}
-    },
-    {
-      id: 'weekly_summary',
-      name: 'Weekly Summary',
-      description: 'Last 7 days activity',
-      icon: <Zap className="h-4 w-4" />,
-      timeframe: {
-        type: 'trends',
-        period: 'last_7_days'
-      },
-      filters: {}
-    }
-  ], [availableTeams]);
-
-  // Handle preset application
-  const applyPreset = (preset: FilterPreset) => {
-    if (preset.filters) {
-      onFiltersChange(preset.filters);
-    }
-    if (preset.metrics) {
-      onMetricsChange(preset.metrics);
-    }
-    if (preset.timeframe) {
-      onTimeframeChange(preset.timeframe);
-    }
-  };
 
   // Handle grouping changes
   const handleGroupingChange = (groupingKey: string, checked: boolean) => {
@@ -231,36 +161,6 @@ export function FilterPanel({
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* Filter Presets */}
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Zap className="h-5 w-5" />
-            Quick Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-3">
-            {filterPresets.map(preset => (
-              <Button
-                key={preset.id}
-                variant="outline"
-                onClick={() => applyPreset(preset)}
-                className="h-auto p-3 justify-start"
-              >
-                <div className="flex items-start gap-2">
-                  <div className="text-primary">{preset.icon}</div>
-                  <div className="text-left">
-                    <div className="font-medium text-sm">{preset.name}</div>
-                    <div className="text-xs text-muted-foreground">{preset.description}</div>
-                  </div>
-                </div>
-              </Button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Core Configuration */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <MetricsSelector
