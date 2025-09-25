@@ -7,7 +7,8 @@
  */
 
 import type { TrendData, StatisticalSummary, ChartConfiguration } from '@shared/analytics-types';
-import { METRIC_CONFIG, ALGORITHM_CONFIG } from '@shared/analytics-types';
+import { METRIC_CONFIG } from '@shared/analytics-types';
+import { CHART_CONFIG } from '@/constants/chart-config';
 import type { ChartOptions } from 'chart.js';
 import type {
   ChartPoint,
@@ -693,15 +694,15 @@ export function processScatterData(params: {
 
   // Performance optimization: Check total data points and limit if necessary
   const totalDataPoints = calculateTotalDataPoints(validAthletes, xMetric, yMetric);
-  const isLargeDataset = totalDataPoints > ALGORITHM_CONFIG.MAX_DATA_POINTS;
+  const isLargeDataset = totalDataPoints > CHART_CONFIG.ALGORITHM.MAX_DATA_POINTS;
 
   // Apply data limiting for performance if dataset is large
   const optimizedAthletes = isLargeDataset ? validAthletes.map((athlete: any) => ({
     ...athlete,
     metrics: {
       ...athlete.metrics,
-      [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2)),
-      [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(ALGORITHM_CONFIG.MAX_DATA_POINTS / validAthletes.length / 2))
+      [xMetric]: limitDatasetSize(athlete.metrics[xMetric] || [], Math.floor(CHART_CONFIG.ALGORITHM.MAX_DATA_POINTS / validAthletes.length / 2)),
+      [yMetric]: limitDatasetSize(athlete.metrics[yMetric] || [], Math.floor(CHART_CONFIG.ALGORITHM.MAX_DATA_POINTS / validAthletes.length / 2))
     }
   })) : validAthletes;
 
