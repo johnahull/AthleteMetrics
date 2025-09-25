@@ -99,7 +99,11 @@ export class AnalyticsService {
           baseCharts.push('time_series_box_swarm', 'line_chart');
         }
       } else if (metricCount === 2) {
-        baseCharts.push('scatter_plot', 'connected_scatter');
+        if (timeframeType === 'best') {
+          baseCharts.push('scatter_plot');
+        } else {
+          baseCharts.push('scatter_plot', 'connected_scatter');
+        }
       } else {
         baseCharts.push('radar_chart', 'multi_line');
       }
