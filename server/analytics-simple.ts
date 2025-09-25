@@ -416,8 +416,6 @@ export class AnalyticsService {
     const allMetrics = [metrics.primary, ...metrics.additional];
     const multiMetricData: any[] = [];
 
-    console.log('generateMultiMetricData: Starting with data length:', data.length);
-    console.log('generateMultiMetricData: All metrics:', allMetrics);
 
     // Group by athlete
     const athleteGroups: Record<string, ChartDataPoint[]> = {};
@@ -428,7 +426,6 @@ export class AnalyticsService {
       athleteGroups[point.athleteId].push(point);
     }
 
-    console.log('generateMultiMetricData: Athlete groups:', Object.keys(athleteGroups).length);
 
     for (const [athleteId, points] of Object.entries(athleteGroups)) {
       const athleteName = points[0].athleteName;
@@ -461,7 +458,6 @@ export class AnalyticsService {
 
       // Include athlete if they have data for at least 2 metrics
       const hasMinimumMetrics = Object.keys(athleteMetrics).length >= 2;
-      console.log(`Athlete ${athleteName}: has ${Object.keys(athleteMetrics).length} metrics, minimum required: 2`);
       
       if (hasMinimumMetrics) {
         multiMetricData.push({
@@ -473,10 +469,6 @@ export class AnalyticsService {
       }
     }
 
-    console.log('generateMultiMetricData: Returning', multiMetricData.length, 'items');
-    if (multiMetricData.length > 0) {
-      console.log('generateMultiMetricData: Sample multiMetric item:', multiMetricData[0]);
-    }
     return multiMetricData;
   }
 
