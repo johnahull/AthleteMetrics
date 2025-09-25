@@ -127,10 +127,15 @@ export function LineChart({
     // Filter based on highlighted athlete or toggle states
     const trendsToShow = highlightAthlete
       ? data.filter(trend => trend.athleteId === highlightAthlete)
-      : data.filter(trend =>
-          displayedAthletes.some(a => a.id === trend.athleteId) &&
-          athleteToggles[trend.athleteId]
-        );
+      : data.filter(trend => {
+          const isInDisplayedAthletes = displayedAthletes.some(a => a.id === trend.athleteId);
+          // If athleteToggles is empty (initial state), show all displayed athletes
+          // Otherwise, respect the toggle state
+          const isToggleEnabled = Object.keys(athleteToggles).length === 0 
+            ? true 
+            : athleteToggles[trend.athleteId];
+          return isInDisplayedAthletes && isToggleEnabled;
+        });
 
     if (trendsToShow.length === 0) return null;
 
