@@ -105,7 +105,11 @@ export class AnalyticsService {
           baseCharts.push('scatter_plot', 'connected_scatter');
         }
       } else {
-        baseCharts.push('radar_chart', 'multi_line');
+        if (timeframeType === 'best') {
+          baseCharts.push('radar_chart');
+        } else {
+          baseCharts.push('radar_chart', 'multi_line');
+        }
       }
     }
 
