@@ -254,16 +254,16 @@ export function FilterPanel({
                   <div>
                     <label className="text-sm font-medium mb-2 block">Teams</label>
                     <Select
-                      value={filters.teams?.[0] || ''}
+                      value={filters.teams?.[0] || 'all_teams'}
                       onValueChange={(value) =>
-                        onFiltersChange({ teams: value ? [value] : [] })
+                        onFiltersChange({ teams: value === 'all_teams' ? [] : [value] })
                       }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="All teams" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All teams</SelectItem>
+                        <SelectItem value="all_teams">All teams</SelectItem>
                         {availableTeams.map(team => (
                           <SelectItem key={team.id} value={team.id}>
                             {team.name}
@@ -279,10 +279,10 @@ export function FilterPanel({
                   <div>
                     <label className="text-sm font-medium mb-2 block">Min Birth Year</label>
                     <Select
-                      value={filters.birthYearFrom?.toString() || ''}
+                      value={filters.birthYearFrom?.toString() || 'any_year'}
                       onValueChange={(value) =>
                         onFiltersChange({
-                          birthYearFrom: value ? parseInt(value) : undefined
+                          birthYearFrom: value === 'any_year' ? undefined : parseInt(value)
                         })
                       }
                     >
@@ -290,7 +290,7 @@ export function FilterPanel({
                         <SelectValue placeholder="Any" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Any</SelectItem>
+                        <SelectItem value="any_year">Any</SelectItem>
                         {Array.from({ length: 20 }, (_, i) => 2010 - i).map(year => (
                           <SelectItem key={year} value={year.toString()}>
                             {year}
@@ -302,10 +302,10 @@ export function FilterPanel({
                   <div>
                     <label className="text-sm font-medium mb-2 block">Max Birth Year</label>
                     <Select
-                      value={filters.birthYearTo?.toString() || ''}
+                      value={filters.birthYearTo?.toString() || 'any_year'}
                       onValueChange={(value) =>
                         onFiltersChange({
-                          birthYearTo: value ? parseInt(value) : undefined
+                          birthYearTo: value === 'any_year' ? undefined : parseInt(value)
                         })
                       }
                     >
@@ -313,7 +313,7 @@ export function FilterPanel({
                         <SelectValue placeholder="Any" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Any</SelectItem>
+                        <SelectItem value="any_year">Any</SelectItem>
                         {Array.from({ length: 20 }, (_, i) => 2010 - i).map(year => (
                           <SelectItem key={year} value={year.toString()}>
                             {year}
