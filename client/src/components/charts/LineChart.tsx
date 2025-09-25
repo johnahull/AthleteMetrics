@@ -181,8 +181,9 @@ export function LineChart({
       });
 
       // Find displayed athlete index for consistent color mapping
-      const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId) ?? 0;
-      const color = colors[displayedIndex % colors.length] || 'rgba(75, 85, 99, 1)';
+      const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId);
+      const safeIndex = displayedIndex >= 0 ? displayedIndex : 0;
+      const color = colors[safeIndex % colors.length] || 'rgba(59, 130, 246, 1)'; // Fallback to blue
       const isHighlighted = trend.athleteId === highlightAthlete;
 
       return {

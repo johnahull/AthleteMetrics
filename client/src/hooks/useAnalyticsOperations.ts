@@ -124,11 +124,19 @@ export function useAnalyticsDataFetcher() {
       const needsInterGroupAnalysis = state.selectedChartType === 'line_chart' || state.timeframe.type === 'trends';
       const effectiveAnalysisType = needsInterGroupAnalysis ? 'inter_group' : state.analysisType;
       
+      // For trends/line charts, use broader timeframe to ensure sufficient data
+      const effectiveTimeframe = needsInterGroupAnalysis ? {
+        ...state.timeframe,
+        period: state.timeframe.period === 'last_7_days' || state.timeframe.period === 'last_30_days' || state.timeframe.period === 'last_90_days' 
+          ? 'all_time' as const
+          : state.timeframe.period
+      } : state.timeframe;
+      
       const request: AnalyticsRequest = {
         analysisType: effectiveAnalysisType,
         filters: { ...state.filters, organizationId: effectiveOrganizationId },
         metrics: state.metrics,
-        timeframe: state.timeframe,
+        timeframe: effectiveTimeframe,
         athleteId: (effectiveAnalysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
 
