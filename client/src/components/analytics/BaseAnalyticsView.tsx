@@ -16,9 +16,7 @@ import { ChartContainer } from '@/components/charts/ChartContainer';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
-import { AnalyticsFilters } from './AnalyticsFilters';
-import { MetricsSelector } from './MetricsSelector';
-import { TimeframeSelector } from './TimeframeSelector';
+import { FilterPanel } from './FilterPanel';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 
 import type { AnalysisType } from '@shared/analytics-types';
@@ -254,38 +252,23 @@ function BaseAnalyticsViewContent({
           </Card>
         )}
 
-        {/* Filters Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            <MetricsSelector
-              metrics={state.metrics}
-              onMetricsChange={updateMetrics}
-            />
-            {additionalFilters}
-          </div>
+        {/* Unified Filter Panel */}
+        <FilterPanel
+          filters={state.filters}
+          metrics={state.metrics}
+          timeframe={state.timeframe}
+          analysisType={state.analysisType}
+          availableTeams={state.availableTeams}
+          availableAthletes={state.availableAthletes}
+          onFiltersChange={updateFilters}
+          onMetricsChange={updateMetrics}
+          onTimeframeChange={updateTimeframe}
+          onReset={() => resetFilters(effectiveOrganizationId || '')}
+          effectiveOrganizationId={effectiveOrganizationId || undefined}
+        />
 
-          <div className="space-y-6">
-            <TimeframeSelector
-              timeframe={state.timeframe}
-              onTimeframeChange={updateTimeframe}
-              analysisType={state.analysisType}
-            />
-
-            <AnalyticsFilters
-              filters={state.filters}
-              metrics={state.metrics}
-              timeframe={state.timeframe}
-              analysisType={state.analysisType}
-              availableTeams={state.availableTeams}
-              availableAthletes={state.availableAthletes}
-              onFiltersChange={updateFilters}
-              onMetricsChange={updateMetrics}
-              onTimeframeChange={updateTimeframe}
-              onAnalysisTypeChange={setAnalysisType}
-              onReset={() => resetFilters(effectiveOrganizationId || '')}
-            />
-          </div>
-        </div>
+        {/* Additional Filters Slot */}
+        {additionalFilters}
 
         {/* Analytics Toolbar */}
         {(isDataReady || state.isLoading) && (
