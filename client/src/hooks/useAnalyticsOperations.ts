@@ -120,12 +120,16 @@ export function useAnalyticsDataFetcher() {
     setError(null);
 
     try {
+      // For line charts/trends, we need inter_group analysis to show multiple athletes
+      const needsInterGroupAnalysis = state.selectedChartType === 'line_chart' || state.timeframe.type === 'trends';
+      const effectiveAnalysisType = needsInterGroupAnalysis ? 'inter_group' : state.analysisType;
+      
       const request: AnalyticsRequest = {
-        analysisType: state.analysisType,
+        analysisType: effectiveAnalysisType,
         filters: { ...state.filters, organizationId: effectiveOrganizationId },
         metrics: state.metrics,
         timeframe: state.timeframe,
-        athleteId: state.analysisType === 'individual' ? state.selectedAthleteId : undefined
+        athleteId: (effectiveAnalysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
 
       // Fetch CSRF token first
