@@ -7,7 +7,7 @@
  */
 
 import type { TrendData, StatisticalSummary, ChartConfiguration } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { METRIC_CONFIG, ALGORITHM_CONFIG } from '@shared/analytics-types';
 import type { ChartOptions } from 'chart.js';
 import type {
   ChartPoint,
