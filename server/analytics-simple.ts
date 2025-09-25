@@ -84,7 +84,7 @@ export class AnalyticsService {
         }
       } else {
         if (timeframeType === 'best') {
-          baseCharts.push('radar_chart', 'bar_chart');
+          baseCharts.push('radar_chart');
         } else {
           baseCharts.push('multi_line', 'radar_chart');
         }
