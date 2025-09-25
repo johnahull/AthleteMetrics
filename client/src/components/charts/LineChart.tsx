@@ -8,6 +8,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -28,7 +29,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 interface LineChartProps {
@@ -125,10 +127,15 @@ export function LineChart({
     // Filter based on highlighted athlete or toggle states
     const trendsToShow = highlightAthlete
       ? data.filter(trend => trend.athleteId === highlightAthlete)
-      : data.filter(trend =>
-          displayedAthletes.some(a => a.id === trend.athleteId) &&
-          athleteToggles[trend.athleteId]
-        );
+      : data.filter(trend => {
+          const isInDisplayedAthletes = displayedAthletes.some(a => a.id === trend.athleteId);
+          // If athleteToggles is empty (initial state), show all displayed athletes
+          // Otherwise, respect the toggle state
+          const isToggleEnabled = Object.keys(athleteToggles).length === 0 
+            ? true 
+            : athleteToggles[trend.athleteId];
+          return isInDisplayedAthletes && isToggleEnabled;
+        });
 
     if (trendsToShow.length === 0) return null;
 
@@ -174,8 +181,9 @@ export function LineChart({
       });
 
       // Find displayed athlete index for consistent color mapping
-      const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId) ?? 0;
-      const color = colors[displayedIndex % colors.length] || 'rgba(75, 85, 99, 1)';
+      const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId);
+      const safeIndex = displayedIndex >= 0 ? displayedIndex : 0;
+      const color = colors[safeIndex % colors.length] || 'rgba(59, 130, 246, 1)'; // Fallback to blue
       const isHighlighted = trend.athleteId === highlightAthlete;
 
       return {

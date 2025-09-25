@@ -8,6 +8,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -26,7 +27,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 interface MultiLineChartProps {
@@ -90,13 +92,24 @@ export function MultiLineChart({
       });
     });
 
-    // Generate colors for athlete-metric combinations
+    // Colors for different scenarios
     const athleteColors = [
-      'rgba(59, 130, 246, 1)',
-      'rgba(16, 185, 129, 1)',
-      'rgba(239, 68, 68, 1)'
+      'rgba(59, 130, 246, 1)',    // Blue
+      'rgba(16, 185, 129, 1)',    // Green
+      'rgba(239, 68, 68, 1)'      // Red
     ];
-    
+
+    const metricColors = [
+      'rgba(59, 130, 246, 1)',    // Blue
+      'rgba(16, 185, 129, 1)',    // Green
+      'rgba(239, 68, 68, 1)',     // Red
+      'rgba(245, 158, 11, 1)',    // Amber
+      'rgba(139, 92, 246, 1)',    // Violet
+      'rgba(236, 72, 153, 1)',    // Pink
+      'rgba(34, 197, 94, 1)',     // Emerald
+      'rgba(251, 113, 133, 1)'    // Rose
+    ];
+
     const metricStyles = [
       { dash: [], opacity: 1 },
       { dash: [5, 5], opacity: 0.8 },
@@ -104,12 +117,13 @@ export function MultiLineChart({
       { dash: [15, 3, 3, 3], opacity: 0.4 }
     ];
 
+    // Determine if this is individual analysis (single athlete)
+    const isSingleAthlete = athletesToShow.length === 1;
+
     const datasets: any[] = [];
 
     // Create dataset for each athlete-metric combination
     athletesToShow.forEach((athlete: any, athleteIndex) => {
-      const baseColor = athleteColors[athleteIndex % athleteColors.length] || 'rgba(75, 85, 99, 1)';
-      
       metrics.forEach((metric, metricIndex) => {
         const metricData = athlete.metrics[metric];
         if (!metricData) return;
@@ -132,20 +146,38 @@ export function MultiLineChart({
           return point ? normalizeValue(point.value) : null;
         });
 
-        const style = metricStyles[metricIndex % metricStyles.length];
         const isHighlighted = athlete.athleteId === highlightAthlete;
         const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
 
+        // Color strategy based on analysis type
+        let borderColor: string;
+        let label: string;
+        let borderDash: number[] = [];
+
+        if (isSingleAthlete) {
+          // Individual analysis: different colors for each metric, solid lines
+          borderColor = metricColors[metricIndex % metricColors.length];
+          label = metricLabel; // Just the metric name
+          borderDash = []; // Solid lines
+        } else {
+          // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
+          const baseColor = athleteColors[athleteIndex % athleteColors.length];
+          const style = metricStyles[metricIndex % metricStyles.length];
+          borderColor = baseColor.replace('1)', `${style.opacity})`);
+          label = `${athlete.athleteName} - ${metricLabel}`;
+          borderDash = style.dash;
+        }
+
         datasets.push({
-          label: `${athlete.athleteName} - ${metricLabel}`,
+          label,
           data: lineData,
-          borderColor: baseColor.replace('1)', `${style.opacity})`),
-          backgroundColor: baseColor.replace('1)', '0.1)'),
+          borderColor,
+          backgroundColor: borderColor.replace('1)', '0.1)'),
           borderWidth: isHighlighted ? 3 : 2,
-          borderDash: style.dash,
+          borderDash,
           pointRadius: isHighlighted ? 4 : 2,
           pointHoverRadius: isHighlighted ? 6 : 4,
-          pointBackgroundColor: baseColor,
+          pointBackgroundColor: borderColor,
           pointBorderColor: '#fff',
           pointBorderWidth: 1,
           fill: false,
@@ -163,14 +195,27 @@ export function MultiLineChart({
       const normalizedMean = 50; // Group average is always at 50% in normalized scale
       const meanData = sortedDates.map(() => normalizedMean);
 
-      const style = metricStyles[metricIndex % metricStyles.length];
       const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
 
+      let avgBorderColor: string;
+      let avgLabel: string;
+
+      if (isSingleAthlete) {
+        // For individual analysis, use lighter version of the metric color
+        const baseColor = metricColors[metricIndex % metricColors.length];
+        avgBorderColor = baseColor.replace('1)', '0.4)');
+        avgLabel = `${metricLabel} Avg`;
+      } else {
+        // For multi-athlete analysis, use neutral gray
+        avgBorderColor = 'rgba(156, 163, 175, 0.8)';
+        avgLabel = `Group Avg - ${metricLabel}`;
+      }
+
       datasets.push({
-        label: `Group Avg - ${metricLabel}`,
+        label: avgLabel,
         data: meanData,
-        borderColor: 'rgba(156, 163, 175, 0.8)',
-        backgroundColor: 'rgba(156, 163, 175, 0.1)',
+        borderColor: avgBorderColor,
+        backgroundColor: avgBorderColor.replace(/[\d\.]+\)$/, '0.1)'),
         borderWidth: 1,
         borderDash: [3, 3],
         pointRadius: 0,
