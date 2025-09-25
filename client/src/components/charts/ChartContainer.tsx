@@ -35,13 +35,7 @@ function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | Trend
   return data !== null && Array.isArray(data);
 }
 
-// Import ConnectedScatterChart directly to prevent hooks order violations during lazy loading
-// ConnectedScatterChart cannot be lazy loaded because it uses hooks that depend on data state,
-// and React.Suspense can cause hooks to be called in different orders during component switching,
-// violating the Rules of Hooks and causing runtime errors.
-import { ConnectedScatterChart } from './ConnectedScatterChart';
-
-// Lazy load other chart components to reduce bundle size
+// Lazy load chart components to reduce bundle size
 const BoxPlotChart = React.lazy(() => import('./BoxPlotChart').then(m => ({ default: m.BoxPlotChart })));
 const DistributionChart = React.lazy(() => import('./DistributionChart').then(m => ({ default: m.DistributionChart })));
 const BarChart = React.lazy(() => import('./BarChart').then(m => ({ default: m.BarChart })));
@@ -49,6 +43,7 @@ const LineChart = React.lazy(() => import('./LineChart').then(m => ({ default: m
 const ScatterPlotChart = React.lazy(() => import('./ScatterPlotChart').then(m => ({ default: m.ScatterPlotChart })));
 const RadarChart = React.lazy(() => import('./RadarChart').then(m => ({ default: m.RadarChart })));
 const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default: m.SwarmChart })));
+const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 
@@ -93,8 +88,8 @@ export function ChartContainer({
   onFullscreen,
   className
 }: ChartContainerProps) {
-  // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
-  // Memoize chart component selection
+  // Memoize chart component selection for generic cases only
+  // Exclude types that are handled explicitly with custom props
   const ChartComponent = useMemo(() => {
     switch (chartType) {
       case 'box_plot':
@@ -103,22 +98,20 @@ export function ChartContainer({
         return DistributionChart;
       case 'bar_chart':
         return BarChart;
-      case 'line_chart':
-        return LineChart;
       case 'scatter_plot':
         return ScatterPlotChart;
-      case 'radar_chart':
-        return RadarChart;
       case 'swarm_plot':
         return SwarmChart;
       case 'connected_scatter':
         return ConnectedScatterChart;
       case 'multi_line':
         return MultiLineChart;
+      // These cases are handled explicitly, so return null for generic component
+      case 'line_chart':
+      case 'radar_chart':
       case 'box_swarm_combo':
-        return BoxPlotChart; // Composite chart handled within BoxPlotChart
       case 'time_series_box_swarm':
-        return TimeSeriesBoxSwarmChart;
+        return null;
       default:
         return null;
     }
@@ -138,6 +131,14 @@ export function ChartContainer({
 
   // Determine which data to pass based on chart type
   const chartData = useMemo(() => {
+    console.log('ChartContainer Debug:', {
+      chartType,
+      dataLength: data?.length || 0,
+      trendsLength: trends?.length || 0,
+      multiMetricLength: multiMetric?.length || 0,
+      hasMultiMetric: !!multiMetric
+    });
+
     switch (chartType) {
       case 'line_chart':
       case 'multi_line':
@@ -145,42 +146,39 @@ export function ChartContainer({
       case 'time_series_box_swarm':
         return trends;
       case 'radar_chart':
-        // For radar chart, prefer multiMetric data, but fallback to regular data if available
-        // Ensure we have valid data before returning
-        if (multiMetric && Array.isArray(multiMetric) && multiMetric.length > 0) {
-          return multiMetric;
-        }
-        return data && Array.isArray(data) && data.length > 0 ? data : null;
+        // For radar charts, we need multiMetric data, but fall back to data if multiMetric is not available
+        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
       default:
         return data;
     }
   }, [chartType, data, trends, multiMetric]);
 
-  // Conditional rendering AFTER all hooks
   if (isLoading) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <Skeleton className="h-6 w-48" />
           {subtitle && <Skeleton className="h-4 w-32" />}
         </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
+        <CardContent className="flex-1">
+          <Skeleton className="h-full w-full" />
         </CardContent>
       </Card>
     );
   }
 
   if (error) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <CardTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
             Chart Error
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
@@ -189,13 +187,17 @@ export function ChartContainer({
     );
   }
 
-  if (!ChartComponent) {
+  // Only show unsupported chart error for truly unsupported types
+  // (ChartComponent is null for both unsupported types AND explicitly handled types)
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm'];
+  if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <CardTitle>Unsupported Chart Type</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Alert>
             <AlertDescription>
               Chart type "{chartType}" is not implemented yet.
@@ -207,13 +209,14 @@ export function ChartContainer({
   }
 
   if (!chartData || (Array.isArray(chartData) && chartData.length === 0)) {
+    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
-      <Card className={className}>
-        <CardHeader>
+      <Card className={`${className} ${cardHeight} flex flex-col`}>
+        <CardHeader className="flex-shrink-0">
           <CardTitle>{title}</CardTitle>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Alert>
             <AlertDescription>
               No data available for this chart. Try adjusting your filters or date range.
@@ -224,9 +227,12 @@ export function ChartContainer({
     );
   }
 
+  // Use larger height for radar chart due to additional controls
+  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+
   return (
-    <Card className={className}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card className={`${className} ${cardHeight} flex flex-col`}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
           {subtitle && (
@@ -256,35 +262,80 @@ export function ChartContainer({
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="w-full" style={{ height: chartType === 'connected_scatter' ? '650px' : '500px' }}>
+      <CardContent className="flex-1 flex flex-col">
+        <div className="w-full" style={{ height: '500px' }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
-              chartType === 'connected_scatter' ? (
-                // ConnectedScatterChart is not lazy loaded to prevent hooks order violations
-                <ConnectedScatterChart
-                  data={chartData as TrendData[]}
-                  config={chartConfig}
-                  statistics={statistics || {}}
-                  highlightAthlete={highlightAthlete}
-                  selectedAthleteIds={selectedAthleteIds}
-                  onAthleteSelectionChange={onAthleteSelectionChange}
-                />
-              ) : (
-                <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
-                  <ChartComponent
-                    data={chartData as ChartDataPoint[] | TrendData[] | MultiMetricData[]}
+              <React.Suspense
+                key={`chart-${chartType}`}
+                fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}
+              >
+                {chartType === 'radar_chart' ? (
+                  <RadarChart
+                    data={multiMetric || []}
                     config={chartConfig}
-                    statistics={statistics || {}}
+                    statistics={statistics}
                     highlightAthlete={highlightAthlete}
                     selectedAthleteIds={selectedAthleteIds}
                     onAthleteSelectionChange={onAthleteSelectionChange}
-                    showAllPoints={chartType === 'box_swarm_combo'}
-                    selectedDates={chartType === 'time_series_box_swarm' ? (selectedDates || []) : []}
-                    metric={chartType === 'time_series_box_swarm' ? (metric || '') : ''}
+                    maxAthletes={10}
                   />
-                </React.Suspense>
-              )
+                ) : chartType === 'line_chart' ? (
+                  <LineChart
+                    data={trends || []}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                  />
+                ) : chartType === 'multi_line' ? (
+                  <MultiLineChart
+                    data={trends || []}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                  />
+                ) : chartType === 'connected_scatter' ? (
+                  <ConnectedScatterChart
+                    data={trends || []}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    maxAthletes={10}
+                  />
+                ) : chartType === 'box_swarm_combo' ? (
+                  <BoxPlotChart
+                    data={chartData as ChartDataPoint[]}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
+                    showAllPoints={true}
+                  />
+                ) : chartType === 'time_series_box_swarm' ? (
+                  <TimeSeriesBoxSwarmChart
+                    data={trends || []}
+                    config={chartConfig}
+                    statistics={statistics}
+                    selectedDates={selectedDates || []}
+                    metric={metric || ''}
+                  />
+                ) : ChartComponent ? (
+                  <ChartComponent
+                    key={`chart-component-${chartType}`}
+                    data={chartData as any}
+                    config={chartConfig}
+                    statistics={statistics || {}}
+                    highlightAthlete={highlightAthlete}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    Unsupported chart type: {chartType}
+                  </div>
+                )}
+              </React.Suspense>
             ) : (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
                 No data available to display
@@ -303,14 +354,13 @@ export function getRecommendedChartType(
   metricCount: number,
   timeframeType: string
 ): ChartType {
-  const key = metricCount === 1 ? '1' : metricCount === 2 ? '2' : '3+';
-
   if (analysisType === 'individual') {
     if (metricCount === 1) {
       return timeframeType === 'best' ? 'box_swarm_combo' : 'line_chart';
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
+      // 3+ metrics
       return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   } else {
@@ -320,6 +370,7 @@ export function getRecommendedChartType(
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
+      // 3+ metrics
       return 'radar_chart';
     }
   }
@@ -346,13 +397,13 @@ export function validateChartData(
         errors.push('Line charts require trend data array');
       }
       break;
-    
+
     case 'radar_chart':
       if (!Array.isArray(data) || data.length === 0) {
         errors.push('Radar charts require multi-metric data array');
       }
       break;
-    
+
     case 'scatter_plot':
     case 'box_plot':
     case 'distribution':

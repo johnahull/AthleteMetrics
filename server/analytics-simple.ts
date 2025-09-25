@@ -460,10 +460,66 @@ export class AnalyticsService {
       const metricCount = 1 + (request.metrics.additional?.length || 0);
       const allSelectedMetrics = [request.metrics.primary, ...(request.metrics.additional || [])];
 
-      // Generate trends data if timeframe type is trends
-      const trends = request.timeframe.type === 'trends'
-        ? this.generateTrendsDataForAllMetrics(chartData, allSelectedMetrics)
-        : [];
+      // Generate trends data if timeframe type is 'trends'
+      const trends: TrendData[] = [];
+      if (request.timeframe?.type === 'trends' && chartData.length > 0) {
+        // Group data by athlete and metric for trend analysis
+        const athleteMetricMap = new Map<string, Array<{ date: Date; value: number; isPersonalBest?: boolean; groupAverage?: number }>>();
+
+        chartData.forEach(point => {
+          const athleteKey = `${point.athleteId}-${point.metric}`;
+          if (!athleteMetricMap.has(athleteKey)) {
+            athleteMetricMap.set(athleteKey, []);
+          }
+          athleteMetricMap.get(athleteKey)!.push({
+            date: point.date,
+            value: point.value,
+            isPersonalBest: point.isPersonalBest
+          });
+        });
+
+        // Calculate group averages by date and metric
+        const groupAveragesByDateMetric = new Map<string, number>();
+        chartData.forEach(point => {
+          const dateStr = point.date.toISOString().split('T')[0];
+          const key = `${dateStr}-${point.metric}`;
+          if (!groupAveragesByDateMetric.has(key)) {
+            const sameMetricSameDate = chartData.filter(p => 
+              p.metric === point.metric && 
+              p.date.toISOString().split('T')[0] === dateStr
+            );
+            const average = sameMetricSameDate.reduce((sum, p) => sum + p.value, 0) / sameMetricSameDate.length;
+            groupAveragesByDateMetric.set(key, average);
+          }
+        });
+
+        // Convert to TrendData format
+        athleteMetricMap.forEach((dataPoints, athleteKey) => {
+          const [athleteId, metric] = athleteKey.split('-');
+          const athlete = chartData.find(p => p.athleteId === athleteId);
+          if (!athlete) return;
+
+          // Sort by date
+          dataPoints.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+          trends.push({
+            athleteId: athlete.athleteId,
+            athleteName: athlete.athleteName,
+            metric: metric,
+            data: dataPoints.map(point => {
+              const dateStr = point.date.toISOString().split('T')[0];
+              const groupAverage = groupAveragesByDateMetric.get(`${dateStr}-${metric}`);
+
+              return {
+                date: point.date,
+                value: point.value,
+                isPersonalBest: point.isPersonalBest || false,
+                groupAverage: groupAverage
+              };
+            })
+          });
+        });
+      }
 
       // Generate multi-metric data for radar charts when multiple metrics are selected
       // Generate multiMetric data when we have 2+ metrics (not just 3+) to support radar charts
