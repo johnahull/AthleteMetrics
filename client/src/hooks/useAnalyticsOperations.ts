@@ -173,17 +173,20 @@ export function useChartConfiguration() {
   const { state } = useAnalyticsContext();
   const { setChartType } = useAnalyticsActions();
 
-  // Auto-update chart type recommendation when parameters change
+  // Auto-update chart type recommendation when parameters change (but not when user explicitly selects)
   useEffect(() => {
     const recommended = getRecommendedChartType(
       state.analysisType,
       state.metrics.additional.length + 1,
       state.timeframe.type
     );
-    if (recommended !== state.selectedChartType) {
+    // Only update if current chart type is not available in recommended charts
+    // This prevents overriding explicit user selections
+    const currentChartIsRecommended = state.analyticsData?.meta?.recommendedCharts?.includes(state.selectedChartType) ?? true;
+    if (recommended !== state.selectedChartType && !currentChartIsRecommended) {
       setChartType(recommended);
     }
-  }, [state.analysisType, state.metrics, state.timeframe, state.selectedChartType, setChartType]);
+  }, [state.analysisType, state.metrics, state.timeframe, setChartType, state.analyticsData?.meta?.recommendedCharts]);
 
   const chartConfig: ChartConfiguration = useMemo(() => {
     let title = 'Performance Analytics';
