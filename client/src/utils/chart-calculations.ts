@@ -18,6 +18,7 @@ import type {
   PerformanceQuadrantLabel
 } from '@/types/chart-types';
 import { CHART_COLORS, CHART_CONFIG } from '@/constants/chart-config';
+import { getDateKey } from '@/utils/date-utils'; // Added this import
 
 // =============================================================================
 // PERFORMANCE QUADRANT CALCULATIONS
@@ -427,7 +428,7 @@ export function calculateAthleteAnalytics(
     .map((xPoint: any) => {
       const yPoint = yData.find((y: any) => {
         const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-        const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
+        const xDate = xPoint.date instanceof Date ? x.date : new Date(x.date);
         return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
       });
       return yPoint ? {
@@ -656,10 +657,7 @@ export function processScatterData(params: {
   const metrics = Array.from(new Set(data.map((trend: any) => trend.metric)));
   const [xMetric, yMetric] = metrics;
 
-  // Import required types and utilities (will be available at runtime)
-  const { METRIC_CONFIG } = require('@shared/analytics-types');
-  const { CHART_COLORS, ALGORITHM_CONFIG } = require('@/constants/chart-config');
-  const { getDateKey } = require('@/utils/date-utils');
+  // All required utilities are now imported at the top of the file
 
   // Group ALL trends by athlete FIRST
   const allAthleteTrends = data.reduce((acc: any, trend: any) => {
@@ -992,7 +990,7 @@ export function processScatterData(params: {
 // =============================================================================
 
 /**
- * Create chart options configuration for connected scatter chart
+ * Create chart options configuration for connected scatter plot
  *
  * @param scatterData - Processed scatter chart data
  * @param config - Chart configuration from props
