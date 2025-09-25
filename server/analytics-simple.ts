@@ -103,7 +103,7 @@ export class AnalyticsService {
         if (timeframeType === 'best') {
           baseCharts.push('scatter_plot');
         } else {
-          baseCharts.push('scatter_plot', 'connected_scatter');
+          baseCharts.push('connected_scatter');
         }
       } else {
         if (timeframeType === 'best') {
