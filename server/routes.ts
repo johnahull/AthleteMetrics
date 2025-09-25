@@ -245,9 +245,9 @@ async function initializeDefaultUser() {
   }
 }
 
-export function registerRoutes(app: Express) {
+export async function registerRoutes(app: Express) {
   const server = createServer(app);
-  
+
   // Session setup with security best practices - MUST BE BEFORE ROUTES
   const sessionSecret = process.env.SESSION_SECRET;
   if (!sessionSecret) {
@@ -260,17 +260,80 @@ export function registerRoutes(app: Express) {
     process.exit(1);
   }
 
-  app.use(session({
+  // Initialize Redis client for session storage (optional)
+  let redisClient = null;
+  try {
+    // Try to dynamically import Redis packages if available
+    const redisModule = await import("redis").catch(() => null);
+    
+    if (redisModule) {
+      const { createClient } = redisModule;
+      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      redisClient = createClient({
+        url: redisUrl,
+        socket: {
+          connectTimeout: 60000
+        }
+      });
+
+      redisClient.on('error', (err: any) => {
+        console.warn('Redis client error:', err);
+        console.warn('Falling back to in-memory session store');
+      });
+
+      // Try to connect to Redis
+      await redisClient.connect().catch((err: any) => {
+        console.warn('Could not connect to Redis:', err);
+        console.warn('Using in-memory session store instead');
+        redisClient = null;
+      });
+    } else {
+      console.warn('Redis module not available');
+    }
+  } catch (error: any) {
+    console.warn('Redis packages not available or initialization failed:', error?.message || error);
+    console.warn('Using in-memory session store instead');
+    redisClient = null;
+  }
+
+  // Configure session store
+  const sessionConfig: any = {
     secret: sessionSecret,
     resave: false,  // Don't save unchanged sessions
     saveUninitialized: false,  // Don't create sessions for unauthenticated users
-    cookie: { 
+    cookie: {
       secure: process.env.NODE_ENV === 'production', // HTTPS only in production
       httpOnly: true, // Prevent XSS attacks
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: 'strict' // CSRF protection
     }
-  }));
+  };
+
+  // Use Redis store if available, otherwise fall back to memory store
+  if (redisClient) {
+    try {
+      const redisStoreModule = await import("connect-redis").catch(() => null);
+      if (redisStoreModule) {
+        const { RedisStore } = redisStoreModule;
+        sessionConfig.store = new RedisStore({
+          client: redisClient,
+          prefix: 'athletemetrics:sess:',
+          ttl: 24 * 60 * 60 // 24 hours in seconds
+        });
+        console.log('Using Redis session store');
+      } else {
+        console.warn('connect-redis module not available');
+        console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+      }
+    } catch (error: any) {
+      console.warn('Failed to create Redis store:', error?.message || error);
+      console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+    }
+  } else {
+    console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+  }
+
+  app.use(session(sessionConfig));
 
   // Register new refactored routes - AFTER session middleware
   registerAllRoutes(app);
@@ -295,6 +358,57 @@ export function registerRoutes(app: Express) {
 
   // CSRF protection setup
   const csrfTokens = new csrf();
+
+  // CSRF protection middleware
+  const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+    // Skip CSRF for GET requests (safe operations)
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      return next();
+    }
+
+    // Skip CSRF for certain API endpoints that use other authentication
+    const skipCsrfPaths = ['/api/login', '/api/register'];
+    if (skipCsrfPaths.some(path => req.path.startsWith(path))) {
+      return next();
+    }
+
+    // Check for CSRF token in headers or body
+    const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'] || req.body._csrf;
+
+    if (!token) {
+      return res.status(403).json({ error: 'CSRF token missing' });
+    }
+
+    // Validate CSRF token
+    const secret = (req.session as any)?.csrfSecret;
+    if (!secret) {
+      return res.status(403).json({ error: 'Invalid session' });
+    }
+
+    try {
+      if (!csrfTokens.verify(secret, token as string)) {
+        return res.status(403).json({ error: 'Invalid CSRF token' });
+      }
+    } catch (error) {
+      return res.status(403).json({ error: 'CSRF token validation failed' });
+    }
+
+    next();
+  };
+
+  // Generate CSRF token endpoint
+  app.get('/api/csrf-token', (req: Request, res: Response) => {
+    const secret = csrfTokens.secretSync();
+    const token = csrfTokens.create(secret);
+
+    // Store secret in session
+    (req.session as any).csrfSecret = secret;
+
+    res.json({ csrfToken: token });
+  });
+
+  // Apply CSRF protection to state-changing routes
+  app.use('/api', csrfProtection);
 
   // Input sanitization middleware
   const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
