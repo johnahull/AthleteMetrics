@@ -200,7 +200,6 @@ export function MetricsSelector({
               )
               .map((metric: string) => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-                const isRecommended = recommendedMetrics.includes(metric);
                 return (
                   <div key={metric} className="flex items-start space-x-2">
                     <Checkbox
@@ -213,14 +212,9 @@ export function MetricsSelector({
                     />
                     <label
                       htmlFor={`metric-${metric}`}
-                      className={`text-xs leading-tight cursor-pointer ${
-                        isRecommended ? 'text-blue-700 font-medium' : ''
-                      }`}
+                      className="text-xs leading-tight cursor-pointer"
                     >
                       {config?.label || metric}
-                      {isRecommended && (
-                        <span className="text-blue-500 text-[10px] block">recommended</span>
-                      )}
                     </label>
                   </div>
                 );
