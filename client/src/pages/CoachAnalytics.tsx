@@ -246,14 +246,6 @@ export function CoachAnalytics() {
       }
 
       const data: AnalyticsResponse = await response.json();
-      console.log('CoachAnalytics: Analytics response received:', data);
-      console.log('CoachAnalytics: Response data keys:', Object.keys(data));
-      console.log('CoachAnalytics: multiMetric data:', data.multiMetric?.length || 0, 'items');
-      console.log('CoachAnalytics: data field:', data.data?.length || 0, 'items');
-      console.log('CoachAnalytics: trends field:', data.trends?.length || 0, 'items');
-      if (data.multiMetric && data.multiMetric.length > 0) {
-        console.log('CoachAnalytics: Sample multiMetric item:', data.multiMetric[0]);
-      }
       setAnalyticsData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
