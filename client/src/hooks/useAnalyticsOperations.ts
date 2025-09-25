@@ -224,7 +224,7 @@ export function useChartConfiguration() {
         return `${primaryLabel} vs ${additionalLabel}`;
       }
 
-      if (state.selectedChartType === 'radar_chart' && state.metrics.additional.length > 0) {
+      if ((state.selectedChartType === 'radar_chart' || state.selectedChartType === 'multi_line') && state.metrics.additional.length > 0) {
         const allMetrics = [state.metrics.primary, ...state.metrics.additional];
         const metricLabels = allMetrics.map(metric =>
           METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
@@ -241,7 +241,7 @@ export function useChartConfiguration() {
         title = athleteName ? `${athleteName} - Performance Analysis` : 'Individual Performance Analysis';
         if ((state.selectedChartType === 'scatter_plot' || state.selectedChartType === 'connected_scatter') && state.metrics.additional.length > 0) {
           subtitle = `${formatMetricsForDisplay()} ${state.timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${state.timeframe.period.replace('_', ' ').toUpperCase()}`;
-        } else if (state.selectedChartType === 'radar_chart' && state.metrics.additional.length > 0) {
+        } else if ((state.selectedChartType === 'radar_chart' || state.selectedChartType === 'multi_line') && state.metrics.additional.length > 0) {
           subtitle = `${formatMetricsForDisplay()} ${state.timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${state.timeframe.period.replace('_', ' ').toUpperCase()}`;
         } else {
           subtitle = `${state.metrics.primary} ${state.timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${state.timeframe.period.replace('_', ' ').toUpperCase()}`;
