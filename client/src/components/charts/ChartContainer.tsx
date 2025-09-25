@@ -36,6 +36,9 @@ function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | Trend
 }
 
 // Import ConnectedScatterChart directly to prevent hooks order violations during lazy loading
+// ConnectedScatterChart cannot be lazy loaded because it uses hooks that depend on data state,
+// and React.Suspense can cause hooks to be called in different orders during component switching,
+// violating the Rules of Hooks and causing runtime errors.
 import { ConnectedScatterChart } from './ConnectedScatterChart';
 
 // Lazy load other chart components to reduce bundle size
@@ -143,7 +146,11 @@ export function ChartContainer({
         return trends;
       case 'radar_chart':
         // For radar chart, prefer multiMetric data, but fallback to regular data if available
-        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
+        // Ensure we have valid data before returning
+        if (multiMetric && Array.isArray(multiMetric) && multiMetric.length > 0) {
+          return multiMetric;
+        }
+        return data && Array.isArray(data) && data.length > 0 ? data : null;
       default:
         return data;
     }
@@ -256,7 +263,7 @@ export function ChartContainer({
               chartType === 'connected_scatter' ? (
                 // ConnectedScatterChart is not lazy loaded to prevent hooks order violations
                 <ConnectedScatterChart
-                  data={chartData as any}
+                  data={chartData as TrendData[]}
                   config={chartConfig}
                   statistics={statistics || {}}
                   highlightAthlete={highlightAthlete}
@@ -266,7 +273,7 @@ export function ChartContainer({
               ) : (
                 <React.Suspense fallback={<LoadingSpinner text="Loading chart..." className="h-64" />}>
                   <ChartComponent
-                    data={chartData as any}
+                    data={chartData as ChartDataPoint[] | TrendData[] | MultiMetricData[]}
                     config={chartConfig}
                     statistics={statistics || {}}
                     highlightAthlete={highlightAthlete}

@@ -43,7 +43,6 @@ export class AnalyticsService {
    */
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     const { analysisType, filters, metrics, timeframe, athleteId } = request;
-    console.log('ANALYTICS DEBUG: Starting getAnalyticsData with metrics:', metrics);
 
     // Build base query with filters
     const baseQuery = this.buildBaseQuery(filters, timeframe);
@@ -64,10 +63,8 @@ export class AnalyticsService {
       await this.getTrendData(data, metrics, timeframe) : undefined;
 
     // Get multi-metric data for radar charts
-    console.log('RADAR CHART DEBUG: additional metrics count:', metrics.additional.length);
     const multiMetric = metrics.additional.length > 0 ?
       await this.getMultiMetricData(data, metrics, filters) : undefined;
-    console.log('RADAR CHART DEBUG: multiMetric result:', multiMetric?.length || 0, 'items');
 
     // Group data by relevant dimensions
     const groupings = await this.createGroupings(data, filters);
@@ -181,7 +178,6 @@ export class AnalyticsService {
     filters: AnalyticsFilters
   ): Promise<ChartDataPoint[]> {
     const allMetrics = [metrics.primary, ...metrics.additional];
-    console.log('Analytics: Group data requested for metrics:', allMetrics);
     
     const query = this.buildBaseQuery(filters, timeframe, allMetrics);
     
@@ -189,8 +185,6 @@ export class AnalyticsService {
     
     // Execute the query
     results = await query.execute();
-    console.log('Analytics: Raw query results count:', results.length);
-    console.log('Analytics: Raw query result metrics:', Array.from(new Set(results.map((r: any) => r.metric))));
 
     if (timeframe.type === 'best') {
       // Filter and group by athlete+metric and take best
@@ -200,8 +194,6 @@ export class AnalyticsService {
       results = results.filter((r: QueryResult) => allMetrics.includes(r.metric));
     }
 
-    console.log('Analytics: Filtered results count:', results.length);
-    console.log('Analytics: Filtered result metrics:', Array.from(new Set(results.map((r: any) => r.metric))));
 
     return this.transformToChartData(results);
   }
@@ -270,9 +262,6 @@ export class AnalyticsService {
     const trends: TrendData[] = [];
     const allMetrics = [metrics.primary, ...metrics.additional];
 
-    console.log('Analytics: Creating trend data for metrics:', allMetrics);
-    console.log('Analytics: Raw data count:', data.length);
-    console.log('Analytics: Data metrics available:', Array.from(new Set(data.map(d => d.metric))));
 
     // Group by athlete and metric
     const athleteMetricGroups = this.groupBy(data, ['athleteId', 'metric']);
@@ -321,13 +310,8 @@ export class AnalyticsService {
     const allMetrics = [metrics.primary, ...metrics.additional];
     const multiMetricData: MultiMetricData[] = [];
 
-    console.log('getMultiMetricData: Starting with data length:', data.length);
-    console.log('getMultiMetricData: All metrics:', allMetrics);
-    console.log('getMultiMetricData: Sample data points:', data.slice(0, 3));
-
     // Group by athlete
     const athleteGroups = this.groupBy(data, ['athleteId']);
-    console.log('getMultiMetricData: Athlete groups:', Object.keys(athleteGroups).length);
 
     for (const [athleteId, points] of Object.entries(athleteGroups)) {
       const athleteName = points[0].athleteName;
@@ -360,8 +344,7 @@ export class AnalyticsService {
 
       // Include athlete if they have data for at least 2 metrics (primary + 1 additional)
       const hasMinimumMetrics = Object.keys(athleteMetrics).length >= 2;
-      console.log(`Athlete ${athleteName}: has ${Object.keys(athleteMetrics).length} metrics, minimum required: 2`);
-      
+
       if (hasMinimumMetrics) {
         multiMetricData.push({
           athleteId,
@@ -372,10 +355,6 @@ export class AnalyticsService {
       }
     }
 
-    console.log('getMultiMetricData: Returning', multiMetricData.length, 'items');
-    if (multiMetricData.length > 0) {
-      console.log('getMultiMetricData: Sample multiMetric item:', multiMetricData[0]);
-    }
     return multiMetricData;
   }
 

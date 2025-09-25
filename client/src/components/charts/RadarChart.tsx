@@ -11,10 +11,11 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import type { 
-  MultiMetricData, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  MultiMetricData,
+  ChartConfiguration,
+  StatisticalSummary,
+  ChartDataPoint
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
@@ -56,8 +57,8 @@ export function RadarChart({
       processedData = data as MultiMetricData[];
     } else {
       // Convert ChartDataPoint data to MultiMetricData format
-      const chartData = data as any[];
-      const athleteMap = new Map<string, any>();
+      const chartData = data as ChartDataPoint[];
+      const athleteMap = new Map<string, Partial<MultiMetricData>>();
 
       chartData.forEach(point => {
         if (!athleteMap.has(point.athleteId)) {
@@ -90,6 +91,8 @@ export function RadarChart({
     });
 
     const metrics = Array.from(allMetrics);
+    // Require at least 2 metrics for meaningful radar chart visualization
+    // (reduced from 3+ to support more chart scenarios while maintaining utility)
     if (metrics.length < 2) return null;
 
     // Create labels from metric config
@@ -303,7 +306,7 @@ export function RadarChart({
         }
       } else {
         // For ChartDataPoint data, check available metrics
-        const chartData = data as any[];
+        const chartData = data as ChartDataPoint[];
         const availableMetrics = new Set(chartData.map(point => point.metric));
 
         if (availableMetrics.size < 2) {

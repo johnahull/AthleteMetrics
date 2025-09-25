@@ -429,7 +429,7 @@ export function calculateAthleteAnalytics(
     .map((xPoint: any) => {
       const yPoint = yData.find((y: any) => {
         const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-        const xDate = xPoint.date instanceof Date ? x.date : new Date(x.date);
+        const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
         return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
       });
       return yPoint ? {
