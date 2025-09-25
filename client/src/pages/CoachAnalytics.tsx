@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { Download, RefreshCw, Users, User, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
+import { FilterPanel } from '@/components/analytics/FilterPanel';
+import { TeamComparisonCards } from '@/components/analytics/TeamComparisonCards';
+import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
 import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
@@ -51,8 +53,10 @@ function formatChartTypeName(chartType: string): string {
   return chartTypeNames[chartType] || chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
-export function CoachAnalytics() {
+// Internal component that uses the analytics context
+function CoachAnalyticsContent() {
   const { user, organizationContext } = useAuth();
+  const { state, dispatch, groupingResult, isDataReady, shouldFetchData, chartData } = useAnalyticsContext();
 
   // Get user's organizations for fallback when organizationContext is null
   const { data: userOrganizations } = useQuery({
@@ -61,38 +65,45 @@ export function CoachAnalytics() {
   });
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
-  // Core state
-  const [analysisType, setAnalysisType] = useState<AnalysisType>('individual');
-  const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
-  const [selectedAthlete, setSelectedAthlete] = useState<{id: string, name: string, teamName?: string} | null>(null);
-  const [filters, setFilters] = useState<FilterType>({
-    organizationId: ''
-  });
-  const [metrics, setMetrics] = useState<MetricSelection>({
-    primary: 'FLY10_TIME',
-    additional: []
-  });
-  const [timeframe, setTimeframe] = useState<TimeframeConfig>({
-    type: 'best',
-    period: 'all_time'
-  });
-
-  // Data and UI state
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsResponse | null>(null);
-  const [availableTeams, setAvailableTeams] = useState<Array<{ id: string; name: string }>>([]);
-  const [availableAthletes, setAvailableAthletes] = useState<Array<{ id: string; name: string; teamName?: string; teams?: Array<{ id: string; name: string }> }>>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Local state for loading
   const [isLoadingAthletes, setIsLoadingAthletes] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Chart configuration
-  const [selectedChartType, setSelectedChartType] = useState<ChartType>('box_swarm_combo');
+  // Handler functions for context dispatch
+  const handleFiltersChange = (newFilters: Partial<FilterType>) => {
+    dispatch({ type: 'SET_FILTERS', payload: newFilters });
+  };
 
-  // Enhanced athlete selection for multi-athlete line charts
-  const [selectedAthleteIds, setSelectedAthleteIds] = useState<string[]>([]);
+  const handleMetricsChange = (newMetrics: Partial<MetricSelection>) => {
+    dispatch({ type: 'SET_METRICS', payload: newMetrics });
+  };
 
-  // Date selection for time-series box+swarm charts
-  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const handleTimeframeChange = (newTimeframe: Partial<TimeframeConfig>) => {
+    dispatch({ type: 'SET_TIMEFRAME', payload: newTimeframe });
+  };
+
+  const handleGroupByChange = (groupBy: string[]) => {
+    dispatch({ type: 'SET_GROUPING', payload: groupBy });
+  };
+
+  const handleAnalysisTypeChange = (analysisType: AnalysisType) => {
+    dispatch({ type: 'SET_ANALYSIS_TYPE', payload: analysisType });
+  };
+
+  const handleAthleteSelect = (athleteId: string, athlete: { id: string; name: string; teamName?: string } | null) => {
+    dispatch({ type: 'SET_SELECTED_ATHLETE', payload: { id: athleteId, athlete } });
+  };
+
+  const handleAthleteIdsChange = (athleteIds: string[]) => {
+    dispatch({ type: 'SET_SELECTED_ATHLETE_IDS', payload: athleteIds });
+  };
+
+  const handleDatesChange = (dates: string[]) => {
+    dispatch({ type: 'SET_SELECTED_DATES', payload: dates });
+  };
+
+  const handleChartTypeChange = (chartType: ChartType) => {
+    dispatch({ type: 'SET_CHART_TYPE', payload: chartType });
+  };
 
   // Get effective organization ID (organizationContext or user's primary organization)
   const getEffectiveOrganizationId = () => {
@@ -109,6 +120,16 @@ export function CoachAnalytics() {
   };
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
+
+  // Initialize context with organization ID
+  React.useEffect(() => {
+    if (effectiveOrganizationId) {
+      dispatch({
+        type: 'INITIALIZE_STATE',
+        payload: { organizationId: effectiveOrganizationId }
+      });
+    }
+  }, [effectiveOrganizationId, dispatch]);
 
   const loadInitialData = useCallback(async () => {
     if (!effectiveOrganizationId) {
@@ -134,10 +155,11 @@ export function CoachAnalytics() {
       if (teamsResponse.ok) {
         const teams = await teamsResponse.json();
         console.log('Teams loaded:', teams.length);
-        setAvailableTeams(teams.map((team: any) => ({
+        const teamData = teams.map((team: any) => ({
           id: team.id,
           name: team.name
-        })));
+        }));
+        dispatch({ type: 'SET_AVAILABLE_TEAMS', payload: teamData });
       } else {
         console.error('Teams request failed:', teamsResponse.status, await teamsResponse.text());
       }
@@ -151,14 +173,15 @@ export function CoachAnalytics() {
         const athletes = await athletesResponse.json();
         console.log('Athletes loaded from API:', athletes.length);
 
-        setAvailableAthletes(athletes.map((athlete: any) => ({
+        const athleteData = athletes.map((athlete: any) => ({
           id: athlete.id,
           name: athlete.name,
           teamName: athlete.teams && athlete.teams.length > 0
             ? athlete.teams.map((t: any) => t.name).join(', ')
             : undefined,
           teams: athlete.teams || []
-        })));
+        }));
+        dispatch({ type: 'SET_AVAILABLE_ATHLETES', payload: athleteData });
       } else {
         console.error('Athletes request failed:', athletesResponse.status, await athletesResponse.text());
       }
@@ -173,16 +196,16 @@ export function CoachAnalytics() {
   const fetchAnalyticsData = useCallback(async () => {
     if (!effectiveOrganizationId) return;
 
-    setIsLoading(true);
-    setError(null);
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
 
     try {
       const request: AnalyticsRequest = {
-        analysisType,
-        filters: { ...filters, organizationId: effectiveOrganizationId },
-        metrics,
-        timeframe,
-        athleteId: analysisType === 'individual' ? selectedAthleteId : undefined
+        analysisType: state.analysisType,
+        filters: { ...state.filters, organizationId: effectiveOrganizationId },
+        metrics: state.metrics,
+        timeframe: state.timeframe,
+        athleteId: state.analysisType === 'individual' ? state.selectedAthleteId : undefined
       };
 
       const response = await fetch('/api/analytics/dashboard', {
@@ -198,27 +221,23 @@ export function CoachAnalytics() {
       }
 
       const data: AnalyticsResponse = await response.json();
-      setAnalyticsData(data);
+      dispatch({ type: 'SET_ANALYTICS_DATA', payload: data });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
-      setAnalyticsData(null);
+      dispatch({ type: 'SET_ERROR', payload: err instanceof Error ? err.message : 'Failed to fetch analytics data' });
+      dispatch({ type: 'SET_ANALYTICS_DATA', payload: null });
     } finally {
-      setIsLoading(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [effectiveOrganizationId, analysisType, filters, metrics, timeframe, selectedAthleteId]);
+  }, [effectiveOrganizationId, state.analysisType, state.filters, state.metrics, state.timeframe, state.selectedAthleteId, dispatch]);
 
   const handleFiltersReset = useCallback(() => {
-    setFilters({ organizationId: effectiveOrganizationId || '' });
-    setMetrics({ primary: 'FLY10_TIME', additional: [] });
-    setTimeframe({ type: 'best', period: 'all_time' });
-    setSelectedAthleteId('');
-    setSelectedAthlete(null);
-  }, [effectiveOrganizationId]);
+    dispatch({ type: 'RESET_FILTERS', payload: effectiveOrganizationId || '' });
+  }, [effectiveOrganizationId, dispatch]);
 
   const handleExport = useCallback(async () => {
     // TODO: Implement export functionality
     // Export analytics data functionality
-  }, [analyticsData]);
+  }, [state.analyticsData]);
 
   // Load initial data and update organizationId in filters
   useEffect(() => {
@@ -228,8 +247,8 @@ export function CoachAnalytics() {
     console.log('Effective organization ID:', effectiveOrganizationId);
 
     // Update filters with effective organization ID when available
-    if (effectiveOrganizationId && filters.organizationId !== effectiveOrganizationId) {
-      setFilters(prev => ({ ...prev, organizationId: effectiveOrganizationId }));
+    if (effectiveOrganizationId && state.filters.organizationId !== effectiveOrganizationId) {
+      dispatch({ type: 'SET_FILTERS', payload: { organizationId: effectiveOrganizationId } });
     }
 
     loadInitialData();
@@ -239,8 +258,8 @@ export function CoachAnalytics() {
   useEffect(() => {
     if (effectiveOrganizationId) {
       // For individual analysis, only fetch data if an athlete is selected
-      if (analysisType === 'individual' && !selectedAthleteId) {
-        setAnalyticsData(null);
+      if (state.analysisType === 'individual' && !state.selectedAthleteId) {
+        dispatch({ type: 'SET_ANALYTICS_DATA', payload: null });
         return;
       }
       fetchAnalyticsData();
@@ -250,34 +269,20 @@ export function CoachAnalytics() {
   // Update chart type recommendation when analysis parameters change
   useEffect(() => {
     const recommended = getRecommendedChartType(
-      analysisType,
-      metrics.additional.length + 1,
-      timeframe.type
+      state.analysisType,
+      state.metrics.additional.length + 1,
+      state.timeframe.type
     );
-    setSelectedChartType(recommended);
-  }, [analysisType, metrics, timeframe]);
+    dispatch({ type: 'SET_CHART_TYPE', payload: recommended });
+  }, [state.analysisType, state.metrics, state.timeframe, dispatch]);
 
   // Prepare athletes array for AthleteSelector component
-  const athletesForSelector = availableAthletes.map(athlete => ({
+  const athletesForSelector = state.availableAthletes.map(athlete => ({
     ...athlete,
     fullName: athlete.name || 'Unknown' // Map 'name' to 'fullName' and ensure it's never undefined
   }));
 
-  // Chart data based on current selection
-  const chartData = useMemo(() => {
-    if (!analyticsData) return null;
-
-    switch (selectedChartType) {
-      case 'line_chart':
-      case 'multi_line':
-      case 'connected_scatter':
-        return analyticsData.trends;
-      case 'radar_chart':
-        return analyticsData.multiMetric;
-      default:
-        return analyticsData.data;
-    }
-  }, [analyticsData, selectedChartType]);
+  // Chart data is now provided by the context and includes grouping logic
 
   const chartConfig = useMemo(() => {
     let title = 'Performance Analytics';
@@ -285,48 +290,51 @@ export function CoachAnalytics() {
 
     // Helper function to format metrics for display
     const formatMetricsForDisplay = () => {
-      if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
-        const primaryLabel = METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
-        const additionalLabel = METRIC_CONFIG[metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || metrics.additional[0];
+      if ((state.selectedChartType === 'scatter_plot' || state.selectedChartType === 'connected_scatter') && state.metrics.additional.length > 0) {
+        const primaryLabel = METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
+        const additionalLabel = METRIC_CONFIG[state.metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || state.metrics.additional[0];
         return `${primaryLabel} vs ${additionalLabel}`;
       }
-      
+
       // For radar charts and multi-metric displays, show all metrics
-      if (selectedChartType === 'radar_chart' && metrics.additional.length > 0) {
-        const allMetrics = [metrics.primary, ...metrics.additional];
-        const metricLabels = allMetrics.map(metric => 
+      if (state.selectedChartType === 'radar_chart' && state.metrics.additional.length > 0) {
+        const allMetrics = [state.metrics.primary, ...state.metrics.additional];
+        const metricLabels = allMetrics.map(metric =>
           METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
         );
         return metricLabels.join(', ');
       }
-      
-      return METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG]?.label || metrics.primary;
+
+      return METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
     };
 
-    switch (analysisType) {
+    // Add grouping information to title/subtitle if active
+    const groupingInfo = groupingResult.isGrouped ? ` (Grouped by ${groupingResult.groupingSummary.groupType})` : '';
+
+    switch (state.analysisType) {
       case 'individual':
-        const athleteName = availableAthletes.find(a => a.id === selectedAthleteId)?.name;
+        const athleteName = state.availableAthletes.find(a => a.id === state.selectedAthleteId)?.name;
         title = athleteName ? `${athleteName} - Performance Analysis` : 'Individual Performance Analysis';
-        if ((selectedChartType === 'scatter_plot' || selectedChartType === 'connected_scatter') && metrics.additional.length > 0) {
-          subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
-        } else if (selectedChartType === 'radar_chart' && metrics.additional.length > 0) {
-          subtitle = `${formatMetricsForDisplay()} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
+        if ((state.selectedChartType === 'scatter_plot' || state.selectedChartType === 'connected_scatter') && state.metrics.additional.length > 0) {
+          subtitle = `${formatMetricsForDisplay()} ${state.timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${state.timeframe.period.replace('_', ' ').toUpperCase()}`;
+        } else if (state.selectedChartType === 'radar_chart' && state.metrics.additional.length > 0) {
+          subtitle = `${formatMetricsForDisplay()} ${state.timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${state.timeframe.period.replace('_', ' ').toUpperCase()}`;
         } else {
-          subtitle = `${metrics.primary} ${timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${timeframe.period.replace('_', ' ').toUpperCase()}`;
+          subtitle = `${state.metrics.primary} ${state.timeframe.type === 'best' ? 'Best Values' : 'Trends'} - ${state.timeframe.period.replace('_', ' ').toUpperCase()}`;
         }
         break;
       case 'intra_group':
-        title = 'Multi-Athlete Analysis';
+        title = 'Multi-Athlete Analysis' + groupingInfo;
         subtitle = `Comparing athletes within selected groups - ${formatMetricsForDisplay()}`;
         break;
       case 'inter_group':
-        title = 'Inter-Group Comparison';
+        title = 'Inter-Group Comparison' + groupingInfo;
         subtitle = `Comparing performance across different groups - ${formatMetricsForDisplay()}`;
         break;
     }
 
     return {
-      type: selectedChartType,
+      type: state.selectedChartType,
       title,
       subtitle,
       showLegend: true,
@@ -334,7 +342,7 @@ export function CoachAnalytics() {
       responsive: true,
       aspectRatio: 2
     };
-  }, [analysisType, selectedChartType, metrics, timeframe, selectedAthleteId, availableAthletes]);
+  }, [state, groupingResult]);
 
   // CONDITIONAL RETURNS - MUST BE AFTER ALL HOOKS
   if (!user) {
@@ -385,16 +393,16 @@ export function CoachAnalytics() {
           <Button
             variant="outline"
             onClick={fetchAnalyticsData}
-            disabled={isLoading}
+            disabled={state.isLoading}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${state.isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           
           <Button
             variant="outline"
             onClick={handleExport}
-            disabled={!analyticsData || isLoading}
+            disabled={!state.analyticsData || state.isLoading}
           >
             <Download className="h-4 w-4 mr-2" />
             Export
@@ -411,7 +419,7 @@ export function CoachAnalytics() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs value={analysisType} onValueChange={(value) => setAnalysisType(value as AnalysisType)}>
+          <Tabs value={state.analysisType} onValueChange={(value) => handleAnalysisTypeChange(value as AnalysisType)}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="individual" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
@@ -441,22 +449,22 @@ export function CoachAnalytics() {
                   <label className="text-sm font-medium">Select Athlete *</label>
                   <AthleteSelector
                     athletes={athletesForSelector}
-                    selectedAthlete={selectedAthlete ? {
-                      ...selectedAthlete,
-                      fullName: selectedAthlete.name
+                    selectedAthlete={state.selectedAthlete ? {
+                      ...state.selectedAthlete,
+                      fullName: state.selectedAthlete.name
                     } : null}
                     onSelect={(athlete) => {
-                      setSelectedAthlete(athlete ? {
+                      const athleteData = athlete ? {
                         id: athlete.id,
                         name: athlete.fullName || athlete.name || 'Unknown',
                         teamName: athlete.teamName
-                      } : null);
-                      setSelectedAthleteId(athlete?.id || '');
+                      } : null;
+                      handleAthleteSelect(athlete?.id || '', athleteData);
                     }}
                     placeholder={
                       isLoadingAthletes
                         ? "Loading athletes..."
-                        : availableAthletes.length === 0
+                        : state.availableAthletes.length === 0
                           ? "No athletes available"
                           : "Select athlete..."
                     }
@@ -465,12 +473,12 @@ export function CoachAnalytics() {
                     disabled={isLoadingAthletes}
                   />
 
-                  {!isLoadingAthletes && availableAthletes.length === 0 && (
+                  {!isLoadingAthletes && state.availableAthletes.length === 0 && (
                     <p className="text-xs text-muted-foreground">
                       No athletes found for your organization. Check that athletes are properly assigned to your organization.
                     </p>
                   )}
-                  {!isLoadingAthletes && !selectedAthleteId && availableAthletes.length > 0 && (
+                  {!isLoadingAthletes && !state.selectedAthleteId && state.availableAthletes.length > 0 && (
                     <p className="text-xs text-orange-600">
                       Please select an athlete to view individual analysis.
                     </p>
@@ -502,26 +510,40 @@ export function CoachAnalytics() {
         </CardContent>
       </Card>
 
-      {/* Analytics Filters - Full Width */}
-      <AnalyticsFilters
-        filters={filters}
-        metrics={metrics}
-        timeframe={timeframe}
-        analysisType={analysisType}
-        availableTeams={availableTeams}
-        availableAthletes={availableAthletes}
-        onFiltersChange={setFilters}
-        onMetricsChange={setMetrics}
-        onTimeframeChange={setTimeframe}
-        onAnalysisTypeChange={setAnalysisType}
+      {/* Filter Panel with Grouping - Full Width */}
+      <FilterPanel
+        filters={state.filters}
+        metrics={state.metrics}
+        timeframe={state.timeframe}
+        analysisType={state.analysisType}
+        groupBy={state.groupBy}
+        availableTeams={state.availableTeams}
+        availableAthletes={state.availableAthletes}
+        onFiltersChange={handleFiltersChange}
+        onMetricsChange={handleMetricsChange}
+        onTimeframeChange={handleTimeframeChange}
+        onGroupByChange={handleGroupByChange}
         onReset={handleFiltersReset}
+        effectiveOrganizationId={effectiveOrganizationId || undefined}
       />
+
+      {/* Team Comparison Cards - Show when teams are being compared */}
+      {groupingResult.isGrouped && groupingResult.groupingSummary.groupType === 'team' && (
+        <TeamComparisonCards
+          groupingResult={groupingResult}
+          primaryMetric={state.metrics.primary}
+          onTeamClick={(teamId) => {
+            // TODO: Add functionality to drill down into specific team
+            console.log('Team clicked:', teamId);
+          }}
+        />
+      )}
 
       {/* Chart Controls Bar - Always render to prevent hooks violations */}
       <div
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
         style={{
-          display: (analyticsData && (analysisType !== 'individual' || selectedAthleteId)) ? 'grid' : 'none'
+          display: (state.analyticsData && (state.analysisType !== 'individual' || state.selectedAthleteId)) ? 'grid' : 'none'
         }}
       >
           {/* Chart Type Selection */}
@@ -530,12 +552,12 @@ export function CoachAnalytics() {
               <CardTitle className="text-sm">Chart Type</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              <Select value={selectedChartType} onValueChange={(value) => setSelectedChartType(value as ChartType)}>
+              <Select value={state.selectedChartType} onValueChange={(value) => handleChartTypeChange(value as ChartType)}>
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(analyticsData?.meta?.recommendedCharts || []).map((chartType) => (
+                  {(state.analyticsData?.meta?.recommendedCharts || []).map((chartType) => (
                     <SelectItem key={chartType} value={chartType}>
                       {formatChartTypeName(chartType)}
                     </SelectItem>
@@ -553,11 +575,11 @@ export function CoachAnalytics() {
             <CardContent className="pt-0 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span>Athletes:</span>
-                <Badge variant="secondary" className="text-xs">{analyticsData?.meta?.totalAthletes || 0}</Badge>
+                <Badge variant="secondary" className="text-xs">{state.analyticsData?.meta?.totalAthletes || 0}</Badge>
               </div>
               <div className="flex justify-between">
                 <span>Measurements:</span>
-                <Badge variant="secondary" className="text-xs">{analyticsData?.meta?.totalMeasurements || 0}</Badge>
+                <Badge variant="secondary" className="text-xs">{state.analyticsData?.meta?.totalMeasurements || 0}</Badge>
               </div>
             </CardContent>
           </Card>
@@ -573,7 +595,7 @@ export function CoachAnalytics() {
                   variant="outline"
                   size="sm"
                   onClick={handleExport}
-                  disabled={!analyticsData || isLoading}
+                  disabled={!state.analyticsData || state.isLoading}
                   className="h-7 text-xs"
                 >
                   <Download className="h-3 w-3 mr-1" />
@@ -589,20 +611,20 @@ export function CoachAnalytics() {
               <CardTitle className="text-sm">Quick Stats</CardTitle>
             </CardHeader>
             <CardContent className="pt-0 space-y-1 text-sm">
-              {analyticsData?.statistics?.[metrics.primary] && (
+              {state.analyticsData?.statistics?.[state.metrics.primary] && (
                 <>
                   <div className="flex justify-between">
                     <span>Average:</span>
                     <span className="font-mono text-xs">
-                      {analyticsData.statistics[metrics.primary].mean.toFixed(2)}
+                      {state.analyticsData.statistics[state.metrics.primary].mean.toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Best:</span>
                     <span className="font-mono text-xs">
                       {(() => {
-                        const stats = analyticsData.statistics[metrics.primary];
-                        const metricConfig = METRIC_CONFIG[metrics.primary as keyof typeof METRIC_CONFIG];
+                        const stats = state.analyticsData.statistics[state.metrics.primary];
+                        const metricConfig = METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG];
                         const lowerIsBetter = metricConfig?.lowerIsBetter || false;
                         const bestValue = lowerIsBetter ? stats.min : stats.max;
                         return bestValue.toFixed(2);
@@ -617,13 +639,13 @@ export function CoachAnalytics() {
 
       {/* Chart Display - Full Width */}
       <div className="w-full">
-        {error && (
+        {state.error && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{state.error}</AlertDescription>
           </Alert>
         )}
 
-        {isLoading && (
+        {state.isLoading && (
           <Card>
             <CardHeader>
               <Skeleton className="h-6 w-48" />
@@ -635,48 +657,49 @@ export function CoachAnalytics() {
           </Card>
         )}
 
-        {/* Conditionally render components - now safe without startTransition */}
-        {!isLoading && !error && analyticsData && chartData && analysisType === 'intra_group' && selectedChartType === 'line_chart' && analyticsData.trends && analyticsData.trends.length > 0 && (
+        {/* Conditionally render components */}
+        {!state.isLoading && !state.error && state.analyticsData && chartData && state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' && state.analyticsData.trends && state.analyticsData.trends.length > 0 && (
           <AthleteSelectionEnhanced
-            data={analyticsData.trends}
-            selectedAthleteIds={selectedAthleteIds}
-            onSelectionChange={setSelectedAthleteIds}
+            data={state.analyticsData.trends}
+            selectedAthleteIds={state.selectedAthleteIds}
+            onSelectionChange={handleAthleteIdsChange}
             maxSelection={10}
-            metric={metrics.primary}
+            metric={state.metrics.primary}
             className="mb-4"
           />
         )}
 
-        {!isLoading && !error && analyticsData && chartData && analysisType !== 'individual' && selectedChartType === 'time_series_box_swarm' && analyticsData.trends && analyticsData.trends.length > 0 && (
+        {!state.isLoading && !state.error && state.analyticsData && chartData && state.analysisType !== 'individual' && state.selectedChartType === 'time_series_box_swarm' && state.analyticsData.trends && state.analyticsData.trends.length > 0 && (
           <DateSelector
-            data={analyticsData.trends}
-            selectedDates={selectedDates}
-            onSelectionChange={setSelectedDates}
+            data={state.analyticsData.trends}
+            selectedDates={state.selectedDates}
+            onSelectionChange={handleDatesChange}
             maxSelection={10}
             className="mb-4"
           />
         )}
 
-        {!isLoading && !error && analyticsData && chartData && (
+        {!state.isLoading && !state.error && state.analyticsData && chartData && (
           <ChartContainer
             title={chartConfig.title}
             subtitle={chartConfig.subtitle}
-            chartType={selectedChartType}
+            chartType={state.selectedChartType}
             data={chartData as ChartDataPoint[]}
-            trends={analyticsData.trends}
-            multiMetric={analyticsData.multiMetric}
-            statistics={analyticsData.statistics}
+            trends={state.analyticsData.trends}
+            multiMetric={state.analyticsData.multiMetric}
+            statistics={state.analyticsData.statistics}
             config={chartConfig}
-            highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
-            selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
-            onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
-            selectedDates={selectedChartType === 'time_series_box_swarm' ? selectedDates : undefined}
-            metric={selectedChartType === 'time_series_box_swarm' ? metrics.primary : undefined}
+            highlightAthlete={state.analysisType === 'individual' ? state.selectedAthleteId : undefined}
+            selectedAthleteIds={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? state.selectedAthleteIds : undefined}
+            onAthleteSelectionChange={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? handleAthleteIdsChange : undefined}
+            selectedDates={state.selectedChartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
+            metric={state.selectedChartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
             onExport={handleExport}
+            groupingResult={groupingResult}
           />
         )}
 
-        {!isLoading && !error && !analyticsData && (
+        {!state.isLoading && !state.error && !state.analyticsData && (
           <Card>
             <CardContent className="flex items-center justify-center h-96">
               <div className="text-center">
@@ -685,7 +708,7 @@ export function CoachAnalytics() {
                 <p className="text-muted-foreground mb-4">
                   Configure your analysis parameters and filters to view analytics data.
                 </p>
-                {analysisType === 'individual' && !selectedAthleteId && (
+                {state.analysisType === 'individual' && !state.selectedAthleteId && (
                   <p className="text-sm text-muted-foreground">
                     Please select an athlete for individual analysis.
                   </p>
@@ -697,6 +720,26 @@ export function CoachAnalytics() {
       </div>
     </div>
     </ErrorBoundary>
+  );
+}
+
+// Main component with provider wrapper
+export function CoachAnalytics() {
+  const { user } = useAuth();
+
+  // Ensure user is authenticated
+  if (!user) {
+    return <div className="p-6">Loading...</div>;
+  }
+
+  return (
+    <AnalyticsProvider
+      organizationId={user?.currentOrganization?.id}
+      userId={user.id}
+      initialAnalysisType="individual"
+    >
+      <CoachAnalyticsContent />
+    </AnalyticsProvider>
   );
 }
 

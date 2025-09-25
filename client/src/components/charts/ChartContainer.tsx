@@ -6,17 +6,18 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '../ErrorBoundary';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
   ChartType,
   StatisticalSummary,
   TrendData,
-  MultiMetricData 
+  MultiMetricData
 } from '@shared/analytics-types';
+import type { GroupingResult, GroupedDataPoint } from '@/hooks/useDataGrouping';
 
 // Union type for all possible chart data types
-type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
+type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | GroupedDataPoint[] | null;
 
 // Type guards for specific chart data types
 function isTrendData(data: ChartDataType): data is TrendData[] {
@@ -31,8 +32,32 @@ function isChartDataPoints(data: ChartDataType): data is ChartDataPoint[] {
   return data !== null && Array.isArray(data) && (data.length === 0 || 'value' in data[0]);
 }
 
-function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | TrendData[] | MultiMetricData[] {
+function isGroupedData(data: ChartDataType): data is GroupedDataPoint[] {
+  return data !== null && Array.isArray(data) && data.length > 0 && 'groupKey' in data[0] && 'statistics' in data[0];
+}
+
+function isValidChartData(data: ChartDataType): data is ChartDataPoint[] | TrendData[] | MultiMetricData[] | GroupedDataPoint[] {
   return data !== null && Array.isArray(data);
+}
+
+// Helper function to convert grouped data to chart points for compatibility
+function convertGroupedDataToChartPoints(groupedData: GroupedDataPoint[]): ChartDataPoint[] {
+  const chartPoints: ChartDataPoint[] = [];
+
+  groupedData.forEach(group => {
+    // Create a representative data point for each group using the mean value
+    chartPoints.push({
+      athleteId: group.groupKey,
+      athleteName: group.groupLabel,
+      value: group.statistics.mean,
+      date: new Date(), // Use current date as placeholder
+      metric: 'grouped', // Placeholder metric
+      teamName: group.groupType === 'team' ? group.groupLabel : undefined,
+      grouping: group.groupLabel
+    });
+  });
+
+  return chartPoints;
 }
 
 // Lazy load chart components to reduce bundle size
@@ -65,6 +90,7 @@ interface ChartContainerProps {
   metric?: string;
   onExport?: () => void;
   onFullscreen?: () => void;
+  groupingResult?: GroupingResult;
   className?: string;
 }
 
@@ -86,6 +112,7 @@ export function ChartContainer({
   metric,
   onExport,
   onFullscreen,
+  groupingResult,
   className
 }: ChartContainerProps) {
   // Memoize chart component selection for generic cases only
@@ -129,15 +156,22 @@ export function ChartContainer({
     ...config
   };
 
-  // Determine which data to pass based on chart type
+  // Determine which data to pass based on chart type and grouping
   const chartData = useMemo(() => {
     console.log('ChartContainer Debug:', {
       chartType,
       dataLength: data?.length || 0,
       trendsLength: trends?.length || 0,
       multiMetricLength: multiMetric?.length || 0,
-      hasMultiMetric: !!multiMetric
+      hasMultiMetric: !!multiMetric,
+      isGrouped: groupingResult?.isGrouped,
+      groupedDataLength: groupingResult?.groupedData?.length || 0
     });
+
+    // If we have grouped data and the chart type supports it, use grouped data
+    if (groupingResult?.isGrouped && ['box_plot', 'bar_chart', 'box_swarm_combo', 'distribution'].includes(chartType)) {
+      return groupingResult.groupedData;
+    }
 
     switch (chartType) {
       case 'line_chart':
@@ -308,7 +342,7 @@ export function ChartContainer({
                 ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}
-                    data={chartData as any}
+                    data={isGroupedData(chartData) ? convertGroupedDataToChartPoints(chartData) : chartData as any}
                     config={chartConfig}
                     statistics={statistics || {}}
                     highlightAthlete={highlightAthlete}
