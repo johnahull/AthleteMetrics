@@ -43,8 +43,8 @@ export function TimeframeSelector({
     // Auto-adjust period based on type
     if (type === 'best' && timeframe.period === 'custom') {
       newTimeframe.period = 'all_time';
-    } else if (type === 'trends' && (timeframe.period === 'all_time' || !timeframe.period)) {
-      newTimeframe.period = 'last_90_days';
+    } else if (type === 'trends' && !timeframe.period) {
+      newTimeframe.period = 'all_time';
     }
 
     onTimeframeChange(newTimeframe);
@@ -106,13 +106,13 @@ export function TimeframeSelector({
     switch (analysisType) {
       case 'individual':
         return [
-          { type: 'trends' as TimeframeType, period: 'last_90_days' as TimePeriod, reason: 'Shows progress over time' },
+          { type: 'trends' as TimeframeType, period: 'all_time' as TimePeriod, reason: 'Shows complete progress over time' },
           { type: 'best' as TimeframeType, period: 'all_time' as TimePeriod, reason: 'Personal records' }
         ];
       case 'intra_group':
         return [
           { type: 'best' as TimeframeType, period: 'this_year' as TimePeriod, reason: 'Current season comparison' },
-          { type: 'trends' as TimeframeType, period: 'last_30_days' as TimePeriod, reason: 'Recent group dynamics' }
+          { type: 'trends' as TimeframeType, period: 'all_time' as TimePeriod, reason: 'Complete group dynamics' }
         ];
       case 'inter_group':
         return [
