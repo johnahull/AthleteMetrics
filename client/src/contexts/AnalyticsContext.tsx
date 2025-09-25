@@ -23,6 +23,7 @@ export interface AnalyticsState {
 
   // Chart Configuration
   selectedChartType: ChartType;
+  showAllCharts: boolean;
 
   // UI State
   isLoading: boolean;
@@ -56,6 +57,7 @@ export type AnalyticsAction =
   | { type: 'SET_METRICS'; payload: Partial<MetricSelection> }
   | { type: 'SET_TIMEFRAME'; payload: Partial<TimeframeConfig> }
   | { type: 'SET_CHART_TYPE'; payload: ChartType }
+  | { type: 'SET_SHOW_ALL_CHARTS'; payload: boolean }
   | { type: 'SET_SELECTED_ATHLETE'; payload: { id: string; athlete: { id: string; name: string; teamName?: string } | null } }
   | { type: 'SET_SELECTED_ATHLETE_IDS'; payload: string[] }
   | { type: 'SET_SELECTED_DATES'; payload: string[] }
@@ -83,6 +85,7 @@ const getDefaultState = (organizationId: string = '', userId?: string): Analytic
     period: 'all_time'
   },
   selectedChartType: 'box_swarm_combo',
+  showAllCharts: false,
   isLoading: false,
   error: null,
   analyticsData: null,
@@ -138,6 +141,12 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       return {
         ...state,
         selectedChartType: action.payload
+      };
+
+    case 'SET_SHOW_ALL_CHARTS':
+      return {
+        ...state,
+        showAllCharts: action.payload
       };
 
     case 'SET_SELECTED_ATHLETE':
@@ -327,6 +336,9 @@ export function useAnalyticsActions() {
 
     setChartType: (chartType: ChartType) =>
       dispatch({ type: 'SET_CHART_TYPE', payload: chartType }),
+
+    setShowAllCharts: (showAll: boolean) =>
+      dispatch({ type: 'SET_SHOW_ALL_CHARTS', payload: showAll }),
 
     selectAthlete: (id: string, athlete: { id: string; name: string; teamName?: string } | null) =>
       dispatch({ type: 'SET_SELECTED_ATHLETE', payload: { id, athlete } }),

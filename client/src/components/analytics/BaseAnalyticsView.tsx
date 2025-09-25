@@ -88,6 +88,7 @@ function BaseAnalyticsViewContent({
     updateMetrics,
     updateTimeframe,
     setChartType,
+    setShowAllCharts,
     resetFilters,
     effectiveOrganizationId
   } = useAnalyticsOperations();
@@ -279,6 +280,8 @@ function BaseAnalyticsViewContent({
                 availableChartTypes={state.analyticsData?.meta?.recommendedCharts || [state.selectedChartType]}
                 onChartTypeChange={setChartType}
                 formatChartTypeName={formatChartTypeName}
+                showAllCharts={state.showAllCharts}
+                onShowAllChartsChange={setShowAllCharts}
                 analyticsData={state.analyticsData}
                 isLoading={state.isLoading}
                 onRefresh={fetchAnalyticsData}
@@ -349,30 +352,68 @@ function BaseAnalyticsViewContent({
 
         {/* Chart Display */}
         {!state.isLoading && !state.error && isDataReady && chartData && (
-          <Suspense fallback={
-            <Card>
-              <CardContent className="flex items-center justify-center h-96">
-                <Skeleton className="h-full w-full" />
-              </CardContent>
-            </Card>
-          }>
-            <ChartContainer
-              title={chartConfig.title}
-              subtitle={chartConfig.subtitle}
-              chartType={state.selectedChartType}
-              data={chartData}
-              trends={state.analyticsData?.trends}
-              multiMetric={state.analyticsData?.multiMetric}
-              statistics={state.analyticsData?.statistics}
-              config={chartConfig}
-              highlightAthlete={state.analysisType === 'individual' ? state.selectedAthleteId : undefined}
-              selectedAthleteIds={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? state.selectedAthleteIds : undefined}
-              onAthleteSelectionChange={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
-              selectedDates={state.selectedChartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
-              metric={state.selectedChartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
-              onExport={handleExport}
-            />
-          </Suspense>
+          <>
+            {state.showAllCharts ? (
+              // Multi-Chart View: Display all available charts vertically
+              <div className="space-y-6">
+                {(state.analyticsData?.meta?.recommendedCharts || [state.selectedChartType]).map((chartType, index) => (
+                  <Suspense key={chartType} fallback={
+                    <Card>
+                      <CardContent className="flex items-center justify-center h-96">
+                        <Skeleton className="h-full w-full" />
+                      </CardContent>
+                    </Card>
+                  }>
+                    <ChartContainer
+                      title={`${chartConfig.title} - ${formatChartTypeName(chartType)}`}
+                      subtitle={chartConfig.subtitle}
+                      chartType={chartType}
+                      data={chartData}
+                      trends={state.analyticsData?.trends}
+                      multiMetric={state.analyticsData?.multiMetric}
+                      statistics={state.analyticsData?.statistics}
+                      config={{
+                        ...chartConfig,
+                        title: `${chartConfig.title} - ${formatChartTypeName(chartType)}`
+                      }}
+                      highlightAthlete={state.analysisType === 'individual' ? state.selectedAthleteId : undefined}
+                      selectedAthleteIds={state.analysisType === 'intra_group' && chartType === 'line_chart' ? state.selectedAthleteIds : undefined}
+                      onAthleteSelectionChange={state.analysisType === 'intra_group' && chartType === 'line_chart' ? setSelectedAthleteIds : undefined}
+                      selectedDates={chartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
+                      metric={chartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
+                      onExport={handleExport}
+                    />
+                  </Suspense>
+                ))}
+              </div>
+            ) : (
+              // Single Chart View: Display selected chart only
+              <Suspense fallback={
+                <Card>
+                  <CardContent className="flex items-center justify-center h-96">
+                    <Skeleton className="h-full w-full" />
+                  </CardContent>
+                </Card>
+              }>
+                <ChartContainer
+                  title={chartConfig.title}
+                  subtitle={chartConfig.subtitle}
+                  chartType={state.selectedChartType}
+                  data={chartData}
+                  trends={state.analyticsData?.trends}
+                  multiMetric={state.analyticsData?.multiMetric}
+                  statistics={state.analyticsData?.statistics}
+                  config={chartConfig}
+                  highlightAthlete={state.analysisType === 'individual' ? state.selectedAthleteId : undefined}
+                  selectedAthleteIds={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? state.selectedAthleteIds : undefined}
+                  onAthleteSelectionChange={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
+                  selectedDates={state.selectedChartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
+                  metric={state.selectedChartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
+                  onExport={handleExport}
+                />
+              </Suspense>
+            )}
+          </>
         )}
 
         {/* No Data Display */}

@@ -7,6 +7,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Download, Maximize2, Settings, BarChart3, Info } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -18,6 +19,10 @@ interface AnalyticsToolbarProps {
   availableChartTypes: ChartType[];
   onChartTypeChange: (chartType: ChartType) => void;
   formatChartTypeName: (chartType: string) => string;
+
+  // Multi-Chart View
+  showAllCharts?: boolean;
+  onShowAllChartsChange?: (showAll: boolean) => void;
 
   // Data and Actions
   analyticsData: AnalyticsResponse | null;
@@ -41,6 +46,8 @@ export function AnalyticsToolbar({
   availableChartTypes,
   onChartTypeChange,
   formatChartTypeName,
+  showAllCharts = false,
+  onShowAllChartsChange,
   analyticsData,
   isLoading,
   onRefresh,
@@ -62,8 +69,12 @@ export function AnalyticsToolbar({
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Chart Type</CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
-          <Select value={selectedChartType} onValueChange={onChartTypeChange}>
+        <CardContent className="pt-0 space-y-3">
+          <Select
+            value={selectedChartType}
+            onValueChange={onChartTypeChange}
+            disabled={showAllCharts}
+          >
             <SelectTrigger className="h-9">
               <SelectValue />
             </SelectTrigger>
@@ -75,9 +86,33 @@ export function AnalyticsToolbar({
               ))}
             </SelectContent>
           </Select>
-          {availableChartTypes.length > 1 && (
-            <p className="text-xs text-muted-foreground mt-1">
+
+          {/* Multi-Chart Toggle */}
+          {availableChartTypes.length > 1 && onShowAllChartsChange && (
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-all-charts"
+                checked={showAllCharts}
+                onCheckedChange={onShowAllChartsChange}
+              />
+              <label
+                htmlFor="show-all-charts"
+                className="text-xs font-medium cursor-pointer"
+              >
+                Show All Charts
+              </label>
+            </div>
+          )}
+
+          {availableChartTypes.length > 1 && !showAllCharts && (
+            <p className="text-xs text-muted-foreground">
               {availableChartTypes.length} chart types available
+            </p>
+          )}
+
+          {showAllCharts && (
+            <p className="text-xs text-muted-foreground">
+              Displaying all {availableChartTypes.length} chart types
             </p>
           )}
         </CardContent>
