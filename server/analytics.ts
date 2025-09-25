@@ -43,6 +43,7 @@ export class AnalyticsService {
    */
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     const { analysisType, filters, metrics, timeframe, athleteId } = request;
+    console.log('ANALYTICS DEBUG: Starting getAnalyticsData with metrics:', metrics);
 
     // Build base query with filters
     const baseQuery = this.buildBaseQuery(filters, timeframe);
@@ -355,12 +356,18 @@ export class AnalyticsService {
         }
       }
 
-      multiMetricData.push({
-        athleteId,
-        athleteName,
-        metrics: athleteMetrics,
-        percentileRanks
-      });
+      // Include athlete if they have data for at least 2 metrics (primary + 1 additional)
+      const hasMinimumMetrics = Object.keys(athleteMetrics).length >= 2;
+      console.log(`Athlete ${athleteName}: has ${Object.keys(athleteMetrics).length} metrics, minimum required: 2`);
+      
+      if (hasMinimumMetrics) {
+        multiMetricData.push({
+          athleteId,
+          athleteName,
+          metrics: athleteMetrics,
+          percentileRanks
+        });
+      }
     }
 
     console.log('getMultiMetricData: Returning', multiMetricData.length, 'items');
