@@ -11,7 +11,8 @@ import type {
   ChartDataPoint,
   StatisticalSummary,
   TrendData,
-  TrendDataPoint
+  TrendDataPoint,
+  MultiMetricData
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import {
@@ -228,6 +229,106 @@ export class AnalyticsService {
     return trends;
   }
 
+  /**
+   * Generate trends data for all selected metrics
+   */
+  private generateTrendsDataForAllMetrics(chartData: ChartDataPoint[], metrics: string[]): TrendData[] {
+    // Generate trends data for each metric and combine
+    const allTrends: TrendData[] = [];
+
+    for (const metric of metrics) {
+      const metricTrends = this.generateTrendsData(chartData, metric);
+      allTrends.push(...metricTrends);
+    }
+
+    return allTrends;
+  }
+
+  /**
+   * Generate multi-metric data for radar charts from filtered chart data points
+   */
+  private generateMultiMetricData(chartData: ChartDataPoint[], metrics: string[]): MultiMetricData[] {
+    // Early return if no data or less than 2 metrics
+    if (!chartData || chartData.length === 0 || metrics.length < 2) {
+      return [];
+    }
+
+    // Group chart data by athlete
+    const athleteGroups = chartData.reduce((groups, point) => {
+      if (metrics.includes(point.metric)) {
+        if (!groups[point.athleteId]) {
+          groups[point.athleteId] = {
+            athleteId: point.athleteId,
+            athleteName: point.athleteName,
+            teamName: point.teamName,
+            measurements: {}
+          };
+        }
+
+        // Store the best value for each metric per athlete
+        const currentBest = groups[point.athleteId].measurements[point.metric];
+        const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
+        const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+
+        if (!currentBest ||
+            (lowerIsBetter && point.value < currentBest) ||
+            (!lowerIsBetter && point.value > currentBest)) {
+          groups[point.athleteId].measurements[point.metric] = point.value;
+        }
+      }
+      return groups;
+    }, {} as Record<string, {
+      athleteId: string;
+      athleteName: string;
+      teamName?: string;
+      measurements: Record<string, number>
+    }>);
+
+    // Filter to only include athletes who have data for all metrics
+    const completeAthletes = Object.values(athleteGroups).filter(athlete =>
+      metrics.every(metric => athlete.measurements[metric] !== undefined)
+    );
+
+    // Debug logging
+    console.log(`MultiMetric Debug: Total athletes with some data: ${Object.keys(athleteGroups).length}`);
+    console.log(`MultiMetric Debug: Athletes with complete data for all ${metrics.length} metrics: ${completeAthletes.length}`);
+    console.log('MultiMetric Debug: Required metrics:', metrics);
+
+    if (completeAthletes.length === 0) {
+      console.log('MultiMetric Debug: No athletes have complete data for all metrics');
+      return [];
+    }
+
+    // Calculate percentile ranks for each metric
+    const metricPercentiles: Record<string, Record<string, number>> = {};
+
+    metrics.forEach(metric => {
+      const values = completeAthletes.map(athlete => athlete.measurements[metric]);
+      const sortedValues = [...values].sort((a, b) => a - b);
+
+      metricPercentiles[metric] = {};
+      completeAthletes.forEach(athlete => {
+        const value = athlete.measurements[metric];
+        const rank = sortedValues.findIndex(v => v === value);
+        // Handle edge case where there's only one athlete
+        const percentile = sortedValues.length === 1 ? 50 : (rank / (sortedValues.length - 1)) * 100;
+        metricPercentiles[metric][athlete.athleteId] = percentile;
+      });
+    });
+
+    // Convert to MultiMetricData format
+    const multiMetricData: MultiMetricData[] = completeAthletes.map(athlete => ({
+      athleteId: athlete.athleteId,
+      athleteName: athlete.athleteName,
+      metrics: athlete.measurements,
+      percentileRanks: Object.fromEntries(
+        metrics.map(metric => [metric, metricPercentiles[metric][athlete.athleteId]])
+      )
+    }));
+
+    return multiMetricData;
+  }
+
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
       // Validate request
@@ -355,21 +456,23 @@ export class AnalyticsService {
         statistics[metric] = calculateStatistics(values);
       }
 
-      // Generate trends data if timeframe type is trends
-      let trends: TrendData[] = [];
-      if (request.timeframe.type === 'trends') {
-        // Check what metrics actually exist in the chart data
-        const availableMetrics = Array.from(new Set(chartData.map(point => point.metric)));
-
-        // Generate trends for all metrics (primary + additional)
-        for (const metric of allMetrics) {
-          const metricTrends = this.generateTrendsData(chartData, metric);
-          trends.push(...metricTrends);
-        }
-      }
-
-      // Calculate total metric count (primary + additional)
+      // Calculate total metric count (primary + additional) and prepare metrics list
       const metricCount = 1 + (request.metrics.additional?.length || 0);
+      const allSelectedMetrics = [request.metrics.primary, ...(request.metrics.additional || [])];
+
+      // Generate trends data if timeframe type is trends
+      const trends = request.timeframe.type === 'trends'
+        ? this.generateTrendsDataForAllMetrics(chartData, allSelectedMetrics)
+        : [];
+
+      // Generate multi-metric data for radar charts when multiple metrics are selected
+      // Generate multiMetric data when we have 2+ metrics (not just 3+) to support radar charts
+      const shouldGenerateMultiMetric = metricCount >= 2;
+      const multiMetric = shouldGenerateMultiMetric
+        ? this.generateMultiMetricData(chartData, allSelectedMetrics)
+        : [];
+
+      console.log(`Analytics Debug: metricCount=${metricCount}, allSelectedMetrics=${JSON.stringify(allSelectedMetrics)}, shouldGenerateMultiMetric=${shouldGenerateMultiMetric}, multiMetric.length=${multiMetric.length}`);
 
       // Generate dynamic chart recommendations
       const recommendedCharts = this.getRecommendedChartTypes(
@@ -377,11 +480,6 @@ export class AnalyticsService {
         metricCount,
         request.timeframe.type
       );
-
-      // Generate multiMetric data for radar charts when multiple metrics are selected
-      const multiMetric = request.metrics.additional.length > 0 
-        ? this.generateMultiMetricData(chartData, request.metrics)
-        : [];
 
       return {
         data: chartData,
@@ -408,82 +506,5 @@ export class AnalyticsService {
       console.error('Analytics service error:', error);
       throw error;
     }
-  }
-
-  /**
-   * Generate multi-metric data for radar charts
-   */
-  private generateMultiMetricData(data: ChartDataPoint[], metrics: any): any[] {
-    const allMetrics = [metrics.primary, ...metrics.additional];
-    const multiMetricData: any[] = [];
-
-
-    // Group by athlete
-    const athleteGroups: Record<string, ChartDataPoint[]> = {};
-    for (const point of data) {
-      if (!athleteGroups[point.athleteId]) {
-        athleteGroups[point.athleteId] = [];
-      }
-      athleteGroups[point.athleteId].push(point);
-    }
-
-
-    for (const [athleteId, points] of Object.entries(athleteGroups)) {
-      const athleteName = points[0].athleteName;
-      const athleteMetrics: Record<string, number> = {};
-      const percentileRanks: Record<string, number> = {};
-
-      // Get best value for each metric
-      for (const metric of allMetrics) {
-        const metricPoints = points.filter(p => p.metric === metric);
-        if (metricPoints.length > 0) {
-          const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-          const values = metricPoints.map(p => p.value);
-
-          athleteMetrics[metric] = metricConfig?.lowerIsBetter
-            ? Math.min(...values)
-            : Math.max(...values);
-          
-          // Calculate percentile rank within group
-          const allMetricValues = data
-            .filter(d => d.metric === metric)
-            .map(d => d.value)
-            .sort((a, b) => a - b);
-          
-          percentileRanks[metric] = this.calculatePercentileRank(
-            athleteMetrics[metric], 
-            allMetricValues
-          );
-        }
-      }
-
-      // Include athlete if they have data for at least 2 metrics
-      const hasMinimumMetrics = Object.keys(athleteMetrics).length >= 2;
-      
-      if (hasMinimumMetrics) {
-        multiMetricData.push({
-          athleteId,
-          athleteName,
-          metrics: athleteMetrics,
-          percentileRanks
-        });
-      }
-    }
-
-    return multiMetricData;
-  }
-
-  /**
-   * Calculate percentile rank for a value within a sorted array
-   */
-  private calculatePercentileRank(value: number, sortedValues: number[]): number {
-    if (sortedValues.length === 0) return 0;
-    
-    let rank = 0;
-    for (const val of sortedValues) {
-      if (val < value) rank++;
-    }
-    
-    return (rank / sortedValues.length) * 100;
   }
 }
