@@ -1,10 +1,20 @@
 /**
  * Custom hook for managing athlete selection state
- * Encapsulates complex state logic and provides optimized callback handlers
+ *
+ * Supports both controlled and uncontrolled modes:
+ * - Controlled: When selectedAthleteIds and onAthleteSelectionChange are provided
+ * - Uncontrolled: When only athletes and maxAthletes are provided
+ *
+ * Performance optimizations:
+ * - Uses useRef for callback dependencies to prevent unnecessary re-renders
+ * - Memoizes athlete IDs for stable dependencies
+ * - Optimized state updates with functional updates
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { DEFAULT_SELECTION_COUNT } from '@/utils/chart-constants';
+import { validateMaxAthletes, logValidationResult } from '@/utils/chart-validation';
+import { useDebouncedCallback } from './useDebounce';
 
 interface Athlete {
   id: string;
@@ -14,9 +24,29 @@ interface Athlete {
 
 interface UseAthleteSelectionProps {
   athletes: Athlete[];
+  /**
+   * External selected athlete IDs (controlled mode)
+   * When provided, component becomes controlled
+   */
   selectedAthleteIds?: string[];
+  /**
+   * Callback for selection changes (controlled mode)
+   * Required when selectedAthleteIds is provided
+   */
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  /** Maximum number of athletes that can be selected */
   maxAthletes?: number;
+  /**
+   * Force controlled mode even without selectedAthleteIds
+   * When true, selection state is always managed externally
+   */
+  forceControlled?: boolean;
+  /**
+   * Debounce delay for selection changes in milliseconds
+   * Helps performance when user rapidly changes selections
+   * @default 150
+   */
+  debounceDelay?: number;
 }
 
 interface UseAthleteSelectionReturn {
@@ -24,16 +54,45 @@ interface UseAthleteSelectionReturn {
   handleToggleAthlete: (athleteId: string) => void;
   handleSelectAll: () => void;
   handleClearAll: () => void;
+  /** Whether the hook is operating in controlled mode */
+  isControlled: boolean;
+  /** Current selection count */
+  selectedCount: number;
+  /** Whether selection has reached the maximum limit */
+  isAtMaximum: boolean;
 }
 
 export function useAthleteSelection({
   athletes,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = DEFAULT_SELECTION_COUNT
+  maxAthletes = DEFAULT_SELECTION_COUNT,
+  forceControlled = false,
+  debounceDelay = 150
 }: UseAthleteSelectionProps): UseAthleteSelectionReturn {
-  // Validate maxAthletes
-  const validatedMaxAthletes = Math.max(1, maxAthletes);
+  // Validate and sanitize maxAthletes prop
+  const maxAthletesValidation = validateMaxAthletes(maxAthletes, athletes.length);
+  logValidationResult('useAthleteSelection', maxAthletesValidation);
+  const validatedMaxAthletes = maxAthletesValidation.value;
+
+  // Determine operation mode (controlled vs uncontrolled)
+  const isControlled = !!(selectedAthleteIds || onAthleteSelectionChange || forceControlled);
+
+  // Validate controlled mode setup
+  if (process.env.NODE_ENV === 'development') {
+    if (selectedAthleteIds && !onAthleteSelectionChange) {
+      console.warn(
+        '[useAthleteSelection] selectedAthleteIds provided without onAthleteSelectionChange. ' +
+        'This creates a read-only selection state. Consider providing onAthleteSelectionChange for controlled mode.'
+      );
+    }
+    if (!selectedAthleteIds && onAthleteSelectionChange) {
+      console.warn(
+        '[useAthleteSelection] onAthleteSelectionChange provided without selectedAthleteIds. ' +
+        'Consider providing selectedAthleteIds for full controlled mode, or omit both for uncontrolled mode.'
+      );
+    }
+  }
 
   // Internal state for when no external state is provided
   const [internalSelectedAthleteIds, setInternalSelectedAthleteIds] = useState<string[]>([]);
@@ -42,6 +101,16 @@ export function useAthleteSelection({
   // Use ref to avoid recreating callbacks when toggles change
   const togglesRef = useRef<Record<string, boolean>>({});
   togglesRef.current = athleteToggles;
+
+  // Create debounced version of external selection change callback
+  const debouncedOnAthleteSelectionChange = useDebouncedCallback(
+    (athleteIds: string[]) => {
+      if (onAthleteSelectionChange) {
+        onAthleteSelectionChange(athleteIds);
+      }
+    },
+    debounceDelay
+  );
 
   // Memoize athlete IDs for stable dependencies
   const athleteIds = useMemo(() => athletes.map(a => a.id), [athletes]);
@@ -90,7 +159,7 @@ export function useAthleteSelection({
     const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
 
     if (onAthleteSelectionChange) {
-      onAthleteSelectionChange(newSelected);
+      debouncedOnAthleteSelectionChange(newSelected);
     } else {
       setInternalSelectedAthleteIds(newSelected);
     }
@@ -106,7 +175,7 @@ export function useAthleteSelection({
     setAthleteToggles(newToggles);
 
     if (onAthleteSelectionChange) {
-      onAthleteSelectionChange(idsToSelect);
+      debouncedOnAthleteSelectionChange(idsToSelect);
     } else {
       setInternalSelectedAthleteIds(idsToSelect);
     }
@@ -121,16 +190,23 @@ export function useAthleteSelection({
     setAthleteToggles(newToggles);
 
     if (onAthleteSelectionChange) {
-      onAthleteSelectionChange([]);
+      debouncedOnAthleteSelectionChange([]);
     } else {
       setInternalSelectedAthleteIds([]);
     }
   }, [athletes, onAthleteSelectionChange]);
 
+  // Calculate derived state
+  const selectedCount = Object.values(athleteToggles).filter(Boolean).length;
+  const isAtMaximum = selectedCount >= validatedMaxAthletes;
+
   return {
     athleteToggles,
     handleToggleAthlete,
     handleSelectAll,
-    handleClearAll
+    handleClearAll,
+    isControlled,
+    selectedCount,
+    isAtMaximum
   };
 }

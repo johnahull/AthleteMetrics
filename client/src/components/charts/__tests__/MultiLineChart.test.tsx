@@ -328,20 +328,20 @@ describe('MultiLineChart', () => {
     it('should show athletes legend for multi-athlete scenario', () => {
       render(<MultiLineChart {...defaultProps} />);
 
-      expect(screen.getByText('Athletes:')).toBeInTheDocument();
+      expect(screen.getByText('Athletes (2)')).toBeInTheDocument();
     });
 
     it('should show metrics legend', () => {
       render(<MultiLineChart {...defaultProps} />);
 
-      expect(screen.getByText('Metrics & Line Styles:')).toBeInTheDocument();
+      expect(screen.getByText('Metrics & Line Styles (2)')).toBeInTheDocument();
     });
 
     it('should not show athletes legend for single athlete', () => {
       const singleAthleteData = mockTrendData.filter(trend => trend.athleteId === 'athlete1');
       render(<MultiLineChart {...defaultProps} data={singleAthleteData} />);
 
-      expect(screen.queryByText('Athletes:')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Athletes \(\d+\)/)).not.toBeInTheDocument();
     });
 
     it('should show appropriate help text for single vs multi athlete', () => {
@@ -453,8 +453,8 @@ describe('MultiLineChart', () => {
       render(<MultiLineChart {...defaultProps} />);
 
       // Check that legend sections have proper headings
-      expect(screen.getByText('Athletes:')).toBeInTheDocument();
-      expect(screen.getByText('Metrics & Line Styles:')).toBeInTheDocument();
+      expect(screen.getByText('Athletes (2)')).toBeInTheDocument();
+      expect(screen.getByText('Metrics & Line Styles (2)')).toBeInTheDocument();
     });
 
     it('should provide meaningful titles for color indicators', () => {
