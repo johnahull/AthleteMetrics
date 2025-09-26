@@ -153,6 +153,32 @@ export function MultiLineChart({
     }
   };
 
+  // Colors and styles for chart lines - defined outside useMemo for legend access
+  const athleteColors = [
+    'rgba(59, 130, 246, 1)',    // Blue
+    'rgba(16, 185, 129, 1)',    // Green
+    'rgba(239, 68, 68, 1)'      // Red
+  ];
+
+  const metricColors = [
+    'rgba(59, 130, 246, 1)',    // Blue
+    'rgba(16, 185, 129, 1)',    // Green
+    'rgba(239, 68, 68, 1)',     // Red
+    'rgba(245, 158, 11, 1)',    // Amber
+    'rgba(139, 92, 246, 1)',    // Violet
+    'rgba(236, 72, 153, 1)',    // Pink
+    'rgba(34, 197, 94, 1)',     // Emerald
+    'rgba(251, 113, 133, 1)'    // Rose
+  ];
+
+  const metricStyles = [
+    { dash: [], opacity: 1, name: 'Solid' },
+    { dash: [10, 5], opacity: 1, name: 'Dashed' },
+    { dash: [2, 2], opacity: 1, name: 'Dotted' },
+    { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
+    { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' }
+  ];
+
   // Transform trend data for multi-line chart
   const multiLineData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -195,37 +221,11 @@ export function MultiLineChart({
     // Create labels
     const labels = sortedDates.map(dateStr => {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
       });
     });
-
-    // Colors for different scenarios
-    const athleteColors = [
-      'rgba(59, 130, 246, 1)',    // Blue
-      'rgba(16, 185, 129, 1)',    // Green
-      'rgba(239, 68, 68, 1)'      // Red
-    ];
-
-    const metricColors = [
-      'rgba(59, 130, 246, 1)',    // Blue
-      'rgba(16, 185, 129, 1)',    // Green
-      'rgba(239, 68, 68, 1)',     // Red
-      'rgba(245, 158, 11, 1)',    // Amber
-      'rgba(139, 92, 246, 1)',    // Violet
-      'rgba(236, 72, 153, 1)',    // Pink
-      'rgba(34, 197, 94, 1)',     // Emerald
-      'rgba(251, 113, 133, 1)'    // Rose
-    ];
-
-    const metricStyles = [
-      { dash: [], opacity: 1, name: 'Solid' },
-      { dash: [10, 5], opacity: 1, name: 'Dashed' },
-      { dash: [2, 2], opacity: 1, name: 'Dotted' },
-      { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
-      { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' }
-    ];
 
     // Determine if this is individual analysis (single athlete)
     const isSingleAthlete = athletesToShow.length === 1;
@@ -306,6 +306,9 @@ export function MultiLineChart({
       athletesToShow
     };
   }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds]);
+
+  // Determine if this is individual analysis (single athlete) - needed for legend
+  const isSingleAthlete = multiLineData?.athletesToShow?.length === 1;
 
   // Chart options
   const options: ChartOptions<'line'> = {
