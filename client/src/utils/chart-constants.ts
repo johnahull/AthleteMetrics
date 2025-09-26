@@ -42,6 +42,11 @@ export const METRIC_STYLES = [
 // Default selection count for athlete selector
 export const DEFAULT_SELECTION_COUNT = 3;
 
+// Normalized value constants for chart calculations
+export const NORMALIZED_MEAN_VALUE = 50;
+export const NORMALIZED_MIN_VALUE = 0;
+export const NORMALIZED_MAX_VALUE = 100;
+
 /**
  * Get an athlete color by index, cycling through available colors
  */

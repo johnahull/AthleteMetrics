@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,9 +24,14 @@ import {
   METRIC_COLORS,
   METRIC_STYLES,
   DEFAULT_SELECTION_COUNT,
+  NORMALIZED_MEAN_VALUE,
+  NORMALIZED_MIN_VALUE,
+  NORMALIZED_MAX_VALUE,
   getAthleteColor,
   getMetricStyle
 } from '@/utils/chart-constants';
+import { useAthleteSelection } from '@/hooks/useAthleteSelection';
+import { ChartErrorBoundary } from './ChartErrorBoundary';
 
 // Register Chart.js components
 ChartJS.register(
@@ -76,6 +81,9 @@ export function MultiLineChart({
   onAthleteSelectionChange,
   maxAthletes = DEFAULT_SELECTION_COUNT
 }: MultiLineChartProps) {
+  // Validate and sanitize maxAthletes prop
+  const validatedMaxAthletes = Math.max(1, maxAthletes || DEFAULT_SELECTION_COUNT);
+
   // Get unique athletes from data
   const availableAthletes = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -94,95 +102,22 @@ export function MultiLineChart({
     return Array.from(athleteMap.values());
   }, [data]);
 
-  // Memoize athlete IDs separately to prevent unnecessary useEffect triggers
-  const availableAthleteIds = useMemo(() =>
-    availableAthletes.map(a => a.id),
-    [availableAthletes]
-  );
+  // Use custom hook for athlete selection logic
+  const {
+    athleteToggles,
+    handleToggleAthlete,
+    handleSelectAll,
+    handleClearAll
+  } = useAthleteSelection({
+    athletes: availableAthletes,
+    selectedAthleteIds,
+    onAthleteSelectionChange,
+    maxAthletes: validatedMaxAthletes
+  });
 
-  // Initialize athlete selection state
-  const [internalSelectedAthleteIds, setInternalSelectedAthleteIds] = useState<string[]>([]);
-  const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
-
-  // Use external selectedAthleteIds if provided, otherwise use internal state
-  const effectiveSelectedAthleteIds = selectedAthleteIds || internalSelectedAthleteIds;
-
-  // Initialize selections when data changes
-  useEffect(() => {
-    if (availableAthleteIds.length > 0) {
-      if (!selectedAthleteIds) {
-        // Use internal state - select first few athletes by default
-        const defaultSelected = availableAthleteIds.slice(0, Math.min(DEFAULT_SELECTION_COUNT, maxAthletes));
-        setInternalSelectedAthleteIds(defaultSelected);
-
-        const defaultToggles = availableAthletes.reduce((acc, athlete) => {
-          acc[athlete.id] = defaultSelected.includes(athlete.id);
-          return acc;
-        }, {} as Record<string, boolean>);
-        setAthleteToggles(defaultToggles);
-      } else {
-        // Use external state
-        const toggles = availableAthletes.reduce((acc, athlete) => {
-          acc[athlete.id] = selectedAthleteIds.includes(athlete.id);
-          return acc;
-        }, {} as Record<string, boolean>);
-        setAthleteToggles(toggles);
-      }
-    }
-  }, [availableAthleteIds, availableAthletes, selectedAthleteIds, maxAthletes]);
-
-  // Handle athlete toggle
-  const handleToggleAthlete = useCallback((athleteId: string) => {
-    const isCurrentlySelected = athleteToggles[athleteId];
-    const currentSelectedCount = Object.values(athleteToggles).filter(Boolean).length;
-
-    // If trying to select and already at limit, don't allow
-    if (!isCurrentlySelected && currentSelectedCount >= maxAthletes) {
-      return; // Prevent selecting more than maxAthletes
-    }
-
-    const newToggles = { ...athleteToggles, [athleteId]: !athleteToggles[athleteId] };
-    setAthleteToggles(newToggles);
-
-    const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
-
-    if (onAthleteSelectionChange) {
-      onAthleteSelectionChange(newSelected);
-    } else {
-      setInternalSelectedAthleteIds(newSelected);
-    }
-  }, [athleteToggles, maxAthletes, onAthleteSelectionChange]);
-
-  // Handle select all
-  const handleSelectAll = useCallback(() => {
-    const idsToSelect = availableAthletes.slice(0, maxAthletes).map(a => a.id);
-    const newToggles = availableAthletes.reduce((acc, athlete) => {
-      acc[athlete.id] = idsToSelect.includes(athlete.id);
-      return acc;
-    }, {} as Record<string, boolean>);
-    setAthleteToggles(newToggles);
-
-    if (onAthleteSelectionChange) {
-      onAthleteSelectionChange(idsToSelect);
-    } else {
-      setInternalSelectedAthleteIds(idsToSelect);
-    }
-  }, [availableAthletes, maxAthletes, onAthleteSelectionChange]);
-
-  // Handle clear all
-  const handleClearAll = useCallback(() => {
-    const newToggles = availableAthletes.reduce((acc, athlete) => {
-      acc[athlete.id] = false;
-      return acc;
-    }, {} as Record<string, boolean>);
-    setAthleteToggles(newToggles);
-
-    if (onAthleteSelectionChange) {
-      onAthleteSelectionChange([]);
-    } else {
-      setInternalSelectedAthleteIds([]);
-    }
-  }, [availableAthletes, onAthleteSelectionChange]);
+  // Get effective selection for chart data
+  const effectiveSelectedAthleteIds = selectedAthleteIds ||
+    Object.keys(athleteToggles).filter(id => athleteToggles[id]);
 
 
   // Transform trend data for multi-line chart
@@ -250,7 +185,7 @@ export function MultiLineChart({
           if (!stats) return value;
           // Use percentile rank for normalization
           const range = stats.max - stats.min;
-          return range > 0 ? ((value - stats.min) / range) * 100 : 50;
+          return range > 0 ? ((value - stats.min) / range) * NORMALIZED_MAX_VALUE : NORMALIZED_MEAN_VALUE;
         };
 
         // Create data points for each date
@@ -406,8 +341,8 @@ export function MultiLineChart({
           display: true,
           text: 'Normalized Performance (%)'
         },
-        min: 0,
-        max: 100,
+        min: NORMALIZED_MIN_VALUE,
+        max: NORMALIZED_MAX_VALUE,
         grid: {
           display: true
         },
@@ -448,12 +383,17 @@ export function MultiLineChart({
           onToggleAthlete={handleToggleAthlete}
           onSelectAll={handleSelectAll}
           onClearAll={handleClearAll}
-          maxAthletes={maxAthletes}
+          maxAthletes={validatedMaxAthletes}
           className="mb-4"
         />
       )}
 
-      <Line data={multiLineData} options={options} />
+      <ChartErrorBoundary
+        fallbackTitle="Multi-Line Chart Error"
+        fallbackMessage="Failed to render the multi-line chart. This may be due to data formatting issues or chart configuration problems."
+      >
+        <Line data={multiLineData} options={options} />
+      </ChartErrorBoundary>
 
       {/* Chart explanation */}
       <div className="mt-4 text-sm">
