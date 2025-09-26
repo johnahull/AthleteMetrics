@@ -176,7 +176,8 @@ export function MultiLineChart({
     { dash: [10, 5], opacity: 1, name: 'Dashed' },
     { dash: [2, 2], opacity: 1, name: 'Dotted' },
     { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
-    { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' }
+    { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' },
+    { dash: [20, 5], opacity: 1, name: 'Long Dash' }
   ];
 
   // Transform trend data for multi-line chart
@@ -265,10 +266,11 @@ export function MultiLineChart({
         let borderDash: number[] = [];
 
         if (isSingleAthlete) {
-          // Individual analysis: different colors for each metric, solid lines
-          borderColor = metricColors[metricIndex % metricColors.length];
+          // Individual analysis: consistent color, different line styles for metrics
+          borderColor = 'rgba(59, 130, 246, 1)'; // Blue for all metrics
+          const style = metricStyles[metricIndex % metricStyles.length];
           label = metricLabel; // Just the metric name
-          borderDash = []; // Solid lines
+          borderDash = style.dash; // Use line styles to distinguish metrics
         } else {
           // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
           const baseColor = athleteColors[athleteIndex % athleteColors.length];
@@ -496,7 +498,7 @@ export function MultiLineChart({
                       <svg width="32" height="8" className="flex-shrink-0">
                         <line
                           x1="0" y1="4" x2="32" y2="4"
-                          stroke="rgba(75, 85, 99, 1)"
+                          stroke={isSingleAthlete ? 'rgba(59, 130, 246, 1)' : 'rgba(75, 85, 99, 1)'}
                           strokeWidth="2"
                           strokeDasharray={style.dash.length > 0 ? style.dash.join(',') : '0'}
                         />
@@ -513,7 +515,7 @@ export function MultiLineChart({
 
           {isSingleAthlete && (
             <div className="text-center text-xs text-muted-foreground mt-2">
-              Different colors represent different metrics for the selected athlete.
+              Different line styles represent different metrics for the selected athlete.
             </div>
           )}
 
