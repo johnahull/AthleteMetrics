@@ -84,7 +84,7 @@ export function CoachAnalytics() {
     <BaseAnalyticsView
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
-      organizationId={user?.currentOrganization?.id}
+      organizationId={user?.primaryOrganizationId}
       defaultAnalysisType="inter_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'inter_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}
