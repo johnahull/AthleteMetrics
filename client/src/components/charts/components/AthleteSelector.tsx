@@ -8,6 +8,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { getAthleteColor } from '@/utils/chart-constants';
 
 interface Athlete {
   id: string;
@@ -36,18 +37,6 @@ interface AthleteSelectorProps {
   className?: string;
 }
 
-const ATHLETE_COLORS = [
-  'rgba(59, 130, 246, 1)',    // Blue
-  'rgba(16, 185, 129, 1)',    // Green
-  'rgba(239, 68, 68, 1)',     // Red
-  'rgba(245, 158, 11, 1)',    // Amber
-  'rgba(139, 92, 246, 1)',    // Purple
-  'rgba(236, 72, 153, 1)',    // Pink
-  'rgba(20, 184, 166, 1)',    // Teal
-  'rgba(251, 146, 60, 1)',    // Orange
-  'rgba(124, 58, 237, 1)',    // Violet
-  'rgba(34, 197, 94, 1)'      // Emerald
-];
 
 export const AthleteSelector = React.memo(function AthleteSelector({
   athletes,
@@ -78,6 +67,7 @@ export const AthleteSelector = React.memo(function AthleteSelector({
             onClick={onSelectAll}
             disabled={visibleAthleteCount === (maxAthletes || athletes.length)}
             title={selectAllTitle}
+            aria-label={selectAllTitle}
           >
             {selectAllText}
           </Button>
@@ -86,6 +76,7 @@ export const AthleteSelector = React.memo(function AthleteSelector({
             size="sm"
             onClick={onClearAll}
             disabled={visibleAthleteCount === 0}
+            aria-label="Clear all athlete selections"
           >
             Clear All
           </Button>
@@ -95,7 +86,7 @@ export const AthleteSelector = React.memo(function AthleteSelector({
       {/* Athletes Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
         {athletes.map(athlete => {
-          const athleteColor = ATHLETE_COLORS[athlete.color % ATHLETE_COLORS.length];
+          const athleteColor = getAthleteColor(athlete.color);
 
           return (
             <div key={athlete.id} className="flex items-center space-x-2">
@@ -103,10 +94,13 @@ export const AthleteSelector = React.memo(function AthleteSelector({
                 id={`athlete-${athlete.id}`}
                 checked={athleteToggles[athlete.id] || false}
                 onCheckedChange={() => onToggleAthlete(athlete.id)}
+                aria-label={`Toggle ${athlete.name} selection`}
               />
               <div
                 className="w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: athleteColor }}
+                role="img"
+                aria-label={`Color indicator for ${athlete.name}`}
               />
               <label
                 htmlFor={`athlete-${athlete.id}`}
@@ -127,8 +121,13 @@ export const AthleteSelector = React.memo(function AthleteSelector({
             id="group-average"
             checked={showGroupAverage}
             onCheckedChange={(checked) => onToggleGroupAverage(checked === true)}
+            aria-label="Toggle group average trend line"
           />
-          <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
+          <div
+            className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400"
+            role="img"
+            aria-label="Color indicator for group average"
+          />
           <label htmlFor="group-average" className="text-sm cursor-pointer">
             Group Average Trend
           </label>

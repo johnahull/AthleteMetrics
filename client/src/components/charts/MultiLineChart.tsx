@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -19,6 +19,14 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { AthleteSelector } from './components/AthleteSelector';
+import {
+  ATHLETE_COLORS,
+  METRIC_COLORS,
+  METRIC_STYLES,
+  DEFAULT_SELECTION_COUNT,
+  getAthleteColor,
+  getMetricStyle
+} from '@/utils/chart-constants';
 
 // Register Chart.js components
 ChartJS.register(
@@ -32,35 +40,6 @@ ChartJS.register(
   Filler
 );
 
-// Constants
-const DEFAULT_SELECTION_COUNT = 3;
-
-// Colors and styles for chart lines - defined outside component for performance
-const ATHLETE_COLORS = [
-  'rgba(59, 130, 246, 1)',    // Blue
-  'rgba(16, 185, 129, 1)',    // Green
-  'rgba(239, 68, 68, 1)'      // Red
-];
-
-const METRIC_COLORS = [
-  'rgba(59, 130, 246, 1)',    // Blue
-  'rgba(16, 185, 129, 1)',    // Green
-  'rgba(239, 68, 68, 1)',     // Red
-  'rgba(245, 158, 11, 1)',    // Amber
-  'rgba(139, 92, 246, 1)',    // Violet
-  'rgba(236, 72, 153, 1)',    // Pink
-  'rgba(34, 197, 94, 1)',     // Emerald
-  'rgba(251, 113, 133, 1)'    // Rose
-];
-
-const METRIC_STYLES = [
-  { dash: [], opacity: 1, name: 'Solid' },
-  { dash: [10, 5], opacity: 1, name: 'Dashed' },
-  { dash: [2, 2], opacity: 1, name: 'Dotted' },
-  { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
-  { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' },
-  { dash: [20, 5], opacity: 1, name: 'Long Dash' }
-];
 
 interface MultiLineChartProps {
   /** Array of trend data to display in the chart */
@@ -153,7 +132,7 @@ export function MultiLineChart({
   }, [availableAthleteIds, availableAthletes, selectedAthleteIds, maxAthletes]);
 
   // Handle athlete toggle
-  const handleToggleAthlete = (athleteId: string) => {
+  const handleToggleAthlete = useCallback((athleteId: string) => {
     const isCurrentlySelected = athleteToggles[athleteId];
     const currentSelectedCount = Object.values(athleteToggles).filter(Boolean).length;
 
@@ -172,10 +151,10 @@ export function MultiLineChart({
     } else {
       setInternalSelectedAthleteIds(newSelected);
     }
-  };
+  }, [athleteToggles, maxAthletes, onAthleteSelectionChange]);
 
   // Handle select all
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     const idsToSelect = availableAthletes.slice(0, maxAthletes).map(a => a.id);
     const newToggles = availableAthletes.reduce((acc, athlete) => {
       acc[athlete.id] = idsToSelect.includes(athlete.id);
@@ -188,10 +167,10 @@ export function MultiLineChart({
     } else {
       setInternalSelectedAthleteIds(idsToSelect);
     }
-  };
+  }, [availableAthletes, maxAthletes, onAthleteSelectionChange]);
 
   // Handle clear all
-  const handleClearAll = () => {
+  const handleClearAll = useCallback(() => {
     const newToggles = availableAthletes.reduce((acc, athlete) => {
       acc[athlete.id] = false;
       return acc;
@@ -203,7 +182,7 @@ export function MultiLineChart({
     } else {
       setInternalSelectedAthleteIds([]);
     }
-  };
+  }, [availableAthletes, onAthleteSelectionChange]);
 
 
   // Transform trend data for multi-line chart
@@ -294,13 +273,13 @@ export function MultiLineChart({
         if (isSingleAthlete) {
           // Individual analysis: consistent color, different line styles for metrics
           borderColor = 'rgba(59, 130, 246, 1)'; // Blue for all metrics
-          const style = METRIC_STYLES[metricIndex % METRIC_STYLES.length];
+          const style = getMetricStyle(metricIndex);
           label = metricLabel; // Just the metric name
           borderDash = style.dash; // Use line styles to distinguish metrics
         } else {
           // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
-          const baseColor = ATHLETE_COLORS[athleteIndex % ATHLETE_COLORS.length];
-          const style = METRIC_STYLES[metricIndex % METRIC_STYLES.length];
+          const baseColor = getAthleteColor(athleteIndex);
+          const style = getMetricStyle(metricIndex);
           borderColor = baseColor; // Keep full opacity for clarity
           label = `${athlete.athleteName} - ${metricLabel}`;
           borderDash = style.dash;
@@ -490,7 +469,7 @@ export function MultiLineChart({
               <h4 className="text-sm font-medium mb-2">Athletes:</h4>
               <div className="grid grid-cols-3 gap-2">
                 {multiLineData.athletesToShow.map((athlete, index) => {
-                  const color = ATHLETE_COLORS[index % ATHLETE_COLORS.length];
+                  const color = getAthleteColor(index);
                   return (
                     <div key={athlete.athleteId} className="flex items-center space-x-2">
                       <div
@@ -515,7 +494,7 @@ export function MultiLineChart({
                 const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
                 const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
                 const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
-                const style = METRIC_STYLES[index % METRIC_STYLES.length];
+                const style = getMetricStyle(index);
 
                 return (
                   <div key={metric} className="flex items-center space-x-3">
