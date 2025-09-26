@@ -27,6 +27,7 @@ import {
   hasDate,
   safeDate
 } from '@/utils/data-safety';
+import { getChartColor, getChartBackgroundColor } from '@/utils/chart-colors';
 
 // Type definitions for chart data
 interface ScatterPoint {
@@ -88,6 +89,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Smart default selection for athletes when not controlled by parent
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Use external selection if provided, otherwise use internal state
   const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
@@ -119,12 +121,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Initialize smart default selection when data changes and no external selection
   React.useEffect(() => {
-    if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0) {
+    if (!selectedAthleteIds && allAthletes.length > 0 && effectiveSelectedIds.length === 0 && !hasInitialized) {
       // Auto-select athletes up to maxAthletes
       const defaultIds = allAthletes.slice(0, Math.min(maxAthletes, allAthletes.length)).map(a => a.id);
       setInternalSelectedIds(defaultIds);
+      setHasInitialized(true);
     }
-  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
+  }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length, hasInitialized]);
 
   // Get athletes that should be displayed (either selected or first N for backwards compatibility)
   const displayedAthletes = useMemo(() => {
@@ -187,11 +190,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       return acc;
     }, {} as Record<string, AthleteData>);
 
-    const colors = [
-      'rgba(59, 130, 246, 1)',
-      'rgba(16, 185, 129, 1)',
-      'rgba(239, 68, 68, 1)'
-    ];
+    const colors = [getChartColor(0), getChartColor(1), getChartColor(2)];
 
     const datasets = Object.values(athleteTrends).map((athlete: AthleteData, index) => {
       const xData = athlete.metrics[xMetric] || [];
@@ -454,19 +453,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           {/* Athletes Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
             {displayedAthletes.map(athlete => {
-              const colors = [
-                'rgba(59, 130, 246, 1)',    // Blue
-                'rgba(16, 185, 129, 1)',    // Green
-                'rgba(239, 68, 68, 1)',     // Red
-                'rgba(245, 158, 11, 1)',    // Amber
-                'rgba(139, 92, 246, 1)',    // Purple
-                'rgba(236, 72, 153, 1)',    // Pink
-                'rgba(20, 184, 166, 1)',    // Teal
-                'rgba(251, 146, 60, 1)',    // Orange
-                'rgba(124, 58, 237, 1)',    // Violet
-                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-              ];
-              const athleteColor = colors[athlete.color % colors.length];
+              const athleteColor = getChartColor(athlete.color);
 
               return (
                 <div key={athlete.id} className="flex items-center space-x-2">
@@ -574,6 +561,17 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         </div>
       )}
     </div>
+  );
+}, (prevProps, nextProps) => {
+  // Optimize re-renders by comparing critical props
+  return (
+    prevProps.data === nextProps.data &&
+    prevProps.config === nextProps.config &&
+    prevProps.statistics === nextProps.statistics &&
+    prevProps.highlightAthlete === nextProps.highlightAthlete &&
+    JSON.stringify(prevProps.selectedAthleteIds) === JSON.stringify(nextProps.selectedAthleteIds) &&
+    prevProps.maxAthletes === nextProps.maxAthletes &&
+    prevProps.onAthleteSelectionChange === nextProps.onAthleteSelectionChange
   );
 });
 

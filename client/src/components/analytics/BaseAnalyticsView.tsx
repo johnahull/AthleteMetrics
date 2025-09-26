@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, Suspense, useMemo } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
