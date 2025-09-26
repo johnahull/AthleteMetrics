@@ -49,7 +49,7 @@ export function MultiLineChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 10
+  maxAthletes = 3
 }: MultiLineChartProps) {
   // Get unique athletes from data
   const availableAthletes = useMemo(() => {
@@ -102,6 +102,14 @@ export function MultiLineChart({
 
   // Handle athlete toggle
   const handleToggleAthlete = (athleteId: string) => {
+    const isCurrentlySelected = athleteToggles[athleteId];
+    const currentSelectedCount = Object.values(athleteToggles).filter(Boolean).length;
+
+    // If trying to select and already at limit, don't allow
+    if (!isCurrentlySelected && currentSelectedCount >= maxAthletes) {
+      return; // Prevent selecting more than maxAthletes
+    }
+
     const newToggles = { ...athleteToggles, [athleteId]: !athleteToggles[athleteId] };
     setAthleteToggles(newToggles);
 
@@ -116,17 +124,17 @@ export function MultiLineChart({
 
   // Handle select all
   const handleSelectAll = () => {
-    const allIds = availableAthletes.map(a => a.id);
+    const idsToSelect = availableAthletes.slice(0, maxAthletes).map(a => a.id);
     const newToggles = availableAthletes.reduce((acc, athlete) => {
-      acc[athlete.id] = true;
+      acc[athlete.id] = idsToSelect.includes(athlete.id);
       return acc;
     }, {} as Record<string, boolean>);
     setAthleteToggles(newToggles);
 
     if (onAthleteSelectionChange) {
-      onAthleteSelectionChange(allIds);
+      onAthleteSelectionChange(idsToSelect);
     } else {
-      setInternalSelectedAthleteIds(allIds);
+      setInternalSelectedAthleteIds(idsToSelect);
     }
   };
 
@@ -212,10 +220,11 @@ export function MultiLineChart({
     ];
 
     const metricStyles = [
-      { dash: [], opacity: 1 },
-      { dash: [5, 5], opacity: 0.8 },
-      { dash: [10, 5, 5, 5], opacity: 0.6 },
-      { dash: [15, 3, 3, 3], opacity: 0.4 }
+      { dash: [], opacity: 1, name: 'Solid' },
+      { dash: [10, 5], opacity: 1, name: 'Dashed' },
+      { dash: [2, 2], opacity: 1, name: 'Dotted' },
+      { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
+      { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' }
     ];
 
     // Determine if this is individual analysis (single athlete)
@@ -264,7 +273,7 @@ export function MultiLineChart({
           // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
           const baseColor = athleteColors[athleteIndex % athleteColors.length];
           const style = metricStyles[metricIndex % metricStyles.length];
-          borderColor = baseColor.replace('1)', `${style.opacity})`);
+          borderColor = baseColor; // Keep full opacity for clarity
           label = `${athlete.athleteName} - ${metricLabel}`;
           borderDash = style.dash;
         }
@@ -288,42 +297,6 @@ export function MultiLineChart({
       });
     });
 
-    // Add group average lines
-    metrics.forEach((metric, metricIndex) => {
-      const stats = statistics?.[metric];
-      if (!stats) return;
-
-      const normalizedMean = 50; // Group average is always at 50% in normalized scale
-      const meanData = sortedDates.map(() => normalizedMean);
-
-      const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-
-      let avgBorderColor: string;
-      let avgLabel: string;
-
-      if (isSingleAthlete) {
-        // For individual analysis, use lighter version of the metric color
-        const baseColor = metricColors[metricIndex % metricColors.length];
-        avgBorderColor = baseColor.replace('1)', '0.4)');
-        avgLabel = `${metricLabel} Avg`;
-      } else {
-        // For multi-athlete analysis, use neutral gray
-        avgBorderColor = 'rgba(156, 163, 175, 0.8)';
-        avgLabel = `Group Avg - ${metricLabel}`;
-      }
-
-      datasets.push({
-        label: avgLabel,
-        data: meanData,
-        borderColor: avgBorderColor,
-        backgroundColor: avgBorderColor.replace(/[\d\.]+\)$/, '0.1)'),
-        borderWidth: 1,
-        borderDash: [3, 3],
-        pointRadius: 0,
-        pointHoverRadius: 3,
-        fill: false
-      });
-    });
 
     return {
       labels,
@@ -476,29 +449,76 @@ export function MultiLineChart({
       {/* Chart explanation */}
       <div className="mt-4 text-sm">
         <div className="text-center text-muted-foreground mb-2">
-          All metrics normalized to 0-100% scale for comparison. 50% = group average.
+          All metrics normalized to 0-100% scale for comparison.
         </div>
 
-        {/* Metric legend */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {multiLineData.metrics.map((metric, index) => {
-            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-            const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-            const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
-
-            return (
-              <div key={metric} className="flex items-center space-x-2">
-                <div 
-                  className="w-4 h-0.5" 
-                  style={{
-                    backgroundColor: 'rgba(59, 130, 246, 1)',
-                    borderStyle: index % 2 === 0 ? 'solid' : 'dashed'
-                  }}
-                />
-                <span>{label} ({unit}) {isLowerBetter ? '↓' : '↑'}</span>
+        {/* Enhanced Legend */}
+        <div className="space-y-4">
+          {/* Athletes Legend */}
+          {!isSingleAthlete && (
+            <div>
+              <h4 className="text-sm font-medium mb-2">Athletes:</h4>
+              <div className="grid grid-cols-3 gap-2">
+                {multiLineData.athletesToShow.map((athlete, index) => {
+                  const color = athleteColors[index % athleteColors.length];
+                  return (
+                    <div key={athlete.athleteId} className="flex items-center space-x-2">
+                      <div
+                        className="w-4 h-3 rounded"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="text-xs truncate" title={athlete.athleteName}>
+                        {athlete.athleteName}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Metrics Legend */}
+          <div>
+            <h4 className="text-sm font-medium mb-2">Metrics & Line Styles:</h4>
+            <div className="grid grid-cols-1 gap-2">
+              {multiLineData.metrics.map((metric, index) => {
+                const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+                const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+                const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
+                const style = metricStyles[index % metricStyles.length];
+
+                return (
+                  <div key={metric} className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2 min-w-0 flex-1">
+                      <svg width="32" height="8" className="flex-shrink-0">
+                        <line
+                          x1="0" y1="4" x2="32" y2="4"
+                          stroke="rgba(75, 85, 99, 1)"
+                          strokeWidth="2"
+                          strokeDasharray={style.dash.length > 0 ? style.dash.join(',') : '0'}
+                        />
+                      </svg>
+                      <span className="text-xs">
+                        <strong>{style.name}:</strong> {label} ({unit}) {isLowerBetter ? '↓' : '↑'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {isSingleAthlete && (
+            <div className="text-center text-xs text-muted-foreground mt-2">
+              Different colors represent different metrics for the selected athlete.
+            </div>
+          )}
+
+          {!isSingleAthlete && (
+            <div className="text-center text-xs text-muted-foreground mt-2">
+              Each athlete has a unique color. Different line styles represent different metrics.
+            </div>
+          )}
         </div>
       </div>
     </div>
