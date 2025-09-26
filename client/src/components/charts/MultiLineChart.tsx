@@ -32,13 +32,59 @@ ChartJS.register(
   Filler
 );
 
+// Constants
+const DEFAULT_SELECTION_COUNT = 3;
+
+// Colors and styles for chart lines - defined outside component for performance
+const ATHLETE_COLORS = [
+  'rgba(59, 130, 246, 1)',    // Blue
+  'rgba(16, 185, 129, 1)',    // Green
+  'rgba(239, 68, 68, 1)'      // Red
+];
+
+const METRIC_COLORS = [
+  'rgba(59, 130, 246, 1)',    // Blue
+  'rgba(16, 185, 129, 1)',    // Green
+  'rgba(239, 68, 68, 1)',     // Red
+  'rgba(245, 158, 11, 1)',    // Amber
+  'rgba(139, 92, 246, 1)',    // Violet
+  'rgba(236, 72, 153, 1)',    // Pink
+  'rgba(34, 197, 94, 1)',     // Emerald
+  'rgba(251, 113, 133, 1)'    // Rose
+];
+
+const METRIC_STYLES = [
+  { dash: [], opacity: 1, name: 'Solid' },
+  { dash: [10, 5], opacity: 1, name: 'Dashed' },
+  { dash: [2, 2], opacity: 1, name: 'Dotted' },
+  { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
+  { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' },
+  { dash: [20, 5], opacity: 1, name: 'Long Dash' }
+];
+
 interface MultiLineChartProps {
+  /** Array of trend data to display in the chart */
   data: TrendData[];
+  /** Chart configuration settings */
   config: ChartConfiguration;
+  /** Statistical summaries for metrics normalization */
   statistics?: Record<string, StatisticalSummary>;
+  /** ID of athlete to highlight (overrides selection) */
   highlightAthlete?: string;
+  /**
+   * Array of selected athlete IDs for external state control
+   * If provided, component uses external state instead of internal state
+   */
   selectedAthleteIds?: string[];
+  /**
+   * Callback fired when athlete selection changes
+   * Called with array of selected athlete IDs
+   */
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  /**
+   * Maximum number of athletes that can be selected at once
+   * @default 3
+   */
   maxAthletes?: number;
 }
 
@@ -49,7 +95,7 @@ export function MultiLineChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 3
+  maxAthletes = DEFAULT_SELECTION_COUNT
 }: MultiLineChartProps) {
   // Get unique athletes from data
   const availableAthletes = useMemo(() => {
@@ -69,6 +115,12 @@ export function MultiLineChart({
     return Array.from(athleteMap.values());
   }, [data]);
 
+  // Memoize athlete IDs separately to prevent unnecessary useEffect triggers
+  const availableAthleteIds = useMemo(() =>
+    availableAthletes.map(a => a.id),
+    [availableAthletes]
+  );
+
   // Initialize athlete selection state
   const [internalSelectedAthleteIds, setInternalSelectedAthleteIds] = useState<string[]>([]);
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
@@ -78,10 +130,10 @@ export function MultiLineChart({
 
   // Initialize selections when data changes
   useEffect(() => {
-    if (availableAthletes.length > 0) {
+    if (availableAthleteIds.length > 0) {
       if (!selectedAthleteIds) {
         // Use internal state - select first few athletes by default
-        const defaultSelected = availableAthletes.slice(0, Math.min(3, maxAthletes)).map(a => a.id);
+        const defaultSelected = availableAthleteIds.slice(0, Math.min(DEFAULT_SELECTION_COUNT, maxAthletes));
         setInternalSelectedAthleteIds(defaultSelected);
 
         const defaultToggles = availableAthletes.reduce((acc, athlete) => {
@@ -98,7 +150,7 @@ export function MultiLineChart({
         setAthleteToggles(toggles);
       }
     }
-  }, [availableAthletes, selectedAthleteIds, maxAthletes]);
+  }, [availableAthleteIds, availableAthletes, selectedAthleteIds, maxAthletes]);
 
   // Handle athlete toggle
   const handleToggleAthlete = (athleteId: string) => {
@@ -153,32 +205,6 @@ export function MultiLineChart({
     }
   };
 
-  // Colors and styles for chart lines - defined outside useMemo for legend access
-  const athleteColors = [
-    'rgba(59, 130, 246, 1)',    // Blue
-    'rgba(16, 185, 129, 1)',    // Green
-    'rgba(239, 68, 68, 1)'      // Red
-  ];
-
-  const metricColors = [
-    'rgba(59, 130, 246, 1)',    // Blue
-    'rgba(16, 185, 129, 1)',    // Green
-    'rgba(239, 68, 68, 1)',     // Red
-    'rgba(245, 158, 11, 1)',    // Amber
-    'rgba(139, 92, 246, 1)',    // Violet
-    'rgba(236, 72, 153, 1)',    // Pink
-    'rgba(34, 197, 94, 1)',     // Emerald
-    'rgba(251, 113, 133, 1)'    // Rose
-  ];
-
-  const metricStyles = [
-    { dash: [], opacity: 1, name: 'Solid' },
-    { dash: [10, 5], opacity: 1, name: 'Dashed' },
-    { dash: [2, 2], opacity: 1, name: 'Dotted' },
-    { dash: [10, 5, 2, 5], opacity: 1, name: 'Dash-Dot' },
-    { dash: [10, 5, 2, 5, 2, 5], opacity: 1, name: 'Dash-Dot-Dot' },
-    { dash: [20, 5], opacity: 1, name: 'Long Dash' }
-  ];
 
   // Transform trend data for multi-line chart
   const multiLineData = useMemo(() => {
@@ -268,13 +294,13 @@ export function MultiLineChart({
         if (isSingleAthlete) {
           // Individual analysis: consistent color, different line styles for metrics
           borderColor = 'rgba(59, 130, 246, 1)'; // Blue for all metrics
-          const style = metricStyles[metricIndex % metricStyles.length];
+          const style = METRIC_STYLES[metricIndex % METRIC_STYLES.length];
           label = metricLabel; // Just the metric name
           borderDash = style.dash; // Use line styles to distinguish metrics
         } else {
           // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
-          const baseColor = athleteColors[athleteIndex % athleteColors.length];
-          const style = metricStyles[metricIndex % metricStyles.length];
+          const baseColor = ATHLETE_COLORS[athleteIndex % ATHLETE_COLORS.length];
+          const style = METRIC_STYLES[metricIndex % METRIC_STYLES.length];
           borderColor = baseColor; // Keep full opacity for clarity
           label = `${athlete.athleteName} - ${metricLabel}`;
           borderDash = style.dash;
@@ -440,11 +466,10 @@ export function MultiLineChart({
         <AthleteSelector
           athletes={availableAthletes}
           athleteToggles={athleteToggles}
-          showGroupAverage={false}
           onToggleAthlete={handleToggleAthlete}
           onSelectAll={handleSelectAll}
           onClearAll={handleClearAll}
-          onToggleGroupAverage={() => {}} // Not used in multi-line chart
+          maxAthletes={maxAthletes}
           className="mb-4"
         />
       )}
@@ -465,7 +490,7 @@ export function MultiLineChart({
               <h4 className="text-sm font-medium mb-2">Athletes:</h4>
               <div className="grid grid-cols-3 gap-2">
                 {multiLineData.athletesToShow.map((athlete, index) => {
-                  const color = athleteColors[index % athleteColors.length];
+                  const color = ATHLETE_COLORS[index % ATHLETE_COLORS.length];
                   return (
                     <div key={athlete.athleteId} className="flex items-center space-x-2">
                       <div
@@ -490,7 +515,7 @@ export function MultiLineChart({
                 const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
                 const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
                 const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
-                const style = metricStyles[index % metricStyles.length];
+                const style = METRIC_STYLES[index % METRIC_STYLES.length];
 
                 return (
                   <div key={metric} className="flex items-center space-x-3">

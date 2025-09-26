@@ -16,13 +16,23 @@ interface Athlete {
 }
 
 interface AthleteSelectorProps {
+  /** Array of available athletes to select from */
   athletes: Athlete[];
+  /** Record mapping athlete IDs to their selection state */
   athleteToggles: Record<string, boolean>;
-  showGroupAverage: boolean;
+  /** Whether to show the group average toggle (optional) */
+  showGroupAverage?: boolean;
+  /** Callback fired when an athlete's selection state changes */
   onToggleAthlete: (athleteId: string) => void;
+  /** Callback fired when "Select All" button is clicked */
   onSelectAll: () => void;
+  /** Callback fired when "Clear All" button is clicked */
   onClearAll: () => void;
-  onToggleGroupAverage: (checked: boolean) => void;
+  /** Callback fired when group average toggle changes (optional) */
+  onToggleGroupAverage?: (checked: boolean) => void;
+  /** Maximum number of athletes that can be selected (affects Select All behavior) */
+  maxAthletes?: number;
+  /** Additional CSS classes to apply */
   className?: string;
 }
 
@@ -42,29 +52,34 @@ const ATHLETE_COLORS = [
 export const AthleteSelector = React.memo(function AthleteSelector({
   athletes,
   athleteToggles,
-  showGroupAverage,
+  showGroupAverage = false,
   onToggleAthlete,
   onSelectAll,
   onClearAll,
   onToggleGroupAverage,
+  maxAthletes,
   className = ''
 }: AthleteSelectorProps) {
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
+  const isLimitedByMax = maxAthletes && maxAthletes < athletes.length;
+  const selectAllText = isLimitedByMax ? `Select ${maxAthletes}` : 'Select All';
+  const selectAllTitle = isLimitedByMax ? `Select up to ${maxAthletes} athletes` : 'Select all athletes';
 
   return (
     <div className={`mb-4 p-4 bg-gray-50 rounded-lg border ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-900">
-          Athletes ({visibleAthleteCount} of {athletes.length} visible)
+          Athletes ({visibleAthleteCount} of {athletes.length} visible{maxAthletes ? `, max ${maxAthletes}` : ''})
         </h3>
         <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={onSelectAll}
-            disabled={visibleAthleteCount === athletes.length}
+            disabled={visibleAthleteCount === (maxAthletes || athletes.length)}
+            title={selectAllTitle}
           >
-            Select All
+            {selectAllText}
           </Button>
           <Button
             variant="outline"
@@ -105,18 +120,20 @@ export const AthleteSelector = React.memo(function AthleteSelector({
         })}
       </div>
 
-      {/* Group Average Toggle */}
-      <div className="flex items-center space-x-2 pt-2 border-t">
-        <Checkbox
-          id="group-average"
-          checked={showGroupAverage}
-          onCheckedChange={(checked) => onToggleGroupAverage(checked === true)}
-        />
-        <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
-        <label htmlFor="group-average" className="text-sm cursor-pointer">
-          Group Average Trend
-        </label>
-      </div>
+      {/* Group Average Toggle - only show if enabled */}
+      {showGroupAverage !== undefined && onToggleGroupAverage && (
+        <div className="flex items-center space-x-2 pt-2 border-t">
+          <Checkbox
+            id="group-average"
+            checked={showGroupAverage}
+            onCheckedChange={(checked) => onToggleGroupAverage(checked === true)}
+          />
+          <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
+          <label htmlFor="group-average" className="text-sm cursor-pointer">
+            Group Average Trend
+          </label>
+        </div>
+      )}
     </div>
   );
 });
