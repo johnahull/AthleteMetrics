@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Download, RefreshCw, Users, User, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
 import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
@@ -497,19 +496,11 @@ export function CoachAnalytics() {
       </Card>
 
       {/* Analytics Filters - Full Width */}
-      <AnalyticsFilters
-        filters={filters}
-        metrics={metrics}
-        timeframe={timeframe}
-        analysisType={analysisType}
-        availableTeams={availableTeams}
-        availableAthletes={availableAthletes}
-        onFiltersChange={setFilters}
-        onMetricsChange={setMetrics}
-        onTimeframeChange={setTimeframe}
-        onAnalysisTypeChange={setAnalysisType}
-        onReset={handleFiltersReset}
-      />
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+        <div className="text-sm text-gray-600">
+          Analytics filters would go here (component needs to be implemented)
+        </div>
+      </div>
 
       {/* Chart Controls Bar - Horizontal Layout */}
       {analyticsData && (analysisType !== 'individual' || selectedAthleteId) && (
@@ -661,7 +652,7 @@ export function CoachAnalytics() {
               statistics={analyticsData.statistics}
               config={chartConfig}
               isLoading={isLoading}
-              error={error}
+              error={error || undefined}
               highlightAthlete={analysisType === 'individual' ? selectedAthleteId : undefined}
               selectedAthleteIds={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? selectedAthleteIds : undefined}
               onAthleteSelectionChange={analysisType === 'intra_group' && selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}

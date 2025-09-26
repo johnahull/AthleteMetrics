@@ -63,7 +63,7 @@ export function RadarChart({
       processedData = data as MultiMetricData[];
     } else {
       // Convert ChartDataPoint data to MultiMetricData format
-      const chartData = data as ChartDataPoint[];
+      const chartData = data as unknown as ChartDataPoint[];
       const athleteMap = new Map<string, Partial<MultiMetricData>>();
 
       chartData.forEach(point => {
@@ -77,17 +77,21 @@ export function RadarChart({
         }
 
         const athlete = athleteMap.get(point.athleteId);
-        athlete.metrics[point.metric] = point.value;
+        if (athlete && athlete.metrics && athlete.percentileRanks) {
+          athlete.metrics[point.metric] = point.value;
 
-        // Calculate percentile rank if statistics are available
-        if (statistics && statistics[point.metric]) {
-          const stats = statistics[point.metric];
-          const percentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
-          athlete.percentileRanks[point.metric] = Math.max(0, Math.min(100, percentile));
+          // Calculate percentile rank if statistics are available
+          if (statistics && statistics[point.metric]) {
+            const stats = statistics[point.metric];
+            const percentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
+            athlete.percentileRanks[point.metric] = Math.max(0, Math.min(100, percentile));
+          }
         }
       });
 
-      processedData = Array.from(athleteMap.values());
+      processedData = Array.from(athleteMap.values()).filter((athlete): athlete is MultiMetricData =>
+        Boolean(athlete.athleteId && athlete.athleteName && athlete.metrics)
+      );
     }
 
     // Get all metrics from the processed data
@@ -312,7 +316,7 @@ export function RadarChart({
         }
       } else {
         // For ChartDataPoint data, check available metrics
-        const chartData = data as ChartDataPoint[];
+        const chartData = data as unknown as ChartDataPoint[];
         const availableMetrics = new Set(chartData.map(point => point.metric));
 
         if (availableMetrics.size < 2) {
