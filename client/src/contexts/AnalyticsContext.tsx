@@ -110,6 +110,12 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       };
 
     case 'SET_ANALYSIS_TYPE':
+      console.log('🔄 Analysis Type Change:', {
+        from: state.analysisType,
+        to: action.payload,
+        selectedAthleteId: state.selectedAthleteId,
+        selectedAthlete: state.selectedAthlete?.name
+      });
       return {
         ...state,
         analysisType: action.payload,
