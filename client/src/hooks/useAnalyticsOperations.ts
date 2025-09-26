@@ -120,25 +120,28 @@ export function useAnalyticsDataFetcher() {
     setError(null);
 
     try {
-      // For line charts/trends, we need inter_group analysis to show multiple athletes
-      const needsInterGroupAnalysis = state.selectedChartType === 'line_chart' || state.timeframe.type === 'trends';
-      const effectiveAnalysisType = needsInterGroupAnalysis ? 'inter_group' : state.analysisType;
+      // Use the actual analysis type from state, don't override it
+      const effectiveAnalysisType = state.analysisType;
       
-      // For trends/line charts, use broader timeframe to ensure sufficient data
-      const effectiveTimeframe = needsInterGroupAnalysis ? {
-        ...state.timeframe,
-        period: state.timeframe.period === 'last_7_days' || state.timeframe.period === 'last_30_days' || state.timeframe.period === 'last_90_days' 
-          ? 'all_time' as const
-          : state.timeframe.period
-      } : state.timeframe;
+      // Use the timeframe as configured
+      const effectiveTimeframe = state.timeframe;
       
       const request: AnalyticsRequest = {
         analysisType: effectiveAnalysisType,
         filters: { ...state.filters, organizationId: effectiveOrganizationId },
         metrics: state.metrics,
         timeframe: effectiveTimeframe,
-        athleteId: (effectiveAnalysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
+        athleteId: (state.analysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
+
+      console.log('Analytics request being sent:', {
+        analysisType: request.analysisType,
+        organizationId: request.filters.organizationId,
+        selectedAthleteId: state.selectedAthleteId,
+        metrics: request.metrics,
+        timeframe: request.timeframe,
+        hasCSRF: !!csrfToken
+      });
 
       // Fetch CSRF token first
       const csrfResponse = await fetch('/api/csrf-token', {

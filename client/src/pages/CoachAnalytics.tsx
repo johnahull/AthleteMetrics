@@ -14,6 +14,15 @@ export function CoachAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   const { user } = useAuth();
 
+  // Debug organization context
+  React.useEffect(() => {
+    console.log('CoachAnalytics - User context:', {
+      userId: user?.id,
+      currentOrganization: user?.currentOrganization,
+      organizationContext: user?.currentOrganization?.id
+    });
+  }, [user]);
+
   // Header actions for coach-specific view
   const headerActions = (
     <div className="flex items-center gap-2">
