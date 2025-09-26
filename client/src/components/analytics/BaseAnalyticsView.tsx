@@ -21,6 +21,7 @@ import { AnalyticsToolbar } from './AnalyticsToolbar';
 
 import type { AnalysisType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
+import { devLog } from '@/utils/dev-logger';
 
 interface BaseAnalyticsViewProps {
   // Required props
@@ -73,7 +74,7 @@ function BaseAnalyticsViewContent({
   className,
   children
 }: Omit<BaseAnalyticsViewProps, 'organizationId' | 'userId' | 'requireRole'>) {
-  const { state, isDataReady, shouldFetchData, chartData } = useAnalyticsContext();
+  const { state, isDataReady, shouldFetchData, chartData: memoizedChartData } = useAnalyticsContext();
   const {
     fetchAnalyticsData,
     chartConfig,
@@ -146,6 +147,10 @@ function BaseAnalyticsViewContent({
         return 'Compare performance metrics across different groups (teams vs teams, age groups, gender differences) to identify group-level patterns and benchmarks.';
     }
   };
+
+  // Chart data is already processed and memoized in the analytics context
+  // Using memoizedChartData directly to avoid duplicate processing
+
 
   return (
     <ErrorBoundary>
@@ -294,7 +299,7 @@ function BaseAnalyticsViewContent({
               !state.isLoading &&
               !state.error &&
               state.analyticsData &&
-              chartData &&
+              memoizedChartData &&
               state.analysisType === 'intra_group' &&
               state.selectedChartType === 'line_chart' &&
               state.analyticsData.trends &&
@@ -314,7 +319,7 @@ function BaseAnalyticsViewContent({
               !state.isLoading &&
               !state.error &&
               state.analyticsData &&
-              chartData &&
+              memoizedChartData &&
               state.analysisType !== 'individual' &&
               state.selectedChartType === 'time_series_box_swarm' &&
               state.analyticsData.trends &&
@@ -351,7 +356,7 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* Chart Display */}
-        {!state.isLoading && !state.error && isDataReady && chartData && (
+        {!state.isLoading && !state.error && isDataReady && memoizedChartData && (
           <>
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
@@ -368,7 +373,7 @@ function BaseAnalyticsViewContent({
                       title={`${chartConfig.title} - ${formatChartTypeName(chartType)}`}
                       subtitle={chartConfig.subtitle}
                       chartType={chartType}
-                      data={chartData}
+                      data={memoizedChartData}
                       trends={state.analyticsData?.trends}
                       multiMetric={state.analyticsData?.multiMetric}
                       statistics={state.analyticsData?.statistics}
@@ -399,7 +404,7 @@ function BaseAnalyticsViewContent({
                   title={chartConfig.title}
                   subtitle={chartConfig.subtitle}
                   chartType={state.selectedChartType}
-                  data={chartData}
+                  data={memoizedChartData}
                   trends={state.analyticsData?.trends}
                   multiMetric={state.analyticsData?.multiMetric}
                   statistics={state.analyticsData?.statistics}

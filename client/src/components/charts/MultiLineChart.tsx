@@ -71,7 +71,7 @@ export function MultiLineChart({
     // Get all unique dates and metrics
     const allDates = new Set<string>();
     const allMetrics = new Set<string>();
-    
+
     data.forEach(trend => {
       allMetrics.add(trend.metric);
       trend.data.forEach(point => {
@@ -252,48 +252,48 @@ export function MultiLineChart({
       },
       tooltip: {
         callbacks: {
-          title: (context) => {
+          title: (context: any) => {
             const dateIndex = context[0].dataIndex;
             const dateStr = multiLineData?.sortedDates[dateIndex];
             return dateStr ? new Date(dateStr).toLocaleDateString() : '';
           },
-          label: (context) => {
+          label: (context: any) => {
             const value = context.parsed.y;
             if (value === null) return '';
-            
+
             return `${context.dataset.label}: ${value.toFixed(1)}%`;
           },
-          afterLabel: (context) => {
+          afterLabel: (context: any) => {
             // Find the actual value for this data point
             const datasetLabel = context.dataset.label || '';
             const [athleteName, metricName] = datasetLabel.split(' - ');
-            
+
             if (datasetLabel.includes('Group Avg')) return [];
-            
+
             const athlete = multiLineData?.athletesToShow.find((a: any) => 
               a.athleteName === athleteName
             );
-            
+
             if (!athlete) return [];
-            
+
             const metric = multiLineData?.metrics.find(m => 
               (METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m) === metricName
             );
-            
+
             if (!metric) return [];
-            
+
             const dateStr = multiLineData?.sortedDates[context.dataIndex];
             const metricData = athlete.metrics[metric];
             const point = metricData?.find((p: any) => {
               const pointDate = p.date instanceof Date ? p.date : new Date(p.date);
               return pointDate.toISOString().split('T')[0] === dateStr;
             });
-            
+
             if (point) {
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
               return [`Actual: ${point.value.toFixed(2)}${unit}`];
             }
-            
+
             return [];
           }
         }
@@ -328,7 +328,7 @@ export function MultiLineChart({
           display: true
         },
         ticks: {
-          callback: (value) => `${value}%`
+          callback: (value: any) => `${value}%`
         }
       }
     },
@@ -357,20 +357,20 @@ export function MultiLineChart({
   return (
     <div className="w-full h-full">
       <Line data={multiLineData} options={options} />
-      
+
       {/* Chart explanation */}
       <div className="mt-4 text-sm">
         <div className="text-center text-muted-foreground mb-2">
           All metrics normalized to 0-100% scale for comparison. 50% = group average.
         </div>
-        
+
         {/* Metric legend */}
         <div className="grid grid-cols-2 gap-2 text-xs">
           {multiLineData.metrics.map((metric, index) => {
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
             const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
-            
+
             return (
               <div key={metric} className="flex items-center space-x-2">
                 <div 

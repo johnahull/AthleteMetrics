@@ -18,7 +18,6 @@ interface MetricsSelectorProps {
   metrics: MetricSelection;
   onMetricsChange: (metrics: MetricSelection) => void;
   maxAdditional?: number;
-  showRecommendations?: boolean;
   className?: string;
 }
 
@@ -26,7 +25,6 @@ export function MetricsSelector({
   metrics,
   onMetricsChange,
   maxAdditional = 5,
-  showRecommendations = true,
   className
 }: MetricsSelectorProps) {
   const availableMetrics = Object.keys(METRIC_CONFIG);
@@ -72,27 +70,6 @@ export function MetricsSelector({
     });
   };
 
-  // Get recommended metrics based on primary metric
-  const getRecommendedMetrics = () => {
-    // TODO: Implement metric recommendations based on sport science principles
-    // For now, return some common combinations
-    const recommendations: Record<string, string[]> = {
-      FLY10_TIME: ['DASH_40YD', 'AGILITY_505'],
-      VERTICAL_JUMP: ['RSI', 'FLY10_TIME'],
-      AGILITY_505: ['AGILITY_5105', 'T_TEST'],
-      AGILITY_5105: ['AGILITY_505', 'T_TEST'],
-      T_TEST: ['AGILITY_505', 'AGILITY_5105'],
-      DASH_40YD: ['FLY10_TIME', 'VERTICAL_JUMP'],
-      RSI: ['VERTICAL_JUMP', 'FLY10_TIME']
-    };
-
-    const primaryRecs = recommendations[metrics.primary] || [];
-    return primaryRecs.filter(metric =>
-      metric !== metrics.primary && !metrics.additional.includes(metric)
-    );
-  };
-
-  const recommendedMetrics = showRecommendations ? getRecommendedMetrics() : [];
 
   return (
     <Card className={className}>
@@ -163,29 +140,6 @@ export function MetricsSelector({
           </div>
         )}
 
-        {/* Recommended Metrics */}
-        {recommendedMetrics.length > 0 && (
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-blue-700">Recommended Metrics</Label>
-            <div className="flex flex-wrap gap-2">
-              {recommendedMetrics.slice(0, 3).map(metric => {
-                const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-                return (
-                  <Button
-                    key={metric}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleAdditionalMetricToggle(metric, true)}
-                    disabled={metrics.additional.length >= maxAdditional}
-                    className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
-                  >
-                    + {config?.label || metric}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Additional Metrics Selection */}
         <div className="space-y-2">

@@ -6,14 +6,15 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '../ErrorBoundary';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
   ChartType,
   StatisticalSummary,
   TrendData,
-  MultiMetricData 
+  MultiMetricData
 } from '@shared/analytics-types';
+import { devLog } from '@/utils/dev-logger';
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
@@ -131,7 +132,7 @@ export function ChartContainer({
 
   // Determine which data to pass based on chart type
   const chartData = useMemo(() => {
-    console.log('ChartContainer Debug:', {
+    devLog.log('ChartContainer Debug:', {
       chartType,
       dataLength: data?.length || 0,
       trendsLength: trends?.length || 0,
@@ -209,6 +210,14 @@ export function ChartContainer({
   }
 
   if (!chartData || (Array.isArray(chartData) && chartData.length === 0)) {
+    devLog.log('ChartContainer: No data available', {
+      chartType,
+      hasChartData: !!chartData,
+      isArray: Array.isArray(chartData),
+      length: Array.isArray(chartData) ? chartData.length : 'N/A',
+      dataType: typeof chartData
+    });
+    
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
@@ -302,6 +311,9 @@ export function ChartContainer({
                     config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    maxAthletes={10}
                   />
                 ) : chartType === 'box_swarm_combo' ? (
                   <BoxPlotChart

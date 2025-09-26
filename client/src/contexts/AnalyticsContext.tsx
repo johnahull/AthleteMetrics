@@ -294,6 +294,7 @@ export function AnalyticsProvider({
       )
     );
 
+
     // Determine chart data based on chart type
     const chartData = state.analyticsData ? (() => {
       switch (state.selectedChartType) {

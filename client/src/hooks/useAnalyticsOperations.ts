@@ -120,25 +120,20 @@ export function useAnalyticsDataFetcher() {
     setError(null);
 
     try {
-      // For line charts/trends, we need inter_group analysis to show multiple athletes
-      const needsInterGroupAnalysis = state.selectedChartType === 'line_chart' || state.timeframe.type === 'trends';
-      const effectiveAnalysisType = needsInterGroupAnalysis ? 'inter_group' : state.analysisType;
+      // Use the actual analysis type from state, don't override it
+      const effectiveAnalysisType = state.analysisType;
       
-      // For trends/line charts, use broader timeframe to ensure sufficient data
-      const effectiveTimeframe = needsInterGroupAnalysis ? {
-        ...state.timeframe,
-        period: state.timeframe.period === 'last_7_days' || state.timeframe.period === 'last_30_days' || state.timeframe.period === 'last_90_days' 
-          ? 'all_time' as const
-          : state.timeframe.period
-      } : state.timeframe;
+      // Use the timeframe as configured
+      const effectiveTimeframe = state.timeframe;
       
       const request: AnalyticsRequest = {
         analysisType: effectiveAnalysisType,
         filters: { ...state.filters, organizationId: effectiveOrganizationId },
         metrics: state.metrics,
         timeframe: effectiveTimeframe,
-        athleteId: (effectiveAnalysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
+        athleteId: (state.analysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
+
 
       // Fetch CSRF token first
       const csrfResponse = await fetch('/api/csrf-token', {
@@ -166,6 +161,21 @@ export function useAnalyticsDataFetcher() {
       }
 
       const data: AnalyticsResponse = await response.json();
+      
+      console.log('Analytics data received:', {
+        hasData: !!data.data,
+        dataLength: data.data?.length || 0,
+        hasTrends: !!data.trends,
+        trendsLength: data.trends?.length || 0,
+        hasMultiMetric: !!data.multiMetric,
+        multiMetricLength: data.multiMetric?.length || 0,
+        hasStatistics: !!data.statistics,
+        statisticsKeys: Object.keys(data.statistics || {}),
+        recommendedCharts: data.meta?.recommendedCharts || [],
+        totalAthletes: data.meta?.totalAthletes || 0,
+        totalMeasurements: data.meta?.totalMeasurements || 0
+      });
+      
       setAnalyticsData(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch analytics data';

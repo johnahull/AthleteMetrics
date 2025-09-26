@@ -131,8 +131,8 @@ export function LineChart({
           const isInDisplayedAthletes = displayedAthletes.some(a => a.id === trend.athleteId);
           // If athleteToggles is empty (initial state), show all displayed athletes
           // Otherwise, respect the toggle state
-          const isToggleEnabled = Object.keys(athleteToggles).length === 0 
-            ? true 
+          const isToggleEnabled = Object.keys(athleteToggles).length === 0
+            ? true
             : athleteToggles[trend.athleteId];
           return isInDisplayedAthletes && isToggleEnabled;
         });
@@ -151,9 +151,9 @@ export function LineChart({
     const sortedDates = Array.from(allDates).sort();
     const labels = sortedDates.map(dateStr => {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
       });
     });
 
@@ -267,14 +267,14 @@ export function LineChart({
 
     data.forEach((trend, datasetIndex) => {
       if (highlightAthlete && trend.athleteId !== highlightAthlete) return;
-      
+
       const bestPoint = trend.data.find(point => point.isPersonalBest);
       if (bestPoint) {
         const pointIndex = lineData.sortedDates.findIndex(dateStr => {
           const bestPointDate = bestPoint.date instanceof Date ? bestPoint.date : new Date(bestPoint.date);
           return bestPointDate.toISOString().split('T')[0] === dateStr;
         });
-        
+
         if (pointIndex >= 0) {
           bests.push({
             athleteId: trend.athleteId,
@@ -318,18 +318,18 @@ export function LineChart({
           label: (context) => {
             const value = context.parsed.y;
             if (value === null) return '';
-            
+
             return `${context.dataset.label}: ${value.toFixed(2)}${lineData?.unit}`;
           },
           afterLabel: (context) => {
             const datasetIndex = context.datasetIndex;
             const pointIndex = context.dataIndex;
-            
+
             // Check if this is a personal best
-            const pb = personalBests.find(best => 
+            const pb = personalBests.find(best =>
               best.datasetIndex === datasetIndex && best.pointIndex === pointIndex
             );
-            
+
             return pb ? ['🏆 Personal Best!'] : [];
           }
         }
@@ -491,7 +491,7 @@ export function LineChart({
       )}
 
       <Line data={lineData} options={options} />
-      
+
       {/* Progress indicators */}
       {highlightAthlete && personalBests.length > 0 && (
         <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
@@ -507,7 +507,7 @@ export function LineChart({
               })()}
             </div>
           </div>
-          
+
           <div className="text-center">
             <div className="font-medium">Progress Trend</div>
             <div className="text-lg font-bold text-blue-600">
@@ -515,14 +515,14 @@ export function LineChart({
               {(() => {
                 const athleteTrend = data.find(t => t.athleteId === highlightAthlete);
                 if (!athleteTrend || athleteTrend.data.length < 2) return 'N/A';
-                
+
                 const first = athleteTrend.data[0].value;
                 const last = athleteTrend.data[athleteTrend.data.length - 1].value;
                 const isLowerBetter = METRIC_CONFIG[athleteTrend.metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
-                
+
                 const improvement = isLowerBetter ? first - last : last - first;
                 const trend = improvement > 0 ? '↗️ Improving' : improvement < 0 ? '↘️ Declining' : '→ Stable';
-                
+
                 return trend;
               })()}
             </div>

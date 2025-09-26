@@ -486,6 +486,16 @@ export class AnalyticsService {
         request.timeframe.type
       );
 
+      console.log('Analytics recommendations:', {
+        analysisType: request.analysisType,
+        metricCount,
+        timeframeType: request.timeframe.type,
+        recommendedCharts,
+        dataLength: chartData.length,
+        trendsLength: trends.length,
+        multiMetricLength: multiMetric.length
+      });
+
       return {
         data: chartData,
         trends,
