@@ -166,6 +166,21 @@ export function useAnalyticsDataFetcher() {
       }
 
       const data: AnalyticsResponse = await response.json();
+      
+      console.log('Analytics data received:', {
+        hasData: !!data.data,
+        dataLength: data.data?.length || 0,
+        hasTrends: !!data.trends,
+        trendsLength: data.trends?.length || 0,
+        hasMultiMetric: !!data.multiMetric,
+        multiMetricLength: data.multiMetric?.length || 0,
+        hasStatistics: !!data.statistics,
+        statisticsKeys: Object.keys(data.statistics || {}),
+        recommendedCharts: data.meta?.recommendedCharts || [],
+        totalAthletes: data.meta?.totalAthletes || 0,
+        totalMeasurements: data.meta?.totalMeasurements || 0
+      });
+      
       setAnalyticsData(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch analytics data';

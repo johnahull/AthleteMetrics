@@ -209,6 +209,14 @@ export function ChartContainer({
   }
 
   if (!chartData || (Array.isArray(chartData) && chartData.length === 0)) {
+    console.log('ChartContainer: No data available', {
+      chartType,
+      hasChartData: !!chartData,
+      isArray: Array.isArray(chartData),
+      length: Array.isArray(chartData) ? chartData.length : 'N/A',
+      dataType: typeof chartData
+    });
+    
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>

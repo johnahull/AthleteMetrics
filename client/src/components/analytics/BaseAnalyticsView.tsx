@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, Suspense, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -73,7 +73,7 @@ function BaseAnalyticsViewContent({
   className,
   children
 }: Omit<BaseAnalyticsViewProps, 'organizationId' | 'userId' | 'requireRole'>) {
-  const { state, isDataReady, shouldFetchData, chartData } = useAnalyticsContext();
+  const { state, isDataReady, shouldFetchData, chartData: memoizedChartData } = useAnalyticsContext();
   const {
     fetchAnalyticsData,
     chartConfig,
@@ -146,6 +146,57 @@ function BaseAnalyticsViewContent({
         return 'Compare performance metrics across different groups (teams vs teams, age groups, gender differences) to identify group-level patterns and benchmarks.';
     }
   };
+
+  // Chart data processing with proper type handling
+  const chartData = useMemo(() => {
+    if (!state.analyticsData) return null;
+
+    console.log('BaseAnalyticsView chartData processing:', {
+      chartType: state.selectedChartType,
+      timeframeType: state.timeframe.type,
+      hasData: !!state.analyticsData.data,
+      dataLength: state.analyticsData.data?.length || 0,
+      hasTrends: !!state.analyticsData.trends,
+      trendsLength: state.analyticsData.trends?.length || 0,
+      hasMultiMetric: !!state.analyticsData.multiMetric,
+      multiMetricLength: state.analyticsData.multiMetric?.length || 0
+    });
+
+    // For trends timeframe, prioritize trends data but fall back to regular data
+    if (state.timeframe.type === 'trends') {
+      const trendsData = state.analyticsData.trends;
+      if (trendsData && trendsData.length > 0) {
+        return trendsData;
+      }
+      // Fall back to regular data if no trends available
+      return state.analyticsData.data || [];
+    }
+
+    // For best timeframe, use appropriate data based on chart type
+    switch (state.selectedChartType) {
+      case 'radar_chart':
+        const multiMetricData = state.analyticsData.multiMetric;
+        if (multiMetricData && multiMetricData.length > 0) {
+          return multiMetricData;
+        }
+        // Fall back to regular data if no multi-metric data
+        return state.analyticsData.data || [];
+
+      case 'line_chart':
+      case 'multi_line':
+      case 'connected_scatter':
+        const trendsForLineChart = state.analyticsData.trends;
+        if (trendsForLineChart && trendsForLineChart.length > 0) {
+          return trendsForLineChart;
+        }
+        // Fall back to regular data if no trends available
+        return state.analyticsData.data || [];
+
+      default:
+        return state.analyticsData.data || [];
+    }
+  }, [state.analyticsData, state.timeframe.type, state.selectedChartType]);
+
 
   return (
     <ErrorBoundary>
@@ -294,7 +345,7 @@ function BaseAnalyticsViewContent({
               !state.isLoading &&
               !state.error &&
               state.analyticsData &&
-              chartData &&
+              memoizedChartData &&
               state.analysisType === 'intra_group' &&
               state.selectedChartType === 'line_chart' &&
               state.analyticsData.trends &&
@@ -314,7 +365,7 @@ function BaseAnalyticsViewContent({
               !state.isLoading &&
               !state.error &&
               state.analyticsData &&
-              chartData &&
+              memoizedChartData &&
               state.analysisType !== 'individual' &&
               state.selectedChartType === 'time_series_box_swarm' &&
               state.analyticsData.trends &&
@@ -351,7 +402,7 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* Chart Display */}
-        {!state.isLoading && !state.error && isDataReady && chartData && (
+        {!state.isLoading && !state.error && isDataReady && memoizedChartData && (
           <>
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
@@ -368,7 +419,7 @@ function BaseAnalyticsViewContent({
                       title={`${chartConfig.title} - ${formatChartTypeName(chartType)}`}
                       subtitle={chartConfig.subtitle}
                       chartType={chartType}
-                      data={chartData}
+                      data={memoizedChartData}
                       trends={state.analyticsData?.trends}
                       multiMetric={state.analyticsData?.multiMetric}
                       statistics={state.analyticsData?.statistics}
@@ -399,7 +450,7 @@ function BaseAnalyticsViewContent({
                   title={chartConfig.title}
                   subtitle={chartConfig.subtitle}
                   chartType={state.selectedChartType}
-                  data={chartData}
+                  data={memoizedChartData}
                   trends={state.analyticsData?.trends}
                   multiMetric={state.analyticsData?.multiMetric}
                   statistics={state.analyticsData?.statistics}
