@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Download, RefreshCw, Users, User, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { AnalyticsFilters } from '@/components/analytics/AnalyticsFilters';
 import { ChartContainer, getRecommendedChartType } from '@/components/charts/ChartContainer';
 import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
@@ -495,21 +494,6 @@ export function CoachAnalytics() {
           </Tabs>
         </CardContent>
       </Card>
-
-      {/* Analytics Filters - Full Width */}
-      <AnalyticsFilters
-        filters={filters}
-        metrics={metrics}
-        timeframe={timeframe}
-        analysisType={analysisType}
-        availableTeams={availableTeams}
-        availableAthletes={availableAthletes}
-        onFiltersChange={setFilters}
-        onMetricsChange={setMetrics}
-        onTimeframeChange={setTimeframe}
-        onAnalysisTypeChange={setAnalysisType}
-        onReset={handleFiltersReset}
-      />
 
       {/* Chart Controls Bar - Horizontal Layout */}
       {analyticsData && (analysisType !== 'individual' || selectedAthleteId) && (
