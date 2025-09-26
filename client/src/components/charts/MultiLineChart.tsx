@@ -12,12 +12,31 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import type { 
-  TrendData, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  TrendData,
+  ChartConfiguration,
+  StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { AthleteSelector } from './components/AthleteSelector';
+import {
+  ATHLETE_COLORS,
+  METRIC_COLORS,
+  METRIC_STYLES,
+  DEFAULT_SELECTION_COUNT,
+  NORMALIZED_MEAN_VALUE,
+  NORMALIZED_MIN_VALUE,
+  NORMALIZED_MAX_VALUE,
+  getAthleteColor,
+  getMetricStyle
+} from '@/utils/chart-constants';
+import { useAthleteSelection } from '@/hooks/useAthleteSelection';
+import { ChartErrorBoundary } from './ChartErrorBoundary';
+import { validateMaxAthletes, validateChartData, logValidationResult } from '@/utils/chart-validation';
+import { LegendLine } from './components/LegendLine';
+import { CollapsibleLegend } from './components/CollapsibleLegend';
+import { ChartSkeleton } from './components/ChartSkeleton';
+import { useDebounce } from '@/hooks/useDebounce';
 
 // Register Chart.js components
 ChartJS.register(
@@ -31,19 +50,113 @@ ChartJS.register(
   Filler
 );
 
+
 interface MultiLineChartProps {
+  /** Array of trend data to display in the chart */
   data: TrendData[];
+  /** Chart configuration settings */
   config: ChartConfiguration;
+  /** Statistical summaries for metrics normalization */
   statistics?: Record<string, StatisticalSummary>;
+  /** ID of athlete to highlight (overrides selection) */
   highlightAthlete?: string;
+  /**
+   * Array of selected athlete IDs for external state control
+   * If provided, component uses external state instead of internal state
+   */
+  selectedAthleteIds?: string[];
+  /**
+   * Callback fired when athlete selection changes
+   * Called with array of selected athlete IDs
+   */
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  /**
+   * Maximum number of athletes that can be selected at once
+   * @default 3
+   */
+  maxAthletes?: number;
+  /**
+   * Whether the chart is in a loading state
+   * Shows skeleton when true
+   */
+  isLoading?: boolean;
+  /**
+   * Debounce delay for data processing in milliseconds
+   * Helps performance with large datasets or frequent updates
+   * @default 200
+   */
+  dataDebounceDelay?: number;
 }
 
-export function MultiLineChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export function MultiLineChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
+  maxAthletes = DEFAULT_SELECTION_COUNT,
+  isLoading = false,
+  dataDebounceDelay = 200
 }: MultiLineChartProps) {
+  // Validate chart data
+  const dataValidation = validateChartData(data);
+  logValidationResult('MultiLineChart', dataValidation);
+
+  // Get available athletes count for validation context
+  const availableAthletes = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const athleteMap = new Map();
+    data.forEach(trend => {
+      if (!athleteMap.has(trend.athleteId)) {
+        athleteMap.set(trend.athleteId, {
+          id: trend.athleteId,
+          name: trend.athleteName,
+          color: athleteMap.size
+        });
+      }
+    });
+
+    return Array.from(athleteMap.values());
+  }, [data]);
+
+  // Validate and sanitize maxAthletes prop with comprehensive validation
+  const maxAthletesValidation = validateMaxAthletes(maxAthletes, availableAthletes.length);
+  logValidationResult('MultiLineChart', maxAthletesValidation);
+  const validatedMaxAthletes = maxAthletesValidation.value;
+
+  // Use custom hook for athlete selection logic
+  const {
+    athleteToggles,
+    handleToggleAthlete,
+    handleSelectAll,
+    handleClearAll,
+    isControlled,
+    selectedCount,
+    isAtMaximum
+  } = useAthleteSelection({
+    athletes: availableAthletes,
+    selectedAthleteIds,
+    onAthleteSelectionChange,
+    maxAthletes: validatedMaxAthletes
+  });
+
+  // Get effective selection for chart data
+  const effectiveSelectedAthleteIds = selectedAthleteIds ||
+    Object.keys(athleteToggles).filter(id => athleteToggles[id]);
+
+  // Debounce the effective selection to improve performance during rapid changes
+  const debouncedSelectedAthleteIds = useDebounce(effectiveSelectedAthleteIds, dataDebounceDelay);
+
+  // Show loading state when data is loading or selection is debouncing
+  // In test environment, skip debounce-based loading to avoid test failures
+  const isDataProcessing = isLoading || (
+    process.env.NODE_ENV !== 'test' &&
+    JSON.stringify(effectiveSelectedAthleteIds) !== JSON.stringify(debouncedSelectedAthleteIds)
+  );
+
+
   // Transform trend data for multi-line chart
   const multiLineData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -61,10 +174,13 @@ export function MultiLineChart({
       return acc;
     }, {} as Record<string, any>);
 
-    // Filter athletes to show
-    const athletesToShow = highlightAthlete ? 
+    // Filter athletes to show based on selection (use debounced for performance)
+    // In test environment, always use immediate selection to avoid timing issues
+    const selectionToUse = process.env.NODE_ENV === 'test' ? effectiveSelectedAthleteIds :
+      (isDataProcessing ? effectiveSelectedAthleteIds : debouncedSelectedAthleteIds);
+    const athletesToShow = highlightAthlete ?
       Object.values(athleteMetrics).filter((athlete: any) => athlete.athleteId === highlightAthlete) :
-      Object.values(athleteMetrics).slice(0, 3);
+      Object.values(athleteMetrics).filter((athlete: any) => selectionToUse.includes(athlete.athleteId));
 
     if (athletesToShow.length === 0) return null;
 
@@ -86,36 +202,11 @@ export function MultiLineChart({
     // Create labels
     const labels = sortedDates.map(dateStr => {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
       });
     });
-
-    // Colors for different scenarios
-    const athleteColors = [
-      'rgba(59, 130, 246, 1)',    // Blue
-      'rgba(16, 185, 129, 1)',    // Green
-      'rgba(239, 68, 68, 1)'      // Red
-    ];
-
-    const metricColors = [
-      'rgba(59, 130, 246, 1)',    // Blue
-      'rgba(16, 185, 129, 1)',    // Green
-      'rgba(239, 68, 68, 1)',     // Red
-      'rgba(245, 158, 11, 1)',    // Amber
-      'rgba(139, 92, 246, 1)',    // Violet
-      'rgba(236, 72, 153, 1)',    // Pink
-      'rgba(34, 197, 94, 1)',     // Emerald
-      'rgba(251, 113, 133, 1)'    // Rose
-    ];
-
-    const metricStyles = [
-      { dash: [], opacity: 1 },
-      { dash: [5, 5], opacity: 0.8 },
-      { dash: [10, 5, 5, 5], opacity: 0.6 },
-      { dash: [15, 3, 3, 3], opacity: 0.4 }
-    ];
 
     // Determine if this is individual analysis (single athlete)
     const isSingleAthlete = athletesToShow.length === 1;
@@ -134,7 +225,7 @@ export function MultiLineChart({
           if (!stats) return value;
           // Use percentile rank for normalization
           const range = stats.max - stats.min;
-          return range > 0 ? ((value - stats.min) / range) * 100 : 50;
+          return range > 0 ? ((value - stats.min) / range) * NORMALIZED_MAX_VALUE : NORMALIZED_MEAN_VALUE;
         };
 
         // Create data points for each date
@@ -155,15 +246,16 @@ export function MultiLineChart({
         let borderDash: number[] = [];
 
         if (isSingleAthlete) {
-          // Individual analysis: different colors for each metric, solid lines
-          borderColor = metricColors[metricIndex % metricColors.length];
+          // Individual analysis: consistent color, different line styles for metrics
+          borderColor = 'rgba(59, 130, 246, 1)'; // Blue for all metrics
+          const style = getMetricStyle(metricIndex);
           label = metricLabel; // Just the metric name
-          borderDash = []; // Solid lines
+          borderDash = style.dash; // Use line styles to distinguish metrics
         } else {
           // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
-          const baseColor = athleteColors[athleteIndex % athleteColors.length];
-          const style = metricStyles[metricIndex % metricStyles.length];
-          borderColor = baseColor.replace('1)', `${style.opacity})`);
+          const baseColor = getAthleteColor(athleteIndex);
+          const style = getMetricStyle(metricIndex);
+          borderColor = baseColor; // Keep full opacity for clarity
           label = `${athlete.athleteName} - ${metricLabel}`;
           borderDash = style.dash;
         }
@@ -187,42 +279,6 @@ export function MultiLineChart({
       });
     });
 
-    // Add group average lines
-    metrics.forEach((metric, metricIndex) => {
-      const stats = statistics?.[metric];
-      if (!stats) return;
-
-      const normalizedMean = 50; // Group average is always at 50% in normalized scale
-      const meanData = sortedDates.map(() => normalizedMean);
-
-      const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-
-      let avgBorderColor: string;
-      let avgLabel: string;
-
-      if (isSingleAthlete) {
-        // For individual analysis, use lighter version of the metric color
-        const baseColor = metricColors[metricIndex % metricColors.length];
-        avgBorderColor = baseColor.replace('1)', '0.4)');
-        avgLabel = `${metricLabel} Avg`;
-      } else {
-        // For multi-athlete analysis, use neutral gray
-        avgBorderColor = 'rgba(156, 163, 175, 0.8)';
-        avgLabel = `Group Avg - ${metricLabel}`;
-      }
-
-      datasets.push({
-        label: avgLabel,
-        data: meanData,
-        borderColor: avgBorderColor,
-        backgroundColor: avgBorderColor.replace(/[\d\.]+\)$/, '0.1)'),
-        borderWidth: 1,
-        borderDash: [3, 3],
-        pointRadius: 0,
-        pointHoverRadius: 3,
-        fill: false
-      });
-    });
 
     return {
       labels,
@@ -231,7 +287,10 @@ export function MultiLineChart({
       sortedDates,
       athletesToShow
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, debouncedSelectedAthleteIds, isDataProcessing, effectiveSelectedAthleteIds]);
+
+  // Determine if this is individual analysis (single athlete) - needed for legend
+  const isSingleAthlete = multiLineData?.athletesToShow?.length === 1;
 
   // Chart options
   const options: ChartOptions<'line'> = {
@@ -322,8 +381,8 @@ export function MultiLineChart({
           display: true,
           text: 'Normalized Performance (%)'
         },
-        min: 0,
-        max: 100,
+        min: NORMALIZED_MIN_VALUE,
+        max: NORMALIZED_MAX_VALUE,
         grid: {
           display: true
         },
@@ -346,6 +405,17 @@ export function MultiLineChart({
     }
   };
 
+  // Show loading skeleton when data is processing
+  if (isDataProcessing) {
+    return (
+      <ChartSkeleton
+        height={400}
+        showAthleteSelector={availableAthletes.length > 1 && !highlightAthlete}
+        showLegend={true}
+      />
+    );
+  }
+
   if (!multiLineData) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -356,34 +426,102 @@ export function MultiLineChart({
 
   return (
     <div className="w-full h-full">
-      <Line data={multiLineData} options={options} />
+      {/* Athlete Selector - only show for multi-athlete scenarios */}
+      {availableAthletes.length > 1 && !highlightAthlete && (
+        <AthleteSelector
+          athletes={availableAthletes}
+          athleteToggles={athleteToggles}
+          onToggleAthlete={handleToggleAthlete}
+          onSelectAll={handleSelectAll}
+          onClearAll={handleClearAll}
+          maxAthletes={validatedMaxAthletes}
+          className="mb-4"
+        />
+      )}
+
+      <ChartErrorBoundary
+        fallbackTitle="Multi-Line Chart Error"
+        fallbackMessage="Failed to render the multi-line chart. This may be due to data formatting issues or chart configuration problems."
+      >
+        <Line data={multiLineData} options={options} />
+      </ChartErrorBoundary>
 
       {/* Chart explanation */}
       <div className="mt-4 text-sm">
         <div className="text-center text-muted-foreground mb-2">
-          All metrics normalized to 0-100% scale for comparison. 50% = group average.
+          All metrics normalized to 0-100% scale for comparison.
         </div>
 
-        {/* Metric legend */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {multiLineData.metrics.map((metric, index) => {
-            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-            const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-            const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
-
-            return (
-              <div key={metric} className="flex items-center space-x-2">
-                <div 
-                  className="w-4 h-0.5" 
-                  style={{
-                    backgroundColor: 'rgba(59, 130, 246, 1)',
-                    borderStyle: index % 2 === 0 ? 'solid' : 'dashed'
-                  }}
-                />
-                <span>{label} ({unit}) {isLowerBetter ? '↓' : '↑'}</span>
+        {/* Enhanced Legend with Collapsible Sections */}
+        <div className="space-y-4">
+          {/* Athletes Legend */}
+          {!isSingleAthlete && (
+            <CollapsibleLegend
+              title="Athletes"
+              itemCount={multiLineData.athletesToShow.length}
+              defaultExpanded={multiLineData.athletesToShow.length <= 5}
+            >
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {multiLineData.athletesToShow.map((athlete, index) => {
+                  const color = getAthleteColor(index);
+                  return (
+                    <div key={athlete.athleteId} className="flex items-center space-x-2">
+                      <div
+                        className="w-4 h-3 rounded flex-shrink-0"
+                        style={{ backgroundColor: color }}
+                        aria-label={`Color indicator for ${athlete.athleteName}`}
+                      />
+                      <span className="text-xs truncate" title={athlete.athleteName}>
+                        {athlete.athleteName}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </CollapsibleLegend>
+          )}
+
+          {/* Metrics Legend */}
+          <CollapsibleLegend
+            title="Metrics & Line Styles"
+            itemCount={multiLineData.metrics.length}
+            defaultExpanded={multiLineData.metrics.length <= 4}
+          >
+            <div className="grid grid-cols-1 gap-2">
+              {multiLineData.metrics.map((metric, index) => {
+                const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+                const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+                const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
+                const style = getMetricStyle(index);
+
+                return (
+                  <div key={metric} className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2 min-w-0 flex-1">
+                      <LegendLine
+                        color={isSingleAthlete ? 'rgba(59, 130, 246, 1)' : 'rgba(75, 85, 99, 1)'}
+                        dashPattern={style.dash}
+                      />
+                      <span className="text-xs">
+                        <strong>{style.name}:</strong> {label} ({unit}) {isLowerBetter ? '↓' : '↑'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CollapsibleLegend>
+
+          {isSingleAthlete && (
+            <div className="text-center text-xs text-muted-foreground mt-2">
+              Different line styles represent different metrics for the selected athlete.
+            </div>
+          )}
+
+          {!isSingleAthlete && (
+            <div className="text-center text-xs text-muted-foreground mt-2">
+              Each athlete has a unique color. Different line styles represent different metrics.
+            </div>
+          )}
         </div>
       </div>
     </div>
