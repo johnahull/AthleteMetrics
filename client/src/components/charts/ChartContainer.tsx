@@ -304,6 +304,9 @@ export function ChartContainer({
                     config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
+                    selectedAthleteIds={selectedAthleteIds}
+                    onAthleteSelectionChange={onAthleteSelectionChange}
+                    maxAthletes={10}
                   />
                 ) : chartType === 'connected_scatter' ? (
                   <ConnectedScatterChart

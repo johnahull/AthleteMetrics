@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,12 +12,13 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import type { 
-  TrendData, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  TrendData,
+  ChartConfiguration,
+  StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { AthleteSelector } from './components/AthleteSelector';
 
 // Register Chart.js components
 ChartJS.register(
@@ -36,14 +37,114 @@ interface MultiLineChartProps {
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  maxAthletes?: number;
 }
 
-export function MultiLineChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export function MultiLineChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
+  maxAthletes = 10
 }: MultiLineChartProps) {
+  // Get unique athletes from data
+  const availableAthletes = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const athleteMap = new Map();
+    data.forEach(trend => {
+      if (!athleteMap.has(trend.athleteId)) {
+        athleteMap.set(trend.athleteId, {
+          id: trend.athleteId,
+          name: trend.athleteName,
+          color: athleteMap.size
+        });
+      }
+    });
+
+    return Array.from(athleteMap.values());
+  }, [data]);
+
+  // Initialize athlete selection state
+  const [internalSelectedAthleteIds, setInternalSelectedAthleteIds] = useState<string[]>([]);
+  const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
+
+  // Use external selectedAthleteIds if provided, otherwise use internal state
+  const effectiveSelectedAthleteIds = selectedAthleteIds || internalSelectedAthleteIds;
+
+  // Initialize selections when data changes
+  useEffect(() => {
+    if (availableAthletes.length > 0) {
+      if (!selectedAthleteIds) {
+        // Use internal state - select first few athletes by default
+        const defaultSelected = availableAthletes.slice(0, Math.min(3, maxAthletes)).map(a => a.id);
+        setInternalSelectedAthleteIds(defaultSelected);
+
+        const defaultToggles = availableAthletes.reduce((acc, athlete) => {
+          acc[athlete.id] = defaultSelected.includes(athlete.id);
+          return acc;
+        }, {} as Record<string, boolean>);
+        setAthleteToggles(defaultToggles);
+      } else {
+        // Use external state
+        const toggles = availableAthletes.reduce((acc, athlete) => {
+          acc[athlete.id] = selectedAthleteIds.includes(athlete.id);
+          return acc;
+        }, {} as Record<string, boolean>);
+        setAthleteToggles(toggles);
+      }
+    }
+  }, [availableAthletes, selectedAthleteIds, maxAthletes]);
+
+  // Handle athlete toggle
+  const handleToggleAthlete = (athleteId: string) => {
+    const newToggles = { ...athleteToggles, [athleteId]: !athleteToggles[athleteId] };
+    setAthleteToggles(newToggles);
+
+    const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+
+    if (onAthleteSelectionChange) {
+      onAthleteSelectionChange(newSelected);
+    } else {
+      setInternalSelectedAthleteIds(newSelected);
+    }
+  };
+
+  // Handle select all
+  const handleSelectAll = () => {
+    const allIds = availableAthletes.map(a => a.id);
+    const newToggles = availableAthletes.reduce((acc, athlete) => {
+      acc[athlete.id] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
+    setAthleteToggles(newToggles);
+
+    if (onAthleteSelectionChange) {
+      onAthleteSelectionChange(allIds);
+    } else {
+      setInternalSelectedAthleteIds(allIds);
+    }
+  };
+
+  // Handle clear all
+  const handleClearAll = () => {
+    const newToggles = availableAthletes.reduce((acc, athlete) => {
+      acc[athlete.id] = false;
+      return acc;
+    }, {} as Record<string, boolean>);
+    setAthleteToggles(newToggles);
+
+    if (onAthleteSelectionChange) {
+      onAthleteSelectionChange([]);
+    } else {
+      setInternalSelectedAthleteIds([]);
+    }
+  };
+
   // Transform trend data for multi-line chart
   const multiLineData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -61,10 +162,10 @@ export function MultiLineChart({
       return acc;
     }, {} as Record<string, any>);
 
-    // Filter athletes to show
-    const athletesToShow = highlightAthlete ? 
+    // Filter athletes to show based on selection
+    const athletesToShow = highlightAthlete ?
       Object.values(athleteMetrics).filter((athlete: any) => athlete.athleteId === highlightAthlete) :
-      Object.values(athleteMetrics).slice(0, 3);
+      Object.values(athleteMetrics).filter((athlete: any) => effectiveSelectedAthleteIds.includes(athlete.athleteId));
 
     if (athletesToShow.length === 0) return null;
 
@@ -231,7 +332,7 @@ export function MultiLineChart({
       sortedDates,
       athletesToShow
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds]);
 
   // Chart options
   const options: ChartOptions<'line'> = {
@@ -356,6 +457,20 @@ export function MultiLineChart({
 
   return (
     <div className="w-full h-full">
+      {/* Athlete Selector - only show for multi-athlete scenarios */}
+      {availableAthletes.length > 1 && !highlightAthlete && (
+        <AthleteSelector
+          athletes={availableAthletes}
+          athleteToggles={athleteToggles}
+          showGroupAverage={false}
+          onToggleAthlete={handleToggleAthlete}
+          onSelectAll={handleSelectAll}
+          onClearAll={handleClearAll}
+          onToggleGroupAverage={() => {}} // Not used in multi-line chart
+          className="mb-4"
+        />
+      )}
+
       <Line data={multiLineData} options={options} />
 
       {/* Chart explanation */}
