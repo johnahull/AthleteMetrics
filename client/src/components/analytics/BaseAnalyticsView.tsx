@@ -148,55 +148,8 @@ function BaseAnalyticsViewContent({
     }
   };
 
-  // Chart data processing with proper type handling
-  const chartData = useMemo(() => {
-    if (!state.analyticsData) return null;
-
-    devLog.log('BaseAnalyticsView chartData processing:', {
-      chartType: state.selectedChartType,
-      timeframeType: state.timeframe.type,
-      hasData: !!state.analyticsData.data,
-      dataLength: state.analyticsData.data?.length || 0,
-      hasTrends: !!state.analyticsData.trends,
-      trendsLength: state.analyticsData.trends?.length || 0,
-      hasMultiMetric: !!state.analyticsData.multiMetric,
-      multiMetricLength: state.analyticsData.multiMetric?.length || 0
-    });
-
-    // For trends timeframe, prioritize trends data but fall back to regular data
-    if (state.timeframe.type === 'trends') {
-      const trendsData = state.analyticsData.trends;
-      if (trendsData && trendsData.length > 0) {
-        return trendsData;
-      }
-      // Fall back to regular data if no trends available
-      return state.analyticsData.data || [];
-    }
-
-    // For best timeframe, use appropriate data based on chart type
-    switch (state.selectedChartType) {
-      case 'radar_chart':
-        const multiMetricData = state.analyticsData.multiMetric;
-        if (multiMetricData && multiMetricData.length > 0) {
-          return multiMetricData;
-        }
-        // Fall back to regular data if no multi-metric data
-        return state.analyticsData.data || [];
-
-      case 'line_chart':
-      case 'multi_line':
-      case 'connected_scatter':
-        const trendsForLineChart = state.analyticsData.trends;
-        if (trendsForLineChart && trendsForLineChart.length > 0) {
-          return trendsForLineChart;
-        }
-        // Fall back to regular data if no trends available
-        return state.analyticsData.data || [];
-
-      default:
-        return state.analyticsData.data || [];
-    }
-  }, [state.analyticsData, state.timeframe.type, state.selectedChartType]);
+  // Chart data is already processed and memoized in the analytics context
+  // Using memoizedChartData directly to avoid duplicate processing
 
 
   return (

@@ -36,6 +36,23 @@ interface ScatterPoint {
   isPersonalBest: boolean;
 }
 
+// Chart.js data point (simplified for Chart.js)
+interface ChartDataPoint {
+  x: number;
+  y: number;
+  isPersonalBest?: boolean;
+}
+
+interface AthleteMetrics {
+  [metric: string]: Array<{ value: unknown; date: unknown; isPersonalBest?: boolean }>;
+}
+
+interface AthleteData {
+  athleteId: string;
+  athleteName: string;
+  metrics: AthleteMetrics;
+}
+
 // Register Chart.js components
 ChartJS.register(
   LinearScale,
@@ -168,7 +185,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       }
       acc[trend.athleteId].metrics[trend.metric] = trend.data;
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, AthleteData>);
 
     const colors = [
       'rgba(59, 130, 246, 1)',
@@ -176,7 +193,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       'rgba(239, 68, 68, 1)'
     ];
 
-    const datasets = Object.values(athleteTrends).map((athlete: any, index) => {
+    const datasets = Object.values(athleteTrends).map((athlete: AthleteData, index) => {
       const xData = athlete.metrics[xMetric] || [];
       const yData = athlete.metrics[yMetric] || [];
 
@@ -214,7 +231,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
       return {
         label: athlete.athleteName,
-        data: connectedPoints,
+        data: connectedPoints.map((point): ChartDataPoint => ({
+          x: point.x,
+          y: point.y,
+          isPersonalBest: point.isPersonalBest
+        })),
         backgroundColor: color.replace('1)', '0.6)'),
         borderColor: color,
         borderWidth: isHighlighted ? 3 : 2,
