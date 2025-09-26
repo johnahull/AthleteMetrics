@@ -76,6 +76,26 @@ ChartJS.register(
   annotationPlugin
 );
 
+// Constants for quadrant calculations
+const QUADRANT_PADDING_RATIO = 0.1; // 10% padding around data bounds
+const FALLBACK_PADDING_BASE = 1; // Base fallback padding when data range is zero
+
+// Shared quadrant color mapping to eliminate duplication
+const QUADRANT_COLOR_MAP = {
+  chart: {
+    green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+    yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+    orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+    red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
+  },
+  legend: {
+    green: { bg: CHART_CONFIG.COLORS.QUADRANTS.ELITE, border: 'rgba(16, 185, 129, 0.3)' },
+    yellow: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
+    orange: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
+    red: { bg: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK, border: 'rgba(239, 68, 68, 0.3)' }
+  }
+};
+
 interface ConnectedScatterChartProps {
   data: TrendData[];
   config: ChartConfiguration;
@@ -459,6 +479,11 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       },
       annotation: showQuadrants && scatterData ? {
         annotations: (() => {
+          // Early return for empty datasets
+          if (!scatterData?.datasets?.length) {
+            return {};
+          }
+
           const xMean = statistics?.[scatterData.xMetric]?.mean || 0;
           const yMean = statistics?.[scatterData.yMetric]?.mean || 0;
           const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
@@ -475,20 +500,13 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
           const xRange = Math.max(...xValues) - Math.min(...xValues);
           const yRange = Math.max(...yValues) - Math.min(...yValues);
-          const xPadding = xRange > 0 ? xRange * 0.1 : 1; // Fallback padding if all values are same
-          const yPadding = yRange > 0 ? yRange * 0.1 : 1; // Fallback padding if all values are same
+          const xPadding = xRange > 0 ? xRange * QUADRANT_PADDING_RATIO : FALLBACK_PADDING_BASE;
+          const yPadding = yRange > 0 ? yRange * QUADRANT_PADDING_RATIO : FALLBACK_PADDING_BASE;
 
           const xMin = Math.min(...xValues) - xPadding;
           const xMax = Math.max(...xValues) + xPadding;
           const yMin = Math.min(...yValues) - yPadding;
           const yMax = Math.max(...yValues) + yPadding;
-
-          const colorMap = {
-            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
-            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
-          };
 
           return {
             // Top Right Quadrant
@@ -498,7 +516,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               xMax: xMax,
               yMin: yMean,
               yMax: yMax,
-              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
+              backgroundColor: QUADRANT_COLOR_MAP.chart[labels.topRight.color as keyof typeof QUADRANT_COLOR_MAP.chart],
               borderWidth: 0,
               z: 0
             },
@@ -509,7 +527,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               xMax: xMean,
               yMin: yMean,
               yMax: yMax,
-              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
+              backgroundColor: QUADRANT_COLOR_MAP.chart[labels.topLeft.color as keyof typeof QUADRANT_COLOR_MAP.chart],
               borderWidth: 0,
               z: 0
             },
@@ -520,7 +538,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               xMax: xMax,
               yMin: yMin,
               yMax: yMean,
-              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
+              backgroundColor: QUADRANT_COLOR_MAP.chart[labels.bottomRight.color as keyof typeof QUADRANT_COLOR_MAP.chart],
               borderWidth: 0,
               z: 0
             },
@@ -531,7 +549,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               xMax: xMean,
               yMin: yMin,
               yMax: yMean,
-              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
+              backgroundColor: QUADRANT_COLOR_MAP.chart[labels.bottomLeft.color as keyof typeof QUADRANT_COLOR_MAP.chart],
               borderWidth: 0,
               z: 0
             },
@@ -720,37 +738,31 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       {/* Quadrant Legend */}
       {showQuadrants && scatterData && (() => {
         const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
-        const colorMap = {
-          green: { bg: CHART_CONFIG.COLORS.QUADRANTS.ELITE, border: 'rgba(16, 185, 129, 0.3)' },
-          yellow: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
-          orange: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },
-          red: { bg: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK, border: 'rgba(239, 68, 68, 0.3)' }
-        };
 
         const quadrantLegend = [
           {
             label: labels.topRight.label,
             color: labels.topRight.color,
             position: 'Top Right',
-            ...colorMap[labels.topRight.color as keyof typeof colorMap]
+            ...QUADRANT_COLOR_MAP.legend[labels.topRight.color as keyof typeof QUADRANT_COLOR_MAP.legend]
           },
           {
             label: labels.topLeft.label,
             color: labels.topLeft.color,
             position: 'Top Left',
-            ...colorMap[labels.topLeft.color as keyof typeof colorMap]
+            ...QUADRANT_COLOR_MAP.legend[labels.topLeft.color as keyof typeof QUADRANT_COLOR_MAP.legend]
           },
           {
             label: labels.bottomRight.label,
             color: labels.bottomRight.color,
             position: 'Bottom Right',
-            ...colorMap[labels.bottomRight.color as keyof typeof colorMap]
+            ...QUADRANT_COLOR_MAP.legend[labels.bottomRight.color as keyof typeof QUADRANT_COLOR_MAP.legend]
           },
           {
             label: labels.bottomLeft.label,
             color: labels.bottomLeft.color,
             position: 'Bottom Left',
-            ...colorMap[labels.bottomLeft.color as keyof typeof colorMap]
+            ...QUADRANT_COLOR_MAP.legend[labels.bottomLeft.color as keyof typeof QUADRANT_COLOR_MAP.legend]
           }
         ];
 
