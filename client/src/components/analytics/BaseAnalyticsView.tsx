@@ -99,7 +99,7 @@ function BaseAnalyticsViewContent({
     if (shouldFetchData && effectiveOrganizationId) {
       fetchAnalyticsData();
     }
-  }, [shouldFetchData, effectiveOrganizationId, fetchAnalyticsData, groupComparison.selectedGroups]);
+  }, [shouldFetchData, effectiveOrganizationId, fetchAnalyticsData]);
 
   // Notify parent of data changes
   useEffect(() => {
