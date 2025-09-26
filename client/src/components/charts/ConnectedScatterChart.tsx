@@ -18,6 +18,23 @@ import type {
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import {
+  parseValue,
+  compareDatesByDay,
+  safeArrayAccess,
+  getFirstObjectValue,
+  hasValue,
+  hasDate,
+  safeDate
+} from '@/utils/data-safety';
+
+// Type definitions for chart data
+interface ScatterPoint {
+  x: number;
+  y: number;
+  date: unknown;
+  isPersonalBest: boolean;
+}
 
 // Register Chart.js components
 ChartJS.register(
@@ -165,27 +182,32 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
       // Create connected points by matching dates
       const connectedPoints = xData
-        .map((xPoint: any) => {
-          const yPoint = yData.find((y: any) => {
-            const yDate = y.date instanceof Date ? y.date : new Date(y.date);
-            const xDate = xPoint.date instanceof Date ? xPoint.date : new Date(xPoint.date);
-            return yDate.toISOString().split('T')[0] === xDate.toISOString().split('T')[0];
+        .map((xPoint: unknown) => {
+          if (!hasValue(xPoint) || !hasDate(xPoint)) return null;
+
+          const yPoint = yData.find((y: unknown) => {
+            if (!hasDate(y)) return false;
+            return compareDatesByDay(y.date, xPoint.date);
           });
-          
-          return yPoint ? {
-            // Convert values to numbers to handle string values
-            x: typeof xPoint.value === 'string' ? parseFloat(xPoint.value) : xPoint.value,
-            y: typeof yPoint.value === 'string' ? parseFloat(yPoint.value) : yPoint.value,
+
+          if (!yPoint || !hasValue(yPoint)) return null;
+
+          return {
+            // Safely convert values to numbers
+            x: parseValue(xPoint.value),
+            y: parseValue(yPoint.value),
             date: xPoint.date,
-            isPersonalBest: xPoint.isPersonalBest || yPoint.isPersonalBest
-          } : null;
+            isPersonalBest: Boolean((xPoint as any).isPersonalBest || (yPoint as any).isPersonalBest)
+          };
         })
-        .filter(Boolean)
-        .sort((a: any, b: any) => {
-        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
-        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
-        return dateA.getTime() - dateB.getTime();
-      });
+        .filter((point: ScatterPoint | null): point is ScatterPoint => point !== null)
+        .sort((a: ScatterPoint, b: ScatterPoint) => {
+          const dateA = safeDate(a.date);
+          const dateB = safeDate(b.date);
+
+          if (!dateA || !dateB) return 0;
+          return dateA.getTime() - dateB.getTime();
+        });
 
       const color = colors[index % colors.length];
       const isHighlighted = athlete.athleteId === highlightAthlete;
@@ -477,19 +499,27 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               <div className="text-lg font-bold text-blue-600">
                 {/* Calculate overall improvement direction */}
                 {(() => {
-                  const athleteData = Object.values(scatterData.athleteTrends)[0] as any;
-                  if (!athleteData) return 'N/A';
-                  
+                  const athleteData = getFirstObjectValue(scatterData.athleteTrends);
+                  if (!athleteData || !athleteData.metrics) return 'N/A';
+
                   const xData = athleteData.metrics[scatterData.xMetric] || [];
                   const yData = athleteData.metrics[scatterData.yMetric] || [];
-                  
+
                   if (xData.length < 2 || yData.length < 2) return 'N/A';
-                  
-                  // Convert values to numbers to handle string values
-                  const xLastValue = typeof xData[xData.length - 1].value === 'string' ? parseFloat(xData[xData.length - 1].value) : xData[xData.length - 1].value;
-                  const xFirstValue = typeof xData[0].value === 'string' ? parseFloat(xData[0].value) : xData[0].value;
-                  const yLastValue = typeof yData[yData.length - 1].value === 'string' ? parseFloat(yData[yData.length - 1].value) : yData[yData.length - 1].value;
-                  const yFirstValue = typeof yData[0].value === 'string' ? parseFloat(yData[0].value) : yData[0].value;
+
+                  // Safely access array elements and convert values
+                  const xLastPoint = safeArrayAccess(xData, xData.length - 1);
+                  const xFirstPoint = safeArrayAccess(xData, 0);
+                  const yLastPoint = safeArrayAccess(yData, yData.length - 1);
+                  const yFirstPoint = safeArrayAccess(yData, 0);
+
+                  if (!xLastPoint || !xFirstPoint || !yLastPoint || !yFirstPoint) return 'N/A';
+                  if (!hasValue(xLastPoint) || !hasValue(xFirstPoint) || !hasValue(yLastPoint) || !hasValue(yFirstPoint)) return 'N/A';
+
+                  const xLastValue = parseValue(xLastPoint.value);
+                  const xFirstValue = parseValue(xFirstPoint.value);
+                  const yLastValue = parseValue(yLastPoint.value);
+                  const yFirstValue = parseValue(yFirstPoint.value);
 
                   const xImprovement = xLastValue - xFirstValue;
                   const yImprovement = yLastValue - yFirstValue;
