@@ -35,13 +35,19 @@ interface RadarChartProps {
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
+  selectedAthleteIds?: string[];
+  onAthleteSelectionChange?: (athleteIds: string[]) => void;
+  maxAthletes?: number;
 }
 
-export function RadarChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export function RadarChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete,
+  selectedAthleteIds,
+  onAthleteSelectionChange,
+  maxAthletes
 }: RadarChartProps) {
   // Transform data for radar chart
   const radarData = useMemo(() => {
