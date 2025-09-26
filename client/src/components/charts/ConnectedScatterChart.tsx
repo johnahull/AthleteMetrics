@@ -400,7 +400,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [data, statistics, highlightAthlete, displayedAthletes, athleteToggles, showGroupAverage]);
 
   // Chart options
-  const options: ChartOptions<'scatter'> = {
+  const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -473,10 +473,15 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             return {};
           }
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * 0.1;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * 0.1;
+          const xRange = Math.max(...xValues) - Math.min(...xValues);
+          const yRange = Math.max(...yValues) - Math.min(...yValues);
+          const xPadding = xRange > 0 ? xRange * 0.1 : 1; // Fallback padding if all values are same
+          const yPadding = yRange > 0 ? yRange * 0.1 : 1; // Fallback padding if all values are same
+
+          const xMin = Math.min(...xValues) - xPadding;
+          const xMax = Math.max(...xValues) + xPadding;
+          const yMin = Math.min(...yValues) - yPadding;
+          const yMax = Math.max(...yValues) + yPadding;
 
           const colorMap = {
             green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
@@ -593,7 +598,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       intersect: false,
       mode: 'point'
     }
-  };
+  }), [scatterData, config, showQuadrants, statistics]);
 
   // Helper functions for athlete toggles
   const toggleAthlete = (athleteId: string) => {
