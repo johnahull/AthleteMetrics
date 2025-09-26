@@ -16,8 +16,10 @@ import { ChartContainer } from '@/components/charts/ChartContainer';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
+import { useGroupComparison } from '@/hooks/useGroupComparison';
 import { FilterPanel } from './FilterPanel';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
+import { GroupSelector } from './GroupSelector';
 
 import type { AnalysisType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
@@ -61,7 +63,7 @@ function BaseAnalyticsViewContent({
   title,
   description,
   defaultAnalysisType = 'individual',
-  allowedAnalysisTypes = ['individual', 'intra_group', 'inter_group'],
+  allowedAnalysisTypes = ['individual', 'intra_group', 'multi_group'],
   showAnalysisTypeTabs = true,
   showIndividualAthleteSelection = true,
   showMultiAthleteSelection = true,
@@ -99,7 +101,7 @@ function BaseAnalyticsViewContent({
     if (shouldFetchData && effectiveOrganizationId) {
       fetchAnalyticsData();
     }
-  }, [shouldFetchData, effectiveOrganizationId, fetchAnalyticsData, groupComparison.selectedGroups]);
+  }, [shouldFetchData, effectiveOrganizationId, fetchAnalyticsData]);
 
   // Notify parent of data changes
   useEffect(() => {
@@ -125,7 +127,7 @@ function BaseAnalyticsViewContent({
     switch (type) {
       case 'individual': return <User className="h-4 w-4" />;
       case 'intra_group': return <Users className="h-4 w-4" />;
-      case 'inter_group': return <BarChart3 className="h-4 w-4" />;
+      case 'multi_group': return <BarChart3 className="h-4 w-4" />;
     }
   };
 
@@ -133,7 +135,7 @@ function BaseAnalyticsViewContent({
     switch (type) {
       case 'individual': return 'Individual Athlete';
       case 'intra_group': return 'Multi-Athlete';
-      case 'inter_group': return 'Inter-Group Comparison';
+      case 'multi_group': return 'Multi-Group Comparison';
     }
   };
 
@@ -143,7 +145,7 @@ function BaseAnalyticsViewContent({
         return 'Analyze a single athlete\'s performance over time, compare against group averages, and track personal records and improvement trends.';
       case 'intra_group':
         return 'Compare multiple athletes within the same group (team, age group, gender, etc.) to identify top performers, outliers, and distribution patterns.';
-      case 'inter_group':
+      case 'multi_group':
         return 'Compare performance metrics across different groups (teams vs teams, age groups, gender differences) to identify group-level patterns and benchmarks.';
     }
   };

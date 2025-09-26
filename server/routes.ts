@@ -2380,8 +2380,8 @@ export async function registerRoutes(app: Express) {
       const userRole = currentUser.role;
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       
-      // Check if the request is for coach analytics (inter/intra group analysis)
-      const isCoachAnalyticsRequest = validatedRequest.analysisType === 'inter_group' ||
+      // Check if the request is for coach analytics (multi/intra group analysis)
+      const isCoachAnalyticsRequest = validatedRequest.analysisType === 'multi_group' ||
                                     validatedRequest.analysisType === 'intra_group';
       
       if (isCoachAnalyticsRequest && !userIsSiteAdmin && userRole !== 'coach' && userRole !== 'org_admin') {

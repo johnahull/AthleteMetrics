@@ -250,14 +250,14 @@ export function MultiLineChart({
           borderColor = 'rgba(59, 130, 246, 1)'; // Blue for all metrics
           const style = getMetricStyle(metricIndex);
           label = metricLabel; // Just the metric name
-          borderDash = style.dash; // Use line styles to distinguish metrics
+          borderDash = [...style.dash]; // Use line styles to distinguish metrics
         } else {
           // Multi-athlete analysis: different colors for athletes, dash patterns for metrics
           const baseColor = getAthleteColor(athleteIndex);
           const style = getMetricStyle(metricIndex);
           borderColor = baseColor; // Keep full opacity for clarity
           label = `${athlete.athleteName} - ${metricLabel}`;
-          borderDash = style.dash;
+          borderDash = [...style.dash];
         }
 
         datasets.push({
@@ -499,7 +499,7 @@ export function MultiLineChart({
                     <div className="flex items-center space-x-2 min-w-0 flex-1">
                       <LegendLine
                         color={isSingleAthlete ? 'rgba(59, 130, 246, 1)' : 'rgba(75, 85, 99, 1)'}
-                        dashPattern={style.dash}
+                        dashPattern={[...style.dash]}
                       />
                       <span className="text-xs">
                         <strong>{style.name}:</strong> {label} ({unit}) {isLowerBetter ? '↓' : '↑'}

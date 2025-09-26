@@ -47,6 +47,7 @@ const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default:
 const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
+const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
 interface ChartContainerProps {
   title: string;
@@ -107,6 +108,8 @@ export function ChartContainer({
         return ConnectedScatterChart;
       case 'multi_line':
         return MultiLineChart;
+      case 'violin_plot':
+        return ViolinChart;
       // These cases are handled explicitly, so return null for generic component
       case 'line_chart':
       case 'radar_chart':
@@ -376,9 +379,9 @@ export function getRecommendedChartType(
       return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   } else {
-    // Group analysis (intra_group or inter_group)
+    // Group analysis (intra_group or multi_group)
     if (metricCount === 1) {
-      return timeframeType === 'best' ? 'distribution' : 'time_series_box_swarm';
+      return timeframeType === 'best' ? 'box_swarm_combo' : 'time_series_box_swarm';
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {

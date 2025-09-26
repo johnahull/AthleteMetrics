@@ -17,7 +17,7 @@ import type { TimeframeConfig, TimeframeType, TimePeriod } from '@shared/analyti
 interface TimeframeSelectorProps {
   timeframe: TimeframeConfig;
   onTimeframeChange: (timeframe: TimeframeConfig) => void;
-  analysisType?: 'individual' | 'intra_group' | 'inter_group';
+  analysisType?: 'individual' | 'intra_group' | 'multi_group';
   showRecommendations?: boolean;
   className?: string;
 }
@@ -114,7 +114,7 @@ export function TimeframeSelector({
           { type: 'best' as TimeframeType, period: 'this_year' as TimePeriod, reason: 'Current season comparison' },
           { type: 'trends' as TimeframeType, period: 'all_time' as TimePeriod, reason: 'Complete group dynamics' }
         ];
-      case 'inter_group':
+      case 'multi_group':
         return [
           { type: 'best' as TimeframeType, period: 'this_year' as TimePeriod, reason: 'Fair group comparison' },
           { type: 'best' as TimeframeType, period: 'all_time' as TimePeriod, reason: 'Historical comparison' }

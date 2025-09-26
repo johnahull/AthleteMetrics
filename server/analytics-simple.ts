@@ -94,8 +94,8 @@ export class AnalyticsService {
       // Group analysis
       if (metricCount === 1) {
         if (timeframeType === 'best') {
-          // For intra-group analysis with 1 metric and best timeframe, use same charts as individual
-          baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart');
+          // For group analysis with 1 metric and best timeframe, include multi-group comparison charts
+          baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart', 'violin_plot');
         } else {
           baseCharts.push('time_series_box_swarm', 'line_chart');
         }

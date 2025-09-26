@@ -98,8 +98,8 @@ describe('MultiLineChart', () => {
   };
 
   const mockStatistics: Record<string, StatisticalSummary> = {
-    'DASH_40YD': { mean: 4.5, median: 4.4, standardDeviation: 0.3, min: 4.0, max: 5.0 },
-    'VERTICAL_JUMP': { mean: 30, median: 30, standardDeviation: 4, min: 22, max: 38 }
+    'DASH_40YD': { count: 10, mean: 4.5, median: 4.4, std: 0.3, variance: 0.09, min: 4.0, max: 5.0, percentiles: { p5: 4.1, p10: 4.2, p25: 4.3, p50: 4.4, p75: 4.6, p90: 4.8, p95: 4.9 } },
+    'VERTICAL_JUMP': { count: 10, mean: 30, median: 30, std: 4, variance: 16, min: 22, max: 38, percentiles: { p5: 23, p10: 24, p25: 27, p50: 30, p75: 33, p90: 36, p95: 37 } }
   };
 
   const defaultProps = {

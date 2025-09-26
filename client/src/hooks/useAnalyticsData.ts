@@ -331,7 +331,7 @@ export function useAnalyticsCacheWarming(organizationId: string, athleteId?: str
         athleteId,
       },
       {
-        analysisType: 'inter_group',
+        analysisType: 'multi_group',
         filters: { organizationId },
         metrics: { primary: 'VERTICAL_JUMP', additional: [] },
         timeframe: { type: 'trends', period: 'last_90_days' },
