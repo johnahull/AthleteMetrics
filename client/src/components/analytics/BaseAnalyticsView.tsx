@@ -21,6 +21,7 @@ import { AnalyticsToolbar } from './AnalyticsToolbar';
 
 import type { AnalysisType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
+import { devLog } from '@/utils/dev-logger';
 
 interface BaseAnalyticsViewProps {
   // Required props
@@ -151,7 +152,7 @@ function BaseAnalyticsViewContent({
   const chartData = useMemo(() => {
     if (!state.analyticsData) return null;
 
-    console.log('BaseAnalyticsView chartData processing:', {
+    devLog.log('BaseAnalyticsView chartData processing:', {
       chartType: state.selectedChartType,
       timeframeType: state.timeframe.type,
       hasData: !!state.analyticsData.data,

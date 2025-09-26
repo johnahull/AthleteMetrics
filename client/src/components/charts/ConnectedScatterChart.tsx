@@ -57,7 +57,6 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
   // Use external selection if provided, otherwise use internal state
   const effectiveSelectedIds = selectedAthleteIds || internalSelectedIds;
-  const handleSelectionChange = onAthleteSelectionChange || setInternalSelectedIds;
   // Get all available athletes sorted by performance
   const allAthletes = useMemo(() => {
     if (!data || data.length === 0) return [];

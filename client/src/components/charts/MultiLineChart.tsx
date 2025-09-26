@@ -8,7 +8,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import type { 
@@ -251,18 +252,18 @@ export function MultiLineChart({
       },
       tooltip: {
         callbacks: {
-          title: (context) => {
+          title: (context: any) => {
             const dateIndex = context[0].dataIndex;
             const dateStr = multiLineData?.sortedDates[dateIndex];
             return dateStr ? new Date(dateStr).toLocaleDateString() : '';
           },
-          label: (context) => {
+          label: (context: any) => {
             const value = context.parsed.y;
             if (value === null) return '';
 
             return `${context.dataset.label}: ${value.toFixed(1)}%`;
           },
-          afterLabel: (context) => {
+          afterLabel: (context: any) => {
             // Find the actual value for this data point
             const datasetLabel = context.dataset.label || '';
             const [athleteName, metricName] = datasetLabel.split(' - ');
@@ -327,7 +328,7 @@ export function MultiLineChart({
           display: true
         },
         ticks: {
-          callback: (value) => `${value}%`
+          callback: (value: any) => `${value}%`
         }
       }
     },

@@ -6,14 +6,15 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '../ErrorBoundary';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
   ChartType,
   StatisticalSummary,
   TrendData,
-  MultiMetricData 
+  MultiMetricData
 } from '@shared/analytics-types';
+import { devLog } from '@/utils/dev-logger';
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
@@ -131,7 +132,7 @@ export function ChartContainer({
 
   // Determine which data to pass based on chart type
   const chartData = useMemo(() => {
-    console.log('ChartContainer Debug:', {
+    devLog.log('ChartContainer Debug:', {
       chartType,
       dataLength: data?.length || 0,
       trendsLength: trends?.length || 0,
@@ -209,7 +210,7 @@ export function ChartContainer({
   }
 
   if (!chartData || (Array.isArray(chartData) && chartData.length === 0)) {
-    console.log('ChartContainer: No data available', {
+    devLog.log('ChartContainer: No data available', {
       chartType,
       hasChartData: !!chartData,
       isArray: Array.isArray(chartData),

@@ -9,14 +9,15 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, Download, Users, BarChart3, Trophy } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
+import { devLog } from '@/utils/dev-logger';
 
 export function CoachAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
-  const { user } = useAuth();
+  const { user, organizationContext } = useAuth();
 
   // Debug organization context
   React.useEffect(() => {
-    console.log('CoachAnalytics - User context:', {
+    devLog.log('CoachAnalytics - User context:', {
       userId: user?.id,
       currentOrganization: user?.currentOrganization,
       organizationContext: user?.currentOrganization?.id
@@ -84,7 +85,7 @@ export function CoachAnalytics() {
     <BaseAnalyticsView
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
-      organizationId={user?.primaryOrganizationId}
+      organizationId={organizationContext || undefined}
       defaultAnalysisType="inter_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'inter_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}
