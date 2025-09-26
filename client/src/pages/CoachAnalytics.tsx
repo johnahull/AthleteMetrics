@@ -237,6 +237,7 @@ export function CoachAnalytics() {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify(request)
       });
 
