@@ -110,12 +110,6 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       };
 
     case 'SET_ANALYSIS_TYPE':
-      console.log('🔄 Analysis Type Change:', {
-        from: state.analysisType,
-        to: action.payload,
-        selectedAthleteId: state.selectedAthleteId,
-        selectedAthlete: state.selectedAthlete?.name
-      });
       return {
         ...state,
         analysisType: action.payload,
@@ -300,16 +294,6 @@ export function AnalyticsProvider({
       )
     );
 
-    // Debug the shouldFetchData logic
-    if (state.analysisType === 'individual') {
-      console.log('🔍 shouldFetchData check for individual:', {
-        organizationId: !!state.filters.organizationId,
-        analysisType: state.analysisType,
-        selectedAthleteId: state.selectedAthleteId,
-        selectedAthlete: state.selectedAthlete?.name,
-        shouldFetchData
-      });
-    }
 
     // Determine chart data based on chart type
     const chartData = state.analyticsData ? (() => {

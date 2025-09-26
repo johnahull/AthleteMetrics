@@ -134,17 +134,6 @@ export function useAnalyticsDataFetcher() {
         athleteId: (state.analysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
 
-      console.log('🚀 Analytics request being sent:', {
-        analysisType: request.analysisType,
-        organizationId: request.filters.organizationId,
-        selectedAthleteId: state.selectedAthleteId,
-        athleteId: request.athleteId,
-        selectedAthlete: state.selectedAthlete?.name,
-        metrics: request.metrics,
-        timeframe: request.timeframe
-      });
-      console.log('📊 Current state analysis type:', state.analysisType);
-      console.log('🎯 Should fetch data:', shouldFetchData);
 
       // Fetch CSRF token first
       const csrfResponse = await fetch('/api/csrf-token', {
