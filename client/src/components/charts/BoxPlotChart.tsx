@@ -22,7 +22,8 @@ import type {
   ChartDataPoint,
   ChartConfiguration,
   StatisticalSummary,
-  BoxPlotData
+  BoxPlotData,
+  GroupDefinition
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -50,6 +51,7 @@ interface BoxPlotChartProps {
   highlightAthlete?: string;
   showAllPoints?: boolean; // Option to show all data points (swarm style)
   showAthleteNames?: boolean; // Option to show athlete names next to points
+  selectedGroups?: GroupDefinition[]; // For multi-group analysis
 }
 
 export const BoxPlotChart = React.memo(function BoxPlotChart({
@@ -58,7 +60,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   statistics,
   highlightAthlete,
   showAllPoints = false,
-  showAthleteNames = false
+  showAthleteNames = false,
+  selectedGroups
 }: BoxPlotChartProps) {
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
@@ -159,7 +162,259 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   const boxPlotData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
+    // Check if this is multi-group analysis
+    const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
 
+    if (isMultiGroup) {
+      // Multi-group box plot: one box per group
+      const datasets: any[] = [];
+      const labels: string[] = [];
+
+      selectedGroups.forEach((group, groupIndex) => {
+        // Filter data for this group
+        const groupData = data.filter(point =>
+          group.memberIds.includes(point.athleteId)
+        );
+
+        if (groupData.length === 0) return;
+
+        // Group by metric for this group
+        const metricGroups = groupData.reduce((groups, point) => {
+          if (!groups[point.metric]) {
+            groups[point.metric] = [];
+          }
+          const numericValue = safeNumber(point.value);
+          if (!isNaN(numericValue)) {
+            groups[point.metric].push(numericValue);
+          }
+          return groups;
+        }, {} as Record<string, number[]>);
+
+        // Process each metric for this group
+        Object.keys(metricGroups).forEach((metric, metricIndex) => {
+          if (groupIndex === 0) {
+            // Only add label once (for first group)
+            labels[metricIndex] = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+          }
+
+          const values = metricGroups[metric].sort((a, b) => a - b);
+          if (values.length === 0) return;
+
+          // Calculate statistics for this group
+          const sortedValues = [...values].sort((a, b) => a - b);
+          const count = sortedValues.length;
+          const sum = sortedValues.reduce((acc, val) => acc + val, 0);
+          const mean = sum / count;
+          const min = Math.min(...sortedValues);
+          const max = Math.max(...sortedValues);
+
+          const getPercentile = (p: number) => {
+            const index = (p / 100) * (count - 1);
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+            if (lower === upper) return sortedValues[lower];
+            const weight = index - lower;
+            return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+          };
+
+          const stats = {
+            count,
+            mean,
+            median: getPercentile(50),
+            min,
+            max,
+            std: 0,
+            variance: 0,
+            percentiles: {
+              p5: getPercentile(5),
+              p10: getPercentile(10),
+              p25: getPercentile(25),
+              p50: getPercentile(50),
+              p75: getPercentile(75),
+              p90: getPercentile(90),
+              p95: getPercentile(95)
+            }
+          };
+
+          // Position calculation for multi-group layout
+          const boxWidth = 0.15; // Narrower boxes for multiple groups
+          const groupSpacing = 0.8 / selectedGroups.length; // Space groups within metric
+          const baseX = metricIndex;
+          const groupOffset = (groupIndex - (selectedGroups.length - 1) / 2) * groupSpacing;
+          const xPos = baseX + groupOffset;
+
+          // Group colors - use the SERIES array from chart config
+          const groupColors = CHART_CONFIG.COLORS.SERIES;
+          const groupColor = groupColors[groupIndex % groupColors.length];
+          const groupColorLight = groupColor + '40'; // Add transparency
+
+          // Box rectangle (Q1 to Q3)
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+            data: [
+              { x: xPos - boxWidth/2, y: stats.percentiles.p25 },
+              { x: xPos + boxWidth/2, y: stats.percentiles.p25 },
+              { x: xPos + boxWidth/2, y: stats.percentiles.p75 },
+              { x: xPos - boxWidth/2, y: stats.percentiles.p75 },
+              { x: xPos - boxWidth/2, y: stats.percentiles.p25 }
+            ],
+            type: 'line',
+            backgroundColor: groupColorLight,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+            pointRadius: 0,
+            showLine: true,
+            fill: true,
+            order: 3
+          });
+
+          // Median line
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+            data: [
+              { x: xPos - boxWidth/2, y: stats.percentiles.p50 },
+              { x: xPos + boxWidth/2, y: stats.percentiles.p50 }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 2
+          });
+
+          // Whiskers
+          const iqr = stats.percentiles.p75 - stats.percentiles.p25;
+          const lowerWhisker = Math.max(stats.min, stats.percentiles.p25 - 1.5 * iqr);
+          const upperWhisker = Math.min(stats.max, stats.percentiles.p75 + 1.5 * iqr);
+
+          // Lower whisker
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+            data: [
+              { x: xPos, y: stats.percentiles.p25 },
+              { x: xPos, y: lowerWhisker }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+
+          // Upper whisker
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+            data: [
+              { x: xPos, y: stats.percentiles.p75 },
+              { x: xPos, y: upperWhisker }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+
+          // Swarm points for all players in this group
+          if (showAllPoints) {
+            const groupPoints = groupData
+              .filter(d => d.metric === metric)
+              .map((point) => {
+                const jitterRange = boxWidth * 0.8; // Jitter within the box width
+                const jitter = generateDeterministicJitter(point.athleteId, jitterRange);
+                const numericValue = safeNumber(point.value);
+
+                if (isNaN(numericValue)) return null;
+
+                const outliers = values.filter(v =>
+                  v < stats.percentiles.p25 - 1.5 * iqr ||
+                  v > stats.percentiles.p75 + 1.5 * iqr
+                );
+                const isOutlier = outliers.includes(numericValue);
+
+                return {
+                  x: xPos + jitter,
+                  y: numericValue,
+                  athleteId: point.athleteId,
+                  athleteName: point.athleteName,
+                  teamName: point.teamName,
+                  groupName: group.name,
+                  isOutlier
+                };
+              })
+              .filter((point): point is NonNullable<typeof point> => point !== null);
+
+            // Regular points
+            const regularPoints = groupPoints.filter(p => !p.isOutlier);
+            if (regularPoints.length > 0) {
+              datasets.push({
+                label: `${group.name} Players`,
+                data: regularPoints,
+                type: 'scatter',
+                backgroundColor: groupColorLight,
+                borderColor: groupColor,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+                showLine: false,
+                order: 5
+              });
+            }
+
+            // Outlier points
+            const outlierPoints = groupPoints.filter(p => p.isOutlier);
+            if (outlierPoints.length > 0) {
+              datasets.push({
+                label: `${group.name} Outliers`,
+                data: outlierPoints,
+                type: 'scatter',
+                backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
+                borderColor: CHART_CONFIG.COLORS.AVERAGE,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+                showLine: false,
+                order: 1
+              });
+            }
+          }
+
+          // Highlight specific athlete if provided
+          if (highlightAthlete) {
+            const athleteData = groupData.find(d =>
+              d.athleteId === highlightAthlete && d.metric === metric
+            );
+
+            if (athleteData) {
+              const numericValue = safeNumber(athleteData.value);
+              datasets.push({
+                label: `${athleteData.athleteName}`,
+                data: [{ x: xPos, y: numericValue }],
+                type: 'scatter',
+                backgroundColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+                borderColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.HIGHLIGHTED,
+                pointStyle: 'star',
+                showLine: false,
+                order: 0
+              });
+            }
+          }
+        });
+      });
+
+      return {
+        labels,
+        datasets
+      };
+    }
+
+    // Original single-group logic
     // Group data by metric
     const metricGroups = data.reduce((groups, point) => {
       if (!groups[point.metric]) {
@@ -426,7 +681,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       ),
       datasets
     };
-  }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames]);
+  }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames, selectedGroups]);
 
   // Chart options
   const options: ChartOptions<'scatter'> = {
@@ -525,9 +780,14 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const rawData = context.raw as any;
             const result = [];
 
-            // Add team info for individual athlete points
+            // Add team and group info for individual athlete points
             if (rawData && rawData.athleteName) {
               result.push(`Team: ${rawData.teamName || 'Independent'}`);
+
+              // Add group info for multi-group analysis
+              if (rawData.groupName) {
+                result.push(`Group: ${rawData.groupName}`);
+              }
 
               // Add percentile information
               if (stats) {

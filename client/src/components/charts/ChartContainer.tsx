@@ -12,7 +12,8 @@ import type {
   ChartType,
   StatisticalSummary,
   TrendData,
-  MultiMetricData
+  MultiMetricData,
+  GroupDefinition
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 
@@ -65,6 +66,7 @@ interface ChartContainerProps {
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   selectedDates?: string[];
   metric?: string;
+  selectedGroups?: GroupDefinition[];
   onExport?: () => void;
   onFullscreen?: () => void;
   className?: string;
@@ -86,6 +88,7 @@ export function ChartContainer({
   onAthleteSelectionChange,
   selectedDates,
   metric,
+  selectedGroups,
   onExport,
   onFullscreen,
   className
@@ -328,6 +331,7 @@ export function ChartContainer({
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
                     showAllPoints={true}
+                    selectedGroups={selectedGroups}
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
                   <TimeSeriesBoxSwarmChart
