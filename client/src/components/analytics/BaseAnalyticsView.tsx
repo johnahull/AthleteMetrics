@@ -18,6 +18,8 @@ import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsCont
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
 import { useGroupComparison } from '@/hooks/useGroupComparison';
 import { FilterPanel } from './FilterPanel';
+import { MetricsSelector } from './MetricsSelector';
+import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
 
@@ -325,6 +327,21 @@ function BaseAnalyticsViewContent({
             onReset={() => resetFilters(effectiveOrganizationId || '')}
             effectiveOrganizationId={effectiveOrganizationId || undefined}
           />
+        )}
+
+        {/* Metrics and Timeframe for Multi-Group */}
+        {state.analysisType === 'multi_group' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <MetricsSelector
+              metrics={state.metrics}
+              onMetricsChange={updateMetrics}
+            />
+            <TimeframeSelector
+              timeframe={state.timeframe}
+              onTimeframeChange={updateTimeframe}
+              analysisType={state.analysisType}
+            />
+          </div>
         )}
 
         {/* Additional Filters Slot */}
