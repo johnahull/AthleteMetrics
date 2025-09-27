@@ -689,50 +689,61 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     maintainAspectRatio: false,
     animation: {
       onComplete: function() {
-        // Render athlete names if enabled
-        if (localShowAthleteNames && showAllPoints && chartRef.current) {
-          const chart = chartRef.current;
-          const ctx = chart.ctx;
-          const chartArea = chart.chartArea;
+        try {
+          // Render athlete names if enabled
+          if (localShowAthleteNames && showAllPoints && chartRef.current) {
+            const chart = chartRef.current;
 
-          if (ctx && chartArea) {
-            // Save current context state
-            ctx.save();
+            // Additional safety checks to prevent ownerDocument errors
+            if (!chart || !chart.canvas || !chart.canvas.ownerDocument) {
+              return;
+            }
 
-            // Set text styling
-            ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
-            ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
+            const ctx = chart.ctx;
+            const chartArea = chart.chartArea;
 
-            // Use memoized label position calculation
-            const labelPositions = calculateLabelPositions(chart, ctx, chartArea);
+            if (ctx && chartArea && ctx.canvas && ctx.canvas.ownerDocument) {
+              // Save current context state
+              ctx.save();
 
-            // Efficient collision resolution using spatial indexing
-            const resolvedPositions = resolveLabelsWithSpatialIndex(labelPositions, chartArea, {
-              maxLabels: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_LABELS,
-              padding: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING,
-              textHeight: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT,
-              gridSize: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.GRID_SIZE,
-              maxIterations: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_ITERATIONS,
-            });
-
-            // Second pass: render all labels with resolved positions
-            resolvedPositions.forEach(label => {
-              const padding = 2;
-
-              // Add a subtle background for better readability
-              ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_DARK;
-              ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
-
-              // Restore text color and draw text
+              // Set text styling
+              ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
               ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
-              ctx.fillText(label.text, label.x, label.y);
-            });
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
 
-            // Restore context state
-            ctx.restore();
+              // Use memoized label position calculation
+              const labelPositions = calculateLabelPositions(chart, ctx, chartArea);
+
+              // Efficient collision resolution using spatial indexing
+              const resolvedPositions = resolveLabelsWithSpatialIndex(labelPositions, chartArea, {
+                maxLabels: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_LABELS,
+                padding: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING,
+                textHeight: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT,
+                gridSize: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.GRID_SIZE,
+                maxIterations: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_ITERATIONS,
+              });
+
+              // Second pass: render all labels with resolved positions
+              resolvedPositions.forEach(label => {
+                const padding = 2;
+
+                // Add a subtle background for better readability
+                ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_DARK;
+                ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
+
+                // Restore text color and draw text
+                ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
+                ctx.fillText(label.text, label.x, label.y);
+              });
+
+              // Restore context state
+              ctx.restore();
+            }
           }
+        } catch (error) {
+          // Silently handle canvas access errors to prevent chart crashes
+          console.warn('BoxPlotChart animation error:', error);
         }
       }
     },
@@ -887,10 +898,16 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     return () => {
       if (chartRef.current) {
         try {
-          chartRef.current.destroy?.();
+          // Additional safety checks before cleanup
+          if (chartRef.current.canvas && chartRef.current.canvas.ownerDocument) {
+            chartRef.current.destroy?.();
+          }
         } catch (error) {
           // Ignore cleanup errors
+          console.warn('BoxPlotChart cleanup error:', error);
         }
+        // Clear the ref regardless
+        chartRef.current = null;
       }
     };
   }, []);
