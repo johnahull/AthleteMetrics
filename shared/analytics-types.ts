@@ -361,7 +361,7 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   },
   multi_group: {
     '1': {
-      best: ['box_swarm_combo', 'distribution', 'bar_chart', 'violin_plot'],
+      best: ['box_swarm_combo', 'violin_plot'],
       trends: ['time_series_box_swarm', 'multi_line']
     },
     '2': {
