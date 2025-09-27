@@ -428,10 +428,10 @@ function BaseAnalyticsViewContent({
 
         {/* Chart Display */}
         {(() => {
-          const shouldShowChart = !state.isLoading && !state.error && memoizedChartData && (
+          const shouldShowChart = !state.isLoading && !state.error && (
             state.analysisType === 'multi_group' ? 
               (selectedGroups.length >= 2 && groupChartData) : 
-              (state.analysisType === 'individual' ? state.selectedAthleteId : true)
+              (memoizedChartData && (state.analysisType === 'individual' ? state.selectedAthleteId : true))
           );
 
           if (state.analysisType === 'multi_group') {
