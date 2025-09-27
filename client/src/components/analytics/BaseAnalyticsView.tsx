@@ -156,7 +156,7 @@ function BaseAnalyticsViewContent({
     switch (type) {
       case 'individual': return 'Individual Athlete';
       case 'intra_group': return 'Multi-Athlete';
-      case 'multi_group': return 'Multi-Group Comparison';
+      case 'multi_group': return 'Multi-Group';
     }
   };
 
@@ -310,20 +310,22 @@ function BaseAnalyticsViewContent({
           </Card>
         )}
 
-        {/* Unified Filter Panel */}
-        <FilterPanel
-          filters={state.filters}
-          metrics={state.metrics}
-          timeframe={state.timeframe}
-          analysisType={state.analysisType}
-          availableTeams={state.availableTeams}
-          availableAthletes={state.availableAthletes}
-          onFiltersChange={updateFilters}
-          onMetricsChange={updateMetrics}
-          onTimeframeChange={updateTimeframe}
-          onReset={() => resetFilters(effectiveOrganizationId || '')}
-          effectiveOrganizationId={effectiveOrganizationId || undefined}
-        />
+        {/* Unified Filter Panel - Hidden for Multi-Group analysis */}
+        {state.analysisType !== 'multi_group' && (
+          <FilterPanel
+            filters={state.filters}
+            metrics={state.metrics}
+            timeframe={state.timeframe}
+            analysisType={state.analysisType}
+            availableTeams={state.availableTeams}
+            availableAthletes={state.availableAthletes}
+            onFiltersChange={updateFilters}
+            onMetricsChange={updateMetrics}
+            onTimeframeChange={updateTimeframe}
+            onReset={() => resetFilters(effectiveOrganizationId || '')}
+            effectiveOrganizationId={effectiveOrganizationId || undefined}
+          />
+        )}
 
         {/* Additional Filters Slot */}
         {additionalFilters}
