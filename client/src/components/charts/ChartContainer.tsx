@@ -221,7 +221,8 @@ export function ChartContainer({
       hasChartData: !!chartData,
       isArray: Array.isArray(chartData),
       length: Array.isArray(chartData) ? chartData.length : 'N/A',
-      dataType: typeof chartData
+      dataType: typeof chartData,
+      selectedGroups: selectedGroups?.length || 0
     });
     
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
@@ -234,7 +235,10 @@ export function ChartContainer({
         <CardContent className="flex-1">
           <Alert>
             <AlertDescription>
-              No data available for this chart. Try adjusting your filters or date range.
+              {selectedGroups && selectedGroups.length > 0 
+                ? `No data available for the selected groups (${selectedGroups.map(g => g.name).join(', ')}). Try selecting different groups or check if the groups have measurement data.`
+                : 'No data available for this chart. Try adjusting your filters or date range.'
+              }
             </AlertDescription>
           </Alert>
         </CardContent>

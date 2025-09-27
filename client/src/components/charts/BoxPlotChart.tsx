@@ -3,17 +3,14 @@ import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
   ChartOptions,
-  ScatterController,
-  LineController,
-  PointElement,
-  LineElement,
   ChartData,
-  TooltipItem,
-  LegendItem
+  Filler,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
@@ -35,13 +32,12 @@ import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spati
 ChartJS.register(
   CategoryScale,
   LinearScale,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
-  ScatterController,
-  LineController,
-  PointElement,
-  LineElement
+  Filler
 );
 
 interface BoxPlotChartProps {
@@ -841,32 +837,32 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     },
     scales: {
       x: {
-        type: 'linear',
-        position: 'bottom',
-        min: -0.5,
-        max: Object.keys(statistics || {}).length - 0.5,
-        ticks: {
-          stepSize: 1,
-          callback: (value) => {
-            const index = Number(value);
-            const metrics = Object.keys(statistics || {});
-            const metric = metrics[index];
-            return metric ? 
-              METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric : 
-              '';
-          }
-        },
+        type: selectedGroups ? 'linear' : 'category',
         title: {
           display: true,
-          text: 'Metrics'
-        }
+          text: config.xAxisLabel || (selectedGroups ? 'Groups' : 'Categories')
+        },
+        grid: {
+          display: false
+        },
+        ...(selectedGroups && {
+          min: -0.5,
+          max: selectedGroups.length - 0.5,
+          ticks: {
+            stepSize: 1,
+            callback: function(value: any) {
+              const index = Math.round(value);
+              return selectedGroups[index]?.name || '';
+            }
+          }
+        })
       },
       y: {
         type: 'linear',
         beginAtZero: false,
         title: {
           display: true,
-          text: 'Value'
+          text: config.yAxisLabel || 'Value'
         },
         ticks: {
           callback: (value) => {
@@ -920,6 +916,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     );
   }
 
+  // Use the processed data for the chart
+  const chartData = boxPlotData;
+  const chartOptions = options;
+
+  // Add error boundary wrapper for chart rendering
   return (
     <div className="w-full h-full">
       {/* Toggle control for athlete names - only show when swarm mode is enabled */}
@@ -936,12 +937,46 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         </div>
       )}
 
-      <Chart
-        ref={chartRef}
-        type="scatter"
-        data={boxPlotData}
-        options={options}
-      />
+      <div style={{ position: 'relative', height: '400px', width: '100%' }}>
+        {(() => {
+          try {
+            // Render chart only if there's data and options
+            if (!chartData || !chartOptions) {
+              return (
+                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                  <div className="text-center">
+                    <div className="text-lg font-medium mb-2">No Data Available</div>
+                    <div className="text-sm">
+                      {selectedGroups && selectedGroups.length > 0
+                        ? `No data found for the selected groups (${selectedGroups.map(g => g.name).join(', ')})`
+                        : 'No measurement data available for visualization'}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <Chart
+                type="scatter"
+                data={chartData}
+                options={chartOptions}
+                ref={chartRef}
+                key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
+              />
+            );
+          } catch (error) {
+            console.error('Chart render error:', error);
+            return (
+              <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="text-center">
+                  <div className="text-lg font-medium mb-2">Chart Error</div>
+                  <div className="text-sm">Unable to render chart. Please try refreshing.</div>
+                </div>
+              </div>
+            );
+          }
+        })()}
+      </div>
     </div>
   );
 });
@@ -950,26 +985,26 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 export function calculateBoxPlotStats(values: number[]): BoxPlotData {
   const sorted = [...values].sort((a, b) => a - b);
   const n = sorted.length;
-  
+
   const min = sorted[0];
   const max = sorted[n - 1];
-  
+
   const q1Index = Math.floor(n * 0.25);
   const medianIndex = Math.floor(n * 0.5);
   const q3Index = Math.floor(n * 0.75);
-  
+
   const q1 = sorted[q1Index];
-  const median = n % 2 === 0 ? 
-    (sorted[medianIndex - 1] + sorted[medianIndex]) / 2 : 
+  const median = n % 2 === 0 ?
+    (sorted[medianIndex - 1] + sorted[medianIndex]) / 2 :
     sorted[medianIndex];
   const q3 = sorted[q3Index];
-  
+
   const iqr = q3 - q1;
   const lowerFence = q1 - 1.5 * iqr;
   const upperFence = q3 + 1.5 * iqr;
-  
+
   const outliers = sorted.filter(v => v < lowerFence || v > upperFence);
-  
+
   return {
     min,
     q1,

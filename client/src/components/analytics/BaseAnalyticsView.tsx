@@ -427,11 +427,27 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* Chart Display */}
-        {!state.isLoading && !state.error && memoizedChartData && (
-          state.analysisType === 'multi_group' ? 
-            (selectedGroups.length >= 2 && groupChartData) : 
-            (state.analysisType === 'individual' ? state.selectedAthleteId : true)
-        ) && (
+        {(() => {
+          const shouldShowChart = !state.isLoading && !state.error && memoizedChartData && (
+            state.analysisType === 'multi_group' ? 
+              (selectedGroups.length >= 2 && groupChartData) : 
+              (state.analysisType === 'individual' ? state.selectedAthleteId : true)
+          );
+
+          if (state.analysisType === 'multi_group') {
+            devLog.log('Multi-group chart render check:', {
+              isLoading: state.isLoading,
+              hasError: !!state.error,
+              hasMemoizedChartData: !!memoizedChartData,
+              selectedGroupsCount: selectedGroups.length,
+              hasGroupChartData: !!groupChartData,
+              groupChartDataLength: groupChartData?.length || 0,
+              shouldShowChart
+            });
+          }
+
+          return shouldShowChart;
+        })() && (
           <>
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
