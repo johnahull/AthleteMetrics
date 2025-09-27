@@ -96,6 +96,27 @@ function BaseAnalyticsViewContent({
     effectiveOrganizationId
   } = useAnalyticsOperations();
 
+  // Group comparison functionality for multi-group analysis
+  const {
+    selectedGroups,
+    setSelectedGroups,
+    groupComparisonData,
+    chartData: groupChartData,
+    isLoading: isGroupLoading,
+    error: groupError,
+    isDataReady: isGroupDataReady
+  } = useGroupComparison({
+    organizationId: effectiveOrganizationId || '',
+    metrics: state.metrics,
+    athletes: state.availableAthletes.map(athlete => ({
+      id: athlete.id,
+      name: athlete.name,
+      team: athlete.teamName
+    })),
+    analyticsData: state.analyticsData,
+    isMainAnalyticsLoading: state.isLoading
+  });
+
   // Fetch data when conditions are met
   useEffect(() => {
     if (shouldFetchData && effectiveOrganizationId) {
@@ -248,6 +269,35 @@ function BaseAnalyticsViewContent({
                           {!state.selectedAthleteId && state.availableAthletes.length > 0 && (
                             <p className="text-xs text-orange-600">
                               Please select an athlete to view individual analysis.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Multi-Group Selection */}
+                      {type === 'multi_group' && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Create Groups for Comparison</label>
+                          <GroupSelector
+                            organizationId={effectiveOrganizationId || ''}
+                            athletes={state.availableAthletes.map(athlete => ({
+                              id: athlete.id,
+                              name: athlete.name,
+                              team: athlete.teamName
+                            }))}
+                            selectedGroups={selectedGroups}
+                            onGroupSelectionChange={setSelectedGroups}
+                            maxGroups={4}
+                          />
+
+                          {selectedGroups.length === 0 && (
+                            <p className="text-xs text-orange-600">
+                              Please create at least 2 groups to compare performance across different categories.
+                            </p>
+                          )}
+                          {selectedGroups.length === 1 && (
+                            <p className="text-xs text-orange-600">
+                              Please create at least one more group for comparison.
                             </p>
                           )}
                         </div>
