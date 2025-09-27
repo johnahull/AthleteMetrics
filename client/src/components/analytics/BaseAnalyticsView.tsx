@@ -410,7 +410,11 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* Chart Display */}
-        {!state.isLoading && !state.error && isDataReady && memoizedChartData && (
+        {!state.isLoading && !state.error && memoizedChartData && (
+          state.analysisType === 'multi_group' ? 
+            (selectedGroups.length >= 2 && groupChartData) : 
+            (state.analysisType === 'individual' ? state.selectedAthleteId : true)
+        ) && (
           <>
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
@@ -427,7 +431,7 @@ function BaseAnalyticsViewContent({
                       title={`${chartConfig.title} - ${formatChartTypeName(chartType)}`}
                       subtitle={chartConfig.subtitle}
                       chartType={chartType}
-                      data={memoizedChartData}
+                      data={state.analysisType === 'multi_group' && groupChartData ? groupChartData : memoizedChartData}
                       trends={state.analyticsData?.trends}
                       multiMetric={state.analyticsData?.multiMetric}
                       statistics={state.analyticsData?.statistics}
@@ -441,6 +445,7 @@ function BaseAnalyticsViewContent({
                       selectedDates={chartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
                       metric={chartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
                       onExport={handleExport}
+                      selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
                     />
                   </Suspense>
                 ))}
@@ -458,7 +463,7 @@ function BaseAnalyticsViewContent({
                   title={chartConfig.title}
                   subtitle={chartConfig.subtitle}
                   chartType={state.selectedChartType}
-                  data={memoizedChartData}
+                  data={state.analysisType === 'multi_group' && groupChartData ? groupChartData : memoizedChartData}
                   trends={state.analyticsData?.trends}
                   multiMetric={state.analyticsData?.multiMetric}
                   statistics={state.analyticsData?.statistics}
@@ -469,6 +474,7 @@ function BaseAnalyticsViewContent({
                   selectedDates={state.selectedChartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
                   metric={state.selectedChartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
                   onExport={handleExport}
+                  selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
                 />
               </Suspense>
             )}
@@ -476,7 +482,7 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* No Data Display */}
-        {!state.isLoading && !state.error && !isDataReady && (
+        {!state.isLoading && !state.error && !isDataReady && !memoizedChartData && (
           <Card>
             <CardContent className="flex items-center justify-center h-96">
               <div className="text-center">
@@ -488,6 +494,11 @@ function BaseAnalyticsViewContent({
                 {state.analysisType === 'individual' && !state.selectedAthleteId && (
                   <p className="text-sm text-muted-foreground">
                     Please select an athlete for individual analysis.
+                  </p>
+                )}
+                {state.analysisType === 'multi_group' && selectedGroups.length < 2 && (
+                  <p className="text-sm text-muted-foreground">
+                    Please create at least 2 groups to compare performance.
                   </p>
                 )}
               </div>
