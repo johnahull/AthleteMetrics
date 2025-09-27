@@ -160,9 +160,136 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
     // Check if this is multi-group analysis
     const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
+    
+    // Check if data is pre-aggregated (group comparison data)
+    const isPreAggregated = data.length > 0 && data[0].athleteId.startsWith('group-');
 
-    if (isMultiGroup) {
-      // Multi-group box plot: one box per group
+    if (isMultiGroup && isPreAggregated) {
+      // Handle pre-aggregated group data
+      const datasets: any[] = [];
+      const labels: string[] = [];
+      
+      // Group data by metric
+      const metricGroups = data.reduce((groups, point) => {
+        if (!groups[point.metric]) {
+          groups[point.metric] = [];
+        }
+        groups[point.metric].push(point);
+        return groups;
+      }, {} as Record<string, any[]>);
+      
+      Object.keys(metricGroups).forEach((metric, metricIndex) => {
+        labels[metricIndex] = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+        
+        metricGroups[metric].forEach((point, groupIndex) => {
+          if (!point.additionalData?.groupStats) return;
+          
+          const stats = point.additionalData.groupStats;
+          const groupName = point.athleteName;
+          
+          // Position calculation for multi-group layout
+          const boxWidth = 0.15;
+          const groupSpacing = 0.8 / metricGroups[metric].length;
+          const baseX = metricIndex;
+          const groupOffset = (groupIndex - (metricGroups[metric].length - 1) / 2) * groupSpacing;
+          const xPos = baseX + groupOffset;
+          
+          // Group colors
+          const groupColors = CHART_CONFIG.COLORS.SERIES;
+          const groupColor = groupColors[groupIndex % groupColors.length];
+          const groupColorLight = groupColor + '40';
+          
+          // Calculate percentiles from existing stats
+          const q1 = stats.median - (stats.stdDev * 0.674); // Approximate Q1
+          const q3 = stats.median + (stats.stdDev * 0.674); // Approximate Q3
+          
+          // Box rectangle (Q1 to Q3)
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+            data: [
+              { x: xPos - boxWidth/2, y: q1 },
+              { x: xPos + boxWidth/2, y: q1 },
+              { x: xPos + boxWidth/2, y: q3 },
+              { x: xPos - boxWidth/2, y: q3 },
+              { x: xPos - boxWidth/2, y: q1 }
+            ],
+            type: 'line',
+            backgroundColor: groupColorLight,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+            pointRadius: 0,
+            showLine: true,
+            fill: true,
+            order: 3
+          });
+          
+          // Median line
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+            data: [
+              { x: xPos - boxWidth/2, y: stats.median },
+              { x: xPos + boxWidth/2, y: stats.median }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 2
+          });
+          
+          // Whiskers (using min/max from stats)
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+            data: [
+              { x: xPos, y: q1 },
+              { x: xPos, y: stats.min }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+          
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+            data: [
+              { x: xPos, y: q3 },
+              { x: xPos, y: stats.max }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+          
+          // Mean point
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Mean`,
+            data: [{ x: xPos, y: stats.mean }],
+            type: 'scatter',
+            backgroundColor: 'white',
+            borderColor: groupColor,
+            borderWidth: 2,
+            pointRadius: 4,
+            order: 1
+          });
+        });
+      });
+      
+      return {
+        labels,
+        datasets
+      };
+    } else if (isMultiGroup) {
+      // Multi-group box plot: one box per group (original logic for individual athlete data)
       const datasets: any[] = [];
       const labels: string[] = [];
 
@@ -837,10 +964,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     },
     scales: {
       x: {
-        type: selectedGroups ? 'linear' : 'category',
+        type: 'linear' as const,
         title: {
           display: true,
-          text: config.xAxisLabel || (selectedGroups ? 'Groups' : 'Categories')
+          text: selectedGroups ? 'Groups' : 'Categories'
         },
         grid: {
           display: false
@@ -862,7 +989,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         beginAtZero: false,
         title: {
           display: true,
-          text: config.yAxisLabel || 'Value'
+          text: 'Value'
         },
         ticks: {
           callback: (value) => {
