@@ -1395,6 +1395,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   const groupColors = CHART_CONFIG.COLORS.SERIES;
                   const groupColor = groupColors[index % groupColors.length];
 
+                  // Extract metric from data if available
+                  const metric = data.length > 0 ? data[0].metric : '';
+
                   // Format values based on metric type
                   const formatValue = (value: number) => {
                     if (typeof value !== 'number' || isNaN(value)) return '-';
@@ -1446,24 +1449,27 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           </div>
 
           {/* Add metric context */}
-          {metric && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1">
-                <span>Metric:</span>
-                <span className="font-medium">
-                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
-                </span>
-                {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit && (
-                  <span>({METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG].unit})</span>
-                )}
-                <span className="ml-2">
-                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
-                    ? '• Lower values are better'
-                    : '• Higher values are better'}
-                </span>
+          {(() => {
+            const metric = data.length > 0 ? data[0].metric : '';
+            return metric ? (
+              <div className="mt-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <span>Metric:</span>
+                  <span className="font-medium">
+                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
+                  </span>
+                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit && (
+                    <span>({METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG].unit})</span>
+                  )}
+                  <span className="ml-2">
+                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
+                      ? '• Lower values are better'
+                      : '• Higher values are better'}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            ) : null;
+          })()}
         </div>
       )}
     </div>
