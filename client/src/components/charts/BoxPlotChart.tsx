@@ -1337,7 +1337,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
   // Add error boundary wrapper for chart rendering
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex flex-col">
       {/* Toggle control for athlete names - only show when swarm mode is enabled */}
       {showAllPoints && (
         <div className="flex items-center space-x-2 mb-4 px-2">
@@ -1352,7 +1352,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         </div>
       )}
 
-      <div style={{ position: 'relative', height: '400px', width: '100%' }}>
+      <div className="flex-1" style={{ position: 'relative', minHeight: '400px', width: '100%' }}>
         {(() => {
           try {
             // Render chart only if there's data and options
@@ -1395,10 +1395,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       </div>
 
       {/* Statistics Summary Table for Multi-Group Comparison */}
-      {selectedGroups && selectedGroups.length >= 2 && statistics && (
-        <div className="mt-6 px-2">
-          <div className="text-sm font-medium text-muted-foreground mb-3">Group Statistics Summary</div>
-          <div className="overflow-x-auto">
+      {selectedGroups && selectedGroups.length >= 2 && data && data.length > 0 && (
+        <div className="mt-6">
+          <div className="text-sm font-medium text-muted-foreground mb-3 px-2">Group Statistics Summary</div>
+          <div className="overflow-x-auto w-full">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b">
