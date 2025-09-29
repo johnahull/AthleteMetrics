@@ -8,6 +8,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, Title, Tooltip, Legend } 
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { getDateKey } from '@/utils/date-utils';
 
 ChartJS.register(CategoryScale, LinearScale, Title, Tooltip, Legend);
 
@@ -33,36 +34,52 @@ export function ViolinChart({
   const processedData = useMemo(() => {
     if (!data || data.length === 0) return [];
 
-    // Group data by grouping field (for multi-group analysis)
-    const groups = data.reduce((acc, point) => {
-      const groupKey = point.grouping || point.teamName || 'All Athletes';
-      if (!acc[groupKey]) {
-        acc[groupKey] = [];
-      }
-      acc[groupKey].push(point.value);
-      return acc;
-    }, {} as Record<string, number[]>);
+    try {
+      // Group data by grouping field (for multi-group analysis)
+      const groups = data.reduce((acc, point) => {
+        // Validate point data
+        if (!point || typeof point.value !== 'number' || isNaN(point.value)) {
+          devLog.warn('ViolinChart: Invalid data point', point);
+          return acc;
+        }
+
+        const groupKey = point.grouping || point.teamName || 'All Athletes';
+        if (!acc[groupKey]) {
+          acc[groupKey] = [];
+        }
+        acc[groupKey].push(point.value);
+        return acc;
+      }, {} as Record<string, number[]>);
 
     return Object.entries(groups).map(([groupName, values], index) => {
-      const sortedValues = [...values].sort((a, b) => a - b);
-      const q1 = percentile(sortedValues, 25);
-      const median = percentile(sortedValues, 50);
-      const q3 = percentile(sortedValues, 75);
-      const min = sortedValues.length > 0 ? Math.min(...sortedValues) : 0;
-      const max = sortedValues.length > 0 ? Math.max(...sortedValues) : 0;
-      const mean = sortedValues.length > 0 ? sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length : 0;
+        if (!values || values.length === 0) {
+          devLog.warn('ViolinChart: No valid values for group', groupName);
+          return null;
+        }
 
-      // Generate kernel density estimation for violin shape
-      const density = calculateKDE(sortedValues);
+        const sortedValues = [...values].sort((a, b) => a - b);
+        const q1 = percentile(sortedValues, 25);
+        const median = percentile(sortedValues, 50);
+        const q3 = percentile(sortedValues, 75);
+        const min = Math.min(...sortedValues);
+        const max = Math.max(...sortedValues);
+        const mean = sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length;
 
-      return {
-        group: groupName,
-        values: sortedValues,
-        stats: { min, q1, median, q3, max, mean },
-        density,
-        color: getGroupColor(index)
-      };
-    });
+        // Generate kernel density estimation for violin shape
+        const density = calculateKDE(sortedValues);
+
+        return {
+          group: groupName,
+          values: sortedValues,
+          stats: { min, q1, median, q3, max, mean },
+          density,
+          color: getGroupColor(index)
+        };
+      }).filter(Boolean);
+    } catch (error) {
+      devLog.error('ViolinChart: Error processing data', error);
+      return [];
+    }
   }, [data]);
 
   // Kernel Density Estimation for violin shape
@@ -113,7 +130,12 @@ export function ViolinChart({
     if (!canvas || processedData.length === 0) return;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      devLog.error('ViolinChart: Could not get canvas context');
+      return;
+    }
+
+    try {
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -234,18 +256,31 @@ export function ViolinChart({
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'right';
 
-    for (let i = 0; i <= numTicks; i++) {
-      const value = globalMin + (valueRange * i) / numTicks;
-      const y = valueToY(value);
-      ctx.fillText(value.toFixed(2), padding - 10, y + 3);
+      for (let i = 0; i <= numTicks; i++) {
+        const value = globalMin + (valueRange * i) / numTicks;
+        const y = valueToY(value);
+        ctx.fillText(value.toFixed(2), padding - 10, y + 3);
 
-      // Tick marks
-      ctx.beginPath();
-      ctx.moveTo(padding - 5, y);
-      ctx.lineTo(padding, y);
-      ctx.stroke();
+        // Tick marks
+        ctx.beginPath();
+        ctx.moveTo(padding - 5, y);
+        ctx.lineTo(padding, y);
+        ctx.stroke();
+      }
+
+    } catch (error) {
+      devLog.error('ViolinChart: Error drawing chart', error);
+      // Clear canvas on error
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw error message
+        ctx.fillStyle = '#6B7280';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Error rendering violin chart', canvas.width / 2, canvas.height / 2);
+      }
     }
-
   }, [processedData]);
 
   const metric = data && data.length > 0 ? data[0]?.metric : undefined;
@@ -260,9 +295,23 @@ export function ViolinChart({
   // Early return if no data to display
   if (!data || data.length === 0 || processedData.length === 0) {
     return (
-      <div className={className}>
-        <div className="flex items-center justify-center h-64 text-muted-foreground">
-          No data available for violin chart
+      <div className={`${className} flex items-center justify-center h-96`}>
+        <div className="text-center">
+          {!data || data.length === 0 ? (
+            <>
+              <h3 className="text-lg font-medium mb-2">No data available</h3>
+              <p className="text-sm text-muted-foreground">
+                No data available for violin chart
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-medium mb-2">Unable to render violin chart</h3>
+              <p className="text-sm text-muted-foreground">
+                The data could not be processed for violin visualization.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );

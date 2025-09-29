@@ -354,12 +354,14 @@ export function ChartContainer({
                     metric={metric || ''}
                   />
                 ) : chartType === 'violin_plot' ? (
-                  <ViolinChart
-                    data={chartData as ChartDataPoint[]}
-                    config={chartConfig}
-                    statistics={statistics}
-                    highlightAthlete={highlightAthlete}
-                  />
+                  <ErrorBoundary>
+                    <ViolinChart
+                      data={chartData as ChartDataPoint[]}
+                      config={chartConfig}
+                      statistics={statistics}
+                      highlightAthlete={highlightAthlete}
+                    />
+                  </ErrorBoundary>
                 ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}
