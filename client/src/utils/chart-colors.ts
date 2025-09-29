@@ -2,6 +2,37 @@
  * Shared chart color constants for consistent styling across all chart components
  */
 
+/**
+ * Validate if a color string is safe for CSS injection
+ * Only allows hex colors and rgb/rgba formats
+ * @param color - Color string to validate
+ * @returns true if color is safe, false otherwise
+ */
+export function isValidColor(color: string): boolean {
+  if (!color || typeof color !== 'string') return false;
+
+  // Allow hex colors: #RGB, #RRGGBB, #RRGGBBAA
+  const hexPattern = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
+  if (hexPattern.test(color)) return true;
+
+  // Allow rgb/rgba colors: rgb(r,g,b) or rgba(r,g,b,a)
+  const rgbPattern = /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(,\s*[\d.]+\s*)?\)$/;
+  if (rgbPattern.test(color)) return true;
+
+  return false;
+}
+
+/**
+ * Sanitize color value for safe CSS usage
+ * Returns validated color or fallback
+ * @param color - Color string to sanitize
+ * @param fallback - Fallback color if validation fails
+ * @returns Safe color string
+ */
+export function sanitizeColor(color: string, fallback: string = '#3B82F6'): string {
+  return isValidColor(color) ? color : fallback;
+}
+
 export const CHART_COLORS = [
   'rgba(59, 130, 246, 1)',    // Blue
   'rgba(16, 185, 129, 1)',    // Green

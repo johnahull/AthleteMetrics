@@ -15,6 +15,7 @@ import {
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { sanitizeCanvasText, sanitizeTeamName } from '@/utils/text-sanitization';
 import type {
   ChartDataPoint,
   ChartConfiguration,
@@ -1007,6 +1008,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           }
         } catch (e) {
           // Canvas might not be in DOM yet
+          console.warn('BoxPlotChart: Failed to access canvas context', e);
           return;
         }
 
@@ -1051,8 +1053,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           // Position label below the chart area
           const labelY = chartArea.bottom + 25;
 
-          // Draw team name
-          ctx.fillText(teamName, pixelX, labelY);
+          // Draw team name (sanitized to prevent XSS)
+          ctx.fillText(sanitizeTeamName(teamName), pixelX, labelY);
         }
       });
 
@@ -1085,6 +1087,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 return;
               }
             } catch (e) {
+              console.warn('BoxPlotChart: labelsPlugin canvas access failed', e);
               return;
             }
 
@@ -1098,6 +1101,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   return;
                 }
               } catch (e) {
+                console.warn('BoxPlotChart: Label collision detection canvas access failed', e);
                 return;
               }
               // Save current context state
@@ -1129,9 +1133,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_DARK;
                 ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
 
-                // Restore text color and draw text
+                // Restore text color and draw text (sanitized to prevent XSS)
                 ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
-                ctx.fillText(label.text, label.x, label.y);
+                ctx.fillText(sanitizeCanvasText(label.text), label.x, label.y);
               });
 
               // Restore context state
