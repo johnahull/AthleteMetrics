@@ -356,7 +356,7 @@ export function ChartContainer({
                 ) : chartType === 'violin_plot' ? (
                   <ErrorBoundary>
                     <ViolinChart
-                      data={chartData as ChartDataPoint[]}
+                      data={rawData || chartData as ChartDataPoint[]}
                       config={chartConfig}
                       statistics={statistics}
                       highlightAthlete={highlightAthlete}
