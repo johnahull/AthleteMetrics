@@ -90,11 +90,32 @@ export class AnalyticsService {
           baseCharts.push('multi_line', 'radar_chart');
         }
       }
-    } else {
-      // Group analysis
+    } else if (analysisType === 'intra_group') {
+      // Intra-group analysis (single group comparison)
       if (metricCount === 1) {
         if (timeframeType === 'best') {
-          // For group analysis with 1 metric and best timeframe, include multi-group comparison charts
+          baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart', 'violin_plot');
+        } else {
+          baseCharts.push('time_series_box_swarm', 'line_chart');
+        }
+      } else if (metricCount === 2) {
+        if (timeframeType === 'best') {
+          baseCharts.push('scatter_plot');
+        } else {
+          baseCharts.push('connected_scatter');
+        }
+      } else {
+        if (timeframeType === 'best') {
+          baseCharts.push('radar_chart');
+        } else {
+          baseCharts.push('multi_line');
+        }
+      }
+    } else {
+      // Multi-group analysis
+      if (metricCount === 1) {
+        if (timeframeType === 'best') {
+          // For multi-group analysis with 1 metric and best timeframe, exclude distribution and bar_chart
           baseCharts.push('box_swarm_combo', 'violin_plot');
         } else {
           baseCharts.push('time_series_box_swarm', 'line_chart');
