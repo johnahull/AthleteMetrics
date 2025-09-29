@@ -5,7 +5,8 @@
 
 import React from "react";
 import { ReportView, ReportSection, ReportStats } from "../ReportView";
-import { LineChart } from "@/components/charts/LineChart";
+import { ConnectedScatterChart } from "@/components/charts/ConnectedScatterChart";
+import { MultiLineChart } from "@/components/charts/MultiLineChart";
 import { RadarChart } from "@/components/charts/RadarChart";
 import type { ReportData } from "@shared/report-types";
 
@@ -79,12 +80,12 @@ export function IndividualReport({
       {trendsSection && (
         <ReportSection
           title={trendsSection.title}
-          subtitle="Performance progression over time"
+          subtitle="Performance progression over time with personal bests highlighted"
           pageBreakBefore={false}
         >
           <div className="chart-container">
             {trendsSection.content?.chartData && (
-              <LineChart {...trendsSection.content.chartData} />
+              <ConnectedScatterChart {...trendsSection.content.chartData} />
             )}
           </div>
         </ReportSection>

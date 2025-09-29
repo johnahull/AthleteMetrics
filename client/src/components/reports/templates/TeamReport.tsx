@@ -5,8 +5,9 @@
 
 import React from "react";
 import { ReportView, ReportSection, ReportStats, ReportTable } from "../ReportView";
+import { TimeSeriesBoxSwarmChart } from "@/components/charts/TimeSeriesBoxSwarmChart";
 import { BoxPlotChart } from "@/components/charts/BoxPlotChart";
-import { BarChart } from "@/components/charts/BarChart";
+import { SwarmChart } from "@/components/charts/SwarmChart";
 import type { ReportData } from "@shared/report-types";
 
 interface TeamReportProps {
@@ -25,8 +26,9 @@ export function TeamReport({
   const stats = statsSection?.content?.stats || [];
 
   // Extract chart sections
+  const timeSeriesSection = data.sections.find((s) => s.title.includes("Over Time"));
   const distributionSection = data.sections.find((s) => s.title.includes("Distribution"));
-  const comparisonSection = data.sections.find((s) => s.title.includes("Averages"));
+  const swarmSection = data.sections.find((s) => s.title.includes("Data Points"));
   const tableSection = data.sections.find((s) => s.type === "table");
 
   return (
@@ -70,11 +72,25 @@ export function TeamReport({
         </ReportSection>
       )}
 
+      {/* Time Series Box Swarm Chart */}
+      {timeSeriesSection && (
+        <ReportSection
+          title={timeSeriesSection.title}
+          subtitle="Team performance evolution with statistical distributions"
+        >
+          <div className="chart-container">
+            {timeSeriesSection.content?.chartData && (
+              <TimeSeriesBoxSwarmChart {...timeSeriesSection.content.chartData} />
+            )}
+          </div>
+        </ReportSection>
+      )}
+
       {/* Performance Distribution Box Plot */}
       {distributionSection && (
         <ReportSection
           title={distributionSection.title}
-          subtitle="Statistical distribution of team performance"
+          subtitle="Statistical distribution of team performance across metrics"
         >
           <div className="chart-container">
             {distributionSection.content?.chartData && (
@@ -84,16 +100,16 @@ export function TeamReport({
         </ReportSection>
       )}
 
-      {/* Team Averages Comparison */}
-      {comparisonSection && (
+      {/* Swarm Plot - Individual Data Points */}
+      {swarmSection && (
         <ReportSection
-          title={comparisonSection.title}
-          subtitle="Comparison of team averages across metrics"
+          title={swarmSection.title}
+          subtitle="Visual distribution of all individual measurements"
           pageBreakBefore={true}
         >
           <div className="chart-container">
-            {comparisonSection.content?.chartData && (
-              <BarChart {...comparisonSection.content.chartData} />
+            {swarmSection.content?.chartData && (
+              <SwarmChart {...swarmSection.content.chartData} />
             )}
           </div>
         </ReportSection>

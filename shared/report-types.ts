@@ -18,7 +18,9 @@ export type ReportChartType =
   | "scatter"
   | "swarm"
   | "multi_line"
-  | "box_swarm_combo";
+  | "box_swarm_combo"
+  | "time_series_box_swarm"
+  | "connected_scatter";
 
 // Report configuration for templates
 export interface ReportTemplateConfig {
@@ -135,8 +137,9 @@ export const DEFAULT_INDIVIDUAL_TEMPLATE: ReportTemplateConfig = {
     additional: ["VERTICAL_JUMP", "AGILITY_505"],
   },
   charts: [
-    { type: "line", title: "Performance Trends Over Time", metrics: ["FLY10_TIME"] },
-    { type: "radar", title: "Multi-Metric Performance", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
+    { type: "connected_scatter", title: "Performance Trends Over Time", metrics: ["FLY10_TIME"] },
+    { type: "multi_line", title: "Multi-Metric Progress", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
+    { type: "radar", title: "Athletic Profile", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
   ],
   displayOptions: {
     includeStatistics: true,
@@ -153,8 +156,9 @@ export const DEFAULT_TEAM_TEMPLATE: ReportTemplateConfig = {
     additional: ["VERTICAL_JUMP", "AGILITY_505", "DASH_40YD"],
   },
   charts: [
-    { type: "box_plot", title: "Team Performance Distribution", metrics: ["FLY10_TIME"] },
-    { type: "bar", title: "Team Averages by Metric", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
+    { type: "time_series_box_swarm", title: "Team Performance Over Time", metrics: ["FLY10_TIME"] },
+    { type: "box_plot", title: "Performance Distribution by Metric", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
+    { type: "swarm", title: "Individual Data Points", metrics: ["FLY10_TIME"] },
   ],
   displayOptions: {
     includeStatistics: true,
@@ -190,7 +194,8 @@ export const DEFAULT_RECRUITING_TEMPLATE: ReportTemplateConfig = {
   },
   charts: [
     { type: "radar", title: "Athletic Profile", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "DASH_40YD"] },
-    { type: "line", title: "Performance Progression", metrics: ["FLY10_TIME", "VERTICAL_JUMP"] },
+    { type: "connected_scatter", title: "Performance Progression", metrics: ["FLY10_TIME", "VERTICAL_JUMP"] },
+    { type: "multi_line", title: "Multi-Metric Development", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
   ],
   displayOptions: {
     includeStatistics: true,

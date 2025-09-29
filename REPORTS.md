@@ -11,6 +11,7 @@ Complete implementation of Phases 1, 2, and 3 for coach-generated athlete report
 - **ReportStats & ReportTable**: Data display components
 - Print-optimized styling with @media print rules
 - Support for both portrait and landscape orientations
+- **Chart Integration**: All latest chart components (ConnectedScatter, MultiLine, TimeSeriesBoxSwarm, Swarm)
 
 ### Phase 2: Server-Side PDF Generation ✅
 - **Puppeteer Integration**: Installed and configured for headless PDF generation
@@ -27,11 +28,11 @@ Complete implementation of Phases 1, 2, and 3 for coach-generated athlete report
   - `GET /api/reports/shared/:shareToken`: Public access
   - `GET /api/reports/organization/:orgId`: List reports
   - `DELETE /api/reports/:id`: Delete report
-- **Report Templates**:
-  - `IndividualReport.tsx`: Single athlete performance trends
-  - `TeamReport.tsx`: Team statistics and distributions
-  - `MultiAthleteReport.tsx`: Side-by-side comparisons
-  - `RecruitingReport.tsx`: Comprehensive recruiting package
+- **Report Templates** (updated with latest chart components):
+  - `IndividualReport.tsx`: Connected scatter, multi-line, and radar charts
+  - `TeamReport.tsx`: Time series box swarm, box plot, and swarm charts
+  - `MultiAthleteReport.tsx`: Bar and radar comparison charts
+  - `RecruitingReport.tsx`: Radar, connected scatter, and multi-line charts
 
 ### Phase 3: Report Management & Templates ✅
 - **Database Schema** (`shared/schema.ts`):
@@ -113,26 +114,31 @@ shared/
 ### Report Types
 
 1. **Individual Report**: Single athlete performance over time
-   - Trends charts
-   - Personal bests
-   - Radar charts for multi-metric view
+   - **Connected Scatter Chart**: Performance trends with personal bests highlighted
+   - **Multi-Line Chart**: Multi-metric progress tracking
+   - **Radar Chart**: Athletic profile across performance dimensions
+   - Portrait orientation
 
 2. **Team Report**: Team-wide statistics and distributions
-   - Box plots
-   - Team averages
-   - Top performers table
+   - **Time Series Box Swarm Chart**: Team performance evolution with distributions
+   - **Box Plot Chart**: Statistical distribution across metrics
+   - **Swarm Chart**: Individual data points visualization
+   - Top performers table and roster
    - Landscape orientation for better readability
 
 3. **Multi-Athlete Report**: Compare 2-10 athletes side-by-side
-   - Bar chart comparisons
-   - Radar overlays
+   - **Bar Chart**: Direct performance comparisons
+   - **Radar Chart**: Multi-metric athlete profiles overlay
    - Performance data table
+   - Portrait orientation
 
 4. **Recruiting Report**: Professional recruiting package
-   - Athletic profile
-   - Performance progression
-   - Strengths and highlights
-   - Coach's assessment section
+   - **Radar Chart**: Comprehensive athletic profile
+   - **Connected Scatter Chart**: Performance progression with trajectory
+   - **Multi-Line Chart**: Multi-metric development over time
+   - Strengths and highlights sections
+   - Coach's assessment area
+   - Portrait orientation
 
 ### Default Templates
 

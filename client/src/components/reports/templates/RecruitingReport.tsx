@@ -6,7 +6,8 @@
 import React from "react";
 import { ReportView, ReportSection, ReportStats } from "../ReportView";
 import { RadarChart } from "@/components/charts/RadarChart";
-import { LineChart } from "@/components/charts/LineChart";
+import { ConnectedScatterChart } from "@/components/charts/ConnectedScatterChart";
+import { MultiLineChart } from "@/components/charts/MultiLineChart";
 import type { ReportData } from "@shared/report-types";
 
 interface RecruitingReportProps {
@@ -27,6 +28,7 @@ export function RecruitingReport({
 
   const profileSection = data.sections.find((s) => s.title.includes("Athletic Profile"));
   const progressionSection = data.sections.find((s) => s.title.includes("Progression"));
+  const developmentSection = data.sections.find((s) => s.title.includes("Development"));
 
   return (
     <ReportView
@@ -107,7 +109,21 @@ export function RecruitingReport({
         >
           <div className="chart-container">
             {progressionSection.content?.chartData && (
-              <LineChart {...progressionSection.content.chartData} />
+              <ConnectedScatterChart {...progressionSection.content.chartData} />
+            )}
+          </div>
+        </ReportSection>
+      )}
+
+      {/* Multi-Metric Development */}
+      {developmentSection && (
+        <ReportSection
+          title={developmentSection.title}
+          subtitle="Comprehensive progress across multiple performance dimensions"
+        >
+          <div className="chart-container">
+            {developmentSection.content?.chartData && (
+              <MultiLineChart {...developmentSection.content.chartData} />
             )}
           </div>
         </ReportSection>
