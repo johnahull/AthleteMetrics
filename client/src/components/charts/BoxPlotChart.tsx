@@ -1415,52 +1415,85 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               </thead>
               <tbody>
                 {selectedGroups.map((group, index) => {
-                  // Try different key formats - the statistics might be keyed by group name or index
-                  const groupKey = `group-${group.id}`;
-                  const groupNameKey = group.name;
-                  const groupStats = statistics[groupKey] || statistics[groupNameKey] || statistics[index];
+                  // Find the group data point that contains the statistics
+                  // The statistics are stored in the additionalData.groupStats of the aggregated data points
+                  const currentMetric = data.length > 0 ? data[0].metric : '';
+                  const groupDataPoint = data.find(d =>
+                    d.grouping === group.id &&
+                    d.additionalData?.groupStats &&
+                    d.metric === currentMetric
+                  );
 
-                  // Debug logging
-                  console.log('Statistics debug:', {
-                    groupId: group.id,
-                    groupName: group.name,
-                    groupKey,
-                    availableKeys: Object.keys(statistics),
-                    groupStats,
-                    statistics
-                  });
+                  const groupStats = groupDataPoint?.additionalData?.groupStats;
 
-                  if (!groupStats) return null;
+                  if (!groupStats) {
+                    // If no groupStats in additionalData, calculate them from raw data
+                    const groupValues = data
+                      .filter(d => d.grouping === group.id && d.metric === currentMetric)
+                      .map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value)
+                      .filter(v => !isNaN(v))
+                      .sort((a, b) => a - b);
 
-                  // Get group color from chart config
-                  const groupColors = CHART_CONFIG.COLORS.SERIES;
-                  const groupColor = groupColors[index % groupColors.length];
+                    if (groupValues.length === 0) return null;
 
-                  // Extract metric from data if available
-                  const metric = data.length > 0 ? data[0].metric : '';
+                    const mean = groupValues.reduce((a, b) => a + b, 0) / groupValues.length;
+                    const median = groupValues.length % 2 === 0
+                      ? (groupValues[Math.floor(groupValues.length / 2) - 1] + groupValues[Math.floor(groupValues.length / 2)]) / 2
+                      : groupValues[Math.floor(groupValues.length / 2)];
+
+                    // Calculate standard deviation
+                    const variance = groupValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / groupValues.length;
+                    const stdDev = Math.sqrt(variance);
+
+                    // Calculate quartiles
+                    const q1Index = Math.floor(groupValues.length * 0.25);
+                    const q3Index = Math.floor(groupValues.length * 0.75);
+
+                    return (
+                      <tr key={group.id} className="hover:bg-gray-50">
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded"
+                              style={{ backgroundColor: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length] }}
+                            />
+                            <span className="font-medium">{group.name}</span>
+                          </div>
+                        </td>
+                        <td className="text-right py-2 px-3">{groupValues.length}</td>
+                        <td className="text-right py-2 px-3">{mean.toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{median.toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[0].toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[groupValues.length - 1].toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{stdDev.toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[q1Index].toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[q3Index].toFixed(2)}</td>
+                      </tr>
+                    );
+                  }
 
                   // Format values based on metric type
                   const formatValue = (value: number) => {
                     if (typeof value !== 'number' || isNaN(value)) return '-';
                     // For time metrics (lower is better), show with 2 decimal places
                     // For jump metrics (higher is better), show with 1 decimal place
-                    const isTimeMetric = metric?.includes('TIME') || metric?.includes('AGILITY') ||
-                                        metric?.includes('TEST') || metric?.includes('DASH');
+                    const isTimeMetric = currentMetric?.includes('TIME') || currentMetric?.includes('AGILITY') ||
+                                        currentMetric?.includes('TEST') || currentMetric?.includes('DASH');
                     return isTimeMetric ? value.toFixed(2) : value.toFixed(1);
                   };
 
                   return (
-                    <tr key={groupKey} className="border-b hover:bg-muted/50">
-                      <td className="py-2 px-3 font-medium">
+                    <tr key={group.id} className="hover:bg-gray-50">
+                      <td className="py-2 px-3">
                         <div className="flex items-center gap-2">
                           <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: groupColor }}
+                            className="w-3 h-3 rounded"
+                            style={{ backgroundColor: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length] }}
                           />
-                          {group.name}
+                          <span className="font-medium">{group.name}</span>
                         </div>
                       </td>
-                      <td className="text-right py-2 px-3">{groupStats.count}</td>
+                      <td className="text-right py-2 px-3">{groupStats.count || groupStats.groupSize || '-'}</td>
                       <td className="text-right py-2 px-3 font-medium">
                         {formatValue(groupStats.mean)}
                       </td>
@@ -1474,13 +1507,15 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                         {formatValue(groupStats.max)}
                       </td>
                       <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.std)}
+                        {formatValue(groupStats.stdDev || groupStats.std || 0)}
                       </td>
                       <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.percentiles?.p25 || groupStats.median - groupStats.std * 0.674)}
+                        {/* Q1 - Try multiple possible property names */}
+                        {formatValue(groupStats.q1 || groupStats.percentiles?.p25 || (groupStats.median - (groupStats.stdDev || groupStats.std || 0) * 0.674))}
                       </td>
                       <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.percentiles?.p75 || groupStats.median + groupStats.std * 0.674)}
+                        {/* Q3 - Try multiple possible property names */}
+                        {formatValue(groupStats.q3 || groupStats.percentiles?.p75 || (groupStats.median + (groupStats.stdDev || groupStats.std || 0) * 0.674))}
                       </td>
                     </tr>
                   );
