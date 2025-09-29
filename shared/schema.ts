@@ -487,3 +487,101 @@ export const insertAthleteSchema = z.object({
 });
 
 // Legacy compatibility exports removed - use Athlete types instead
+
+// Report Templates Table
+export const reportTemplates = pgTable("report_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  templateType: text("template_type").notNull(), // "individual", "team", "multi_athlete", "recruiting"
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  isDefault: text("is_default").default("false").notNull(), // System default templates
+
+  // Template configuration (JSON)
+  config: text("config").notNull(), // Stores metrics, chart types, filters, etc.
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Generated Reports Table
+export const generatedReports = pgTable("generated_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  templateId: varchar("template_id").references(() => reportTemplates.id),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
+  generatedBy: varchar("generated_by").notNull().references(() => users.id),
+
+  // Report metadata
+  reportType: text("report_type").notNull(), // "individual", "team", "multi_athlete", "recruiting"
+  athleteIds: text("athlete_ids").array(), // Athletes included in report
+  teamIds: text("team_ids").array(), // Teams included in report
+
+  // Storage
+  filePath: text("file_path"), // Path to generated PDF
+  fileSize: integer("file_size"), // Size in bytes
+
+  // Sharing
+  shareToken: text("share_token").unique(), // For shareable links
+  isPublic: text("is_public").default("false").notNull(),
+  expiresAt: timestamp("expires_at"), // Optional expiration for shared links
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Relations for report tables
+export const reportTemplatesRelations = relations(reportTemplates, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [reportTemplates.organizationId],
+    references: [organizations.id],
+  }),
+  createdBy: one(users, {
+    fields: [reportTemplates.createdBy],
+    references: [users.id],
+  }),
+  generatedReports: many(generatedReports),
+}));
+
+export const generatedReportsRelations = relations(generatedReports, ({ one }) => ({
+  template: one(reportTemplates, {
+    fields: [generatedReports.templateId],
+    references: [reportTemplates.id],
+  }),
+  organization: one(organizations, {
+    fields: [generatedReports.organizationId],
+    references: [organizations.id],
+  }),
+  generatedBy: one(users, {
+    fields: [generatedReports.generatedBy],
+    references: [users.id],
+  }),
+}));
+
+// Insert schemas for reports
+export const insertReportTemplateSchema = createInsertSchema(reportTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1, "Template name is required"),
+  templateType: z.enum(["individual", "team", "multi_athlete", "recruiting"]),
+  config: z.string().min(1, "Template configuration is required"),
+});
+
+export const insertGeneratedReportSchema = createInsertSchema(generatedReports).omit({
+  id: true,
+  createdAt: true,
+  shareToken: true,
+}).extend({
+  title: z.string().min(1, "Report title is required"),
+  reportType: z.enum(["individual", "team", "multi_athlete", "recruiting"]),
+  athleteIds: z.array(z.string()).optional(),
+  teamIds: z.array(z.string()).optional(),
+});
+
+// Types
+export type ReportTemplate = typeof reportTemplates.$inferSelect;
+export type InsertReportTemplate = z.infer<typeof insertReportTemplateSchema>;
+export type GeneratedReport = typeof generatedReports.$inferSelect;
+export type InsertGeneratedReport = z.infer<typeof insertGeneratedReportSchema>;

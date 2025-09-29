@@ -1,0 +1,212 @@
+/**
+ * Print Styles for Reports
+ * Optimized layouts for professional printouts and PDF generation
+ */
+
+@media print {
+  /* Hide non-printable elements */
+  .no-print,
+  .report-actions,
+  header nav,
+  aside,
+  .sidebar,
+  button:not(.print-show) {
+    display: none !important;
+  }
+
+  /* Reset page margins and backgrounds */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+  }
+
+  /* Report container styling */
+  .report-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .report-content {
+    box-shadow: none;
+    padding: 20mm;
+    page-break-after: auto;
+  }
+
+  /* Page break controls */
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid;
+  }
+
+  /* Section styling */
+  .report-section {
+    page-break-inside: avoid;
+    margin-bottom: 20mm;
+  }
+
+  /* Header styling */
+  .report-header {
+    margin-bottom: 15mm;
+    padding-bottom: 10mm;
+  }
+
+  .report-header h1 {
+    font-size: 24pt;
+    margin-bottom: 5mm;
+  }
+
+  .report-header p {
+    font-size: 12pt;
+  }
+
+  /* Typography */
+  h2 {
+    font-size: 18pt;
+    margin-top: 10mm;
+    margin-bottom: 5mm;
+    page-break-after: avoid;
+  }
+
+  h3 {
+    font-size: 14pt;
+    margin-top: 8mm;
+    margin-bottom: 4mm;
+    page-break-after: avoid;
+  }
+
+  p, li {
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    page-break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+  }
+
+  th {
+    background-color: #f5f5f5 !important;
+    font-weight: bold;
+  }
+
+  /* Charts - ensure they print properly */
+  canvas {
+    max-width: 100%;
+    page-break-inside: avoid;
+  }
+
+  .chart-container {
+    page-break-inside: avoid;
+    margin: 10mm 0;
+  }
+
+  /* Statistics cards */
+  .report-stats {
+    page-break-inside: avoid;
+    margin: 10mm 0;
+  }
+
+  .stat-card {
+    border: 1px solid #ddd;
+    page-break-inside: avoid;
+  }
+
+  /* Footer */
+  .report-footer {
+    position: fixed;
+    bottom: 10mm;
+    left: 20mm;
+    right: 20mm;
+    border-top: 1px solid #ddd;
+    padding-top: 5mm;
+    font-size: 9pt;
+  }
+
+  /* Links */
+  a {
+    color: black;
+    text-decoration: none;
+  }
+
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #666;
+  }
+
+  /* Colors - ensure visibility */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Shadows - remove for print */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
+
+/* Portrait orientation (default) */
+@page {
+  size: letter portrait;
+  margin: 20mm;
+}
+
+/* Landscape orientation - use class on report-container */
+@page :first {
+  margin-top: 20mm;
+}
+
+.report-landscape {
+  @page {
+    size: letter landscape;
+  }
+}
+
+/* Print preview helper - shows page boundaries on screen */
+.print-preview-mode {
+  background: #e5e5e5;
+  padding: 20px;
+}
+
+.print-preview-mode .report-content {
+  max-width: 8.5in;
+  min-height: 11in;
+  margin: 0 auto 20px;
+  background: white;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  padding: 0.75in;
+}
+
+.print-preview-mode.landscape .report-content {
+  max-width: 11in;
+  min-height: 8.5in;
+}

@@ -46,9 +46,19 @@ export function CoachAnalytics() {
       <Button
         variant="outline"
         size="sm"
+        onClick={() => window.location.href = '/reports/builder'}
       >
         <BarChart3 className="h-4 w-4 mr-2" />
-        Reports
+        Generate Report
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => window.location.href = '/reports/history'}
+      >
+        <Download className="h-4 w-4 mr-2" />
+        View Reports
       </Button>
 
       <Button
@@ -57,14 +67,6 @@ export function CoachAnalytics() {
       >
         <RefreshCw className="h-4 w-4 mr-2" />
         Refresh
-      </Button>
-
-      <Button
-        variant="outline"
-        size="sm"
-      >
-        <Download className="h-4 w-4 mr-2" />
-        Export
       </Button>
     </div>
   );

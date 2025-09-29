@@ -36,6 +36,10 @@ const Analytics = React.lazy(() => import("./pages/analytics"));
 const CoachAnalytics = React.lazy(() => import("./pages/CoachAnalytics"));
 const AthleteAnalytics = React.lazy(() => import("./pages/AthleteAnalytics"));
 
+// Lazy load report pages
+const ReportBuilder = React.lazy(() => import("./pages/ReportBuilder"));
+const ReportHistory = React.lazy(() => import("./pages/ReportHistory"));
+
 function Router() {
   return (
     <Switch>
@@ -118,6 +122,16 @@ function Router() {
       <Route path="/profile">
         <RouteWrapper loadingText="Loading Profile...">
           <Profile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/builder">
+        <RouteWrapper loadingText="Loading Report Builder...">
+          <ReportBuilder />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/history">
+        <RouteWrapper loadingText="Loading Report History...">
+          <ReportHistory />
         </RouteWrapper>
       </Route>
       <Route path="/">

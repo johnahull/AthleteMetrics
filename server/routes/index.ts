@@ -11,6 +11,7 @@ import { registerAthleteRoutes } from "./athlete-routes";
 // import { registerMeasurementRoutes } from "./measurement-routes";
 // import { registerAnalyticsRoutes } from "./analytics-routes";
 // import { registerImportRoutes } from "./import-routes";
+import reportRoutes from "./report-routes";
 
 /**
  * Register all application routes
@@ -27,13 +28,16 @@ export function registerAllRoutes(app: Express) {
   
   // Athlete management routes
   registerAthleteRoutes(app);
-  
+
+  // Report routes
+  app.use("/api/reports", reportRoutes);
+
   // TODO: Add remaining route modules
   // registerTeamRoutes(app);
   // registerMeasurementRoutes(app);
   // registerAnalyticsRoutes(app);
   // registerImportRoutes(app);
-  
+
   console.log("✅ All routes registered successfully");
 }
 
