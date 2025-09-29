@@ -1426,6 +1426,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
                   const groupStats = groupDataPoint?.additionalData?.groupStats;
 
+                  // Calculate the actual count of data points for this group
+                  // For aggregated group data, there's typically one point per group
+                  // The actual member count should be in group.memberIds or groupStats
+                  const groupDataCount = group.memberIds?.length ||
+                    data.filter(d => d.grouping === group.id && d.metric === currentMetric && !d.additionalData?.groupStats).length;
+
                   if (!groupStats) {
                     // If no groupStats in additionalData, calculate them from raw data
                     const groupValues = data
@@ -1493,7 +1499,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                           <span className="font-medium">{group.name}</span>
                         </div>
                       </td>
-                      <td className="text-right py-2 px-3">{groupStats.count || groupStats.groupSize || '-'}</td>
+                      <td className="text-right py-2 px-3">{groupDataCount || groupStats.count || groupStats.groupSize || 0}</td>
                       <td className="text-right py-2 px-3 font-medium">
                         {formatValue(groupStats.mean)}
                       </td>
