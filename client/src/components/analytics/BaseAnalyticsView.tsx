@@ -289,7 +289,7 @@ function BaseAnalyticsViewContent({
                             }))}
                             selectedGroups={selectedGroups}
                             onGroupSelectionChange={setSelectedGroups}
-                            maxGroups={4}
+                            maxGroups={8}
                           />
 
                           {selectedGroups.length === 0 && (

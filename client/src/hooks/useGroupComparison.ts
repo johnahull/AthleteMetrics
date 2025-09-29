@@ -66,7 +66,7 @@ export function useGroupComparison({
   organizationId,
   metrics,
   athletes,
-  maxGroups = 4,
+  maxGroups = 8,
   analyticsData,
   isMainAnalyticsLoading = false
 }: UseGroupComparisonProps): UseGroupComparisonReturn {

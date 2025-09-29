@@ -37,7 +37,7 @@ export function GroupSelector({
   athletes,
   selectedGroups,
   onGroupSelectionChange,
-  maxGroups = 4,
+  maxGroups = 8,
   className
 }: GroupSelectorProps) {
   const [activeTab, setActiveTab] = useState<'teams' | 'age' | 'custom'>('teams');
