@@ -64,13 +64,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
 
-  console.log('BoxPlotChart: Rendering with props', {
-    dataLength: data?.length || 0,
-    rawDataLength: rawData?.length || 0,
-    showAllPoints,
-    selectedGroupsLength: selectedGroups?.length || 0,
-    isMultiGroup: (selectedGroups?.length || 0) >= 2
-  });
 
   // Memoized label positions cache to prevent recalculation on every render
   const labelPositionsCache = useRef<Map<string, LabelPosition[]>>(new Map());
@@ -222,9 +215,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
           const xPos = baseX + startOffset + (groupIndex * groupSpacing);
 
-          // Debug logging for spacing calculations
-          console.log(`BoxPlot spacing calc: groups=${numGroups}, boxWidth=${boxWidth.toFixed(3)}, spacing=${groupSpacing.toFixed(3)}, xPos=${xPos.toFixed(3)} for group ${groupIndex}`);
-          
           // Group colors
           const groupColors = CHART_CONFIG.COLORS.SERIES;
           const groupColor = groupColors[groupIndex % groupColors.length];
@@ -315,11 +305,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
           // Swarm points for all players in this group (if enabled)
           if (showAllPoints) {
-            console.log('BoxPlotChart: Swarm points enabled for', groupName, {
-              hasRawData: !!rawData,
-              rawDataLength: rawData?.length || 0,
-              hasAdditionalData: !!point.additionalData?.individualPoints
-            });
 
             // Try to get individual points from additionalData first
             let individualPoints = point.additionalData?.individualPoints as Array<{
@@ -358,13 +343,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   teamName: d.teamName,
                   teamId: d.teamId
                 }));
-              console.log('BoxPlotChart: Using rawData for swarm points', {
-                filteredCount: individualPoints.length,
-                metric,
-                groupName,
-                selectedGroupMemberCount: selectedGroups?.find(g => g.name === groupName)?.memberIds?.length || 0,
-                availableAthleteIds: rawData.map(d => d.athleteId).slice(0, 5) // Show first 5 for debugging
-              });
             }
 
             // Final fallback: filter main data to get individual points for this group and metric
@@ -396,20 +374,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   teamName: d.teamName,
                   teamId: d.teamId
                 }));
-              console.log('BoxPlotChart: Using main data fallback for swarm points', {
-                filteredCount: individualPoints.length,
-                metric,
-                groupName,
-                selectedGroupMemberCount: selectedGroups?.find(g => g.name === groupName)?.memberIds?.length || 0,
-                sampleData: individualPoints.slice(0, 3)
-              });
             }
 
-            console.log('BoxPlotChart: Final individualPoints check', {
-              hasIndividualPoints: !!individualPoints,
-              count: individualPoints?.length || 0,
-              groupName
-            });
 
             if (individualPoints && individualPoints.length > 0) {
 
@@ -439,12 +405,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // Regular points
             const regularPoints = groupPoints.filter(p => !p.isOutlier);
-            console.log('BoxPlotChart: Regular swarm points', {
-              groupName,
-              totalGroupPoints: groupPoints.length,
-              regularPoints: regularPoints.length,
-              outliers: groupPoints.length - regularPoints.length
-            });
             if (regularPoints.length > 0) {
               datasets.push({
                 label: `${groupName} Players`,
@@ -457,7 +417,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 showLine: false,
                 order: 5
               });
-              console.log('BoxPlotChart: Added regular swarm dataset for', groupName);
             }
 
             // Outlier points
