@@ -411,13 +411,6 @@ export function ViolinChart({
 
   return (
     <div className={className}>
-      <div className="mb-4">
-        <h3 className="text-lg font-medium">{config.title}</h3>
-        {config.subtitle && (
-          <p className="text-sm text-muted-foreground">{config.subtitle}</p>
-        )}
-      </div>
-
       <div className="relative">
         <canvas
           ref={canvasRef}
