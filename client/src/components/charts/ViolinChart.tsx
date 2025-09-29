@@ -92,18 +92,40 @@ export function ViolinChart({
 
     // Handle edge case where all values are the same
     if (range === 0) {
-      return [{ x: min, y: 1 }];
+      // Create a narrow bell curve centered at the single value
+      const center = min;
+      const artificialBandwidth = Math.abs(min) * 0.1 || 1;
+      const kde: Array<{ x: number; y: number }> = [];
+      for (let i = -50; i <= 50; i++) {
+        const x = center + (i / 50) * artificialBandwidth;
+        const u = i / 50;
+        const density = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+        kde.push({ x, y: density });
+      }
+      return kde;
     }
 
-    const bandwidth = Math.max(range * 0.2, 0.01); // Prevent zero bandwidth
-    const step = Math.max(range / 100, 0.01); // Prevent zero step
+    // Use Silverman's rule of thumb for bandwidth selection
+    const n = values.length;
+    const std = Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - values.reduce((a, b) => a + b, 0) / n, 2), 0) / n);
+    const iqr = percentile(values.sort((a, b) => a - b), 75) - percentile(values.sort((a, b) => a - b), 25);
+    const bandwidth = 0.9 * Math.min(std, iqr / 1.34) * Math.pow(n, -0.2);
+
+    const step = range / 100; // 100 points along the range
+
+    devLog.log('KDE calculation', {
+      valuesCount: values.length,
+      min, max, range,
+      std, iqr, bandwidth,
+      step
+    });
 
     const kde: Array<{ x: number; y: number }> = [];
 
-    for (let x = min - bandwidth; x <= max + bandwidth; x += step) {
+    for (let x = min - bandwidth * 3; x <= max + bandwidth * 3; x += step) {
       let density = 0;
       for (const value of values) {
-        // Gaussian kernel with safe division
+        // Gaussian kernel
         const u = (x - value) / bandwidth;
         density += Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
       }
@@ -114,6 +136,11 @@ export function ViolinChart({
         kde.push({ x, y: density });
       }
     }
+
+    devLog.log('KDE results', {
+      kdePoints: kde.length,
+      densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
+    });
 
     return kde.length > 0 ? kde : [{ x: min, y: 1 }];
   }
@@ -177,6 +204,15 @@ export function ViolinChart({
       const centerX = padding + groupIndex * groupWidth + groupWidth / 2;
       const densityValues = group.density.map(d => d.y).filter(y => isFinite(y));
       const maxDensity = densityValues.length > 0 ? Math.max(...densityValues) : 1;
+
+      devLog.log('Drawing violin for group', {
+        group: group.group,
+        densityPoints: group.density.length,
+        densityValues: densityValues.slice(0, 5), // First 5 values for debugging
+        maxDensity,
+        centerX,
+        groupWidth
+      });
 
       // Draw violin shape (density curve)
       ctx.fillStyle = group.color + '40'; // Semi-transparent
