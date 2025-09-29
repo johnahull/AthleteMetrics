@@ -55,6 +55,7 @@ interface ChartContainerProps {
   subtitle?: string;
   chartType: ChartType;
   data: ChartDataPoint[];
+  rawData?: ChartDataPoint[]; // Raw individual athlete data for swarm points
   trends?: TrendData[];
   multiMetric?: MultiMetricData[];
   statistics?: Record<string, StatisticalSummary>;
@@ -77,6 +78,7 @@ export function ChartContainer({
   subtitle,
   chartType,
   data,
+  rawData,
   trends,
   multiMetric,
   statistics,
@@ -143,7 +145,8 @@ export function ChartContainer({
       dataLength: data?.length || 0,
       trendsLength: trends?.length || 0,
       multiMetricLength: multiMetric?.length || 0,
-      hasMultiMetric: !!multiMetric
+      hasMultiMetric: !!multiMetric,
+      isPreAggregated: data && data.length > 0 && data[0].athleteId?.startsWith?.('group-')
     });
 
     switch (chartType) {
@@ -331,6 +334,7 @@ export function ChartContainer({
                 ) : chartType === 'box_swarm_combo' ? (
                   <BoxPlotChart
                     data={chartData as ChartDataPoint[]}
+                    rawData={rawData}
                     config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
@@ -349,6 +353,7 @@ export function ChartContainer({
                   <ChartComponent
                     key={`chart-component-${chartType}`}
                     data={chartData as any}
+                    rawData={rawData}
                     config={chartConfig}
                     statistics={statistics || {}}
                     highlightAthlete={highlightAthlete}

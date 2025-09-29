@@ -465,6 +465,7 @@ function BaseAnalyticsViewContent({
                       subtitle={chartConfig.subtitle}
                       chartType={chartType}
                       data={state.analysisType === 'multi_group' && groupChartData ? groupChartData : memoizedChartData}
+                      rawData={state.analysisType === 'multi_group' && (chartType === 'box_plot' || chartType === 'box_swarm_combo') ? memoizedChartData : undefined}
                       trends={state.analyticsData?.trends}
                       multiMetric={state.analyticsData?.multiMetric}
                       statistics={state.analyticsData?.statistics}
@@ -497,6 +498,7 @@ function BaseAnalyticsViewContent({
                   subtitle={chartConfig.subtitle}
                   chartType={state.selectedChartType}
                   data={state.analysisType === 'multi_group' && groupChartData ? groupChartData : memoizedChartData}
+                  rawData={state.analysisType === 'multi_group' && (state.selectedChartType === 'box_plot' || state.selectedChartType === 'box_swarm_combo') ? memoizedChartData : undefined}
                   trends={state.analyticsData?.trends}
                   multiMetric={state.analyticsData?.multiMetric}
                   statistics={state.analyticsData?.statistics}
