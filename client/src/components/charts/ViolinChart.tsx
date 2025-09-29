@@ -33,6 +33,7 @@ export function ViolinChart({
 }: ViolinChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<any>(null);
+  const [error, setError] = React.useState<string | null>(null);
   const [tooltip, setTooltip] = React.useState<{
     visible: boolean;
     x: number;
@@ -198,6 +199,7 @@ export function ViolinChart({
       }).filter((group): group is NonNullable<typeof group> => group !== null);
     } catch (error) {
       devLog.error('ViolinChart: Error processing data', error);
+      setError('Unable to process data for visualization. Please check your data selection.');
       return [];
     }
   }, [data, rawData, selectedGroups]);
@@ -654,15 +656,16 @@ export function ViolinChart({
 
     } catch (error) {
       devLog.error('ViolinChart: Error drawing chart', error);
+      setError('Unable to render the violin chart. Please try refreshing or selecting different data.');
       // Clear canvas on error
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+
         // Draw error message
         ctx.fillStyle = '#6B7280';
         ctx.font = '14px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Error rendering violin chart', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('Unable to render chart. Please check your data.', canvas.width / 2, canvas.height / 2);
       }
     }
   }, [processedData]);
@@ -778,6 +781,33 @@ export function ViolinChart({
     metric
   });
 
+  // Early return if error occurred
+  if (error) {
+    return (
+      <div className={`${className} flex items-center justify-center h-96`}>
+        <div className="text-center max-w-md">
+          <div className="mb-4 p-2 bg-destructive/10 text-destructive rounded-full inline-block">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium mb-2">Chart Error</h3>
+          <p className="text-sm text-muted-foreground mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              // Force re-render by updating a dummy state
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+          >
+            Refresh Chart
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Early return if no data to display
   if (!data || data.length === 0 || processedData.length === 0) {
     return (
@@ -785,16 +815,38 @@ export function ViolinChart({
         <div className="text-center">
           {!data || data.length === 0 ? (
             <>
-              <h3 className="text-lg font-medium mb-2">No data available</h3>
+              <div className="mb-4 p-3 bg-muted rounded-full inline-block">
+                <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium mb-2">No Data Available</h3>
               <p className="text-sm text-muted-foreground">
-                No data available for violin chart
+                Select groups and metrics to display the violin chart.
+              </p>
+            </>
+          ) : selectedGroups && selectedGroups.length > 0 && selectedGroups.some(g => g.memberIds.length === 0) ? (
+            <>
+              <div className="mb-4 p-3 bg-muted rounded-full inline-block">
+                <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium mb-2">Empty Groups</h3>
+              <p className="text-sm text-muted-foreground">
+                One or more selected groups have no athletes. Please add athletes to the groups or select different groups.
               </p>
             </>
           ) : (
             <>
-              <h3 className="text-lg font-medium mb-2">Unable to render violin chart</h3>
+              <div className="mb-4 p-3 bg-muted rounded-full inline-block">
+                <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium mb-2">Unable to Display Chart</h3>
               <p className="text-sm text-muted-foreground">
-                The data could not be processed for violin visualization.
+                The data could not be processed for violin visualization. Please ensure you have valid numeric data for the selected metric.
               </p>
             </>
           )}

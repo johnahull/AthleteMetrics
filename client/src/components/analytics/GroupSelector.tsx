@@ -10,9 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { X, Users, Calendar, Settings } from 'lucide-react';
+import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 
@@ -30,6 +31,7 @@ interface GroupSelectorProps {
   onGroupSelectionChange: (groups: GroupDefinition[]) => void;
   maxGroups?: number;
   className?: string;
+  isLoading?: boolean;
 }
 
 export function GroupSelector({
@@ -38,7 +40,8 @@ export function GroupSelector({
   selectedGroups,
   onGroupSelectionChange,
   maxGroups = 8,
-  className
+  className,
+  isLoading = false
 }: GroupSelectorProps) {
   const [activeTab, setActiveTab] = useState<'teams' | 'age' | 'custom'>('teams');
 
@@ -227,10 +230,15 @@ export function GroupSelector({
       {/* Group Creation Interface */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Create Groups for Comparison</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            Create Groups for Comparison
+            {isLoading && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <CardContent className={isLoading ? 'opacity-50 pointer-events-none' : ''}>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'teams' | 'age' | 'custom')}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="teams">
                 <Users className="h-4 w-4 mr-2" />
@@ -349,13 +357,13 @@ export function GroupSelector({
               <div className="space-y-3">
                 <div>
                   <Label htmlFor="custom-name">Group Name</Label>
-                  <input
+                  <Input
                     id="custom-name"
                     type="text"
                     value={customGroupName}
                     onChange={(e) => setCustomGroupName(e.target.value)}
                     placeholder="Enter group name"
-                    className="w-full mt-1 px-3 py-2 border rounded-md"
+                    className="mt-1"
                   />
                 </div>
                 <div>
