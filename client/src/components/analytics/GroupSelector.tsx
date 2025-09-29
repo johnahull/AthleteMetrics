@@ -64,6 +64,12 @@ export function GroupSelector({
   // Extract age ranges from athletes
   const ageRanges = useMemo(() => {
     const ages = athletes.map(a => a.age).filter((age): age is number => age !== undefined);
+
+    // Handle case where no athletes have age data
+    if (ages.length === 0) {
+      return [];
+    }
+
     const minAge = Math.min(...ages);
     const maxAge = Math.max(...ages);
 
