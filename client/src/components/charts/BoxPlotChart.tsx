@@ -1352,7 +1352,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         </div>
       )}
 
-      <div className="flex-1" style={{ position: 'relative', minHeight: '400px', width: '100%' }}>
+      <div className="flex-1" style={{ position: 'relative', minHeight: '400px', maxHeight: '600px', width: '100%' }}>
         {(() => {
           try {
             // Render chart only if there's data and options
