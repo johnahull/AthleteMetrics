@@ -1301,21 +1301,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     return () => {
       if (chartRef.current) {
         try {
-          // Additional safety checks before cleanup
-          if (chartRef.current.canvas) {
-            try {
-              // Check ownerDocument before destroying
-              if (chartRef.current.canvas.ownerDocument) {
-                chartRef.current.destroy?.();
-              }
-            } catch (e) {
-              // Canvas not in DOM, destroy anyway
-              chartRef.current.destroy?.();
-            }
-          }
+          // Just destroy the chart without checking ownerDocument
+          // The destroy method handles cleanup internally
+          chartRef.current.destroy?.();
         } catch (error) {
-          // Ignore cleanup errors
-          console.warn('BoxPlotChart cleanup error:', error);
+          // Ignore cleanup errors silently
         }
         // Clear the ref regardless
         chartRef.current = null;
