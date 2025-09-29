@@ -48,9 +48,9 @@ export function ViolinChart({
       const q1 = percentile(sortedValues, 25);
       const median = percentile(sortedValues, 50);
       const q3 = percentile(sortedValues, 75);
-      const min = Math.min(...sortedValues);
-      const max = Math.max(...sortedValues);
-      const mean = sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length;
+      const min = sortedValues.length > 0 ? Math.min(...sortedValues) : 0;
+      const max = sortedValues.length > 0 ? Math.max(...sortedValues) : 0;
+      const mean = sortedValues.length > 0 ? sortedValues.reduce((a, b) => a + b, 0) / sortedValues.length : 0;
 
       // Generate kernel density estimation for violin shape
       const density = calculateKDE(sortedValues);
@@ -69,8 +69,8 @@ export function ViolinChart({
   function calculateKDE(values: number[]): Array<{ x: number; y: number }> {
     if (values.length === 0) return [];
 
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = values.length > 0 ? Math.min(...values) : 0;
+    const max = values.length > 0 ? Math.max(...values) : 0;
     const range = max - min;
     const bandwidth = range * 0.2; // Simple bandwidth selection
     const step = range / 100;
@@ -125,9 +125,9 @@ export function ViolinChart({
 
     // Find global min/max for y-axis scaling
     const allValues = processedData.flatMap(group => group.values);
-    const globalMin = Math.min(...allValues);
-    const globalMax = Math.max(...allValues);
-    const valueRange = globalMax - globalMin;
+    const globalMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+    const globalMax = allValues.length > 0 ? Math.max(...allValues) : 100;
+    const valueRange = globalMax - globalMin || 1; // Prevent division by zero
 
     // Helper function to convert value to y-coordinate
     const valueToY = (value: number) => {
@@ -137,7 +137,8 @@ export function ViolinChart({
     // Draw each violin
     processedData.forEach((group, groupIndex) => {
       const centerX = padding + groupIndex * groupWidth + groupWidth / 2;
-      const maxDensity = Math.max(...group.density.map(d => d.y));
+      const densityValues = group.density.map(d => d.y);
+      const maxDensity = densityValues.length > 0 ? Math.max(...densityValues) : 1;
 
       // Draw violin shape (density curve)
       ctx.fillStyle = group.color + '40'; // Semi-transparent
@@ -255,6 +256,17 @@ export function ViolinChart({
     processedGroups: processedData.length,
     metric
   });
+
+  // Early return if no data to display
+  if (!data || data.length === 0 || processedData.length === 0) {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-center h-64 text-muted-foreground">
+          No data available for violin chart
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={className}>
