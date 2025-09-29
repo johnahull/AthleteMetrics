@@ -187,12 +187,16 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           const stats = point.additionalData.groupStats;
           const groupName = point.athleteName;
           
-          // Position calculation for multi-group layout
+          // Position calculation for multi-group layout - even spacing
           const boxWidth = 0.15;
-          const groupSpacing = 0.8 / metricGroups[metric].length;
+          const totalGroupSpacing = 0.8; // Total space available for all groups
+          const numGroups = metricGroups[metric].length;
+          const groupSpacing = numGroups > 1 ? totalGroupSpacing / (numGroups - 1) : 0;
           const baseX = metricIndex;
-          const groupOffset = (groupIndex - (metricGroups[metric].length - 1) / 2) * groupSpacing;
-          const xPos = baseX + groupOffset;
+
+          // Calculate even spacing across the available space
+          const startOffset = -totalGroupSpacing / 2;
+          const xPos = baseX + startOffset + (groupIndex * groupSpacing);
           
           // Group colors
           const groupColors = CHART_CONFIG.COLORS.SERIES;
@@ -359,12 +363,16 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             }
           };
 
-          // Position calculation for multi-group layout
+          // Position calculation for multi-group layout - even spacing
           const boxWidth = 0.15; // Narrower boxes for multiple groups
-          const groupSpacing = 0.8 / selectedGroups.length; // Space groups within metric
+          const totalGroupSpacing = 0.8; // Total space available for all groups
+          const numGroups = selectedGroups.length;
+          const groupSpacing = numGroups > 1 ? totalGroupSpacing / (numGroups - 1) : 0;
           const baseX = metricIndex;
-          const groupOffset = (groupIndex - (selectedGroups.length - 1) / 2) * groupSpacing;
-          const xPos = baseX + groupOffset;
+
+          // Calculate even spacing across the available space
+          const startOffset = -totalGroupSpacing / 2;
+          const xPos = baseX + startOffset + (groupIndex * groupSpacing);
 
           // Group colors - use the SERIES array from chart config
           const groupColors = CHART_CONFIG.COLORS.SERIES;
@@ -806,6 +814,64 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     };
   }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames, selectedGroups]);
 
+  // Custom plugin for drawing team labels
+  const multiGroupLabelsPlugin = {
+    id: 'multiGroupLabels',
+    afterRender: (chart: any) => {
+      // Only draw team labels for multi-group analysis
+      const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
+      if (!isMultiGroup || !chart.ctx || !chart.chartArea) return;
+
+      const ctx = chart.ctx;
+      const chartArea = chart.chartArea;
+
+      // Collect unique team positions from datasets
+      const teamPositions: { [teamName: string]: number[] } = {};
+
+      chart.data.datasets.forEach((dataset: any) => {
+        if (dataset.data && Array.isArray(dataset.data) && dataset.label) {
+          const teamMatch = dataset.label.match(/^([^-]+) -/);
+          if (teamMatch) {
+            const teamName = teamMatch[1].trim();
+            if (!teamPositions[teamName]) {
+              teamPositions[teamName] = [];
+            }
+
+            dataset.data.forEach((point: any) => {
+              if (point && typeof point.x === 'number') {
+                teamPositions[teamName].push(point.x);
+              }
+            });
+          }
+        }
+      });
+
+      // Calculate center position for each team and draw labels
+      ctx.save();
+      ctx.font = '12px Arial';
+      ctx.fillStyle = '#374151';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      Object.keys(teamPositions).forEach(teamName => {
+        const positions = teamPositions[teamName];
+        if (positions.length > 0) {
+          // Calculate average position for team label
+          const avgPosition = positions.reduce((sum, pos) => sum + pos, 0) / positions.length;
+          const pixelX = chart.scales.x.getPixelForValue(avgPosition);
+
+          // Position label below the chart area
+          const labelY = chartArea.bottom + 25;
+
+          // Draw team name
+          ctx.fillText(teamName, pixelX, labelY);
+        }
+      });
+
+      ctx.restore();
+    }
+  };
+
   // Chart options
   const options: ChartOptions<'scatter'> = {
     responsive: true,
@@ -972,14 +1038,19 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         grid: {
           display: false
         },
-        ...(selectedGroups && {
+        ...(selectedGroups && selectedGroups.length >= 2 && {
+          // For multi-group, adjust scale bounds and hide default ticks
           min: -0.5,
-          max: selectedGroups.length - 0.5,
+          max: (boxPlotData?.labels?.length || 1) - 0.5,
           ticks: {
             stepSize: 1,
             callback: function(value: any) {
-              const index = Math.round(value);
-              return selectedGroups[index]?.name || '';
+              const metricIndex = Math.round(value);
+              if (metricIndex < 0 || metricIndex >= (boxPlotData?.labels?.length || 0)) {
+                return '';
+              }
+              // Show only the metric name for multi-group
+              return boxPlotData?.labels?.[metricIndex] || '';
             }
           }
         })
@@ -1087,6 +1158,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 type="scatter"
                 data={chartData}
                 options={chartOptions}
+                plugins={[multiGroupLabelsPlugin]}
                 ref={chartRef}
                 key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
               />
