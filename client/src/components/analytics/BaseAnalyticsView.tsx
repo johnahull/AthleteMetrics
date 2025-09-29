@@ -16,8 +16,12 @@ import { ChartContainer } from '@/components/charts/ChartContainer';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
+import { useGroupComparison } from '@/hooks/useGroupComparison';
 import { FilterPanel } from './FilterPanel';
+import { MetricsSelector } from './MetricsSelector';
+import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
+import { GroupSelector } from './GroupSelector';
 
 import type { AnalysisType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
@@ -61,7 +65,7 @@ function BaseAnalyticsViewContent({
   title,
   description,
   defaultAnalysisType = 'individual',
-  allowedAnalysisTypes = ['individual', 'intra_group', 'inter_group'],
+  allowedAnalysisTypes = ['individual', 'intra_group', 'multi_group'],
   showAnalysisTypeTabs = true,
   showIndividualAthleteSelection = true,
   showMultiAthleteSelection = true,
@@ -94,6 +98,27 @@ function BaseAnalyticsViewContent({
     effectiveOrganizationId
   } = useAnalyticsOperations();
 
+  // Group comparison functionality for multi-group analysis
+  const {
+    selectedGroups,
+    setSelectedGroups,
+    groupComparisonData,
+    chartData: groupChartData,
+    isLoading: isGroupLoading,
+    error: groupError,
+    isDataReady: isGroupDataReady
+  } = useGroupComparison({
+    organizationId: effectiveOrganizationId || '',
+    metrics: state.metrics,
+    athletes: state.availableAthletes.map(athlete => ({
+      id: athlete.id,
+      name: athlete.name,
+      team: athlete.teamName
+    })),
+    analyticsData: state.analyticsData,
+    isMainAnalyticsLoading: state.isLoading
+  });
+
   // Fetch data when conditions are met
   useEffect(() => {
     if (shouldFetchData && effectiveOrganizationId) {
@@ -125,7 +150,7 @@ function BaseAnalyticsViewContent({
     switch (type) {
       case 'individual': return <User className="h-4 w-4" />;
       case 'intra_group': return <Users className="h-4 w-4" />;
-      case 'inter_group': return <BarChart3 className="h-4 w-4" />;
+      case 'multi_group': return <BarChart3 className="h-4 w-4" />;
     }
   };
 
@@ -133,7 +158,7 @@ function BaseAnalyticsViewContent({
     switch (type) {
       case 'individual': return 'Individual Athlete';
       case 'intra_group': return 'Multi-Athlete';
-      case 'inter_group': return 'Inter-Group Comparison';
+      case 'multi_group': return 'Multi-Group';
     }
   };
 
@@ -143,7 +168,7 @@ function BaseAnalyticsViewContent({
         return 'Analyze a single athlete\'s performance over time, compare against group averages, and track personal records and improvement trends.';
       case 'intra_group':
         return 'Compare multiple athletes within the same group (team, age group, gender, etc.) to identify top performers, outliers, and distribution patterns.';
-      case 'inter_group':
+      case 'multi_group':
         return 'Compare performance metrics across different groups (teams vs teams, age groups, gender differences) to identify group-level patterns and benchmarks.';
     }
   };
@@ -250,6 +275,35 @@ function BaseAnalyticsViewContent({
                           )}
                         </div>
                       )}
+
+                      {/* Multi-Group Selection */}
+                      {type === 'multi_group' && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Create Groups for Comparison</label>
+                          <GroupSelector
+                            organizationId={effectiveOrganizationId || ''}
+                            athletes={state.availableAthletes.map(athlete => ({
+                              id: athlete.id,
+                              name: athlete.name,
+                              team: athlete.teamName
+                            }))}
+                            selectedGroups={selectedGroups}
+                            onGroupSelectionChange={setSelectedGroups}
+                            maxGroups={8}
+                          />
+
+                          {selectedGroups.length === 0 && (
+                            <p className="text-xs text-orange-600">
+                              Please create at least 2 groups to compare performance across different categories.
+                            </p>
+                          )}
+                          {selectedGroups.length === 1 && (
+                            <p className="text-xs text-orange-600">
+                              Please create at least one more group for comparison.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
                 ))}
@@ -258,20 +312,37 @@ function BaseAnalyticsViewContent({
           </Card>
         )}
 
-        {/* Unified Filter Panel */}
-        <FilterPanel
-          filters={state.filters}
-          metrics={state.metrics}
-          timeframe={state.timeframe}
-          analysisType={state.analysisType}
-          availableTeams={state.availableTeams}
-          availableAthletes={state.availableAthletes}
-          onFiltersChange={updateFilters}
-          onMetricsChange={updateMetrics}
-          onTimeframeChange={updateTimeframe}
-          onReset={() => resetFilters(effectiveOrganizationId || '')}
-          effectiveOrganizationId={effectiveOrganizationId || undefined}
-        />
+        {/* Unified Filter Panel - Hidden for Multi-Group analysis */}
+        {state.analysisType !== 'multi_group' && (
+          <FilterPanel
+            filters={state.filters}
+            metrics={state.metrics}
+            timeframe={state.timeframe}
+            analysisType={state.analysisType}
+            availableTeams={state.availableTeams}
+            availableAthletes={state.availableAthletes}
+            onFiltersChange={updateFilters}
+            onMetricsChange={updateMetrics}
+            onTimeframeChange={updateTimeframe}
+            onReset={() => resetFilters(effectiveOrganizationId || '')}
+            effectiveOrganizationId={effectiveOrganizationId || undefined}
+          />
+        )}
+
+        {/* Metrics and Timeframe for Multi-Group */}
+        {state.analysisType === 'multi_group' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <MetricsSelector
+              metrics={state.metrics}
+              onMetricsChange={updateMetrics}
+            />
+            <TimeframeSelector
+              timeframe={state.timeframe}
+              onTimeframeChange={updateTimeframe}
+              analysisType={state.analysisType}
+            />
+          </div>
+        )}
 
         {/* Additional Filters Slot */}
         {additionalFilters}
@@ -356,7 +427,27 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* Chart Display */}
-        {!state.isLoading && !state.error && isDataReady && memoizedChartData && (
+        {(() => {
+          const shouldShowChart = !state.isLoading && !state.error && (
+            state.analysisType === 'multi_group' ? 
+              (selectedGroups.length >= 2 && groupChartData) : 
+              (memoizedChartData && (state.analysisType === 'individual' ? state.selectedAthleteId : true))
+          );
+
+          if (state.analysisType === 'multi_group') {
+            devLog.log('Multi-group chart render check:', {
+              isLoading: state.isLoading,
+              hasError: !!state.error,
+              hasMemoizedChartData: !!memoizedChartData,
+              selectedGroupsCount: selectedGroups.length,
+              hasGroupChartData: !!groupChartData,
+              groupChartDataLength: groupChartData?.length || 0,
+              shouldShowChart
+            });
+          }
+
+          return shouldShowChart;
+        })() && (
           <>
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
@@ -373,7 +464,8 @@ function BaseAnalyticsViewContent({
                       title={`${chartConfig.title} - ${formatChartTypeName(chartType)}`}
                       subtitle={chartConfig.subtitle}
                       chartType={chartType}
-                      data={memoizedChartData}
+                      data={state.analysisType === 'multi_group' && groupChartData ? groupChartData : memoizedChartData}
+                      rawData={state.analysisType === 'multi_group' && (chartType === 'box_plot' || chartType === 'box_swarm_combo' || chartType === 'violin_plot') ? state.analyticsData?.data : undefined}
                       trends={state.analyticsData?.trends}
                       multiMetric={state.analyticsData?.multiMetric}
                       statistics={state.analyticsData?.statistics}
@@ -387,6 +479,7 @@ function BaseAnalyticsViewContent({
                       selectedDates={chartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
                       metric={chartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
                       onExport={handleExport}
+                      selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
                     />
                   </Suspense>
                 ))}
@@ -404,7 +497,8 @@ function BaseAnalyticsViewContent({
                   title={chartConfig.title}
                   subtitle={chartConfig.subtitle}
                   chartType={state.selectedChartType}
-                  data={memoizedChartData}
+                  data={state.analysisType === 'multi_group' && groupChartData ? groupChartData : memoizedChartData}
+                  rawData={state.analysisType === 'multi_group' && (state.selectedChartType === 'box_plot' || state.selectedChartType === 'box_swarm_combo' || state.selectedChartType === 'violin_plot') ? state.analyticsData?.data : undefined}
                   trends={state.analyticsData?.trends}
                   multiMetric={state.analyticsData?.multiMetric}
                   statistics={state.analyticsData?.statistics}
@@ -415,6 +509,7 @@ function BaseAnalyticsViewContent({
                   selectedDates={state.selectedChartType === 'time_series_box_swarm' ? state.selectedDates : undefined}
                   metric={state.selectedChartType === 'time_series_box_swarm' ? state.metrics.primary : undefined}
                   onExport={handleExport}
+                  selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
                 />
               </Suspense>
             )}
@@ -422,7 +517,7 @@ function BaseAnalyticsViewContent({
         )}
 
         {/* No Data Display */}
-        {!state.isLoading && !state.error && !isDataReady && (
+        {!state.isLoading && !state.error && !isDataReady && !memoizedChartData && (
           <Card>
             <CardContent className="flex items-center justify-center h-96">
               <div className="text-center">
@@ -434,6 +529,11 @@ function BaseAnalyticsViewContent({
                 {state.analysisType === 'individual' && !state.selectedAthleteId && (
                   <p className="text-sm text-muted-foreground">
                     Please select an athlete for individual analysis.
+                  </p>
+                )}
+                {state.analysisType === 'multi_group' && selectedGroups.length < 2 && (
+                  <p className="text-sm text-muted-foreground">
+                    Please create at least 2 groups to compare performance.
                   </p>
                 )}
               </div>

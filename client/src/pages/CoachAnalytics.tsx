@@ -86,8 +86,8 @@ export function CoachAnalytics() {
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
       organizationId={organizationContext || undefined}
-      defaultAnalysisType="inter_group"
-      allowedAnalysisTypes={['individual', 'intra_group', 'inter_group']}
+      defaultAnalysisType="multi_group"
+      allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}
       headerActions={headerActions}
       additionalFilters={additionalFilters}

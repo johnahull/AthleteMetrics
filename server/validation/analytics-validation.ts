@@ -14,7 +14,7 @@ const ALLOWED_METRICS = [
 // Allowed analysis types
 const ALLOWED_ANALYSIS_TYPES = [
   'individual',
-  'inter_group',
+  'multi_group',
   'intra_group'
 ] as const;
 

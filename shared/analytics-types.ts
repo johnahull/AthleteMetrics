@@ -4,7 +4,7 @@
  */
 
 // Core analysis types
-export type AnalysisType = 'individual' | 'intra_group' | 'inter_group';
+export type AnalysisType = 'individual' | 'intra_group' | 'multi_group';
 export type TimeframeType = 'best' | 'trends';
 export type TimePeriod = 'this_year' | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'all_time' | 'custom';
 
@@ -47,6 +47,39 @@ export interface TimeframeConfig {
   endDate?: Date;
 }
 
+// Group definition for multi-group comparisons
+export interface GroupDefinition {
+  id: string;
+  name: string;
+  type: 'team' | 'age' | 'custom';
+  memberIds: string[];
+  color?: string;
+  criteria?: {
+    teams?: string[];
+    teamIds?: string[]; // Added for robust team identification
+    ageFrom?: number;
+    ageTo?: number;
+    graduationYears?: number[];
+    athleteIds?: string[];
+  };
+}
+
+// Group comparison data for multi-group analysis
+export interface GroupComparisonData {
+  groups: GroupDefinition[];
+  metrics: string[];
+  aggregations: Record<string, Record<string, {
+    mean: number;
+    median: number;
+    min: number;
+    max: number;
+    stdDev: number;
+    count: number;
+    values: number[];
+  }>>;
+  statistics?: Record<string, StatisticalSummary>;
+}
+
 // Chart data point structure
 export interface ChartDataPoint {
   athleteId: string;
@@ -56,6 +89,7 @@ export interface ChartDataPoint {
   metric: string;
   grouping?: string;
   teamName?: string;
+  teamId?: string; // Added for robust team identification
   additionalData?: Record<string, any>;
 }
 
@@ -116,7 +150,8 @@ export type ChartType =
   | 'connected_scatter'
   | 'multi_line'
   | 'box_swarm_combo'
-  | 'time_series_box_swarm';
+  | 'time_series_box_swarm'
+  | 'violin_plot';
 
 export interface ChartConfiguration {
   type: ChartType;
@@ -326,9 +361,9 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
       trends: ['multi_line']
     }
   },
-  inter_group: {
+  multi_group: {
     '1': {
-      best: ['box_swarm_combo', 'distribution'],
+      best: ['box_swarm_combo', 'violin_plot'],
       trends: ['time_series_box_swarm', 'multi_line']
     },
     '2': {

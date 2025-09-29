@@ -12,7 +12,8 @@ import type {
   ChartType,
   StatisticalSummary,
   TrendData,
-  MultiMetricData
+  MultiMetricData,
+  GroupDefinition
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 
@@ -47,12 +48,14 @@ const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default:
 const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
+const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
 interface ChartContainerProps {
   title: string;
   subtitle?: string;
   chartType: ChartType;
   data: ChartDataPoint[];
+  rawData?: ChartDataPoint[]; // Raw individual athlete data for swarm points
   trends?: TrendData[];
   multiMetric?: MultiMetricData[];
   statistics?: Record<string, StatisticalSummary>;
@@ -64,6 +67,7 @@ interface ChartContainerProps {
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   selectedDates?: string[];
   metric?: string;
+  selectedGroups?: GroupDefinition[];
   onExport?: () => void;
   onFullscreen?: () => void;
   className?: string;
@@ -74,6 +78,7 @@ export function ChartContainer({
   subtitle,
   chartType,
   data,
+  rawData,
   trends,
   multiMetric,
   statistics,
@@ -85,6 +90,7 @@ export function ChartContainer({
   onAthleteSelectionChange,
   selectedDates,
   metric,
+  selectedGroups,
   onExport,
   onFullscreen,
   className
@@ -112,6 +118,7 @@ export function ChartContainer({
       case 'radar_chart':
       case 'box_swarm_combo':
       case 'time_series_box_swarm':
+      case 'violin_plot':
         return null;
       default:
         return null;
@@ -137,7 +144,8 @@ export function ChartContainer({
       dataLength: data?.length || 0,
       trendsLength: trends?.length || 0,
       multiMetricLength: multiMetric?.length || 0,
-      hasMultiMetric: !!multiMetric
+      hasMultiMetric: !!multiMetric,
+      isPreAggregated: data && data.length > 0 && data[0].athleteId?.startsWith?.('group-')
     });
 
     switch (chartType) {
@@ -190,7 +198,7 @@ export function ChartContainer({
 
   // Only show unsupported chart error for truly unsupported types
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
-  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm'];
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'violin_plot'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
@@ -215,7 +223,8 @@ export function ChartContainer({
       hasChartData: !!chartData,
       isArray: Array.isArray(chartData),
       length: Array.isArray(chartData) ? chartData.length : 'N/A',
-      dataType: typeof chartData
+      dataType: typeof chartData,
+      selectedGroups: selectedGroups?.length || 0
     });
     
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
@@ -228,7 +237,10 @@ export function ChartContainer({
         <CardContent className="flex-1">
           <Alert>
             <AlertDescription>
-              No data available for this chart. Try adjusting your filters or date range.
+              {selectedGroups && selectedGroups.length > 0 
+                ? `No data available for the selected groups (${selectedGroups.map(g => g.name).join(', ')}). Try selecting different groups or check if the groups have measurement data.`
+                : 'No data available for this chart. Try adjusting your filters or date range.'
+              }
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -272,7 +284,12 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
-        <div className="w-full" style={{ height: '500px' }}>
+        <div className={`w-full ${chartType === 'box_swarm_combo' && selectedGroups && selectedGroups.length >= 2 ? 'flex-1 flex flex-col' : ''}`} style={{
+          height: chartType === 'box_swarm_combo' && selectedGroups && selectedGroups.length >= 2
+            ? undefined
+            : '500px',
+          minHeight: '500px'
+        }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense
@@ -321,10 +338,12 @@ export function ChartContainer({
                 ) : chartType === 'box_swarm_combo' ? (
                   <BoxPlotChart
                     data={chartData as ChartDataPoint[]}
+                    rawData={rawData}
                     config={chartConfig}
                     statistics={statistics}
                     highlightAthlete={highlightAthlete}
                     showAllPoints={true}
+                    selectedGroups={selectedGroups}
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
                   <TimeSeriesBoxSwarmChart
@@ -334,13 +353,26 @@ export function ChartContainer({
                     selectedDates={selectedDates || []}
                     metric={metric || ''}
                   />
+                ) : chartType === 'violin_plot' ? (
+                  <ErrorBoundary>
+                    <ViolinChart
+                      data={rawData || chartData as ChartDataPoint[]}
+                      config={chartConfig}
+                      statistics={statistics}
+                      highlightAthlete={highlightAthlete}
+                      selectedGroups={selectedGroups}
+                    />
+                  </ErrorBoundary>
                 ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}
                     data={chartData as any}
+                    rawData={rawData}
                     config={chartConfig}
                     statistics={statistics || {}}
                     highlightAthlete={highlightAthlete}
+                    showAllPoints={chartType === 'box_plot' && selectedGroups && selectedGroups.length >= 2}
+                    selectedGroups={selectedGroups}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -376,9 +408,9 @@ export function getRecommendedChartType(
       return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   } else {
-    // Group analysis (intra_group or inter_group)
+    // Group analysis (intra_group or multi_group)
     if (metricCount === 1) {
-      return timeframeType === 'best' ? 'distribution' : 'time_series_box_swarm';
+      return timeframeType === 'best' ? 'box_swarm_combo' : 'time_series_box_swarm';
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {

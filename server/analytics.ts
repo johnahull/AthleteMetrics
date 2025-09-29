@@ -440,6 +440,7 @@ export class AnalyticsService {
       date: row.date,
       metric: row.metric,
       teamName: row.teamName,
+      teamId: row.teamId, // Added for robust team identification
       grouping: row.teamName // Default grouping by team
     }));
   }

@@ -3,26 +3,25 @@ import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
   ChartOptions,
-  ScatterController,
-  LineController,
-  PointElement,
-  LineElement,
   ChartData,
-  TooltipItem,
-  LegendItem
+  Filler,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { sanitizeCanvasText, sanitizeTeamName } from '@/utils/text-sanitization';
 import type {
   ChartDataPoint,
   ChartConfiguration,
   StatisticalSummary,
-  BoxPlotData
+  BoxPlotData,
+  GroupDefinition
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -34,34 +33,38 @@ import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spati
 ChartJS.register(
   CategoryScale,
   LinearScale,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
   Legend,
-  ScatterController,
-  LineController,
-  PointElement,
-  LineElement
+  Filler
 );
 
 interface BoxPlotChartProps {
   data: ChartDataPoint[];
+  rawData?: ChartDataPoint[]; // Raw individual athlete data for swarm points
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
   highlightAthlete?: string;
   showAllPoints?: boolean; // Option to show all data points (swarm style)
   showAthleteNames?: boolean; // Option to show athlete names next to points
+  selectedGroups?: GroupDefinition[]; // For multi-group analysis
 }
 
 export const BoxPlotChart = React.memo(function BoxPlotChart({
   data,
+  rawData,
   config,
   statistics,
   highlightAthlete,
   showAllPoints = false,
-  showAthleteNames = false
+  showAthleteNames = false,
+  selectedGroups
 }: BoxPlotChartProps) {
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
+
 
   // Memoized label positions cache to prevent recalculation on every render
   const labelPositionsCache = useRef<Map<string, LabelPosition[]>>(new Map());
@@ -159,7 +162,560 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   const boxPlotData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
+    // Check if this is multi-group analysis
+    const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
+    
+    // Check if data is pre-aggregated (group comparison data)
+    const isPreAggregated = data.length > 0 && data[0].athleteId.startsWith('group-');
 
+    if (isMultiGroup && isPreAggregated) {
+      // Handle pre-aggregated group data
+      const datasets: any[] = [];
+      const labels: string[] = [];
+      
+      // Group data by metric
+      const metricGroups = data.reduce((groups, point) => {
+        if (!groups[point.metric]) {
+          groups[point.metric] = [];
+        }
+        groups[point.metric].push(point);
+        return groups;
+      }, {} as Record<string, any[]>);
+      
+      Object.keys(metricGroups).forEach((metric, metricIndex) => {
+        labels[metricIndex] = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+        
+        metricGroups[metric].forEach((point, groupIndex) => {
+          if (!point.additionalData?.groupStats) return;
+          
+          const stats = point.additionalData.groupStats;
+          const groupName = point.athleteName;
+          
+          // Position calculation for multi-group layout - dynamic spacing
+          const numGroups = metricGroups[metric].length;
+          const numMetrics = Object.keys(metricGroups).length;
+
+          // Dynamic box width based on number of groups to prevent overlap
+          const maxBoxWidth = 0.15;
+          const minBoxWidth = 0.05;
+          const dynamicBoxWidth = Math.max(minBoxWidth, Math.min(maxBoxWidth, 0.8 / numGroups));
+          const boxWidth = dynamicBoxWidth;
+
+          // Calculate spacing to ensure no overlap
+          const minSpacing = boxWidth * 1.2; // Minimum gap between boxes
+          const chartPadding = Math.min(0.4, 0.5 / numGroups); // Dynamic padding
+          const availableWidth = 1 - (2 * chartPadding);
+          const totalBoxWidth = numGroups * boxWidth;
+          const totalGaps = (numGroups - 1) * minSpacing;
+          const remainingSpace = Math.max(0, availableWidth - totalBoxWidth - totalGaps);
+          const extraSpacing = numGroups > 1 ? remainingSpace / (numGroups - 1) : 0;
+          const groupSpacing = minSpacing + extraSpacing;
+          const baseX = metricIndex; // Metric position
+
+          // Calculate position with proper spacing to prevent overlap
+          const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
+          const xPos = baseX + startOffset + (groupIndex * groupSpacing);
+
+          // Group colors
+          const groupColors = CHART_CONFIG.COLORS.SERIES;
+          const groupColor = groupColors[groupIndex % groupColors.length];
+          const groupColorLight = groupColor + '40';
+          
+          // Calculate percentiles from existing stats
+          const q1 = stats.median - (stats.stdDev * 0.674); // Approximate Q1
+          const q3 = stats.median + (stats.stdDev * 0.674); // Approximate Q3
+          
+          // Box rectangle (Q1 to Q3)
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+            data: [
+              { x: xPos - boxWidth/2, y: q1 },
+              { x: xPos + boxWidth/2, y: q1 },
+              { x: xPos + boxWidth/2, y: q3 },
+              { x: xPos - boxWidth/2, y: q3 },
+              { x: xPos - boxWidth/2, y: q1 }
+            ],
+            type: 'line',
+            backgroundColor: groupColorLight,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+            pointRadius: 0,
+            showLine: true,
+            fill: true,
+            order: 3
+          });
+          
+          // Median line
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+            data: [
+              { x: xPos - boxWidth/2, y: stats.median },
+              { x: xPos + boxWidth/2, y: stats.median }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 2
+          });
+          
+          // Whiskers (using min/max from stats)
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+            data: [
+              { x: xPos, y: q1 },
+              { x: xPos, y: stats.min }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+          
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+            data: [
+              { x: xPos, y: q3 },
+              { x: xPos, y: stats.max }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+          
+          // Mean point
+          datasets.push({
+            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Mean`,
+            data: [{ x: xPos, y: stats.mean }],
+            type: 'scatter',
+            backgroundColor: 'white',
+            borderColor: groupColor,
+            borderWidth: 2,
+            pointRadius: 4,
+            order: 1
+          });
+
+          // Swarm points for all players in this group (if enabled)
+          if (showAllPoints) {
+
+            // Try to get individual points from additionalData first
+            let individualPoints = point.additionalData?.individualPoints as Array<{
+              athleteId: string;
+              athleteName: string;
+              value: number;
+              teamName?: string;
+            }> | undefined;
+
+            // If no individual points in additionalData, use rawData if available
+            if (!individualPoints && rawData) {
+              // Function to check if data point matches the group
+              const matchesGroup = (dataPoint: any) => {
+                // For multi-group analysis, match by athlete ID being in the group's memberIds
+                if (selectedGroups) {
+                  const matchingGroup = selectedGroups.find(g => g.name === groupName);
+                  if (matchingGroup?.memberIds && matchingGroup.memberIds.includes(dataPoint.athleteId)) {
+                    return true;
+                  }
+                }
+
+                // Legacy fallback: Match by team name (case-insensitive)
+                if (dataPoint.teamName) {
+                  return dataPoint.teamName.toLowerCase() === groupName.toLowerCase();
+                }
+
+                return false;
+              };
+
+              individualPoints = rawData
+                .filter(d => d.metric === metric && matchesGroup(d))
+                .map(d => ({
+                  athleteId: d.athleteId,
+                  athleteName: d.athleteName,
+                  value: d.value,
+                  teamName: d.teamName,
+                  teamId: d.teamId
+                }));
+            }
+
+            // Final fallback: filter main data to get individual points for this group and metric
+            if (!individualPoints) {
+              // Reuse the same matching logic for main data
+              const matchesGroup = (dataPoint: any) => {
+                // For multi-group analysis, match by athlete ID being in the group's memberIds
+                if (selectedGroups) {
+                  const matchingGroup = selectedGroups.find(g => g.name === groupName);
+                  if (matchingGroup?.memberIds && matchingGroup.memberIds.includes(dataPoint.athleteId)) {
+                    return true;
+                  }
+                }
+
+                // Legacy fallback: Match by team name (case-insensitive)
+                if (dataPoint.teamName) {
+                  return dataPoint.teamName.toLowerCase() === groupName.toLowerCase();
+                }
+
+                return false;
+              };
+
+              individualPoints = data
+                .filter(d => d.metric === metric && matchesGroup(d))
+                .map(d => ({
+                  athleteId: d.athleteId,
+                  athleteName: d.athleteName,
+                  value: d.value,
+                  teamName: d.teamName,
+                  teamId: d.teamId
+                }));
+            }
+
+
+            if (individualPoints && individualPoints.length > 0) {
+
+            const groupPoints = individualPoints
+              .filter(p => safeNumber(p.value) && !isNaN(safeNumber(p.value)))
+              .map((indivPoint) => {
+                const jitterRange = boxWidth * 0.8; // Jitter within the box width
+                const jitter = generateDeterministicJitter(indivPoint.athleteId, jitterRange);
+                const numericValue = safeNumber(indivPoint.value);
+
+                // Determine if outlier using same logic as main section
+                const q1 = stats.percentiles?.p25 || (stats.median - (stats.std * 0.674));
+                const q3 = stats.percentiles?.p75 || (stats.median + (stats.std * 0.674));
+                const iqr = q3 - q1;
+                const isOutlier = numericValue < q1 - 1.5 * iqr || numericValue > q3 + 1.5 * iqr;
+
+                return {
+                  x: xPos + jitter,
+                  y: numericValue,
+                  athleteId: indivPoint.athleteId,
+                  athleteName: indivPoint.athleteName,
+                  teamName: indivPoint.teamName,
+                  groupName: groupName,
+                  isOutlier
+                };
+              });
+
+            // Regular points
+            const regularPoints = groupPoints.filter(p => !p.isOutlier);
+            if (regularPoints.length > 0) {
+              datasets.push({
+                label: `${groupName} Players`,
+                data: regularPoints,
+                type: 'scatter',
+                backgroundColor: groupColorLight,
+                borderColor: groupColor,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+                showLine: false,
+                order: 5
+              });
+            }
+
+            // Outlier points
+            const outlierPoints = groupPoints.filter(p => p.isOutlier);
+            if (outlierPoints.length > 0) {
+              datasets.push({
+                label: `${groupName} Outliers`,
+                data: outlierPoints,
+                type: 'scatter',
+                backgroundColor: 'white',
+                borderColor: groupColor,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.DEFAULT,
+                pointStyle: 'cross',
+                showLine: false,
+                order: 6
+              });
+            }
+            }
+          }
+        });
+      });
+      
+      return {
+        labels,
+        datasets
+      };
+    } else if (isMultiGroup) {
+      // Multi-group box plot: one box per group (original logic for individual athlete data)
+      const datasets: any[] = [];
+      const labels: string[] = [];
+
+      selectedGroups.forEach((group, groupIndex) => {
+        // Filter data for this group
+        const groupData = data.filter(point =>
+          group.memberIds.includes(point.athleteId)
+        );
+
+        if (groupData.length === 0) return;
+
+        // Group by metric for this group
+        const metricGroups = groupData.reduce((groups, point) => {
+          if (!groups[point.metric]) {
+            groups[point.metric] = [];
+          }
+          const numericValue = safeNumber(point.value);
+          if (!isNaN(numericValue)) {
+            groups[point.metric].push(numericValue);
+          }
+          return groups;
+        }, {} as Record<string, number[]>);
+
+        // Process each metric for this group
+        Object.keys(metricGroups).forEach((metric, metricIndex) => {
+          if (groupIndex === 0) {
+            // Only add label once (for first group)
+            labels[metricIndex] = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+          }
+
+          const values = metricGroups[metric].sort((a, b) => a - b);
+          if (values.length === 0) return;
+
+          // Calculate statistics for this group
+          const sortedValues = [...values].sort((a, b) => a - b);
+          const count = sortedValues.length;
+          const sum = sortedValues.reduce((acc, val) => acc + val, 0);
+          const mean = sum / count;
+          const min = Math.min(...sortedValues);
+          const max = Math.max(...sortedValues);
+
+          const getPercentile = (p: number) => {
+            const index = (p / 100) * (count - 1);
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+            if (lower === upper) return sortedValues[lower];
+            const weight = index - lower;
+            return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
+          };
+
+          const stats = {
+            count,
+            mean,
+            median: getPercentile(50),
+            min,
+            max,
+            std: 0,
+            variance: 0,
+            percentiles: {
+              p5: getPercentile(5),
+              p10: getPercentile(10),
+              p25: getPercentile(25),
+              p50: getPercentile(50),
+              p75: getPercentile(75),
+              p90: getPercentile(90),
+              p95: getPercentile(95)
+            }
+          };
+
+          // Position calculation for multi-group layout - dynamic spacing
+          const numGroups = selectedGroups.length;
+          const numMetrics = Object.keys(metricGroups).length;
+
+          // Dynamic box width based on number of groups to prevent overlap
+          const maxBoxWidth = 0.15;
+          const minBoxWidth = 0.05;
+          const dynamicBoxWidth = Math.max(minBoxWidth, Math.min(maxBoxWidth, 0.8 / numGroups));
+          const boxWidth = dynamicBoxWidth;
+
+          // Calculate spacing to ensure no overlap
+          const minSpacing = boxWidth * 1.2; // Minimum gap between boxes
+          const chartPadding = Math.min(0.4, 0.5 / numGroups); // Dynamic padding
+          const availableWidth = 1 - (2 * chartPadding);
+          const totalBoxWidth = numGroups * boxWidth;
+          const totalGaps = (numGroups - 1) * minSpacing;
+          const remainingSpace = Math.max(0, availableWidth - totalBoxWidth - totalGaps);
+          const extraSpacing = numGroups > 1 ? remainingSpace / (numGroups - 1) : 0;
+          const groupSpacing = minSpacing + extraSpacing;
+          const baseX = metricIndex; // Metric position
+
+          // Calculate position with proper spacing to prevent overlap
+          const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
+          const xPos = baseX + startOffset + (groupIndex * groupSpacing);
+
+          // Debug logging for spacing calculations
+          console.log(`BoxPlot spacing calc: groups=${numGroups}, boxWidth=${boxWidth.toFixed(3)}, spacing=${groupSpacing.toFixed(3)}, xPos=${xPos.toFixed(3)} for group ${groupIndex}`);
+
+          // Group colors - use the SERIES array from chart config
+          const groupColors = CHART_CONFIG.COLORS.SERIES;
+          const groupColor = groupColors[groupIndex % groupColors.length];
+          const groupColorLight = groupColor + '40'; // Add transparency
+
+          // Box rectangle (Q1 to Q3)
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+            data: [
+              { x: xPos - boxWidth/2, y: stats.percentiles.p25 },
+              { x: xPos + boxWidth/2, y: stats.percentiles.p25 },
+              { x: xPos + boxWidth/2, y: stats.percentiles.p75 },
+              { x: xPos - boxWidth/2, y: stats.percentiles.p75 },
+              { x: xPos - boxWidth/2, y: stats.percentiles.p25 }
+            ],
+            type: 'line',
+            backgroundColor: groupColorLight,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+            pointRadius: 0,
+            showLine: true,
+            fill: true,
+            order: 3
+          });
+
+          // Median line
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+            data: [
+              { x: xPos - boxWidth/2, y: stats.percentiles.p50 },
+              { x: xPos + boxWidth/2, y: stats.percentiles.p50 }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 2
+          });
+
+          // Whiskers
+          const iqr = stats.percentiles.p75 - stats.percentiles.p25;
+          const lowerWhisker = Math.max(stats.min, stats.percentiles.p25 - 1.5 * iqr);
+          const upperWhisker = Math.min(stats.max, stats.percentiles.p75 + 1.5 * iqr);
+
+          // Lower whisker
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+            data: [
+              { x: xPos, y: stats.percentiles.p25 },
+              { x: xPos, y: lowerWhisker }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+
+          // Upper whisker
+          datasets.push({
+            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+            data: [
+              { x: xPos, y: stats.percentiles.p75 },
+              { x: xPos, y: upperWhisker }
+            ],
+            type: 'line',
+            backgroundColor: groupColor,
+            borderColor: groupColor,
+            borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+            pointRadius: 0,
+            showLine: true,
+            order: 4
+          });
+
+          // Swarm points for all players in this group
+          if (showAllPoints) {
+            const groupPoints = groupData
+              .filter(d => d.metric === metric)
+              .map((point) => {
+                const jitterRange = boxWidth * 0.8; // Jitter within the box width
+                const jitter = generateDeterministicJitter(point.athleteId, jitterRange);
+                const numericValue = safeNumber(point.value);
+
+                if (isNaN(numericValue)) return null;
+
+                const outliers = values.filter(v =>
+                  v < stats.percentiles.p25 - 1.5 * iqr ||
+                  v > stats.percentiles.p75 + 1.5 * iqr
+                );
+                const isOutlier = outliers.includes(numericValue);
+
+                return {
+                  x: xPos + jitter,
+                  y: numericValue,
+                  athleteId: point.athleteId,
+                  athleteName: point.athleteName,
+                  teamName: point.teamName,
+                  groupName: group.name,
+                  isOutlier
+                };
+              })
+              .filter((point): point is NonNullable<typeof point> => point !== null);
+
+            // Regular points
+            const regularPoints = groupPoints.filter(p => !p.isOutlier);
+            if (regularPoints.length > 0) {
+              datasets.push({
+                label: `${group.name} Players`,
+                data: regularPoints,
+                type: 'scatter',
+                backgroundColor: groupColorLight,
+                borderColor: groupColor,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+                showLine: false,
+                order: 5
+              });
+            }
+
+            // Outlier points
+            const outlierPoints = groupPoints.filter(p => p.isOutlier);
+            if (outlierPoints.length > 0) {
+              datasets.push({
+                label: `${group.name} Outliers`,
+                data: outlierPoints,
+                type: 'scatter',
+                backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
+                borderColor: CHART_CONFIG.COLORS.AVERAGE,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+                showLine: false,
+                order: 1
+              });
+            }
+          }
+
+          // Highlight specific athlete if provided
+          if (highlightAthlete) {
+            const athleteData = groupData.find(d =>
+              d.athleteId === highlightAthlete && d.metric === metric
+            );
+
+            if (athleteData) {
+              const numericValue = safeNumber(athleteData.value);
+              datasets.push({
+                label: `${athleteData.athleteName}`,
+                data: [{ x: xPos, y: numericValue }],
+                type: 'scatter',
+                backgroundColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+                borderColor: CHART_CONFIG.COLORS.HIGHLIGHT,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.HIGHLIGHTED,
+                pointStyle: 'star',
+                showLine: false,
+                order: 0
+              });
+            }
+          }
+        });
+      });
+
+      return {
+        labels,
+        datasets
+      };
+    }
+
+    // Original single-group logic
     // Group data by metric
     const metricGroups = data.reduce((groups, point) => {
       if (!groups[point.metric]) {
@@ -230,7 +786,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       }
 
       if (stats && values.length > 0) {
-        const boxWidth = 0.4;
+        // Dynamic box width for single metric display
+        const numMetrics = Object.keys(metricGroups).length;
+        const dynamicBoxWidth = Math.min(0.4, 0.8 / Math.max(1, numMetrics));
+        const boxWidth = dynamicBoxWidth;
         const xPos = index;
 
         // Box rectangle (Q1 to Q3)
@@ -426,7 +985,86 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       ),
       datasets
     };
-  }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames]);
+  }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames, selectedGroups]);
+
+  // Custom plugin for drawing team labels
+  const multiGroupLabelsPlugin = {
+    id: 'multiGroupLabels',
+    afterRender: (chart: any) => {
+      try {
+        // Only draw team labels for multi-group analysis
+        const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
+        if (!isMultiGroup) return;
+
+        // Comprehensive safety checks to prevent ownerDocument errors
+        if (!chart || !chart.canvas || !chart.ctx || !chart.chartArea) {
+          return;
+        }
+
+        // Additional safety check for canvas DOM element with error handling
+        try {
+          if (!chart.canvas.ownerDocument) {
+            return;
+          }
+        } catch (e) {
+          // Canvas might not be in DOM yet
+          console.warn('BoxPlotChart: Failed to access canvas context', e);
+          return;
+        }
+
+        const ctx = chart.ctx;
+        const chartArea = chart.chartArea;
+
+      // Collect unique team positions from datasets
+      const teamPositions: { [teamName: string]: number[] } = {};
+
+      chart.data.datasets.forEach((dataset: any) => {
+        if (dataset.data && Array.isArray(dataset.data) && dataset.label) {
+          const teamMatch = dataset.label.match(/^([^-]+) -/);
+          if (teamMatch) {
+            const teamName = teamMatch[1].trim();
+            if (!teamPositions[teamName]) {
+              teamPositions[teamName] = [];
+            }
+
+            dataset.data.forEach((point: any) => {
+              if (point && typeof point.x === 'number') {
+                teamPositions[teamName].push(point.x);
+              }
+            });
+          }
+        }
+      });
+
+      // Calculate center position for each team and draw labels
+      ctx.save();
+      ctx.font = '12px Arial';
+      ctx.fillStyle = '#374151';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      Object.keys(teamPositions).forEach(teamName => {
+        const positions = teamPositions[teamName];
+        if (positions.length > 0) {
+          // Calculate average position for team label
+          const avgPosition = positions.reduce((sum, pos) => sum + pos, 0) / positions.length;
+          const pixelX = chart.scales.x.getPixelForValue(avgPosition);
+
+          // Position label below the chart area
+          const labelY = chartArea.bottom + 25;
+
+          // Draw team name (sanitized to prevent XSS)
+          ctx.fillText(sanitizeTeamName(teamName), pixelX, labelY);
+        }
+      });
+
+      ctx.restore();
+      } catch (error) {
+        // Silently handle canvas access errors to prevent chart crashes
+        console.warn('BoxPlotChart multiGroupLabelsPlugin error:', error);
+      }
+    }
+  };
 
   // Chart options
   const options: ChartOptions<'scatter'> = {
@@ -434,50 +1072,79 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     maintainAspectRatio: false,
     animation: {
       onComplete: function() {
-        // Render athlete names if enabled
-        if (localShowAthleteNames && showAllPoints && chartRef.current) {
-          const chart = chartRef.current;
-          const ctx = chart.ctx;
-          const chartArea = chart.chartArea;
+        try {
+          // Render athlete names if enabled
+          if (localShowAthleteNames && showAllPoints && chartRef.current) {
+            const chart = chartRef.current;
 
-          if (ctx && chartArea) {
-            // Save current context state
-            ctx.save();
+            // Additional safety checks to prevent ownerDocument errors
+            if (!chart || !chart.canvas) {
+              return;
+            }
 
-            // Set text styling
-            ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
-            ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
+            try {
+              if (!chart.canvas.ownerDocument) {
+                return;
+              }
+            } catch (e) {
+              console.warn('BoxPlotChart: labelsPlugin canvas access failed', e);
+              return;
+            }
 
-            // Use memoized label position calculation
-            const labelPositions = calculateLabelPositions(chart, ctx, chartArea);
+            const ctx = chart.ctx;
+            const chartArea = chart.chartArea;
 
-            // Efficient collision resolution using spatial indexing
-            const resolvedPositions = resolveLabelsWithSpatialIndex(labelPositions, chartArea, {
-              maxLabels: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_LABELS,
-              padding: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING,
-              textHeight: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT,
-              gridSize: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.GRID_SIZE,
-              maxIterations: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_ITERATIONS,
-            });
+            if (ctx && chartArea && ctx.canvas) {
+              // Check ownerDocument in try-catch
+              try {
+                if (!ctx.canvas.ownerDocument) {
+                  return;
+                }
+              } catch (e) {
+                console.warn('BoxPlotChart: Label collision detection canvas access failed', e);
+                return;
+              }
+              // Save current context state
+              ctx.save();
 
-            // Second pass: render all labels with resolved positions
-            resolvedPositions.forEach(label => {
-              const padding = 2;
-
-              // Add a subtle background for better readability
-              ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_DARK;
-              ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
-
-              // Restore text color and draw text
+              // Set text styling
+              ctx.font = `${CHART_CONFIG.RESPONSIVE.MOBILE_FONT_SIZE}px Arial`;
               ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
-              ctx.fillText(label.text, label.x, label.y);
-            });
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
 
-            // Restore context state
-            ctx.restore();
+              // Use memoized label position calculation
+              const labelPositions = calculateLabelPositions(chart, ctx, chartArea);
+
+              // Efficient collision resolution using spatial indexing
+              const resolvedPositions = resolveLabelsWithSpatialIndex(labelPositions, chartArea, {
+                maxLabels: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_LABELS,
+                padding: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.PADDING,
+                textHeight: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.TEXT_HEIGHT,
+                gridSize: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.GRID_SIZE,
+                maxIterations: CHART_CONFIG.ALGORITHM.COLLISION_DETECTION.MAX_ITERATIONS,
+              });
+
+              // Second pass: render all labels with resolved positions
+              resolvedPositions.forEach(label => {
+                const padding = 2;
+
+                // Add a subtle background for better readability
+                ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_DARK;
+                ctx.fillRect(label.x - padding, label.y - 6, label.width + 2 * padding, 12);
+
+                // Restore text color and draw text (sanitized to prevent XSS)
+                ctx.fillStyle = CHART_CONFIG.ACCESSIBILITY.WCAG_COLORS.TEXT_ON_LIGHT;
+                ctx.fillText(sanitizeCanvasText(label.text), label.x, label.y);
+              });
+
+              // Restore context state
+              ctx.restore();
+            }
           }
+        } catch (error) {
+          // Silently handle canvas access errors to prevent chart crashes
+          console.warn('BoxPlotChart animation error:', error);
         }
       }
     },
@@ -525,9 +1192,14 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const rawData = context.raw as any;
             const result = [];
 
-            // Add team info for individual athlete points
+            // Add team and group info for individual athlete points
             if (rawData && rawData.athleteName) {
               result.push(`Team: ${rawData.teamName || 'Independent'}`);
+
+              // Add group info for multi-group analysis
+              if (rawData.groupName) {
+                result.push(`Group: ${rawData.groupName}`);
+              }
 
               // Add percentile information
               if (stats) {
@@ -570,25 +1242,31 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     },
     scales: {
       x: {
-        type: 'linear',
-        position: 'bottom',
-        min: -0.5,
-        max: Object.keys(statistics || {}).length - 0.5,
-        ticks: {
-          stepSize: 1,
-          callback: (value) => {
-            const index = Number(value);
-            const metrics = Object.keys(statistics || {});
-            const metric = metrics[index];
-            return metric ? 
-              METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric : 
-              '';
-          }
-        },
+        type: 'linear' as const,
         title: {
           display: true,
-          text: 'Metrics'
-        }
+          text: selectedGroups ? 'Groups' : 'Categories'
+        },
+        grid: {
+          display: false
+        },
+        ...(selectedGroups && selectedGroups.length >= 2 && {
+          // For multi-group, adjust scale bounds dynamically based on groups
+          min: -0.6,
+          max: (boxPlotData?.labels?.length || 1) - 0.4,
+          ticks: {
+            stepSize: 1,
+            maxTicksLimit: Math.min(10, (boxPlotData?.labels?.length || 1) + 2),
+            callback: function(value: any) {
+              const metricIndex = Math.round(value);
+              if (metricIndex < 0 || metricIndex >= (boxPlotData?.labels?.length || 0)) {
+                return '';
+              }
+              // Show only the metric name for multi-group
+              return boxPlotData?.labels?.[metricIndex] || '';
+            }
+          }
+        })
       },
       y: {
         type: 'linear',
@@ -627,10 +1305,14 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     return () => {
       if (chartRef.current) {
         try {
+          // Just destroy the chart without checking ownerDocument
+          // The destroy method handles cleanup internally
           chartRef.current.destroy?.();
         } catch (error) {
-          // Ignore cleanup errors
+          // Ignore cleanup errors silently
         }
+        // Clear the ref regardless
+        chartRef.current = null;
       }
     };
   }, []);
@@ -643,11 +1325,16 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     );
   }
 
+  // Use the processed data for the chart
+  const chartData = boxPlotData;
+  const chartOptions = options;
+
+  // Add error boundary wrapper for chart rendering
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex flex-col overflow-hidden">
       {/* Toggle control for athlete names - only show when swarm mode is enabled */}
       {showAllPoints && (
-        <div className="flex items-center space-x-2 mb-4 px-2">
+        <div className="flex items-center space-x-2 mb-4 px-2 flex-shrink-0">
           <Switch
             id="show-names"
             checked={localShowAthleteNames}
@@ -659,12 +1346,210 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         </div>
       )}
 
-      <Chart
-        ref={chartRef}
-        type="scatter"
-        data={boxPlotData}
-        options={options}
-      />
+      <div className="flex-1 overflow-y-auto">
+        <div style={{ position: 'relative', minHeight: '400px', width: '100%' }}>
+          {(() => {
+            try {
+              // Render chart only if there's data and options
+              if (!chartData || !chartOptions) {
+                return (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    <div className="text-center">
+                      <div className="text-lg font-medium mb-2">No Data Available</div>
+                      <div className="text-sm">
+                        {selectedGroups && selectedGroups.length > 0
+                          ? `No data found for the selected groups (${selectedGroups.map(g => g.name).join(', ')})`
+                          : 'No measurement data available for visualization'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <Chart
+                  type="scatter"
+                  data={chartData}
+                  options={chartOptions}
+                  plugins={[multiGroupLabelsPlugin]}
+                  ref={chartRef}
+                  key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
+                />
+              );
+            } catch (error) {
+              console.error('Chart render error:', error);
+              return (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center">
+                    <div className="text-lg font-medium mb-2">Chart Error</div>
+                    <div className="text-sm">Unable to render chart. Please try refreshing.</div>
+                  </div>
+                </div>
+              );
+            }
+          })()}
+        </div>
+
+        {/* Statistics Summary Table for Multi-Group Comparison */}
+        {selectedGroups && selectedGroups.length >= 2 && data && data.length > 0 && (
+          <div className="mt-6 pb-4">
+            <div className="text-sm font-medium text-muted-foreground mb-3 px-2">Group Statistics Summary</div>
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 px-3 font-medium">Group</th>
+                  <th className="text-right py-2 px-3 font-medium">n</th>
+                  <th className="text-right py-2 px-3 font-medium">Mean</th>
+                  <th className="text-right py-2 px-3 font-medium">Median</th>
+                  <th className="text-right py-2 px-3 font-medium">Min</th>
+                  <th className="text-right py-2 px-3 font-medium">Max</th>
+                  <th className="text-right py-2 px-3 font-medium">Std Dev</th>
+                  <th className="text-right py-2 px-3 font-medium">Q1</th>
+                  <th className="text-right py-2 px-3 font-medium">Q3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedGroups.map((group, index) => {
+                  // Find the group data point that contains the statistics
+                  // The statistics are stored in the additionalData.groupStats of the aggregated data points
+                  const currentMetric = data.length > 0 ? data[0].metric : '';
+                  const groupDataPoint = data.find(d =>
+                    d.grouping === group.id &&
+                    d.additionalData?.groupStats &&
+                    d.metric === currentMetric
+                  );
+
+                  const groupStats = groupDataPoint?.additionalData?.groupStats;
+
+                  // Calculate the actual count of data points for this group
+                  // For aggregated group data, there's typically one point per group
+                  // The actual member count should be in group.memberIds or groupStats
+                  const groupDataCount = group.memberIds?.length ||
+                    data.filter(d => d.grouping === group.id && d.metric === currentMetric && !d.additionalData?.groupStats).length;
+
+                  if (!groupStats) {
+                    // If no groupStats in additionalData, calculate them from raw data
+                    const groupValues = data
+                      .filter(d => d.grouping === group.id && d.metric === currentMetric)
+                      .map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value)
+                      .filter(v => !isNaN(v))
+                      .sort((a, b) => a - b);
+
+                    if (groupValues.length === 0) return null;
+
+                    const mean = groupValues.reduce((a, b) => a + b, 0) / groupValues.length;
+                    const median = groupValues.length % 2 === 0
+                      ? (groupValues[Math.floor(groupValues.length / 2) - 1] + groupValues[Math.floor(groupValues.length / 2)]) / 2
+                      : groupValues[Math.floor(groupValues.length / 2)];
+
+                    // Calculate standard deviation
+                    const variance = groupValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / groupValues.length;
+                    const stdDev = Math.sqrt(variance);
+
+                    // Calculate quartiles
+                    const q1Index = Math.floor(groupValues.length * 0.25);
+                    const q3Index = Math.floor(groupValues.length * 0.75);
+
+                    return (
+                      <tr key={group.id} className="hover:bg-gray-50">
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded"
+                              style={{ backgroundColor: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length] }}
+                            />
+                            <span className="font-medium">{group.name}</span>
+                          </div>
+                        </td>
+                        <td className="text-right py-2 px-3">{groupValues.length}</td>
+                        <td className="text-right py-2 px-3">{mean.toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{median.toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[0].toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[groupValues.length - 1].toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{stdDev.toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[q1Index].toFixed(2)}</td>
+                        <td className="text-right py-2 px-3">{groupValues[q3Index].toFixed(2)}</td>
+                      </tr>
+                    );
+                  }
+
+                  // Format values based on metric type
+                  const formatValue = (value: number) => {
+                    if (typeof value !== 'number' || isNaN(value)) return '-';
+                    // For time metrics (lower is better), show with 2 decimal places
+                    // For jump metrics (higher is better), show with 1 decimal place
+                    const isTimeMetric = currentMetric?.includes('TIME') || currentMetric?.includes('AGILITY') ||
+                                        currentMetric?.includes('TEST') || currentMetric?.includes('DASH');
+                    return isTimeMetric ? value.toFixed(2) : value.toFixed(1);
+                  };
+
+                  return (
+                    <tr key={group.id} className="hover:bg-gray-50">
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded"
+                            style={{ backgroundColor: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length] }}
+                          />
+                          <span className="font-medium">{group.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-right py-2 px-3">{groupDataCount || groupStats.count || groupStats.groupSize || 0}</td>
+                      <td className="text-right py-2 px-3 font-medium">
+                        {formatValue(groupStats.mean)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.median)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.min)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.max)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.stdDev || groupStats.std || 0)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {/* Q1 - Try multiple possible property names */}
+                        {formatValue(groupStats.q1 || groupStats.percentiles?.p25 || (groupStats.median - (groupStats.stdDev || groupStats.std || 0) * 0.674))}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {/* Q3 - Try multiple possible property names */}
+                        {formatValue(groupStats.q3 || groupStats.percentiles?.p75 || (groupStats.median + (groupStats.stdDev || groupStats.std || 0) * 0.674))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Add metric context */}
+          {(() => {
+            const metric = data.length > 0 ? data[0].metric : '';
+            return metric ? (
+              <div className="mt-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <span>Metric:</span>
+                  <span className="font-medium">
+                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
+                  </span>
+                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit && (
+                    <span>({METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG].unit})</span>
+                  )}
+                  <span className="ml-2">
+                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
+                      ? '• Lower values are better'
+                      : '• Higher values are better'}
+                  </span>
+                </div>
+              </div>
+            ) : null;
+          })()}
+        </div>
+        )}
+      </div>
     </div>
   );
 });
@@ -673,26 +1558,26 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 export function calculateBoxPlotStats(values: number[]): BoxPlotData {
   const sorted = [...values].sort((a, b) => a - b);
   const n = sorted.length;
-  
+
   const min = sorted[0];
   const max = sorted[n - 1];
-  
+
   const q1Index = Math.floor(n * 0.25);
   const medianIndex = Math.floor(n * 0.5);
   const q3Index = Math.floor(n * 0.75);
-  
+
   const q1 = sorted[q1Index];
-  const median = n % 2 === 0 ? 
-    (sorted[medianIndex - 1] + sorted[medianIndex]) / 2 : 
+  const median = n % 2 === 0 ?
+    (sorted[medianIndex - 1] + sorted[medianIndex]) / 2 :
     sorted[medianIndex];
   const q3 = sorted[q3Index];
-  
+
   const iqr = q3 - q1;
   const lowerFence = q1 - 1.5 * iqr;
   const upperFence = q3 + 1.5 * iqr;
-  
+
   const outliers = sorted.filter(v => v < lowerFence || v > upperFence);
-  
+
   return {
     min,
     q1,

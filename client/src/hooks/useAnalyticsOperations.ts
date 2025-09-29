@@ -261,8 +261,8 @@ export function useChartConfiguration() {
         title = 'Multi-Athlete Analysis';
         subtitle = `Comparing athletes within selected groups - ${formatMetricsForDisplay()}`;
         break;
-      case 'inter_group':
-        title = 'Inter-Group Comparison';
+      case 'multi_group':
+        title = 'Multi-Group Comparison';
         subtitle = `Comparing performance across different groups - ${formatMetricsForDisplay()}`;
         break;
     }
