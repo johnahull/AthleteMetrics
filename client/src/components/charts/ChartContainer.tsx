@@ -352,6 +352,8 @@ export function ChartContainer({
                     config={chartConfig}
                     statistics={statistics || {}}
                     highlightAthlete={highlightAthlete}
+                    showAllPoints={chartType === 'box_plot' && selectedGroups && selectedGroups.length >= 2}
+                    selectedGroups={selectedGroups}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-64 text-muted-foreground">

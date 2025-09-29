@@ -290,6 +290,89 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             pointRadius: 4,
             order: 1
           });
+
+          // Swarm points for all players in this group (if enabled)
+          if (showAllPoints) {
+            // Try to get individual points from additionalData first, then fallback to filtering raw data
+            let individualPoints = point.additionalData?.individualPoints as Array<{
+              athleteId: string;
+              athleteName: string;
+              value: number;
+              teamName?: string;
+            }> | undefined;
+
+            // Fallback: filter raw data to get individual points for this group and metric
+            if (!individualPoints) {
+              individualPoints = data
+                .filter(d => d.metric === metric && d.teamName === groupName)
+                .map(d => ({
+                  athleteId: d.athleteId,
+                  athleteName: d.athleteName,
+                  value: d.value,
+                  teamName: d.teamName
+                }));
+            }
+
+            if (individualPoints && individualPoints.length > 0) {
+
+            const groupPoints = individualPoints
+              .filter(p => safeNumber(p.value) && !isNaN(safeNumber(p.value)))
+              .map((indivPoint) => {
+                const jitterRange = boxWidth * 0.8; // Jitter within the box width
+                const jitter = generateDeterministicJitter(indivPoint.athleteId, jitterRange);
+                const numericValue = safeNumber(indivPoint.value);
+
+                // Determine if outlier using same logic as main section
+                const q1 = stats.percentiles?.p25 || (stats.median - (stats.std * 0.674));
+                const q3 = stats.percentiles?.p75 || (stats.median + (stats.std * 0.674));
+                const iqr = q3 - q1;
+                const isOutlier = numericValue < q1 - 1.5 * iqr || numericValue > q3 + 1.5 * iqr;
+
+                return {
+                  x: xPos + jitter,
+                  y: numericValue,
+                  athleteId: indivPoint.athleteId,
+                  athleteName: indivPoint.athleteName,
+                  teamName: indivPoint.teamName,
+                  groupName: groupName,
+                  isOutlier
+                };
+              });
+
+            // Regular points
+            const regularPoints = groupPoints.filter(p => !p.isOutlier);
+            if (regularPoints.length > 0) {
+              datasets.push({
+                label: `${groupName} Players`,
+                data: regularPoints,
+                type: 'scatter',
+                backgroundColor: groupColorLight,
+                borderColor: groupColor,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+                showLine: false,
+                order: 5
+              });
+            }
+
+            // Outlier points
+            const outlierPoints = groupPoints.filter(p => p.isOutlier);
+            if (outlierPoints.length > 0) {
+              datasets.push({
+                label: `${groupName} Outliers`,
+                data: outlierPoints,
+                type: 'scatter',
+                backgroundColor: 'white',
+                borderColor: groupColor,
+                borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THICK,
+                pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.DEFAULT,
+                pointStyle: 'cross',
+                showLine: false,
+                order: 6
+              });
+            }
+            }
+          }
         });
       });
       
