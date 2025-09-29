@@ -285,7 +285,12 @@ export function ChartContainer({
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
-        <div className="w-full" style={{ height: '500px' }}>
+        <div className={`w-full ${chartType === 'box_swarm_combo' && selectedGroups && selectedGroups.length >= 2 ? 'flex-1 flex flex-col' : ''}`} style={{
+          height: chartType === 'box_swarm_combo' && selectedGroups && selectedGroups.length >= 2
+            ? undefined
+            : '500px',
+          minHeight: '500px'
+        }}>
           <ErrorBoundary>
             {isValidChartData(chartData) ? (
               <React.Suspense
