@@ -189,13 +189,18 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           
           // Position calculation for multi-group layout - even spacing
           const boxWidth = 0.15;
-          const totalGroupSpacing = 0.8; // Total space available for all groups
           const numGroups = metricGroups[metric].length;
-          const groupSpacing = numGroups > 1 ? totalGroupSpacing / (numGroups - 1) : 0;
-          const baseX = metricIndex;
+          const numMetrics = Object.keys(metricGroups).length;
 
-          // Calculate even spacing across the available space
-          const startOffset = -totalGroupSpacing / 2;
+          // Calculate even distribution across full chart width
+          // Each metric gets 1 unit of space, with padding from edges
+          const chartPadding = 0.3; // Padding from chart edges
+          const availableWidth = 1 - (2 * chartPadding); // Space available within metric bounds
+          const groupSpacing = numGroups > 1 ? availableWidth / (numGroups - 1) : 0;
+          const baseX = metricIndex; // Metric position
+
+          // Calculate position with even spacing from chart edges
+          const startOffset = -availableWidth / 2; // Start from left edge of available space
           const xPos = baseX + startOffset + (groupIndex * groupSpacing);
           
           // Group colors
@@ -365,13 +370,18 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
           // Position calculation for multi-group layout - even spacing
           const boxWidth = 0.15; // Narrower boxes for multiple groups
-          const totalGroupSpacing = 0.8; // Total space available for all groups
           const numGroups = selectedGroups.length;
-          const groupSpacing = numGroups > 1 ? totalGroupSpacing / (numGroups - 1) : 0;
-          const baseX = metricIndex;
+          const numMetrics = Object.keys(metricGroups).length;
 
-          // Calculate even spacing across the available space
-          const startOffset = -totalGroupSpacing / 2;
+          // Calculate even distribution across full chart width
+          // Each metric gets 1 unit of space, with padding from edges
+          const chartPadding = 0.3; // Padding from chart edges
+          const availableWidth = 1 - (2 * chartPadding); // Space available within metric bounds
+          const groupSpacing = numGroups > 1 ? availableWidth / (numGroups - 1) : 0;
+          const baseX = metricIndex; // Metric position
+
+          // Calculate position with even spacing from chart edges
+          const startOffset = -availableWidth / 2; // Start from left edge of available space
           const xPos = baseX + startOffset + (groupIndex * groupSpacing);
 
           // Group colors - use the SERIES array from chart config
