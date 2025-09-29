@@ -1000,8 +1000,13 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           return;
         }
 
-        // Additional safety check for canvas DOM element
-        if (!chart.canvas.ownerDocument) {
+        // Additional safety check for canvas DOM element with error handling
+        try {
+          if (!chart.canvas.ownerDocument) {
+            return;
+          }
+        } catch (e) {
+          // Canvas might not be in DOM yet
           return;
         }
 
@@ -1071,14 +1076,30 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const chart = chartRef.current;
 
             // Additional safety checks to prevent ownerDocument errors
-            if (!chart || !chart.canvas || !chart.canvas.ownerDocument) {
+            if (!chart || !chart.canvas) {
+              return;
+            }
+
+            try {
+              if (!chart.canvas.ownerDocument) {
+                return;
+              }
+            } catch (e) {
               return;
             }
 
             const ctx = chart.ctx;
             const chartArea = chart.chartArea;
 
-            if (ctx && chartArea && ctx.canvas && ctx.canvas.ownerDocument) {
+            if (ctx && chartArea && ctx.canvas) {
+              // Check ownerDocument in try-catch
+              try {
+                if (!ctx.canvas.ownerDocument) {
+                  return;
+                }
+              } catch (e) {
+                return;
+              }
               // Save current context state
               ctx.save();
 
@@ -1281,8 +1302,16 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       if (chartRef.current) {
         try {
           // Additional safety checks before cleanup
-          if (chartRef.current.canvas && chartRef.current.canvas.ownerDocument) {
-            chartRef.current.destroy?.();
+          if (chartRef.current.canvas) {
+            try {
+              // Check ownerDocument before destroying
+              if (chartRef.current.canvas.ownerDocument) {
+                chartRef.current.destroy?.();
+              }
+            } catch (e) {
+              // Canvas not in DOM, destroy anyway
+              chartRef.current.destroy?.();
+            }
           }
         } catch (error) {
           // Ignore cleanup errors
