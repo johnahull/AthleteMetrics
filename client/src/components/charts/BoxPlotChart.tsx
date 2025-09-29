@@ -1327,10 +1327,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
   // Add error boundary wrapper for chart rendering
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full flex flex-col overflow-hidden">
       {/* Toggle control for athlete names - only show when swarm mode is enabled */}
       {showAllPoints && (
-        <div className="flex items-center space-x-2 mb-4 px-2">
+        <div className="flex items-center space-x-2 mb-4 px-2 flex-shrink-0">
           <Switch
             id="show-names"
             checked={localShowAthleteNames}
@@ -1342,52 +1342,53 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         </div>
       )}
 
-      <div className="flex-1" style={{ position: 'relative', minHeight: '400px', maxHeight: '1200px', width: '100%' }}>
-        {(() => {
-          try {
-            // Render chart only if there's data and options
-            if (!chartData || !chartOptions) {
-              return (
-                <div className="flex items-center justify-center h-64 text-muted-foreground">
-                  <div className="text-center">
-                    <div className="text-lg font-medium mb-2">No Data Available</div>
-                    <div className="text-sm">
-                      {selectedGroups && selectedGroups.length > 0
-                        ? `No data found for the selected groups (${selectedGroups.map(g => g.name).join(', ')})`
-                        : 'No measurement data available for visualization'}
+      <div className="flex-1 overflow-y-auto">
+        <div style={{ position: 'relative', minHeight: '400px', width: '100%' }}>
+          {(() => {
+            try {
+              // Render chart only if there's data and options
+              if (!chartData || !chartOptions) {
+                return (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    <div className="text-center">
+                      <div className="text-lg font-medium mb-2">No Data Available</div>
+                      <div className="text-sm">
+                        {selectedGroups && selectedGroups.length > 0
+                          ? `No data found for the selected groups (${selectedGroups.map(g => g.name).join(', ')})`
+                          : 'No measurement data available for visualization'}
+                      </div>
                     </div>
+                  </div>
+                );
+              }
+              return (
+                <Chart
+                  type="scatter"
+                  data={chartData}
+                  options={chartOptions}
+                  plugins={[multiGroupLabelsPlugin]}
+                  ref={chartRef}
+                  key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
+                />
+              );
+            } catch (error) {
+              console.error('Chart render error:', error);
+              return (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <div className="text-center">
+                    <div className="text-lg font-medium mb-2">Chart Error</div>
+                    <div className="text-sm">Unable to render chart. Please try refreshing.</div>
                   </div>
                 </div>
               );
             }
-            return (
-              <Chart
-                type="scatter"
-                data={chartData}
-                options={chartOptions}
-                plugins={[multiGroupLabelsPlugin]}
-                ref={chartRef}
-                key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
-              />
-            );
-          } catch (error) {
-            console.error('Chart render error:', error);
-            return (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <div className="text-center">
-                  <div className="text-lg font-medium mb-2">Chart Error</div>
-                  <div className="text-sm">Unable to render chart. Please try refreshing.</div>
-                </div>
-              </div>
-            );
-          }
-        })()}
-      </div>
+          })()}
+        </div>
 
-      {/* Statistics Summary Table for Multi-Group Comparison */}
-      {selectedGroups && selectedGroups.length >= 2 && data && data.length > 0 && (
-        <div className="mt-6">
-          <div className="text-sm font-medium text-muted-foreground mb-3 px-2">Group Statistics Summary</div>
+        {/* Statistics Summary Table for Multi-Group Comparison */}
+        {selectedGroups && selectedGroups.length >= 2 && data && data.length > 0 && (
+          <div className="mt-6 pb-4">
+            <div className="text-sm font-medium text-muted-foreground mb-3 px-2">Group Statistics Summary</div>
           <div className="overflow-x-auto w-full">
             <table className="w-full text-sm border-collapse">
               <thead>
@@ -1543,7 +1544,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             ) : null;
           })()}
         </div>
-      )}
+        )}
+      </div>
     </div>
   );
 });
