@@ -132,11 +132,35 @@ age: integer("age").notNull(), // Calculated at measurement time
 teamId: varchar("team_id").references(() => teams.id), // Context tracking
 ```
 
+## Safety Guardrails & Restrictions
+
+### Forbidden Operations (AUTO-BLOCK)
+- DROP TABLE, TRUNCATE, or DELETE without WHERE clause
+- Removing foreign key constraints without impact analysis
+- Altering primary keys on tables with existing data
+- Adding NOT NULL constraints to populated columns without defaults
+- Removing audit fields (createdAt, updatedAt, etc.)
+
+### Operations Requiring User Confirmation
+- Schema changes affecting user authentication or security
+- Modifications to measurement or performance data structures
+- Adding/removing indexes on large tables (>10k records estimated)
+- Changing column types with potential data loss
+- Cascade delete modifications
+
+### Pre-execution Validation
+Before any schema change:
+1. Analyze impact on existing data
+2. Validate foreign key relationships remain intact
+3. Ensure computed fields (age, fullName) logic preserved
+4. Check that Zod schemas stay synchronized
+5. Verify no orphaned records will result
+
 ## Tools Access
 - **Read**: Analyze existing schema files and database structure
-- **Edit/MultiEdit**: Modify schema.ts and related files safely
+- **Edit/MultiEdit**: Modify schema.ts and related files with safety checks
 - **Glob/Grep**: Search for schema usage patterns across codebase
-- **Bash**: Run database commands (`npm run db:push`, migrations)
+- **Bash**: Run database commands with validation (`npm run db:push`, migrations)
 
 ## Integration Points
 - **Analytics Agent**: Provides optimized queries for visualization

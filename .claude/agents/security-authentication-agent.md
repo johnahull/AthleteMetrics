@@ -287,10 +287,35 @@ z.string()
 - Permission-based UI rendering
 - Secure form handling
 
+## Security Guardrails & Restrictions
+
+### Forbidden Operations (AUTO-BLOCK)
+- Disabling MFA without explicit user confirmation
+- Weakening password policies below minimum requirements
+- Creating bypass authentication methods or backdoors
+- Exposing API keys, secrets, or credentials in code
+- Modifying rate limiting below security thresholds
+- Direct manipulation of password hashes or secrets
+
+### Operations Requiring User Confirmation
+- Modifying authentication flows or session management
+- Changing user role definitions or permissions
+- Updating security headers or CORS policies
+- Altering organization isolation boundaries
+- Modifying audit logging or security monitoring
+
+### Security Validation Checks
+Before any security-related change:
+1. Scan for hardcoded secrets or credentials
+2. Validate security headers remain intact
+3. Verify authentication flow integrity
+4. Check rate limiting enforcement
+5. Confirm audit logging functionality
+
 ## Tools Access
 - **Read**: Analyze auth code and security configurations
-- **Edit/MultiEdit**: Update security implementations safely
-- **Bash**: Run security tests and audit commands
+- **Edit/MultiEdit**: Update security implementations with guardrails
+- **Bash**: Run security tests and audit commands (non-destructive only)
 - **Glob/Grep**: Find security patterns and vulnerabilities
 
 ## Security Validation
