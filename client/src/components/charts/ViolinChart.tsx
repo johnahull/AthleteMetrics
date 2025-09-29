@@ -33,6 +33,15 @@ export function ViolinChart({
 }: ViolinChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<any>(null);
+  const [tooltip, setTooltip] = React.useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    athleteName: string;
+    value: number;
+    teamName?: string;
+    metric?: string;
+  } | null>(null);
 
   // Process data by groups - use rawData for individual athletes like BoxPlotChart
   const processedData = useMemo(() => {
@@ -676,6 +685,90 @@ export function ViolinChart({
     return () => window.removeEventListener('resize', handleResize);
   }, [processedData]);
 
+  // Handle mouse hover for tooltips
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || processedData.length === 0) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Calculate chart dimensions (matching the drawing logic)
+      const padding = 60;
+      const displayWidth = canvas.clientWidth;
+      const displayHeight = 400;
+      const chartWidth = displayWidth - 2 * padding;
+      const chartHeight = displayHeight - 2 * padding;
+      const groupWidth = chartWidth / processedData.length;
+
+      // Find global min/max for y-axis scaling
+      const allValues = processedData.flatMap(group => group.values);
+      const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+      const dataMax = allValues.length > 0 ? Math.max(...allValues) : 100;
+      const dataRange = dataMax - dataMin || 1;
+
+      const padding_percent = 0.05;
+      const rangePadding = dataRange * padding_percent;
+      const globalMin = dataMin - rangePadding;
+      const globalMax = dataMax + rangePadding;
+      const valueRange = globalMax - globalMin;
+
+      const valueToY = (value: number) => {
+        return padding + chartHeight - ((value - globalMin) / valueRange) * chartHeight;
+      };
+
+      // Check if mouse is near any athlete point
+      let foundAthlete: typeof tooltip = null;
+      const hoverThreshold = 8; // pixels
+
+      for (const [groupIndex, group] of processedData.entries()) {
+        if (!group.athletes) continue;
+
+        const centerX = padding + groupIndex * groupWidth + groupWidth / 2;
+
+        for (const athlete of group.athletes) {
+          const jitterRange = groupWidth * 0.25;
+          const jitter = generateJitter(athlete.athleteId, jitterRange);
+          const x = centerX + jitter;
+          const y = valueToY(athlete.value);
+
+          const distance = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
+
+          if (distance <= hoverThreshold) {
+            foundAthlete = {
+              visible: true,
+              x: mouseX,
+              y: mouseY,
+              athleteName: athlete.athleteName,
+              value: athlete.value,
+              teamName: athlete.teamName,
+              metric: data[0]?.metric
+            };
+            break;
+          }
+        }
+
+        if (foundAthlete) break;
+      }
+
+      setTooltip(foundAthlete);
+    };
+
+    const handleMouseLeave = () => {
+      setTooltip(null);
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [processedData, data]);
+
   const metric = data && data.length > 0 ? data[0]?.metric : undefined;
   const metricConfig = metric ? METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG] : null;
 
@@ -718,6 +811,34 @@ export function ViolinChart({
           className="w-full h-auto border rounded"
           style={{ height: '400px' }}
         />
+
+        {/* Tooltip */}
+        {tooltip && tooltip.visible && (
+          <div
+            className="absolute z-50 bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-sm pointer-events-none"
+            style={{
+              left: `${tooltip.x}px`,
+              top: `${tooltip.y - 10}px`,
+              transform: 'translate(-50%, -100%)',
+            }}
+          >
+            <div className="font-semibold">{tooltip.athleteName}</div>
+            {tooltip.teamName && (
+              <div className="text-xs text-gray-300">{tooltip.teamName}</div>
+            )}
+            <div className="mt-1">
+              {tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG] && (
+                <span className="text-xs text-gray-300">
+                  {METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG].label}:{' '}
+                </span>
+              )}
+              <span className="font-bold">
+                {tooltip.value.toFixed(2)}
+                {tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG]?.unit}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Legend */}
         <div className="mt-4 flex flex-wrap gap-4 text-sm">
