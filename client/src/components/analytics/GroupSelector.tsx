@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
+import { getGroupColor as getChartGroupColor } from '@/utils/chart-colors';
 
 /**
  * Sanitize group name to prevent XSS and ensure valid input
@@ -69,24 +70,29 @@ export function GroupSelector({
 }: GroupSelectorProps) {
   const [activeTab, setActiveTab] = useState<'teams' | 'age' | 'custom'>('teams');
 
-  // Extract unique teams from athletes, handling multi-team strings
-  const uniqueTeams = useMemo(() => {
-    const teams = new Set<string>();
+  // Parse athlete teams once and memoize for performance
+  const athleteTeamsMap = useMemo(() => {
+    const map = new Map<string, string[]>();
     athletes.forEach(athlete => {
       if (athlete.team) {
-        // Split by common delimiters (comma, semicolon) and trim whitespace
         const teamList = athlete.team
           .split(/[,;]/)
           .map(t => t.trim())
           .filter(t => t.length > 0);
-
-        teamList.forEach(team => {
-          teams.add(team);
-        });
+        map.set(athlete.id, teamList);
       }
     });
-    return Array.from(teams).sort();
+    return map;
   }, [athletes]);
+
+  // Extract unique teams from athletes, handling multi-team strings
+  const uniqueTeams = useMemo(() => {
+    const teams = new Set<string>();
+    athleteTeamsMap.forEach(teamList => {
+      teamList.forEach(team => teams.add(team));
+    });
+    return Array.from(teams).sort();
+  }, [athleteTeamsMap]);
 
   // Extract age ranges from athletes
   const ageRanges = useMemo(() => {
@@ -121,17 +127,10 @@ export function GroupSelector({
     const updatedGroups = [...selectedGroups];
     if (isSelected) {
       // Add team as a group
-      // Find all athletes that belong to this team (including multi-team athletes)
+      // Find all athletes that belong to this team (using memoized team map)
       const teamAthletes = athletes.filter(a => {
-        if (!a.team) return false;
-
-        // Split team string and check if it includes the selected team
-        const teamList = a.team
-          .split(/[,;]/)
-          .map(t => t.trim())
-          .filter(t => t.length > 0);
-
-        return teamList.includes(teamName);
+        const teams = athleteTeamsMap.get(a.id);
+        return teams && teams.includes(teamName);
       });
 
       const newGroup: GroupDefinition = {
@@ -150,7 +149,7 @@ export function GroupSelector({
     }
 
     onGroupSelectionChange(updatedGroups);
-  }, [selectedGroups, athletes, maxGroups, onGroupSelectionChange]);
+  }, [selectedGroups, athletes, maxGroups, onGroupSelectionChange, athleteTeamsMap]);
 
   // Handle age group selection
   const handleAgeGroupSelection = useCallback((ageRange: { label: string; min: number; max: number }, isSelected: boolean) => {
@@ -182,7 +181,7 @@ export function GroupSelector({
     }
 
     onGroupSelectionChange(updatedGroups);
-  }, [selectedGroups, athletes, maxGroups, onGroupSelectionChange]);
+  }, [selectedGroups, athletes, maxGroups, onGroupSelectionChange, athleteTeamsMap]);
 
   // Handle custom group creation
   const [customSelection, setCustomSelection] = useState<string[]>([]);
@@ -221,10 +220,9 @@ export function GroupSelector({
     onGroupSelectionChange(updatedGroups);
   }, [selectedGroups, onGroupSelectionChange]);
 
-  // Get color for group
+  // Get color for group (using centralized utility with unlimited color generation)
   function getGroupColor(index: number): string {
-    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
-    return colors[index % colors.length];
+    return getChartGroupColor(index);
   }
 
   devLog.log('GroupSelector', { selectedGroups, uniqueTeams, ageRanges });
@@ -311,14 +309,10 @@ export function GroupSelector({
                     const isSelected = selectedGroups.some(
                       g => g.type === 'team' && g.criteria?.teams?.[0] === team
                     );
-                    // Count athletes that belong to this team (including multi-team athletes)
+                    // Count athletes that belong to this team (using memoized team map)
                     const athleteCount = athletes.filter(a => {
-                      if (!a.team) return false;
-                      const teamList = a.team
-                        .split(/[,;]/)
-                        .map(t => t.trim())
-                        .filter(t => t.length > 0);
-                      return teamList.includes(team);
+                      const teams = athleteTeamsMap.get(a.id);
+                      return teams && teams.includes(team);
                     }).length;
 
                     return (

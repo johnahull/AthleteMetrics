@@ -70,8 +70,11 @@ export function ViolinChart({
       if (selectedGroups && selectedGroups.length > 0) {
         return selectedGroups.map((group, index) => {
           // Filter data for this group by memberIds
-          const groupData = sourceData.filter(point => 
-            group.memberIds && group.memberIds.includes(point.athleteId)
+          const groupData = sourceData.filter(point =>
+            point &&
+            point.athleteId &&
+            group.memberIds &&
+            group.memberIds.includes(point.athleteId)
           );
 
           if (groupData.length === 0) {

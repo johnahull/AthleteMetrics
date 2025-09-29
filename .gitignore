@@ -38,3 +38,6 @@ coverage
 # Replit configuration
 .replit
 replit.nix
+
+# Attached assets (screenshots, temporary files)
+attached_assets/image_*.png
