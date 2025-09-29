@@ -205,86 +205,105 @@ export function ViolinChart({
   }, [data, rawData, selectedGroups]);
 
 
-  // Kernel Density Estimation for violin shape
-  function calculateKDE(values: number[]): Array<{ x: number; y: number }> {
-    if (values.length === 0) return [];
+  // Kernel Density Estimation for violin shape - Memoized for performance
+  const calculateKDE = useMemo(() => {
+    return (values: number[]): Array<{ x: number; y: number }> => {
+      if (values.length === 0) return [];
 
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const range = max - min;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min;
 
-    // Handle edge case where all values are the same
-    if (range === 0) {
-      // Create a narrow bell curve centered at the single value
-      const center = min;
-      const artificialBandwidth = Math.abs(min) * 0.1 || 1;
+      // Handle edge case where all values are the same
+      if (range === 0) {
+        // Create a narrow bell curve centered at the single value
+        const center = min;
+        const artificialBandwidth = Math.abs(min) * 0.1 || 1;
+        const kde: Array<{ x: number; y: number }> = [];
+        for (let i = -50; i <= 50; i++) {
+          const x = center + (i / 50) * artificialBandwidth;
+          const u = i / 50;
+          const density = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+          kde.push({ x, y: density });
+        }
+        return kde;
+      }
+
+      // For large datasets (>1000 points), sample to improve performance
+      const MAX_SAMPLE_SIZE = 1000;
+      let sampledValues = values;
+      if (values.length > MAX_SAMPLE_SIZE) {
+        // Stratified sampling to preserve distribution
+        const step = Math.floor(values.length / MAX_SAMPLE_SIZE);
+        sampledValues = values.filter((_, i) => i % step === 0).slice(0, MAX_SAMPLE_SIZE);
+        devLog.log('KDE: Using sampling for large dataset', {
+          original: values.length,
+          sampled: sampledValues.length
+        });
+      }
+
+      // Use Silverman's rule of thumb for bandwidth selection
+      const n = sampledValues.length;
+      const mean = sampledValues.reduce((a, b) => a + b, 0) / n;
+      const std = Math.sqrt(sampledValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n);
+      const sortedValues = [...sampledValues].sort((a, b) => a - b);
+      const iqr = percentile(sortedValues, 75) - percentile(sortedValues, 25);
+
+      // Calculate bandwidth using Silverman's rule, with fallbacks
+      let bandwidth = 0.9 * Math.min(std, iqr / 1.34) * Math.pow(n, -0.2);
+
+      // Ensure bandwidth is valid and reasonable
+      if (!isFinite(bandwidth) || bandwidth <= 0) {
+        bandwidth = range * 0.1; // Fallback to 10% of range
+      }
+
+      // Make sure bandwidth is not too small
+      bandwidth = Math.max(bandwidth, range * 0.05);
+
+      devLog.log('KDE calculation', {
+        valuesCount: sampledValues.length,
+        min, max, range,
+        std, iqr, bandwidth
+      });
+
       const kde: Array<{ x: number; y: number }> = [];
-      for (let i = -50; i <= 50; i++) {
-        const x = center + (i / 50) * artificialBandwidth;
-        const u = i / 50;
-        const density = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
-        kde.push({ x, y: density });
+
+      // Extend range by 2 * bandwidth for better visualization
+      const extendedMin = min - bandwidth * 2;
+      const extendedMax = max + bandwidth * 2;
+      const extendedRange = extendedMax - extendedMin;
+      const adjustedStep = extendedRange / 200; // More points for smoother curve
+
+      // Pre-calculate constants
+      const gaussianNorm = 1 / Math.sqrt(2 * Math.PI);
+      const denominator = sampledValues.length * bandwidth;
+
+      for (let x = extendedMin; x <= extendedMax; x += adjustedStep) {
+        let density = 0;
+        // Optimized: only calculate for sampled values
+        for (const value of sampledValues) {
+          // Gaussian kernel
+          const u = (x - value) / bandwidth;
+          // Optimized: skip values that contribute negligibly (>3 standard deviations)
+          if (Math.abs(u) > 3) continue;
+          density += Math.exp(-0.5 * u * u) * gaussianNorm;
+        }
+        density = density / denominator;
+
+        // Ensure density is a valid number
+        if (isFinite(density)) {
+          kde.push({ x, y: density });
+        }
       }
-      return kde;
-    }
 
-    // Use Silverman's rule of thumb for bandwidth selection
-    const n = values.length;
-    const mean = values.reduce((a, b) => a + b, 0) / n;
-    const std = Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n);
-    const sortedValues = [...values].sort((a, b) => a - b);
-    const iqr = percentile(sortedValues, 75) - percentile(sortedValues, 25);
+      devLog.log('KDE results', {
+        kdePoints: kde.length,
+        densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
+      });
 
-    // Calculate bandwidth using Silverman's rule, with fallbacks
-    let bandwidth = 0.9 * Math.min(std, iqr / 1.34) * Math.pow(n, -0.2);
-
-    // Ensure bandwidth is valid and reasonable
-    if (!isFinite(bandwidth) || bandwidth <= 0) {
-      bandwidth = range * 0.1; // Fallback to 10% of range
-    }
-
-    // Make sure bandwidth is not too small
-    bandwidth = Math.max(bandwidth, range * 0.05);
-
-    const step = range / 100; // 100 points along the range
-
-    devLog.log('KDE calculation', {
-      valuesCount: values.length,
-      min, max, range,
-      std, iqr, bandwidth,
-      step
-    });
-
-    const kde: Array<{ x: number; y: number }> = [];
-
-    // Extend range by 2 * bandwidth for better visualization
-    const extendedMin = min - bandwidth * 2;
-    const extendedMax = max + bandwidth * 2;
-    const extendedRange = extendedMax - extendedMin;
-    const adjustedStep = extendedRange / 200; // More points for smoother curve
-
-    for (let x = extendedMin; x <= extendedMax; x += adjustedStep) {
-      let density = 0;
-      for (const value of values) {
-        // Gaussian kernel
-        const u = (x - value) / bandwidth;
-        density += Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
-      }
-      density = density / (values.length * bandwidth);
-
-      // Ensure density is a valid number
-      if (isFinite(density)) {
-        kde.push({ x, y: density });
-      }
-    }
-
-    devLog.log('KDE results', {
-      kdePoints: kde.length,
-      densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
-    });
-
-    return kde.length > 0 ? kde : [{ x: min, y: 1 }];
-  }
+      return kde.length > 0 ? kde : [{ x: min, y: 1 }];
+    };
+  }, []); // Empty deps - function itself doesn't change
 
   function percentile(arr: number[], p: number): number {
     const index = (p / 100) * (arr.length - 1);

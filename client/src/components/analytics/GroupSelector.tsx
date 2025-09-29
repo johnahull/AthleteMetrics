@@ -200,10 +200,18 @@ export function GroupSelector({
     <div className={className}>
       {/* Selected Groups Display */}
       <div className="mb-4">
-        <Label>Selected Groups ({selectedGroups.length}/{maxGroups})</Label>
-        <div className="flex flex-wrap gap-2 mt-2">
+        <Label id="selected-groups-label">
+          Selected Groups ({selectedGroups.length}/{maxGroups})
+        </Label>
+        <div
+          className="flex flex-wrap gap-2 mt-2"
+          role="list"
+          aria-labelledby="selected-groups-label"
+          aria-live="polite"
+          aria-relevant="additions removals"
+        >
           {selectedGroups.length === 0 ? (
-            <span className="text-muted-foreground text-sm">No groups selected</span>
+            <span className="text-muted-foreground text-sm" role="status">No groups selected</span>
           ) : (
             selectedGroups.map((group) => (
               <Badge
@@ -211,15 +219,17 @@ export function GroupSelector({
                 variant="secondary"
                 style={{ borderLeft: `4px solid ${group.color}` }}
                 className="pl-2"
+                role="listitem"
               >
-                {group.name} ({group.memberIds.length} athletes)
+                <span>{group.name} ({group.memberIds.length} athletes)</span>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-4 w-4 ml-2"
                   onClick={() => handleRemoveGroup(group.id)}
+                  aria-label={`Remove ${group.name} group`}
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3 w-3" aria-hidden="true" />
                 </Button>
               </Badge>
             ))
@@ -239,17 +249,17 @@ export function GroupSelector({
         </CardHeader>
         <CardContent className={isLoading ? 'opacity-50 pointer-events-none' : ''}>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'teams' | 'age' | 'custom')}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="teams">
-                <Users className="h-4 w-4 mr-2" />
+            <TabsList className="grid w-full grid-cols-3" role="tablist" aria-label="Group selection methods">
+              <TabsTrigger value="teams" aria-label="Create groups by teams">
+                <Users className="h-4 w-4 mr-2" aria-hidden="true" />
                 Teams
               </TabsTrigger>
-              <TabsTrigger value="age">
-                <Calendar className="h-4 w-4 mr-2" />
+              <TabsTrigger value="age" aria-label="Create groups by age ranges">
+                <Calendar className="h-4 w-4 mr-2" aria-hidden="true" />
                 Age Groups
               </TabsTrigger>
-              <TabsTrigger value="custom">
-                <Settings className="h-4 w-4 mr-2" />
+              <TabsTrigger value="custom" aria-label="Create custom groups">
+                <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
                 Custom
               </TabsTrigger>
             </TabsList>
@@ -369,9 +379,8 @@ export function GroupSelector({
                 <div>
                   <Label>Select Athletes</Label>
                   <Select
-                    value={customSelection.join(',')}
-                    onValueChange={(value) => {
-                      const athleteId = value.split(',').pop();
+                    value=""
+                    onValueChange={(athleteId) => {
                       if (athleteId && !customSelection.includes(athleteId)) {
                         setCustomSelection([...customSelection, athleteId]);
                       }
@@ -381,15 +390,16 @@ export function GroupSelector({
                       <SelectValue placeholder="Select athletes..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {athletes.map((athlete) => (
-                        <SelectItem
-                          key={athlete.id}
-                          value={[...customSelection, athlete.id].join(',')}
-                          disabled={customSelection.includes(athlete.id)}
-                        >
-                          {athlete.name} {athlete.team ? `(${athlete.team})` : ''}
-                        </SelectItem>
-                      ))}
+                      {athletes
+                        .filter((athlete) => !customSelection.includes(athlete.id))
+                        .map((athlete) => (
+                          <SelectItem
+                            key={athlete.id}
+                            value={athlete.id}
+                          >
+                            {athlete.name} {athlete.team ? `(${athlete.team})` : ''}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <div className="flex flex-wrap gap-2 mt-2">
