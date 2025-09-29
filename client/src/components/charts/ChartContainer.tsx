@@ -360,6 +360,7 @@ export function ChartContainer({
                       config={chartConfig}
                       statistics={statistics}
                       highlightAthlete={highlightAthlete}
+                      selectedGroups={selectedGroups}
                     />
                   </ErrorBoundary>
                 ) : ChartComponent ? (
