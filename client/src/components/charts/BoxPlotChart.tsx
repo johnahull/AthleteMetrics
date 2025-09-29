@@ -1364,6 +1364,108 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           }
         })()}
       </div>
+
+      {/* Statistics Summary Table for Multi-Group Comparison */}
+      {selectedGroups && selectedGroups.length >= 2 && statistics && (
+        <div className="mt-6 px-2">
+          <div className="text-sm font-medium text-muted-foreground mb-3">Group Statistics Summary</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 px-3 font-medium">Group</th>
+                  <th className="text-right py-2 px-3 font-medium">n</th>
+                  <th className="text-right py-2 px-3 font-medium">Mean</th>
+                  <th className="text-right py-2 px-3 font-medium">Median</th>
+                  <th className="text-right py-2 px-3 font-medium">Min</th>
+                  <th className="text-right py-2 px-3 font-medium">Max</th>
+                  <th className="text-right py-2 px-3 font-medium">Std Dev</th>
+                  <th className="text-right py-2 px-3 font-medium">Q1</th>
+                  <th className="text-right py-2 px-3 font-medium">Q3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedGroups.map((group, index) => {
+                  const groupKey = `group-${group.id}`;
+                  const groupStats = statistics[groupKey];
+
+                  if (!groupStats) return null;
+
+                  // Get group color from chart config
+                  const groupColors = CHART_CONFIG.COLORS.SERIES;
+                  const groupColor = groupColors[index % groupColors.length];
+
+                  // Format values based on metric type
+                  const formatValue = (value: number) => {
+                    if (typeof value !== 'number' || isNaN(value)) return '-';
+                    // For time metrics (lower is better), show with 2 decimal places
+                    // For jump metrics (higher is better), show with 1 decimal place
+                    const isTimeMetric = metric?.includes('TIME') || metric?.includes('AGILITY') ||
+                                        metric?.includes('TEST') || metric?.includes('DASH');
+                    return isTimeMetric ? value.toFixed(2) : value.toFixed(1);
+                  };
+
+                  return (
+                    <tr key={groupKey} className="border-b hover:bg-muted/50">
+                      <td className="py-2 px-3 font-medium">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: groupColor }}
+                          />
+                          {group.name}
+                        </div>
+                      </td>
+                      <td className="text-right py-2 px-3">{groupStats.count}</td>
+                      <td className="text-right py-2 px-3 font-medium">
+                        {formatValue(groupStats.mean)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.median)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.min)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.max)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.std)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.percentiles?.p25 || groupStats.median - groupStats.std * 0.674)}
+                      </td>
+                      <td className="text-right py-2 px-3">
+                        {formatValue(groupStats.percentiles?.p75 || groupStats.median + groupStats.std * 0.674)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Add metric context */}
+          {metric && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <span>Metric:</span>
+                <span className="font-medium">
+                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
+                </span>
+                {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit && (
+                  <span>({METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG].unit})</span>
+                )}
+                <span className="ml-2">
+                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
+                    ? '• Lower values are better'
+                    : '• Higher values are better'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });
