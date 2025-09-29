@@ -247,7 +247,7 @@ export function ViolinChart({
 
   }, [processedData]);
 
-  const metric = data[0]?.metric;
+  const metric = data && data.length > 0 ? data[0]?.metric : undefined;
   const metricConfig = metric ? METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG] : null;
 
   devLog.log('ViolinChart render', {

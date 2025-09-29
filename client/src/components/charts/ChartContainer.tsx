@@ -113,13 +113,12 @@ export function ChartContainer({
         return ConnectedScatterChart;
       case 'multi_line':
         return MultiLineChart;
-      case 'violin_plot':
-        return ViolinChart;
       // These cases are handled explicitly, so return null for generic component
       case 'line_chart':
       case 'radar_chart':
       case 'box_swarm_combo':
       case 'time_series_box_swarm':
+      case 'violin_plot':
         return null;
       default:
         return null;
@@ -199,7 +198,7 @@ export function ChartContainer({
 
   // Only show unsupported chart error for truly unsupported types
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
-  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm'];
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'violin_plot'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
@@ -353,6 +352,13 @@ export function ChartContainer({
                     statistics={statistics}
                     selectedDates={selectedDates || []}
                     metric={metric || ''}
+                  />
+                ) : chartType === 'violin_plot' ? (
+                  <ViolinChart
+                    data={chartData as ChartDataPoint[]}
+                    config={chartConfig}
+                    statistics={statistics}
+                    highlightAthlete={highlightAthlete}
                   />
                 ) : ChartComponent ? (
                   <ChartComponent
