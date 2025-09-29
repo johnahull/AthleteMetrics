@@ -248,7 +248,7 @@ export function GroupSelector({
               <Badge
                 key={group.id}
                 variant="secondary"
-                style={{ borderLeft: `4px solid ${sanitizeColor(group.color)}` }}
+                style={{ borderLeft: `4px solid ${sanitizeColor(group.color || '#3B82F6')}` }}
                 className="pl-2"
                 role="listitem"
               >
