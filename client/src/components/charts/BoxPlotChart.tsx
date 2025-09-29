@@ -197,21 +197,33 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           const stats = point.additionalData.groupStats;
           const groupName = point.athleteName;
           
-          // Position calculation for multi-group layout - even spacing
-          const boxWidth = 0.15;
+          // Position calculation for multi-group layout - dynamic spacing
           const numGroups = metricGroups[metric].length;
           const numMetrics = Object.keys(metricGroups).length;
 
-          // Calculate even distribution across full chart width
-          // Each metric gets 1 unit of space, with padding from edges
-          const chartPadding = 0.3; // Padding from chart edges
-          const availableWidth = 1 - (2 * chartPadding); // Space available within metric bounds
-          const groupSpacing = numGroups > 1 ? availableWidth / (numGroups - 1) : 0;
+          // Dynamic box width based on number of groups to prevent overlap
+          const maxBoxWidth = 0.15;
+          const minBoxWidth = 0.05;
+          const dynamicBoxWidth = Math.max(minBoxWidth, Math.min(maxBoxWidth, 0.8 / numGroups));
+          const boxWidth = dynamicBoxWidth;
+
+          // Calculate spacing to ensure no overlap
+          const minSpacing = boxWidth * 1.2; // Minimum gap between boxes
+          const chartPadding = Math.min(0.4, 0.5 / numGroups); // Dynamic padding
+          const availableWidth = 1 - (2 * chartPadding);
+          const totalBoxWidth = numGroups * boxWidth;
+          const totalGaps = (numGroups - 1) * minSpacing;
+          const remainingSpace = Math.max(0, availableWidth - totalBoxWidth - totalGaps);
+          const extraSpacing = numGroups > 1 ? remainingSpace / (numGroups - 1) : 0;
+          const groupSpacing = minSpacing + extraSpacing;
           const baseX = metricIndex; // Metric position
 
-          // Calculate position with even spacing from chart edges
-          const startOffset = -availableWidth / 2; // Start from left edge of available space
+          // Calculate position with proper spacing to prevent overlap
+          const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
           const xPos = baseX + startOffset + (groupIndex * groupSpacing);
+
+          // Debug logging for spacing calculations
+          console.log(`BoxPlot spacing calc: groups=${numGroups}, boxWidth=${boxWidth.toFixed(3)}, spacing=${groupSpacing.toFixed(3)}, xPos=${xPos.toFixed(3)} for group ${groupIndex}`);
           
           // Group colors
           const groupColors = CHART_CONFIG.COLORS.SERIES;
@@ -544,21 +556,33 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             }
           };
 
-          // Position calculation for multi-group layout - even spacing
-          const boxWidth = 0.15; // Narrower boxes for multiple groups
+          // Position calculation for multi-group layout - dynamic spacing
           const numGroups = selectedGroups.length;
           const numMetrics = Object.keys(metricGroups).length;
 
-          // Calculate even distribution across full chart width
-          // Each metric gets 1 unit of space, with padding from edges
-          const chartPadding = 0.3; // Padding from chart edges
-          const availableWidth = 1 - (2 * chartPadding); // Space available within metric bounds
-          const groupSpacing = numGroups > 1 ? availableWidth / (numGroups - 1) : 0;
+          // Dynamic box width based on number of groups to prevent overlap
+          const maxBoxWidth = 0.15;
+          const minBoxWidth = 0.05;
+          const dynamicBoxWidth = Math.max(minBoxWidth, Math.min(maxBoxWidth, 0.8 / numGroups));
+          const boxWidth = dynamicBoxWidth;
+
+          // Calculate spacing to ensure no overlap
+          const minSpacing = boxWidth * 1.2; // Minimum gap between boxes
+          const chartPadding = Math.min(0.4, 0.5 / numGroups); // Dynamic padding
+          const availableWidth = 1 - (2 * chartPadding);
+          const totalBoxWidth = numGroups * boxWidth;
+          const totalGaps = (numGroups - 1) * minSpacing;
+          const remainingSpace = Math.max(0, availableWidth - totalBoxWidth - totalGaps);
+          const extraSpacing = numGroups > 1 ? remainingSpace / (numGroups - 1) : 0;
+          const groupSpacing = minSpacing + extraSpacing;
           const baseX = metricIndex; // Metric position
 
-          // Calculate position with even spacing from chart edges
-          const startOffset = -availableWidth / 2; // Start from left edge of available space
+          // Calculate position with proper spacing to prevent overlap
+          const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
           const xPos = baseX + startOffset + (groupIndex * groupSpacing);
+
+          // Debug logging for spacing calculations
+          console.log(`BoxPlot spacing calc: groups=${numGroups}, boxWidth=${boxWidth.toFixed(3)}, spacing=${groupSpacing.toFixed(3)}, xPos=${xPos.toFixed(3)} for group ${groupIndex}`);
 
           // Group colors - use the SERIES array from chart config
           const groupColors = CHART_CONFIG.COLORS.SERIES;
@@ -802,7 +826,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       }
 
       if (stats && values.length > 0) {
-        const boxWidth = 0.4;
+        // Dynamic box width for single metric display
+        const numMetrics = Object.keys(metricGroups).length;
+        const dynamicBoxWidth = Math.min(0.4, 0.8 / Math.max(1, numMetrics));
+        const boxWidth = dynamicBoxWidth;
         const xPos = index;
 
         // Box rectangle (Q1 to Q3)
@@ -1240,11 +1267,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           display: false
         },
         ...(selectedGroups && selectedGroups.length >= 2 && {
-          // For multi-group, adjust scale bounds and hide default ticks
-          min: -0.5,
-          max: (boxPlotData?.labels?.length || 1) - 0.5,
+          // For multi-group, adjust scale bounds dynamically based on groups
+          min: -0.6,
+          max: (boxPlotData?.labels?.length || 1) - 0.4,
           ticks: {
             stepSize: 1,
+            maxTicksLimit: Math.min(10, (boxPlotData?.labels?.length || 1) + 2),
             callback: function(value: any) {
               const metricIndex = Math.round(value);
               if (metricIndex < 0 || metricIndex >= (boxPlotData?.labels?.length || 0)) {
