@@ -1386,8 +1386,20 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               </thead>
               <tbody>
                 {selectedGroups.map((group, index) => {
+                  // Try different key formats - the statistics might be keyed by group name or index
                   const groupKey = `group-${group.id}`;
-                  const groupStats = statistics[groupKey];
+                  const groupNameKey = group.name;
+                  const groupStats = statistics[groupKey] || statistics[groupNameKey] || statistics[index];
+
+                  // Debug logging
+                  console.log('Statistics debug:', {
+                    groupId: group.id,
+                    groupName: group.name,
+                    groupKey,
+                    availableKeys: Object.keys(statistics),
+                    groupStats,
+                    statistics
+                  });
 
                   if (!groupStats) return null;
 
