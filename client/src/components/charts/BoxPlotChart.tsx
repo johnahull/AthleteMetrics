@@ -321,16 +321,20 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             if (!individualPoints && rawData) {
               // Function to check if data point matches the group
               const matchesGroup = (dataPoint: any) => {
-                // Primary: Match by team ID if available (most reliable)
-                if (dataPoint.teamId && selectedGroups) {
+                // For multi-group analysis, match by athlete ID being in the group's memberIds
+                if (selectedGroups) {
                   const matchingGroup = selectedGroups.find(g => g.name === groupName);
-                  if (matchingGroup?.id && dataPoint.teamId === matchingGroup.id) {
+                  if (matchingGroup?.memberIds && matchingGroup.memberIds.includes(dataPoint.athleteId)) {
                     return true;
                   }
                 }
 
-                // Fallback: Match by team name (case-insensitive)
-                return dataPoint.teamName?.toLowerCase() === groupName.toLowerCase();
+                // Legacy fallback: Match by team name (case-insensitive)
+                if (dataPoint.teamName) {
+                  return dataPoint.teamName.toLowerCase() === groupName.toLowerCase();
+                }
+
+                return false;
               };
 
               individualPoints = rawData
@@ -346,8 +350,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 filteredCount: individualPoints.length,
                 metric,
                 groupName,
-                availableTeamNames: rawData.map(d => d.teamName).filter((name, index, arr) => arr.indexOf(name) === index),
-                availableTeamIds: rawData.map(d => d.teamId).filter((id, index, arr) => id && arr.indexOf(id) === index)
+                selectedGroupMemberCount: selectedGroups?.find(g => g.name === groupName)?.memberIds?.length || 0,
+                availableAthleteIds: rawData.map(d => d.athleteId).slice(0, 5) // Show first 5 for debugging
               });
             }
 
@@ -355,16 +359,20 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             if (!individualPoints) {
               // Reuse the same matching logic for main data
               const matchesGroup = (dataPoint: any) => {
-                // Primary: Match by team ID if available (most reliable)
-                if (dataPoint.teamId && selectedGroups) {
+                // For multi-group analysis, match by athlete ID being in the group's memberIds
+                if (selectedGroups) {
                   const matchingGroup = selectedGroups.find(g => g.name === groupName);
-                  if (matchingGroup?.id && dataPoint.teamId === matchingGroup.id) {
+                  if (matchingGroup?.memberIds && matchingGroup.memberIds.includes(dataPoint.athleteId)) {
                     return true;
                   }
                 }
 
-                // Fallback: Match by team name (case-insensitive)
-                return dataPoint.teamName?.toLowerCase() === groupName.toLowerCase();
+                // Legacy fallback: Match by team name (case-insensitive)
+                if (dataPoint.teamName) {
+                  return dataPoint.teamName.toLowerCase() === groupName.toLowerCase();
+                }
+
+                return false;
               };
 
               individualPoints = data
@@ -380,6 +388,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 filteredCount: individualPoints.length,
                 metric,
                 groupName,
+                selectedGroupMemberCount: selectedGroups?.find(g => g.name === groupName)?.memberIds?.length || 0,
                 sampleData: individualPoints.slice(0, 3)
               });
             }
