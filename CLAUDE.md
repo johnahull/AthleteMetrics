@@ -2,6 +2,121 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Specialized Agent Integration
+
+**STATUS: ENABLED** _(Change to "DISABLED" to turn off automatic agent usage)_
+
+Claude Code should proactively use specialized agents for domain-specific tasks in AthleteMetrics. These agents have deep expertise in specific areas and should be invoked automatically when tasks match their domains.
+
+### Agent Usage Control
+
+**To DISABLE automatic agents:** Change the STATUS above to "DISABLED"
+**To ENABLE automatic agents:** Change the STATUS above to "ENABLED"
+
+When DISABLED:
+- Claude will work normally without invoking specialized agents
+- You can still manually invoke agents using `/agent <agent-name> "task"`
+- All existing functionality remains available
+
+When ENABLED:
+- Claude automatically invokes appropriate agents based on task context
+- Multiple agents are coordinated in parallel when needed
+- Enhanced domain-specific expertise is applied automatically
+
+### Available Specialized Agents
+
+#### Database Schema Agent (`database-schema-agent`)
+**Auto-invoke when tasks involve:**
+- Modifying `shared/schema.ts`
+- Database migrations or `npm run db:push`
+- Adding/modifying tables, columns, or relationships
+- Drizzle ORM queries or schema validation
+- Data integrity issues or constraints
+- Performance measurement schema changes
+
+**Keywords that trigger:** `schema`, `database`, `drizzle`, `migration`, `table`, `postgres`, `validation`, `measurements`, `users`, `teams`, `organizations`, `zod`, `relations`
+
+#### Analytics & Data Visualization Agent (`analytics-visualization-agent`)
+**Auto-invoke when tasks involve:**
+- Chart components in `client/src/components/charts/`
+- Chart.js, react-chartjs-2, or statistical analysis
+- Performance analytics or data visualization
+- Files matching `*Chart.tsx` or analytics-related components
+- Statistical calculations (percentiles, z-scores, etc.)
+
+**Keywords that trigger:** `chart`, `analytics`, `visualization`, `graph`, `plot`, `performance`, `statistics`, `box plot`, `line chart`, `scatter`, `swarm`, `percentile`, `MultiLineChart`, `BoxPlotChart`
+
+#### Security & Authentication Agent (`security-authentication-agent`)
+**Auto-invoke when tasks involve:**
+- Authentication flows or `server/auth/` files
+- Permission systems or role-based access control
+- Security hardening, rate limiting, or session management
+- User roles (Site Admin, Org Admin, Coach, Athlete)
+- Organization-based data isolation
+- MFA, password policies, or security vulnerabilities
+
+**Keywords that trigger:** `auth`, `authentication`, `security`, `permission`, `role`, `rbac`, `session`, `mfa`, `password`, `login`, `admin`, `coach`, `athlete`, `organization`, `access control`
+
+### Proactive Agent Usage Guidelines
+
+#### Single Domain Tasks
+When a task clearly falls into one domain, automatically invoke the appropriate agent:
+
+```typescript
+// Example: User requests "Add a new measurement type for RSI"
+// Claude should automatically use: Task(subagent_type: "database-schema-agent", ...)
+```
+
+#### Multi-Domain Tasks
+For tasks spanning multiple domains, invoke relevant agents in parallel:
+
+```typescript
+// Example: User requests "Implement coach dashboard with team analytics"
+// Claude should automatically use multiple Task() calls in parallel:
+// - database-schema-agent (optimize queries)
+// - security-authentication-agent (coach permissions)
+// - analytics-visualization-agent (dashboard charts)
+```
+
+#### Context-Rich Prompts
+When invoking agents, provide AthleteMetrics-specific context:
+
+**Good:**
+"Optimize the measurement aggregation queries for the analytics dashboard. Focus on the measurements table joins with users and teams, considering the temporal team membership patterns and archived team handling."
+
+**Avoid:**
+"Optimize database queries"
+
+### Agent Integration Rules
+
+1. **Proactive Usage**: Use agents automatically when task keywords match, don't wait for explicit requests
+2. **Parallel Execution**: Use multiple Task() calls in single response when multiple domains are involved
+3. **Context Enhancement**: Always provide AthleteMetrics-specific context in agent prompts
+4. **File-Based Triggers**: Auto-invoke agents when working with their domain-specific files
+5. **Error Handling**: If a task might affect multiple domains, prefer including more agents rather than fewer
+
+### Task Patterns That Always Trigger Agents
+
+#### Database Schema Changes
+- Any modification to `shared/schema.ts` → `database-schema-agent`
+- Running `npm run db:push` → `database-schema-agent`
+- Adding new measurement types → `database-schema-agent` + `analytics-visualization-agent`
+
+#### Chart/Analytics Work
+- Any file in `client/src/components/charts/` → `analytics-visualization-agent`
+- Statistical calculations or performance analysis → `analytics-visualization-agent`
+- Dashboard or reporting features → `analytics-visualization-agent` + others
+
+#### Security/Auth Changes
+- Any file in `server/auth/` → `security-authentication-agent`
+- Permission or role changes → `security-authentication-agent`
+- Organization or team access → `security-authentication-agent`
+
+#### Cross-Cutting Features
+- New user types or roles → All three agents
+- Organization management → `database-schema-agent` + `security-authentication-agent`
+- Performance measurement features → All three agents
+
 ## Development Commands
 
 ### Core Development
