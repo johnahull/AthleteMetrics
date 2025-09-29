@@ -42,11 +42,21 @@ export function GroupSelector({
 }: GroupSelectorProps) {
   const [activeTab, setActiveTab] = useState<'teams' | 'age' | 'custom'>('teams');
 
-  // Extract unique teams from athletes
+  // Extract unique teams from athletes, handling multi-team strings
   const uniqueTeams = useMemo(() => {
     const teams = new Set<string>();
     athletes.forEach(athlete => {
-      if (athlete.team) teams.add(athlete.team);
+      if (athlete.team) {
+        // Split by common delimiters (comma, semicolon) and trim whitespace
+        const teamList = athlete.team
+          .split(/[,;]/)
+          .map(t => t.trim())
+          .filter(t => t.length > 0);
+
+        teamList.forEach(team => {
+          teams.add(team);
+        });
+      }
     });
     return Array.from(teams).sort();
   }, [athletes]);
@@ -78,7 +88,19 @@ export function GroupSelector({
     const updatedGroups = [...selectedGroups];
     if (isSelected) {
       // Add team as a group
-      const teamAthletes = athletes.filter(a => a.team === teamName);
+      // Find all athletes that belong to this team (including multi-team athletes)
+      const teamAthletes = athletes.filter(a => {
+        if (!a.team) return false;
+
+        // Split team string and check if it includes the selected team
+        const teamList = a.team
+          .split(/[,;]/)
+          .map(t => t.trim())
+          .filter(t => t.length > 0);
+
+        return teamList.includes(teamName);
+      });
+
       const newGroup: GroupDefinition = {
         id: `team-${teamName.toLowerCase().replace(/\s+/g, '-')}`,
         name: teamName,
@@ -232,7 +254,15 @@ export function GroupSelector({
                     const isSelected = selectedGroups.some(
                       g => g.type === 'team' && g.criteria?.teams?.[0] === team
                     );
-                    const athleteCount = athletes.filter(a => a.team === team).length;
+                    // Count athletes that belong to this team (including multi-team athletes)
+                    const athleteCount = athletes.filter(a => {
+                      if (!a.team) return false;
+                      const teamList = a.team
+                        .split(/[,;]/)
+                        .map(t => t.trim())
+                        .filter(t => t.length > 0);
+                      return teamList.includes(team);
+                    }).length;
 
                     return (
                       <div key={team} className="flex items-center space-x-2">
@@ -250,7 +280,7 @@ export function GroupSelector({
                         >
                           {team}
                           <span className="text-muted-foreground ml-2">
-                            ({athleteCount} athletes)
+                            ({athleteCount} athlete{athleteCount !== 1 ? 's' : ''})
                           </span>
                         </Label>
                       </div>
