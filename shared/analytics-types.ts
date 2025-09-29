@@ -56,6 +56,7 @@ export interface GroupDefinition {
   color?: string;
   criteria?: {
     teams?: string[];
+    teamIds?: string[]; // Added for robust team identification
     ageFrom?: number;
     ageTo?: number;
     graduationYears?: number[];
@@ -88,6 +89,7 @@ export interface ChartDataPoint {
   metric: string;
   grouping?: string;
   teamName?: string;
+  teamId?: string; // Added for robust team identification
   additionalData?: Record<string, any>;
 }
 

@@ -319,30 +319,62 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // If no individual points in additionalData, use rawData if available
             if (!individualPoints && rawData) {
+              // Function to check if data point matches the group
+              const matchesGroup = (dataPoint: any) => {
+                // Primary: Match by team ID if available (most reliable)
+                if (dataPoint.teamId && selectedGroups) {
+                  const matchingGroup = selectedGroups.find(g => g.name === groupName);
+                  if (matchingGroup?.id && dataPoint.teamId === matchingGroup.id) {
+                    return true;
+                  }
+                }
+
+                // Fallback: Match by team name (case-insensitive)
+                return dataPoint.teamName?.toLowerCase() === groupName.toLowerCase();
+              };
+
               individualPoints = rawData
-                .filter(d => d.metric === metric && d.teamName === groupName)
+                .filter(d => d.metric === metric && matchesGroup(d))
                 .map(d => ({
                   athleteId: d.athleteId,
                   athleteName: d.athleteName,
                   value: d.value,
-                  teamName: d.teamName
+                  teamName: d.teamName,
+                  teamId: d.teamId
                 }));
               console.log('BoxPlotChart: Using rawData for swarm points', {
                 filteredCount: individualPoints.length,
                 metric,
-                groupName
+                groupName,
+                availableTeamNames: rawData.map(d => d.teamName).filter((name, index, arr) => arr.indexOf(name) === index),
+                availableTeamIds: rawData.map(d => d.teamId).filter((id, index, arr) => id && arr.indexOf(id) === index)
               });
             }
 
             // Final fallback: filter main data to get individual points for this group and metric
             if (!individualPoints) {
+              // Reuse the same matching logic for main data
+              const matchesGroup = (dataPoint: any) => {
+                // Primary: Match by team ID if available (most reliable)
+                if (dataPoint.teamId && selectedGroups) {
+                  const matchingGroup = selectedGroups.find(g => g.name === groupName);
+                  if (matchingGroup?.id && dataPoint.teamId === matchingGroup.id) {
+                    return true;
+                  }
+                }
+
+                // Fallback: Match by team name (case-insensitive)
+                return dataPoint.teamName?.toLowerCase() === groupName.toLowerCase();
+              };
+
               individualPoints = data
-                .filter(d => d.metric === metric && d.teamName === groupName)
+                .filter(d => d.metric === metric && matchesGroup(d))
                 .map(d => ({
                   athleteId: d.athleteId,
                   athleteName: d.athleteName,
                   value: d.value,
-                  teamName: d.teamName
+                  teamName: d.teamName,
+                  teamId: d.teamId
                 }));
               console.log('BoxPlotChart: Using main data fallback for swarm points', {
                 filteredCount: individualPoints.length,
