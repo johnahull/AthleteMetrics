@@ -818,12 +818,23 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   const multiGroupLabelsPlugin = {
     id: 'multiGroupLabels',
     afterRender: (chart: any) => {
-      // Only draw team labels for multi-group analysis
-      const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
-      if (!isMultiGroup || !chart.ctx || !chart.chartArea) return;
+      try {
+        // Only draw team labels for multi-group analysis
+        const isMultiGroup = selectedGroups && selectedGroups.length >= 2;
+        if (!isMultiGroup) return;
 
-      const ctx = chart.ctx;
-      const chartArea = chart.chartArea;
+        // Comprehensive safety checks to prevent ownerDocument errors
+        if (!chart || !chart.canvas || !chart.ctx || !chart.chartArea) {
+          return;
+        }
+
+        // Additional safety check for canvas DOM element
+        if (!chart.canvas.ownerDocument) {
+          return;
+        }
+
+        const ctx = chart.ctx;
+        const chartArea = chart.chartArea;
 
       // Collect unique team positions from datasets
       const teamPositions: { [teamName: string]: number[] } = {};
@@ -869,6 +880,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       });
 
       ctx.restore();
+      } catch (error) {
+        // Silently handle canvas access errors to prevent chart crashes
+        console.warn('BoxPlotChart multiGroupLabelsPlugin error:', error);
+      }
     }
   };
 
