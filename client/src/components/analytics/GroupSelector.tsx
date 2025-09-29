@@ -17,6 +17,30 @@ import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 
+/**
+ * Sanitize group name to prevent XSS and ensure valid input
+ * Removes potentially dangerous characters and enforces length limit
+ * @param name - Raw group name input
+ * @returns Sanitized group name
+ */
+function sanitizeGroupName(name: string): string {
+  return name
+    .replace(/[<>]/g, '') // Remove angle brackets to prevent HTML injection
+    .replace(/[^\w\s\-]/g, '') // Only allow alphanumeric, spaces, hyphens
+    .trim()
+    .slice(0, 50); // Enforce maximum length
+}
+
+/**
+ * Validate athlete IDs to ensure they exist in the athletes list
+ * @param athleteIds - Array of athlete IDs to validate
+ * @param validAthleteIds - Set of valid athlete IDs
+ * @returns Array of valid athlete IDs only
+ */
+function validateAthleteIds(athleteIds: string[], validAthleteIds: Set<string>): string[] {
+  return athleteIds.filter(id => validAthleteIds.has(id));
+}
+
 interface GroupSelectorProps {
   organizationId: string;
   athletes: Array<{
@@ -164,23 +188,32 @@ export function GroupSelector({
   const [customSelection, setCustomSelection] = useState<string[]>([]);
   const [customGroupName, setCustomGroupName] = useState<string>('');
 
+  // Create a set of valid athlete IDs for validation
+  const validAthleteIds = useMemo(() => new Set(athletes.map(a => a.id)), [athletes]);
+
   const handleCreateCustomGroup = useCallback(() => {
-    if (!customGroupName || customSelection.length === 0) return;
+    // Sanitize and validate input
+    const sanitizedName = sanitizeGroupName(customGroupName);
+    if (!sanitizedName || customSelection.length === 0) return;
     if (selectedGroups.length >= maxGroups) return;
+
+    // Validate athlete IDs
+    const validatedAthleteIds = validateAthleteIds(customSelection, validAthleteIds);
+    if (validatedAthleteIds.length === 0) return;
 
     const newGroup: GroupDefinition = {
       id: `custom-${Date.now()}`,
-      name: customGroupName,
+      name: sanitizedName,
       type: 'custom',
-      memberIds: customSelection,
+      memberIds: validatedAthleteIds,
       color: getGroupColor(selectedGroups.length),
-      criteria: { athleteIds: customSelection }
+      criteria: { athleteIds: validatedAthleteIds }
     };
 
     onGroupSelectionChange([...selectedGroups, newGroup]);
     setCustomSelection([]);
     setCustomGroupName('');
-  }, [customGroupName, customSelection, selectedGroups, maxGroups, onGroupSelectionChange]);
+  }, [customGroupName, customSelection, selectedGroups, maxGroups, onGroupSelectionChange, validAthleteIds]);
 
   // Remove a group
   const handleRemoveGroup = useCallback((groupId: string) => {
