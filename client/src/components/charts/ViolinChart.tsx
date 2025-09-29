@@ -75,7 +75,7 @@ export function ViolinChart({
           density,
           color: getGroupColor(index)
         };
-      }).filter(Boolean);
+      }).filter((group): group is NonNullable<typeof group> => group !== null);
     } catch (error) {
       devLog.error('ViolinChart: Error processing data', error);
       return [];
@@ -86,26 +86,36 @@ export function ViolinChart({
   function calculateKDE(values: number[]): Array<{ x: number; y: number }> {
     if (values.length === 0) return [];
 
-    const min = values.length > 0 ? Math.min(...values) : 0;
-    const max = values.length > 0 ? Math.max(...values) : 0;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
     const range = max - min;
-    const bandwidth = range * 0.2; // Simple bandwidth selection
-    const step = range / 100;
+
+    // Handle edge case where all values are the same
+    if (range === 0) {
+      return [{ x: min, y: 1 }];
+    }
+
+    const bandwidth = Math.max(range * 0.2, 0.01); // Prevent zero bandwidth
+    const step = Math.max(range / 100, 0.01); // Prevent zero step
 
     const kde: Array<{ x: number; y: number }> = [];
 
     for (let x = min - bandwidth; x <= max + bandwidth; x += step) {
       let density = 0;
       for (const value of values) {
-        // Gaussian kernel
+        // Gaussian kernel with safe division
         const u = (x - value) / bandwidth;
         density += Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
       }
       density = density / (values.length * bandwidth);
-      kde.push({ x, y: density });
+
+      // Ensure density is a valid number
+      if (isFinite(density)) {
+        kde.push({ x, y: density });
+      }
     }
 
-    return kde;
+    return kde.length > 0 ? kde : [{ x: min, y: 1 }];
   }
 
   function percentile(arr: number[], p: number): number {
@@ -158,8 +168,14 @@ export function ViolinChart({
 
     // Draw each violin
     processedData.forEach((group, groupIndex) => {
+      // Safety checks for group data
+      if (!group || !group.density || group.density.length === 0) {
+        devLog.warn('ViolinChart: Invalid group data', group);
+        return;
+      }
+
       const centerX = padding + groupIndex * groupWidth + groupWidth / 2;
-      const densityValues = group.density.map(d => d.y);
+      const densityValues = group.density.map(d => d.y).filter(y => isFinite(y));
       const maxDensity = densityValues.length > 0 ? Math.max(...densityValues) : 1;
 
       // Draw violin shape (density curve)
@@ -171,8 +187,13 @@ export function ViolinChart({
 
       // Right side of violin
       group.density.forEach((point, i) => {
+        if (!point || !isFinite(point.x) || !isFinite(point.y)) return;
+
         const x = centerX + (point.y / maxDensity) * (groupWidth * 0.4);
         const y = valueToY(point.x);
+
+        if (!isFinite(x) || !isFinite(y)) return;
+
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
@@ -180,8 +201,13 @@ export function ViolinChart({
       // Left side of violin (mirrored)
       for (let i = group.density.length - 1; i >= 0; i--) {
         const point = group.density[i];
+        if (!point || !isFinite(point.x) || !isFinite(point.y)) continue;
+
         const x = centerX - (point.y / maxDensity) * (groupWidth * 0.4);
         const y = valueToY(point.x);
+
+        if (!isFinite(x) || !isFinite(y)) continue;
+
         ctx.lineTo(x, y);
       }
 
@@ -193,47 +219,77 @@ export function ViolinChart({
       const boxWidth = 8;
       const { stats } = group;
 
+      // Safety check for stats
+      if (!stats || !isFinite(stats.q1) || !isFinite(stats.q3) || !isFinite(stats.median)) {
+        devLog.warn('ViolinChart: Invalid stats for group', group.group, stats);
+        return;
+      }
+
       // Box (Q1 to Q3)
       ctx.fillStyle = group.color;
-      ctx.fillRect(
-        centerX - boxWidth / 2,
-        valueToY(stats.q3),
-        boxWidth,
-        valueToY(stats.q1) - valueToY(stats.q3)
-      );
+      const q1Y = valueToY(stats.q1);
+      const q3Y = valueToY(stats.q3);
+
+      if (isFinite(q1Y) && isFinite(q3Y)) {
+        ctx.fillRect(
+          centerX - boxWidth / 2,
+          q3Y,
+          boxWidth,
+          q1Y - q3Y
+        );
+      }
 
       // Median line
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(centerX - boxWidth / 2, valueToY(stats.median));
-      ctx.lineTo(centerX + boxWidth / 2, valueToY(stats.median));
-      ctx.stroke();
+      const medianY = valueToY(stats.median);
+      if (isFinite(medianY)) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX - boxWidth / 2, medianY);
+        ctx.lineTo(centerX + boxWidth / 2, medianY);
+        ctx.stroke();
+      }
 
       // Whiskers
       ctx.strokeStyle = group.color;
       ctx.lineWidth = 1;
+
       // Min whisker
-      ctx.beginPath();
-      ctx.moveTo(centerX, valueToY(stats.q1));
-      ctx.lineTo(centerX, valueToY(stats.min));
-      ctx.moveTo(centerX - 4, valueToY(stats.min));
-      ctx.lineTo(centerX + 4, valueToY(stats.min));
-      ctx.stroke();
+      if (isFinite(stats.min)) {
+        const minY = valueToY(stats.min);
+        if (isFinite(minY) && isFinite(q1Y)) {
+          ctx.beginPath();
+          ctx.moveTo(centerX, q1Y);
+          ctx.lineTo(centerX, minY);
+          ctx.moveTo(centerX - 4, minY);
+          ctx.lineTo(centerX + 4, minY);
+          ctx.stroke();
+        }
+      }
 
       // Max whisker
-      ctx.beginPath();
-      ctx.moveTo(centerX, valueToY(stats.q3));
-      ctx.lineTo(centerX, valueToY(stats.max));
-      ctx.moveTo(centerX - 4, valueToY(stats.max));
-      ctx.lineTo(centerX + 4, valueToY(stats.max));
-      ctx.stroke();
+      if (isFinite(stats.max)) {
+        const maxY = valueToY(stats.max);
+        if (isFinite(maxY) && isFinite(q3Y)) {
+          ctx.beginPath();
+          ctx.moveTo(centerX, q3Y);
+          ctx.lineTo(centerX, maxY);
+          ctx.moveTo(centerX - 4, maxY);
+          ctx.lineTo(centerX + 4, maxY);
+          ctx.stroke();
+        }
+      }
 
       // Mean point
-      ctx.fillStyle = '#ff0000';
-      ctx.beginPath();
-      ctx.arc(centerX, valueToY(stats.mean), 3, 0, 2 * Math.PI);
-      ctx.fill();
+      if (isFinite(stats.mean)) {
+        const meanY = valueToY(stats.mean);
+        if (isFinite(meanY)) {
+          ctx.fillStyle = '#ff0000';
+          ctx.beginPath();
+          ctx.arc(centerX, meanY, 3, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      }
 
       // Group label
       ctx.fillStyle = '#374151';
