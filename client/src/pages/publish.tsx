@@ -41,7 +41,13 @@ export default function Publish() {
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
       
-      const response = await fetch(`/api/measurements?${params}`);
+      const response = await fetch(`/api/measurements?${params}`, {
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.json();
     },
     enabled: !!filters.metric,
@@ -397,7 +403,12 @@ export default function Publish() {
                           : "Independent Athlete"
                         }
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {measurement.user.sports && measurement.user.sports.length > 0
+                          ? measurement.user.sports.join(", ")
+                          : "N/A"
+                        }
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-gray-900">

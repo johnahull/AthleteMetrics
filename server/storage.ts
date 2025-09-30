@@ -1315,7 +1315,7 @@ export class DatabaseStorage implements IStorage {
     position?: string;
     includeUnverified?: boolean;
   }): Promise<any[]> {
-    // Optimized query with all joins to eliminate N+1
+    // First, query measurements with user data (no team joins yet)
     const query = db.select({
       // Measurement fields
       id: measurements.id,
@@ -1331,7 +1331,7 @@ export class DatabaseStorage implements IStorage {
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
       createdAt: measurements.createdAt,
-      // User data with teams aggregated
+      // User data WITHOUT teams for now
       user: sql<any>`jsonb_build_object(
         'id', ${users.id},
         'firstName', ${users.firstName},
@@ -1339,19 +1339,8 @@ export class DatabaseStorage implements IStorage {
         'fullName', ${users.fullName},
         'birthYear', ${users.birthYear},
         'sports', ${users.sports},
-        'teams', COALESCE(
-          json_agg(
-            DISTINCT jsonb_build_object(
-              'id', ${teams.id},
-              'name', ${teams.name},
-              'organization', jsonb_build_object(
-                'id', ${organizations.id},
-                'name', ${organizations.name}
-              )
-            )
-          ) FILTER (WHERE ${teams.id} IS NOT NULL),
-          '[]'
-        )
+        'gender', ${users.gender},
+        'positions', ${users.positions}
       )`,
       // Submitter and verifier info
       submitterInfo: sql<any>`submitter_info.first_name || ' ' || submitter_info.last_name`,
@@ -1359,33 +1348,6 @@ export class DatabaseStorage implements IStorage {
     })
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
-    // Use direct team relationship when available, fall back to temporal logic
-    .leftJoin(teams, or(
-      // Direct team relationship (preferred)
-      eq(measurements.teamId, teams.id),
-      // Fallback: temporal logic for measurements without direct team context
-      and(
-        or(isNull(measurements.teamId), eq(measurements.teamId, "")), // No direct team context
-        exists(
-          db.select({ id: userTeams.id })
-            .from(userTeams)
-            .where(and(
-              eq(userTeams.userId, users.id),
-              eq(userTeams.teamId, teams.id),
-              lte(userTeams.joinedAt, measurements.date),
-              or(
-                isNull(userTeams.leftAt),
-                gte(userTeams.leftAt, measurements.date)
-              )
-            ))
-        )
-      )
-    ))
-    .leftJoin(userTeams, and(
-      eq(users.id, userTeams.userId),
-      eq(userTeams.teamId, teams.id)
-    ))
-    .leftJoin(organizations, eq(teams.organizationId, organizations.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 
@@ -1424,27 +1386,24 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(measurements.isVerified, "true"));
     }
     
-    // Team filtering - use direct team relationship when available for better performance
+    // Team filtering - filter by athlete's CURRENT team membership (not historical)
+    // This matches the display logic which shows current teams
     if (filters?.teamIds && filters.teamIds.length > 0) {
-      conditions.push(or(
-        inArray(measurements.teamId, filters.teamIds), // Direct team relationship (preferred)
-        and(
-          or(isNull(measurements.teamId), eq(measurements.teamId, "")), // Fallback for measurements without direct team context
-          exists(
-            db.select({ id: userTeams.id })
-              .from(userTeams)
-              .where(and(
-                eq(userTeams.userId, users.id),
-                inArray(userTeams.teamId, filters.teamIds),
-                lte(userTeams.joinedAt, measurements.date),
-                or(
-                  isNull(userTeams.leftAt),
-                  gte(userTeams.leftAt, measurements.date)
-                )
-              ))
-          )
+      conditions.push(
+        exists(
+          db.select({ id: userTeams.id })
+            .from(userTeams)
+            .where(and(
+              eq(userTeams.userId, users.id),
+              inArray(userTeams.teamId, filters.teamIds),
+              eq(userTeams.isActive, "true"),
+              or(
+                isNull(userTeams.leftAt),
+                gte(userTeams.leftAt, new Date())
+              )
+            ))
         )
-      ));
+      );
     }
     
     // Organization filtering - filter by user's organization membership, not team organization
@@ -1466,18 +1425,102 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await finalQuery
-      .groupBy(
-        measurements.id, 
-        users.id, 
-        sql`submitter_info.first_name`,
-        sql`submitter_info.last_name`,
-        sql`verifier_info.first_name`,
-        sql`verifier_info.last_name`
-      )
       .orderBy(desc(measurements.date), desc(measurements.createdAt));
 
+    // If no measurements found, return empty array
+    if (result.length === 0) {
+      return [];
+    }
+
+    // Step 2: Batch fetch teams for each measurement based on the measurement date
+    // Build a map of (userId, measurementDate) -> teams
+    const userDatePairs = result.map((m: any) => ({
+      userId: m.userId,
+      date: m.date
+    }));
+
+    // Get unique user IDs
+    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string).filter(Boolean))] as string[];
+
+    // Fetch all team memberships for these users
+    type TeamMembership = {
+      userId: string;
+      teamId: string;
+      teamName: string;
+      joinedAt: Date;
+      leftAt: Date | null;
+      organizationId: string;
+      organizationName: string;
+    };
+
+    // Only query for teams if we have user IDs
+    let allUserTeams: TeamMembership[] = [];
+    if (uniqueUserIds.length > 0) {
+      allUserTeams = await db
+        .select({
+          userId: userTeams.userId,
+          teamId: teams.id,
+          teamName: teams.name,
+          joinedAt: userTeams.joinedAt,
+          leftAt: userTeams.leftAt,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .where(and(
+          inArray(userTeams.userId, uniqueUserIds),
+          eq(userTeams.isActive, "true"),
+          eq(teams.isArchived, "false")
+        ));
+    }
+
+    // Build a map of userId -> array of team memberships
+    const userTeamsMap = new Map<string, typeof allUserTeams>();
+    allUserTeams.forEach((ut: typeof allUserTeams[0]) => {
+      if (!userTeamsMap.has(ut.userId)) {
+        userTeamsMap.set(ut.userId, []);
+      }
+      userTeamsMap.get(ut.userId)!.push(ut);
+    });
+
+    // Attach teams to each measurement based on temporal logic
+    const measurementsWithTeams = result.map((measurement: any) => {
+      const measurementDate = new Date(measurement.date);
+      const userMemberships = userTeamsMap.get(measurement.userId) || [];
+
+      // Show currently active teams (not filtered by measurement date)
+      // This ensures athletes show with their current team affiliations
+      const activeTeamsAtDate = userMemberships.filter((membership: typeof allUserTeams[0]) => {
+        // Only filter out if they've explicitly left the team
+        const leftDate = membership.leftAt ? new Date(membership.leftAt) : null;
+        const now = new Date();
+        
+        return (!leftDate || leftDate >= now);
+      });
+
+      // Build teams array
+      const teams = activeTeamsAtDate.map((membership: typeof allUserTeams[0]) => ({
+        id: membership.teamId,
+        name: membership.teamName,
+        organization: {
+          id: membership.organizationId,
+          name: membership.organizationName,
+        },
+      }));
+
+      return {
+        ...measurement,
+        user: {
+          ...measurement.user,
+          teams,
+        },
+      };
+    });
+
     // Apply remaining filters (team/org filtering now done in query for better performance)
-    let filteredMeasurements = result;
+    let filteredMeasurements = measurementsWithTeams;
 
     // Filter by sport if specified
     if (filters?.sport && filters.sport !== "all") {

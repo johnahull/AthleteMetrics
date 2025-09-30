@@ -8,6 +8,12 @@ The system supports flexible player management where athletes can be assigned to
 
 ## Recent Changes
 
+### Publish Page Team Display Fix (September 30, 2025)
+- **Resolved Athletes Showing as "Independent"**: Fixed issue where all athletes on the Publish page were displaying as "Independent Athlete" instead of showing their actual team names
+- **Root Cause**: The getMeasurements function was filtering teams based on the measurement date, excluding teams where the athlete joined after the measurement was recorded
+- **Solution**: Modified team filtering logic to display athletes with their current active teams rather than teams active at measurement time
+- **Impact**: Publish page now correctly displays team affiliations for all athletes with active team memberships
+
 ### Authentication and Data Access Fixes (September 17, 2025)
 - **Resolved Session Organization Context Issue**: Fixed critical authentication bug where `primaryOrganizationId` was missing from user sessions, causing teams and athletes pages to show empty data
 - **Fixed Login Route**: Added proper `primaryOrganizationId` field to session during login to ensure organization context is maintained
