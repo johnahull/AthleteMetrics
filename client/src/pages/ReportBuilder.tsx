@@ -217,11 +217,20 @@ export function ReportBuilder() {
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Report Builder</h1>
-        <p className="text-gray-600">
-          Create customized performance reports for athletes, teams, and groups
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Report Builder</h1>
+          <p className="text-gray-600">
+            Create customized performance reports for athletes, teams, and groups
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setLocation("/reports/history")}
+        >
+          <FileText className="mr-2 h-4 w-4" />
+          View Report History
+        </Button>
       </div>
 
       <div className="grid gap-6">
