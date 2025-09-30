@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, useRef, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -13,6 +13,7 @@ import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import { DateSelector } from '@/components/ui/date-selector';
 import { ChartContainer } from '@/components/charts/ChartContainer';
+import { useToast } from '@/hooks/use-toast';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
@@ -79,6 +80,9 @@ function BaseAnalyticsViewContent({
   children
 }: Omit<BaseAnalyticsViewProps, 'organizationId' | 'userId' | 'requireRole'>) {
   const { state, isDataReady, shouldFetchData, chartData: memoizedChartData } = useAnalyticsContext();
+  const { toast } = useToast();
+  const previousAnalysisTypeRef = useRef<AnalysisType>(state.analysisType);
+
   const {
     fetchAnalyticsData,
     chartConfig,
@@ -139,6 +143,31 @@ function BaseAnalyticsViewContent({
       onError(state.error);
     }
   }, [state.error, onError]);
+
+  // Notify user when switching to multi-group mode with state changes
+  useEffect(() => {
+    const wasMultiGroup = previousAnalysisTypeRef.current === 'multi_group';
+    const isMultiGroup = state.analysisType === 'multi_group';
+
+    if (isMultiGroup && !wasMultiGroup) {
+      const hadAdditionalMetrics = state.previousMetrics && state.previousMetrics.additional.length > 0;
+      const hadTrends = state.previousTimeframe && state.previousTimeframe.type === 'trends';
+
+      if (hadAdditionalMetrics || hadTrends) {
+        const changes = [];
+        if (hadAdditionalMetrics) changes.push('additional metrics cleared');
+        if (hadTrends) changes.push('timeframe changed to best values');
+
+        toast({
+          title: 'Multi-group mode activated',
+          description: `${changes.join(' and ')} for fair comparison. Your previous settings will be restored when you exit multi-group mode.`,
+          duration: 5000,
+        });
+      }
+    }
+
+    previousAnalysisTypeRef.current = state.analysisType;
+  }, [state.analysisType, state.previousMetrics, state.previousTimeframe, toast]);
 
   // Prepare athletes for selector
   const athletesForSelector = state.availableAthletes.map(athlete => ({

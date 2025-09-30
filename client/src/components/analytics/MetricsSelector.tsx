@@ -24,6 +24,7 @@ interface MetricsSelectorProps {
    * When set to 'multi_group', additional metrics are disabled because
    * multi-group comparisons require a single consistent metric across all groups
    * to ensure fair and meaningful cross-group analysis
+   * @default 'individual'
    */
   analysisType?: AnalysisType;
 }
@@ -33,9 +34,12 @@ export function MetricsSelector({
   onMetricsChange,
   maxAdditional = 5,
   className,
-  analysisType
+  analysisType = 'individual'
 }: MetricsSelectorProps) {
   const availableMetrics = Object.keys(METRIC_CONFIG);
+
+  // Memoize multi-group check to avoid recalculating in map loop
+  const isMultiGroupMode = analysisType === 'multi_group';
 
   const handlePrimaryMetricChange = (metric: string) => {
     // Remove from additional if it was there
@@ -154,7 +158,7 @@ export function MetricsSelector({
           <Label className="text-sm font-medium">
             Add More Metrics ({metrics.additional.length}/{maxAdditional})
           </Label>
-          {analysisType === 'multi_group' && (
+          {isMultiGroupMode && (
             <p id="multi-group-metrics-help" className="text-xs text-muted-foreground">
               Multi-group mode requires a single metric for fair comparison.
             </p>
@@ -167,7 +171,7 @@ export function MetricsSelector({
               )
               .map((metric: string) => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-                const isDisabled = metrics.additional.length >= maxAdditional || analysisType === 'multi_group';
+                const isDisabled = metrics.additional.length >= maxAdditional || isMultiGroupMode;
                 return (
                   <div key={metric} className="flex items-start space-x-2">
                     <Checkbox
@@ -177,7 +181,7 @@ export function MetricsSelector({
                         handleAdditionalMetricToggle(metric, checked as boolean)
                       }
                       disabled={isDisabled}
-                      aria-describedby={analysisType === 'multi_group' ? 'multi-group-metrics-help' : undefined}
+                      aria-describedby={isMultiGroupMode ? 'multi-group-metrics-help' : undefined}
                     />
                     <label
                       htmlFor={`metric-${metric}`}
