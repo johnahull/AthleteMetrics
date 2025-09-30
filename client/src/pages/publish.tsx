@@ -42,7 +42,11 @@ export default function Publish() {
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
       
       const response = await fetch(`/api/measurements?${params}`, {
-        credentials: 'include'
+        credentials: 'include',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
       return response.json();
     },
