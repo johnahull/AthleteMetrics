@@ -10,6 +10,7 @@ export interface BaseUser {
   lastName: string;
   isSiteAdmin: boolean;
   athleteId?: string;
+  primaryOrganizationId?: string;
 }
 
 export interface UserOrganization {

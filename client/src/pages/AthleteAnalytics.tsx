@@ -66,24 +66,36 @@ export function AthleteAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
-  // Create initial filters with the athlete's teams pre-selected
+  // Get the organization ID from user context
+  const organizationId = user.currentOrganization?.id || (user as any).primaryOrganizationId;
+
+  // Create initial filters with the athlete's teams pre-selected and athleteId
   const initialFilters: Partial<AnalyticsFilters> = {
-    athleteIds: user.athleteId ? [user.athleteId] : undefined,
-    teams: teamIds.length > 0 ? teamIds : undefined
+    athleteIds: user.athleteId ? [user.athleteId] : [user.id],
+    teams: teamIds.length > 0 ? teamIds : undefined,
+    organizationId: organizationId
   };
+
+  console.log('AthleteAnalytics - User context:', {
+    userId: user.id,
+    athleteId: user.athleteId,
+    organizationId,
+    teamIds,
+    initialFilters
+  });
 
   return (
     <BaseAnalyticsView
       title="My Athletics Performance"
       description="Track your progress, analyze your performance, and identify areas for improvement"
-      organizationId={user?.currentOrganization?.id}
+      organizationId={organizationId}
       userId={user.id}
       defaultAnalysisType="individual"
       allowedAnalysisTypes={['individual']} // Athletes only see individual analysis
       requireRole={['athlete', 'coach', 'org_admin', 'site_admin']}
       headerActions={headerActions}
       additionalFilters={additionalFilters}
-      showIndividualAthleteSelection={false} // Athletes don't need to select themselves
+      showIndividualAthleteSelection={true} // Show selector to allow athlete selection
       showAnalysisTypeTabs={false} // Hide analysis type tabs for athletes
       initialFilters={initialFilters} // Pre-select athlete's teams
       className="athlete-analytics"

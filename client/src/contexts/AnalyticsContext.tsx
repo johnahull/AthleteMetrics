@@ -245,11 +245,23 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       return handleNormalTypeChange(state, action.payload);
     }
 
-    case 'SET_FILTERS':
+    case 'SET_FILTERS': {
+      const newFilters = { ...state.filters, ...action.payload };
+
+      // If athleteIds is set and we're in individual mode, also set selectedAthleteId
+      const newSelectedAthleteId =
+        state.analysisType === 'individual' &&
+        action.payload.athleteIds &&
+        action.payload.athleteIds.length > 0
+          ? action.payload.athleteIds[0]
+          : state.selectedAthleteId;
+
       return {
         ...state,
-        filters: { ...state.filters, ...action.payload }
+        filters: newFilters,
+        selectedAthleteId: newSelectedAthleteId
       };
+    }
 
     case 'SET_METRICS':
       return {
