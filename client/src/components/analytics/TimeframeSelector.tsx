@@ -152,16 +152,23 @@ export function TimeframeSelector({
                   </span>
                 </div>
               </SelectItem>
-              <SelectItem value="trends">
-                <div className="flex flex-col">
-                  <span>Trends Over Time</span>
-                  <span className="text-xs text-muted-foreground">
-                    Progress and change analysis
-                  </span>
-                </div>
-              </SelectItem>
+              {analysisType !== 'multi_group' && (
+                <SelectItem value="trends">
+                  <div className="flex flex-col">
+                    <span>Trends Over Time</span>
+                    <span className="text-xs text-muted-foreground">
+                      Progress and change analysis
+                    </span>
+                  </div>
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
+          {analysisType === 'multi_group' && (
+            <p className="text-xs text-muted-foreground">
+              Multi-group comparisons use best values for fair cross-group analysis.
+            </p>
+          )}
         </div>
 
         {/* Time Period Selection */}

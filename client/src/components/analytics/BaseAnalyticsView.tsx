@@ -335,6 +335,7 @@ function BaseAnalyticsViewContent({
             <MetricsSelector
               metrics={state.metrics}
               onMetricsChange={updateMetrics}
+              analysisType={state.analysisType}
             />
             <TimeframeSelector
               timeframe={state.timeframe}
