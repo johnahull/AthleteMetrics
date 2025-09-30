@@ -41,7 +41,9 @@ export default function Publish() {
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
       
-      const response = await fetch(`/api/measurements?${params}`);
+      const response = await fetch(`/api/measurements?${params}`, {
+        credentials: 'include'
+      });
       return response.json();
     },
     enabled: !!filters.metric,
