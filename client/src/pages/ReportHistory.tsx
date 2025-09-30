@@ -28,23 +28,35 @@ export function ReportHistory() {
   const { data: reports, isLoading, error } = useQuery({
     queryKey: ["reports", organizationContext],
     queryFn: async () => {
-      if (!organizationContext) return [];
+      if (!organizationContext) {
+        console.log("No organization context");
+        return [];
+      }
       console.log("Fetching reports for organization:", organizationContext);
       const res = await fetch(`/api/reports/organization/${organizationContext}`, {
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to fetch reports");
+      console.log("Response status:", res.status);
+      if (!res.ok) {
+        console.error("Failed to fetch reports:", res.status, res.statusText);
+        throw new Error("Failed to fetch reports");
+      }
       const data = await res.json();
-      console.log("Reports fetched:", data);
+      console.log("Reports fetched - count:", data?.length);
+      console.log("Reports data:", data);
       return data;
     },
     enabled: !!organizationContext,
   });
 
-  console.log("Report History - organizationContext:", organizationContext);
-  console.log("Report History - reports:", reports);
-  console.log("Report History - isLoading:", isLoading);
-  console.log("Report History - error:", error);
+  if (error) {
+    console.error("Query error:", error);
+  }
+  if (organizationContext) {
+    console.log("Organization context:", organizationContext);
+    console.log("Reports:", reports);
+    console.log("Is loading:", isLoading);
+  }
 
   // Delete report mutation
   const deleteReportMutation = useMutation({
@@ -114,13 +126,24 @@ export function ReportHistory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {reports.map((report: any) => (
+                {reports.map((report: any) => {
+                  console.log("Report:", report.title, "shareToken:", report.shareToken, "filePath:", report.filePath);
+                  return (
                   <TableRow key={report.id}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-gray-400" />
-                        {report.title}
-                      </div>
+                      {report.shareToken ? (
+                        <Link href={`/reports/view/${report.shareToken}`}>
+                          <div className="flex items-center gap-2 hover:text-blue-600 cursor-pointer">
+                            <FileText className="h-4 w-4 text-gray-400" />
+                            {report.title}
+                          </div>
+                        </Link>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-gray-400" />
+                          {report.title}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -181,7 +204,8 @@ export function ReportHistory() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
