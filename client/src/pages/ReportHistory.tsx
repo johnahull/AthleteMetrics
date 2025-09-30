@@ -25,18 +25,26 @@ export function ReportHistory() {
   const queryClient = useQueryClient();
 
   // Fetch report history
-  const { data: reports, isLoading } = useQuery({
+  const { data: reports, isLoading, error } = useQuery({
     queryKey: ["reports", organizationContext],
     queryFn: async () => {
       if (!organizationContext) return [];
+      console.log("Fetching reports for organization:", organizationContext);
       const res = await fetch(`/api/reports/organization/${organizationContext}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch reports");
-      return res.json();
+      const data = await res.json();
+      console.log("Reports fetched:", data);
+      return data;
     },
     enabled: !!organizationContext,
   });
+
+  console.log("Report History - organizationContext:", organizationContext);
+  console.log("Report History - reports:", reports);
+  console.log("Report History - isLoading:", isLoading);
+  console.log("Report History - error:", error);
 
   // Delete report mutation
   const deleteReportMutation = useMutation({

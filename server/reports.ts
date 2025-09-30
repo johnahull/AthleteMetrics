@@ -565,6 +565,8 @@ export class ReportService {
         createdAt: generatedReports.createdAt,
         athleteIds: generatedReports.athleteIds,
         teamIds: generatedReports.teamIds,
+        filePath: generatedReports.filePath,
+        shareToken: generatedReports.shareToken,
       })
       .from(generatedReports)
       .leftJoin(users, eq(generatedReports.generatedBy, users.id))
