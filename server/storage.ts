@@ -1389,7 +1389,6 @@ export class DatabaseStorage implements IStorage {
     // Team filtering - filter by athlete's CURRENT team membership (not historical)
     // This matches the display logic which shows current teams
     if (filters?.teamIds && filters.teamIds.length > 0) {
-      console.log('[getMeasurements] Filtering by teamIds:', filters.teamIds);
       conditions.push(
         exists(
           db.select({ id: userTeams.id })
@@ -1427,8 +1426,6 @@ export class DatabaseStorage implements IStorage {
 
     const result = await finalQuery
       .orderBy(desc(measurements.date), desc(measurements.createdAt));
-
-    console.log('[getMeasurements] Query returned', result.length, 'measurements');
 
     // If no measurements found, return empty array
     if (result.length === 0) {
