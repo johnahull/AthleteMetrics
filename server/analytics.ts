@@ -270,7 +270,7 @@ export class AnalyticsService {
       const [athleteId, metric] = key.split('|');
       if (!allMetrics.includes(metric)) continue;
 
-      const sortedPoints = points.sort((a, b) => a.date.getTime() - b.date.getTime());
+      const sortedPoints = points.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       
       // Get best value per day
       const dailyBests = this.getBestPerDay(sortedPoints);

@@ -22,9 +22,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, BarChart3, Download, Loader2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { GenerateReportRequest } from "@shared/report-types";
-import { MetricsSelector } from "@/components/analytics/MetricsSelector";
-import { TimeframeSelector } from "@/components/analytics/TimeframeSelector";
-import type { MetricSelection, TimeframeConfig } from "@shared/analytics-types";
 
 export function ReportBuilder() {
   const { user, organizationContext, setOrganizationContext, isLoading } = useAuth();
@@ -35,14 +32,6 @@ export function ReportBuilder() {
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [generatePdf, setGeneratePdf] = useState(true);
   const [localOrgContext, setLocalOrgContext] = useState<string | null>(organizationContext);
-  const [metrics, setMetrics] = useState<MetricSelection>({
-    primary: "FLY10_TIME",
-    additional: []
-  });
-  const [timeframe, setTimeframe] = useState<TimeframeConfig>({
-    type: "best",
-    period: "all_time"
-  });
 
   // Use localOrgContext or organizationContext
   const activeOrgContext = localOrgContext || organizationContext;
@@ -162,15 +151,7 @@ export function ReportBuilder() {
       organizationId: activeOrgContext,
       athleteIds: selectedAthletes.length > 0 ? selectedAthletes : undefined,
       teamIds: selectedTeams.length > 0 ? selectedTeams : undefined,
-      config: {
-        metrics,
-        timeframeType: timeframe.type,
-        dateRange: {
-          type: timeframe.period === "last_7_days" ? "last_30_days" : timeframe.period,
-          startDate: timeframe.startDate?.toISOString(),
-          endDate: timeframe.endDate?.toISOString(),
-        },
-      },
+      // Use default template configuration (no custom config)
       options: {
         generatePdf,
       },
@@ -429,20 +410,6 @@ export function ReportBuilder() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Metrics Selection */}
-        <MetricsSelector
-          metrics={metrics}
-          onMetricsChange={setMetrics}
-          analysisType="individual"
-        />
-
-        {/* Timeframe Selection */}
-        <TimeframeSelector
-          timeframe={timeframe}
-          onTimeframeChange={setTimeframe}
-          analysisType="individual"
-        />
 
         {/* Generate Button */}
         <div className="flex justify-end gap-4">

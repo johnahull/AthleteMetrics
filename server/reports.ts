@@ -278,7 +278,8 @@ export class ReportService {
       ? request.athleteIds?.[0]
       : undefined;
 
-    const analyticsRequest: AnalyticsRequest = {
+    // Fetch data for BEST performances
+    const bestRequest: AnalyticsRequest = {
       analysisType,
       athleteId,
       filters: {
@@ -289,19 +290,37 @@ export class ReportService {
       },
       metrics: config.metrics,
       timeframe: {
-        type: config.timeframeType,
+        type: "best",
         period: config.dateRange?.type || "all_time",
         startDate: dateRange.start,
         endDate: dateRange.end,
       },
     };
 
-    // Call analytics service to get actual data
-    const analyticsResponse = await this.analyticsService.getAnalyticsData(analyticsRequest);
+    // Fetch data for TRENDS over time
+    const trendsRequest: AnalyticsRequest = {
+      ...bestRequest,
+      timeframe: {
+        ...bestRequest.timeframe,
+        type: "trends",
+      },
+    };
 
-    // Transform analytics response to report data
+    // Call analytics service to get both best and trends data
+    const [bestResponse, trendsResponse] = await Promise.all([
+      this.analyticsService.getAnalyticsData(bestRequest),
+      this.analyticsService.getAnalyticsData(trendsRequest),
+    ]);
+
+    // Filter metrics to only those with actual data
+    const availableMetrics = this.getAvailableMetrics(bestResponse, trendsResponse);
+    console.log('[ReportService] Available metrics with data:', availableMetrics);
+
+    // Transform analytics responses to report data (combining best and trends)
     const reportData = transformAnalyticsToReportData(
-      analyticsResponse,
+      bestResponse,
+      trendsResponse,
+      availableMetrics,
       config,
       {
         title: request.title,
@@ -327,6 +346,33 @@ export class ReportService {
     }
 
     return reportData;
+  }
+
+  /**
+   * Determine which metrics have actual measurement data
+   */
+  private getAvailableMetrics(bestResponse: any, trendsResponse: any): string[] {
+    const metricsWithData = new Set<string>();
+
+    // Check best data
+    if (bestResponse.data && bestResponse.data.length > 0) {
+      bestResponse.data.forEach((point: any) => {
+        if (point.metric) {
+          metricsWithData.add(point.metric);
+        }
+      });
+    }
+
+    // Check trends data
+    if (trendsResponse.data && trendsResponse.data.length > 0) {
+      trendsResponse.data.forEach((point: any) => {
+        if (point.metric) {
+          metricsWithData.add(point.metric);
+        }
+      });
+    }
+
+    return Array.from(metricsWithData);
   }
 
   /**

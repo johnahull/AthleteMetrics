@@ -150,15 +150,21 @@ export interface ReportSection {
 
 // Default template configurations
 export const DEFAULT_INDIVIDUAL_TEMPLATE: ReportTemplateConfig = {
-  timeframeType: "trends",
+  timeframeType: "best", // Will be overridden to fetch both best AND trends
   metrics: {
     primary: "FLY10_TIME",
-    additional: ["VERTICAL_JUMP", "AGILITY_505"],
+    additional: ["VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"],
   },
   charts: [
-    { type: "connected_scatter", title: "Performance Trends Over Time", metrics: ["FLY10_TIME"] },
-    { type: "multi_line", title: "Multi-Metric Progress", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
-    { type: "radar", title: "Athletic Profile", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
+    // Best Performances Charts
+    { type: "radar", title: "Athletic Profile (Best Performances)", metrics: ["ALL_AVAILABLE"] },
+    { type: "bar", title: "Best Performances by Metric", metrics: ["ALL_AVAILABLE"] },
+    { type: "box_plot", title: "Performance vs Team Distribution", metrics: ["ALL_AVAILABLE"] },
+
+    // Trends Over Time Charts
+    { type: "connected_scatter", title: "Performance Trends Over Time", metrics: ["ALL_AVAILABLE"] },
+    { type: "multi_line", title: "Multi-Metric Progress", metrics: ["ALL_AVAILABLE"] },
+    { type: "time_series_box_swarm", title: "Performance Evolution with Team Context", metrics: ["ALL_AVAILABLE"] },
   ],
   displayOptions: {
     includeStatistics: true,
@@ -170,19 +176,24 @@ export const DEFAULT_INDIVIDUAL_TEMPLATE: ReportTemplateConfig = {
 };
 
 export const DEFAULT_TEAM_TEMPLATE: ReportTemplateConfig = {
-  timeframeType: "best",
+  timeframeType: "best", // Will be overridden to fetch both best AND trends
   metrics: {
     primary: "FLY10_TIME",
-    additional: ["VERTICAL_JUMP", "AGILITY_505", "DASH_40YD"],
+    additional: ["VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"],
   },
   charts: [
-    { type: "time_series_box_swarm", title: "Team Performance Over Time", metrics: ["FLY10_TIME"] },
-    { type: "box_plot", title: "Performance Distribution by Metric", metrics: ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505"] },
-    { type: "swarm", title: "Individual Data Points", metrics: ["FLY10_TIME"] },
+    // Best Performances Charts
+    { type: "box_plot", title: "Performance Distribution by Metric (Best)", metrics: ["ALL_AVAILABLE"] },
+    { type: "swarm", title: "Individual Best Performances", metrics: ["ALL_AVAILABLE"] },
+    { type: "bar", title: "Team Average by Metric (Best)", metrics: ["ALL_AVAILABLE"] },
+
+    // Trends Over Time Charts
+    { type: "time_series_box_swarm", title: "Team Performance Evolution Over Time", metrics: ["ALL_AVAILABLE"] },
+    { type: "multi_line", title: "Team Progress Across Metrics", metrics: ["ALL_AVAILABLE"] },
   ],
   displayOptions: {
     includeStatistics: true,
-    includeTrends: false,
+    includeTrends: true,
     includeComparison: true,
     showRawData: false,
     pageOrientation: "landscape",

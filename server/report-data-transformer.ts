@@ -17,9 +17,12 @@ import type {
 
 /**
  * Transform analytics response into report data structure
+ * Now handles BOTH best and trends data to create comprehensive reports
  */
 export function transformAnalyticsToReportData(
-  analyticsResponse: AnalyticsResponse,
+  bestResponse: AnalyticsResponse,
+  trendsResponse: AnalyticsResponse,
+  availableMetrics: string[],
   config: ReportTemplateConfig,
   reportMeta: {
     title: string;
@@ -30,45 +33,83 @@ export function transformAnalyticsToReportData(
     dateRangeEnd: string;
   }
 ): ReportData {
-  const { data, trends, multiMetric, statistics, meta } = analyticsResponse;
+  const { data: bestData, statistics: bestStatistics } = bestResponse;
+  const { data: trendsData, trends: trendsTimeSeries } = trendsResponse;
 
-  // Extract unique athletes from data
+  // Extract unique athletes from both best and trends data
   const athleteMap = new Map();
-  data.forEach((point) => {
-    if (!athleteMap.has(point.athleteId)) {
-      athleteMap.set(point.athleteId, {
-        id: point.athleteId,
-        name: point.athleteName,
-        team: point.teamName,
-      });
-    }
-  });
+  const processAthletes = (data: any[]) => {
+    data.forEach((point) => {
+      if (!athleteMap.has(point.athleteId)) {
+        athleteMap.set(point.athleteId, {
+          id: point.athleteId,
+          name: point.athleteName,
+          team: point.teamName,
+        });
+      }
+    });
+  };
+  processAthletes(bestData);
+  processAthletes(trendsData);
 
   const athletes = Array.from(athleteMap.values());
 
   // Generate sections based on configuration
   const sections: ReportSection[] = [];
 
-  // 1. Statistics Section
-  if (config.displayOptions.includeStatistics && statistics) {
-    sections.push(createStatisticsSection(statistics, config.metrics));
+  // 1. Statistics Section (from best performances)
+  if (config.displayOptions.includeStatistics && bestStatistics) {
+    sections.push(createStatisticsSection(bestStatistics, availableMetrics));
   }
 
-  // 2. Chart Sections - one for each configured chart
+  // 2. Generate chart sections for BEST performances
   config.charts.forEach((chartConfig) => {
+    // Skip trends-only charts for best section
+    if (chartConfig.title.toLowerCase().includes("over time") ||
+        chartConfig.title.toLowerCase().includes("progress") ||
+        chartConfig.title.toLowerCase().includes("evolution")) {
+      return;
+    }
+
     const chartSection = createChartSection(
       chartConfig,
-      analyticsResponse,
-      config.timeframeType
+      bestResponse,
+      "best",
+      availableMetrics
     );
     if (chartSection) {
       sections.push(chartSection);
     }
   });
 
-  // 3. Raw Data Table (if requested)
+  // 3. Generate chart sections for TRENDS over time (if data exists)
+  if (trendsData && trendsData.length > 0) {
+    config.charts.forEach((chartConfig) => {
+      // Only include trend charts
+      if (!chartConfig.title.toLowerCase().includes("over time") &&
+          !chartConfig.title.toLowerCase().includes("progress") &&
+          !chartConfig.title.toLowerCase().includes("evolution") &&
+          chartConfig.type !== "connected_scatter" &&
+          chartConfig.type !== "multi_line" &&
+          chartConfig.type !== "time_series_box_swarm") {
+        return;
+      }
+
+      const chartSection = createChartSection(
+        chartConfig,
+        trendsResponse,
+        "trends",
+        availableMetrics
+      );
+      if (chartSection) {
+        sections.push(chartSection);
+      }
+    });
+  }
+
+  // 4. Raw Data Table (if requested)
   if (config.displayOptions.showRawData) {
-    sections.push(createRawDataSection(data, config.metrics));
+    sections.push(createRawDataSection(bestData, availableMetrics));
   }
 
   return {
@@ -92,11 +133,9 @@ export function transformAnalyticsToReportData(
  */
 function createStatisticsSection(
   statistics: Record<string, StatisticalSummary>,
-  metrics: { primary: string; additional: string[] }
+  availableMetrics: string[]
 ): ReportSection {
-  const allMetrics = [metrics.primary, ...metrics.additional];
-
-  const stats = allMetrics.map((metric) => {
+  const stats = availableMetrics.map((metric) => {
     const stat = statistics[metric];
     if (!stat) return null;
 
@@ -109,7 +148,7 @@ function createStatisticsSection(
 
   return {
     type: "statistics",
-    title: "Performance Statistics",
+    title: "Performance Statistics (Best Performances)",
     content: {
       stats,
       totalMeasurements: Object.values(statistics)[0]?.count || 0,
@@ -123,10 +162,20 @@ function createStatisticsSection(
 function createChartSection(
   chartConfig: { type: string; title: string; metrics: string[] },
   analyticsResponse: AnalyticsResponse,
-  timeframeType: "best" | "trends"
+  timeframeType: "best" | "trends",
+  availableMetrics: string[]
 ): ReportSection | null {
   const { type, title, metrics: chartMetrics } = chartConfig;
   const { trends, multiMetric, data, statistics } = analyticsResponse;
+
+  // If chartMetrics includes "ALL_AVAILABLE", replace with actual available metrics
+  let metricsToUse = chartMetrics;
+  if (chartMetrics.includes("ALL_AVAILABLE")) {
+    metricsToUse = availableMetrics;
+  }
+
+  // Filter to only metrics that have data
+  metricsToUse = metricsToUse.filter(m => availableMetrics.includes(m));
 
   let chartData: any = null;
 
@@ -146,16 +195,16 @@ function createChartSection(
             responsive: true,
           },
           selectedDates: [], // Can be populated if needed
-          metric: chartMetrics[0],
+          metric: metricsToUse[0],
         };
       }
       break;
 
     case "radar":
-      // Use multi-metric data for radar charts
+      // Use multi-metric data for radar charts (or best data if multiMetric unavailable)
       if (multiMetric && multiMetric.length > 0) {
         chartData = {
-          data: multiMetric,
+          data: multiMetric.filter((d: any) => metricsToUse.includes(d.metric)),
           config: {
             type,
             title,
@@ -163,7 +212,20 @@ function createChartSection(
             showTooltips: true,
             responsive: true,
           },
-          metrics: chartMetrics,
+          metrics: metricsToUse,
+        };
+      } else if (data && data.length > 0) {
+        // Fallback to regular data for radar if multiMetric is not available
+        chartData = {
+          data: data.filter((d: any) => metricsToUse.includes(d.metric)),
+          config: {
+            type,
+            title,
+            showLegend: true,
+            showTooltips: true,
+            responsive: true,
+          },
+          metrics: metricsToUse,
         };
       }
       break;
@@ -185,7 +247,7 @@ function createChartSection(
             showTooltips: true,
             responsive: true,
           },
-          metric: chartMetrics[0],
+          metric: metricsToUse[0],
         };
       }
       break;
@@ -193,10 +255,15 @@ function createChartSection(
     case "bar":
       // Use statistics for bar charts
       if (statistics) {
-        const barData = chartMetrics.map((metric) => ({
-          metric: formatMetricName(metric),
-          value: statistics[metric]?.mean || 0,
-        }));
+        const barData = metricsToUse
+          .filter(metric => statistics[metric]) // Only include metrics with stats
+          .map((metric) => ({
+            metric: formatMetricName(metric),
+            value: statistics[metric]?.mean || 0,
+          }));
+
+        if (barData.length === 0) return null; // No data for chart
+
         chartData = {
           data: barData,
           config: {
@@ -211,7 +278,7 @@ function createChartSection(
       break;
   }
 
-  if (!chartData) return null;
+  if (!chartData || !data || data.length === 0) return null;
 
   return {
     type: "chart",
@@ -225,20 +292,23 @@ function createChartSection(
  */
 function createRawDataSection(
   data: any[],
-  metrics: { primary: string; additional: string[] }
+  availableMetrics: string[]
 ): ReportSection {
   const headers = ["Athlete", "Date", "Metric", "Value", "Team"];
-  const rows = data.slice(0, 50).map((point) => [
-    point.athleteName,
-    new Date(point.date).toLocaleDateString(),
-    formatMetricName(point.metric),
-    point.value.toFixed(2),
-    point.teamName || "N/A",
-  ]);
+  const rows = data
+    .filter((point) => availableMetrics.includes(point.metric))
+    .slice(0, 50)
+    .map((point) => [
+      point.athleteName,
+      new Date(point.date).toLocaleDateString(),
+      formatMetricName(point.metric),
+      point.value.toFixed(2),
+      point.teamName || "N/A",
+    ]);
 
   return {
     type: "table",
-    title: "Performance Data",
+    title: "Performance Data (Best Performances)",
     content: {
       headers,
       rows,
