@@ -33,20 +33,6 @@ export function ReportBuilder() {
   const [generatePdf, setGeneratePdf] = useState(true);
   const [localOrgContext, setLocalOrgContext] = useState<string | null>(organizationContext);
 
-  // Update local context when organizationContext changes
-  React.useEffect(() => {
-    if (organizationContext && !localOrgContext) {
-      setLocalOrgContext(organizationContext);
-    }
-  }, [organizationContext]);
-
-  // Disable PDF generation if not available
-  React.useEffect(() => {
-    if (capabilities && !capabilities.pdfGeneration) {
-      setGeneratePdf(false);
-    }
-  }, [capabilities, setGeneratePdf]);
-
   // Use localOrgContext or organizationContext
   const activeOrgContext = localOrgContext || organizationContext;
 
@@ -71,6 +57,20 @@ export function ReportBuilder() {
     },
     staleTime: Infinity, // Cache indefinitely
   });
+
+  // Update local context when organizationContext changes
+  React.useEffect(() => {
+    if (organizationContext && !localOrgContext) {
+      setLocalOrgContext(organizationContext);
+    }
+  }, [organizationContext, localOrgContext]);
+
+  // Disable PDF generation if not available
+  React.useEffect(() => {
+    if (capabilities && !capabilities.pdfGeneration) {
+      setGeneratePdf(false);
+    }
+  }, [capabilities]);
 
   // Fetch athletes for selection
   const { data: athletes, error: athletesError, isLoading: athletesLoading } = useQuery({
