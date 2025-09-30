@@ -76,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (organizations && organizations.length > 0) {
                 // Set the first organization as the default context
                 setOrganizationContext(organizations[0].organizationId);
+                setUserOrganizations(organizations);
               }
             }
           } catch (orgError) {

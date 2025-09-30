@@ -9,7 +9,7 @@ import { z } from "zod";
 export type ReportType = "individual" | "team" | "multi_athlete" | "recruiting";
 
 // Map report types to analytics analysis types
-export function getAnalysisTypeForReport(reportType: ReportType): "individual" | "intra_group" | "inter_group" {
+export function getAnalysisTypeForReport(reportType: ReportType): "individual" | "intra_group" | "multi_group" {
   switch (reportType) {
     case "individual":
     case "recruiting":
@@ -17,7 +17,7 @@ export function getAnalysisTypeForReport(reportType: ReportType): "individual" |
     case "multi_athlete":
       return "intra_group"; // Multiple athletes within same group
     case "team":
-      return "inter_group"; // Multiple groups/teams comparison
+      return "intra_group"; // Team analysis shows all athletes in the group
     default:
       return "individual";
   }

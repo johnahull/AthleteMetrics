@@ -190,15 +190,29 @@ export class ReportService {
 
     // Merge with provided config (allows partial overrides)
     if (request.config) {
-      return {
-        ...baseConfig,
-        ...request.config,
-        metrics: request.config.metrics || baseConfig.metrics,
-        charts: request.config.charts || baseConfig.charts,
-        filters: request.config.filters ? { ...baseConfig.filters, ...request.config.filters } : baseConfig.filters,
-        dateRange: request.config.dateRange ? { ...baseConfig.dateRange, ...request.config.dateRange } : baseConfig.dateRange,
-        displayOptions: request.config.displayOptions ? { ...baseConfig.displayOptions, ...request.config.displayOptions } : baseConfig.displayOptions,
-      };
+      const mergedConfig = { ...baseConfig };
+
+      // Only override fields that are explicitly provided
+      if (request.config.metrics) {
+        mergedConfig.metrics = request.config.metrics;
+      }
+      if (request.config.charts && request.config.charts.length > 0) {
+        mergedConfig.charts = request.config.charts;
+      }
+      if (request.config.timeframeType) {
+        mergedConfig.timeframeType = request.config.timeframeType;
+      }
+      if (request.config.filters) {
+        mergedConfig.filters = { ...baseConfig.filters, ...request.config.filters };
+      }
+      if (request.config.dateRange) {
+        mergedConfig.dateRange = { ...baseConfig.dateRange, ...request.config.dateRange };
+      }
+      if (request.config.displayOptions) {
+        mergedConfig.displayOptions = { ...baseConfig.displayOptions, ...request.config.displayOptions };
+      }
+
+      return mergedConfig;
     }
 
     return baseConfig;
@@ -244,6 +258,17 @@ export class ReportService {
       .where(eq(users.id, userId))
       .limit(1);
 
+    // Fetch team info if this is a team report
+    let teamInfo: { name: string } | null = null;
+    if (request.reportType === "team" && request.teamIds && request.teamIds.length > 0) {
+      const [team] = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.id, request.teamIds[0]))
+        .limit(1);
+      teamInfo = team ? { name: team.name } : null;
+    }
+
     // Determine date range
     const dateRange = this.getDateRange(config.dateRange);
 
@@ -280,7 +305,7 @@ export class ReportService {
       config,
       {
         title: request.title,
-        organizationName: org?.name || "Unknown Organization",
+        organizationName: teamInfo?.name || org?.name || "Unknown Organization",
         generatedBy: generatedBy?.fullName || "Unknown",
         generatedAt: new Date().toISOString(),
         dateRangeStart: dateRange.start.toISOString(),
@@ -288,7 +313,61 @@ export class ReportService {
       }
     );
 
+    // For team reports, fetch full roster (not just athletes with measurements)
+    if (request.reportType === "team" && request.teamIds && request.teamIds.length > 0) {
+      const teamRoster = await this.fetchTeamRoster(request.teamIds);
+      // Merge roster with existing athletes from measurements
+      const athleteMap = new Map(reportData.athletes.map(a => [a.id, a]));
+      teamRoster.forEach(athlete => {
+        if (!athleteMap.has(athlete.id)) {
+          athleteMap.set(athlete.id, athlete);
+        }
+      });
+      reportData.athletes = Array.from(athleteMap.values());
+    }
+
     return reportData;
+  }
+
+  /**
+   * Fetch team roster (all athletes on team, not just those with measurements)
+   */
+  private async fetchTeamRoster(teamIds: string[]): Promise<Array<{
+    id: string;
+    name: string;
+    birthYear?: number;
+    gender?: string;
+    team?: string;
+  }>> {
+    console.log('[ReportService] Fetching team roster for team IDs:', teamIds);
+
+    const teamMembers = await db
+      .select({
+        userId: userTeams.userId,
+        userName: users.fullName,
+        birthYear: users.birthYear,
+        gender: users.gender,
+        teamName: teams.name,
+      })
+      .from(userTeams)
+      .innerJoin(users, eq(userTeams.userId, users.id))
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          inArray(userTeams.teamId, teamIds),
+          eq(userTeams.isActive, "true")
+        )
+      );
+
+    console.log('[ReportService] Found team members:', teamMembers.length);
+
+    return teamMembers.map((member: any) => ({
+      id: member.userId,
+      name: member.userName,
+      birthYear: member.birthYear ? parseInt(member.birthYear, 10) : undefined,
+      gender: member.gender || undefined,
+      team: member.teamName,
+    }));
   }
 
   /**
