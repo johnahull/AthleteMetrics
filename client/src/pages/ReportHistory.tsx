@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, Share2, Trash2, FileText, Plus } from "lucide-react";
+import { Download, Share2, Trash2, FileText, Plus, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 
@@ -140,6 +140,17 @@ export function ReportHistory() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
+                        {report.shareToken && (
+                          <Link href={`/reports/view/${report.shareToken}`}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="View Report"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        )}
                         {report.filePath ? (
                           <Button
                             variant="ghost"
@@ -149,9 +160,7 @@ export function ReportHistory() {
                           >
                             <Download className="h-4 w-4" />
                           </Button>
-                        ) : (
-                          <span className="text-xs text-gray-500 px-2">Web report</span>
-                        )}
+                        ) : null}
                         <Button
                           variant="ghost"
                           size="sm"

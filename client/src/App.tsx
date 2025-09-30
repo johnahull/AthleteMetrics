@@ -39,6 +39,7 @@ const AthleteAnalytics = React.lazy(() => import("./pages/AthleteAnalytics"));
 // Lazy load report pages
 const ReportBuilder = React.lazy(() => import("./pages/ReportBuilder"));
 const ReportHistory = React.lazy(() => import("./pages/ReportHistory"));
+const ReportViewer = React.lazy(() => import("./pages/ReportViewer"));
 
 function Router() {
   return (
@@ -132,6 +133,11 @@ function Router() {
       <Route path="/reports/history">
         <RouteWrapper loadingText="Loading Report History...">
           <ReportHistory />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/view/:shareToken">
+        <RouteWrapper loadingText="Loading Report...">
+          <ReportViewer />
         </RouteWrapper>
       </Route>
       <Route path="/">

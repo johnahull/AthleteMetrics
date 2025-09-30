@@ -553,6 +553,45 @@ export class ReportService {
   }
 
   /**
+   * Get report by share token with full report data
+   */
+  async getReportByShareTokenWithData(shareToken: string) {
+    const report = await this.getReportByShareToken(shareToken);
+
+    if (!report) {
+      return null;
+    }
+
+    // Regenerate the report data
+    const config = await this.getReportConfig({
+      reportType: report.reportType as any,
+      title: report.title,
+      organizationId: report.organizationId,
+      athleteIds: report.athleteIds || undefined,
+      teamIds: report.teamIds || undefined,
+      templateId: report.templateId || undefined,
+    });
+
+    const reportData = await this.fetchReportData(
+      {
+        reportType: report.reportType as any,
+        title: report.title,
+        organizationId: report.organizationId,
+        athleteIds: report.athleteIds || undefined,
+        teamIds: report.teamIds || undefined,
+      },
+      config,
+      report.generatedBy
+    );
+
+    return {
+      metadata: report,
+      data: reportData,
+      config: config,
+    };
+  }
+
+  /**
    * Get all reports for an organization
    */
   async getOrganizationReports(organizationId: string, limit = 50) {

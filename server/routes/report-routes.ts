@@ -149,23 +149,19 @@ router.get("/:id/download", requireAuth, async (req: Request, res: Response) => 
 
 /**
  * GET /api/reports/shared/:shareToken
- * Get report by share token (public access)
+ * Get report by share token with full data (public access)
  */
 router.get("/shared/:shareToken", async (req: Request, res: Response) => {
   try {
     const { shareToken } = req.params;
 
-    const report = await reportService.getReportByShareToken(shareToken);
+    const reportWithData = await reportService.getReportByShareTokenWithData(shareToken);
 
-    if (!report) {
+    if (!reportWithData) {
       return res.status(404).json({ message: "Report not found or expired" });
     }
 
-    if (report.isPublic !== "true") {
-      return res.status(403).json({ message: "Report is not public" });
-    }
-
-    res.json(report);
+    res.json(reportWithData);
   } catch (error) {
     console.error("Error fetching shared report:", error);
     res.status(500).json({
