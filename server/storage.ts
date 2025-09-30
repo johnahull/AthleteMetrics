@@ -1443,7 +1443,7 @@ export class DatabaseStorage implements IStorage {
     }));
 
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string))];
+    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string).filter(Boolean))];
 
     // Fetch all team memberships for these users
     type TeamMembership = {
@@ -1456,24 +1456,28 @@ export class DatabaseStorage implements IStorage {
       organizationName: string;
     };
 
-    const allUserTeams = await db
-      .select({
-        userId: userTeams.userId,
-        teamId: teams.id,
-        teamName: teams.name,
-        joinedAt: userTeams.joinedAt,
-        leftAt: userTeams.leftAt,
-        organizationId: organizations.id,
-        organizationName: organizations.name,
-      })
-      .from(userTeams)
-      .innerJoin(teams, eq(userTeams.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(and(
-        inArray(userTeams.userId, uniqueUserIds),
-        eq(userTeams.isActive, "true"),
-        eq(teams.isArchived, "false")
-      ));
+    // Only query for teams if we have user IDs
+    let allUserTeams: TeamMembership[] = [];
+    if (uniqueUserIds.length > 0) {
+      allUserTeams = await db
+        .select({
+          userId: userTeams.userId,
+          teamId: teams.id,
+          teamName: teams.name,
+          joinedAt: userTeams.joinedAt,
+          leftAt: userTeams.leftAt,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .where(and(
+          inArray(userTeams.userId, uniqueUserIds),
+          eq(userTeams.isActive, "true"),
+          eq(teams.isArchived, "false")
+        ));
+    }
 
     // Build a map of userId -> array of team memberships
     const userTeamsMap = new Map<string, typeof allUserTeams>();
