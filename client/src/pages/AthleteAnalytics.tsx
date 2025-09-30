@@ -93,14 +93,6 @@ export function AthleteAnalytics() {
     organizationId: organizationId
   };
 
-  console.log('AthleteAnalytics - User context:', {
-    userId: user.id,
-    athleteId: user.athleteId,
-    organizationId,
-    teamIds,
-    initialFilters
-  });
-
   return (
     <BaseAnalyticsView
       title="My Athletics Performance"
