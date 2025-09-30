@@ -1443,7 +1443,7 @@ export class DatabaseStorage implements IStorage {
     }));
 
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string).filter(Boolean))];
+    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string).filter(Boolean))] as string[];
 
     // Fetch all team memberships for these users
     type TeamMembership = {
