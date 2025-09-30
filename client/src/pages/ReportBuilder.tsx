@@ -42,10 +42,10 @@ export function ReportBuilder() {
 
   // Disable PDF generation if not available
   React.useEffect(() => {
-    if (capabilities && !capabilities.pdfGeneration && generatePdf) {
+    if (capabilities && !capabilities.pdfGeneration) {
       setGeneratePdf(false);
     }
-  }, [capabilities]);
+  }, [capabilities, setGeneratePdf]);
 
   // Use localOrgContext or organizationContext
   const activeOrgContext = localOrgContext || organizationContext;
