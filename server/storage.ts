@@ -1386,27 +1386,24 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(measurements.isVerified, "true"));
     }
     
-    // Team filtering - use direct team relationship when available for better performance
+    // Team filtering - filter by athlete's CURRENT team membership (not historical)
+    // This matches the display logic which shows current teams
     if (filters?.teamIds && filters.teamIds.length > 0) {
-      conditions.push(or(
-        inArray(measurements.teamId, filters.teamIds), // Direct team relationship (preferred)
-        and(
-          or(isNull(measurements.teamId), eq(measurements.teamId, "")), // Fallback for measurements without direct team context
-          exists(
-            db.select({ id: userTeams.id })
-              .from(userTeams)
-              .where(and(
-                eq(userTeams.userId, users.id),
-                inArray(userTeams.teamId, filters.teamIds),
-                lte(userTeams.joinedAt, measurements.date),
-                or(
-                  isNull(userTeams.leftAt),
-                  gte(userTeams.leftAt, measurements.date)
-                )
-              ))
-          )
+      conditions.push(
+        exists(
+          db.select({ id: userTeams.id })
+            .from(userTeams)
+            .where(and(
+              eq(userTeams.userId, users.id),
+              inArray(userTeams.teamId, filters.teamIds),
+              eq(userTeams.isActive, "true"),
+              or(
+                isNull(userTeams.leftAt),
+                gte(userTeams.leftAt, new Date())
+              )
+            ))
         )
-      ));
+      );
     }
     
     // Organization filtering - filter by user's organization membership, not team organization
