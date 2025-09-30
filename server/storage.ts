@@ -1359,7 +1359,7 @@ export class DatabaseStorage implements IStorage {
     })
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
-    // Join to userTeams to get team memberships active at measurement date
+    // Join to userTeams to get ALL team memberships active at measurement date
     .leftJoin(userTeams, and(
       eq(users.id, userTeams.userId),
       lte(userTeams.joinedAt, measurements.date),
@@ -1368,14 +1368,9 @@ export class DatabaseStorage implements IStorage {
         gte(userTeams.leftAt, measurements.date)
       )
     ))
-    // Join teams - prefer direct teamId, otherwise use userTeams relationship
-    .leftJoin(teams, or(
-      eq(measurements.teamId, teams.id),
-      and(
-        or(isNull(measurements.teamId), eq(measurements.teamId, "")),
-        eq(userTeams.teamId, teams.id)
-      )
-    ))
+    // Join teams using userTeams relationship
+    // This will create multiple rows if athlete was on multiple teams at measurement date
+    .leftJoin(teams, eq(userTeams.teamId, teams.id))
     .leftJoin(organizations, eq(teams.organizationId, organizations.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
