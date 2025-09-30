@@ -1359,31 +1359,22 @@ export class DatabaseStorage implements IStorage {
     })
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
-    // Use direct team relationship when available, fall back to temporal logic
-    .leftJoin(teams, or(
-      // Direct team relationship (preferred)
-      eq(measurements.teamId, teams.id),
-      // Fallback: temporal logic for measurements without direct team context
-      and(
-        or(isNull(measurements.teamId), eq(measurements.teamId, "")), // No direct team context
-        exists(
-          db.select({ id: userTeams.id })
-            .from(userTeams)
-            .where(and(
-              eq(userTeams.userId, users.id),
-              eq(userTeams.teamId, teams.id),
-              lte(userTeams.joinedAt, measurements.date),
-              or(
-                isNull(userTeams.leftAt),
-                gte(userTeams.leftAt, measurements.date)
-              )
-            ))
-        )
-      )
-    ))
+    // Join to userTeams to get team memberships active at measurement date
     .leftJoin(userTeams, and(
       eq(users.id, userTeams.userId),
-      eq(userTeams.teamId, teams.id)
+      lte(userTeams.joinedAt, measurements.date),
+      or(
+        isNull(userTeams.leftAt),
+        gte(userTeams.leftAt, measurements.date)
+      )
+    ))
+    // Join teams - prefer direct teamId, otherwise use userTeams relationship
+    .leftJoin(teams, or(
+      eq(measurements.teamId, teams.id),
+      and(
+        or(isNull(measurements.teamId), eq(measurements.teamId, "")),
+        eq(userTeams.teamId, teams.id)
+      )
     ))
     .leftJoin(organizations, eq(teams.organizationId, organizations.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)

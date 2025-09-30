@@ -397,7 +397,12 @@ export default function Publish() {
                           : "Independent Athlete"
                         }
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {measurement.user.sports && measurement.user.sports.length > 0
+                          ? measurement.user.sports.join(", ")
+                          : "N/A"
+                        }
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-gray-900">
