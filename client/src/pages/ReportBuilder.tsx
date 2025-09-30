@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ import type { GenerateReportRequest } from "@shared/report-types";
 
 export function ReportBuilder() {
   const { user, organizationContext, setOrganizationContext, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [reportType, setReportType] = useState<string>("individual");
   const [title, setTitle] = useState("");
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
@@ -97,9 +99,22 @@ export function ReportBuilder() {
     },
     onSuccess: (data) => {
       console.log("Report generated:", data);
-      // Redirect to report view or download PDF
+
+      // If PDF was generated, open it in a new tab
       if (data.pdfUrl) {
         window.open(data.pdfUrl, "_blank");
+        // Optionally redirect to report history after a brief delay
+        setTimeout(() => {
+          setLocation("/report-history");
+        }, 500);
+      }
+      // If no PDF but has share URL, navigate to the report view
+      else if (data.shareUrl) {
+        setLocation(data.shareUrl);
+      }
+      // Fallback: redirect to report history
+      else {
+        setLocation("/report-history");
       }
     },
   });
