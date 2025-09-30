@@ -128,22 +128,13 @@ export function ReportBuilder() {
       if (data.pdfUrl) {
         console.log("Opening PDF in new tab:", data.pdfUrl);
         window.open(data.pdfUrl, "_blank");
-        // Optionally redirect to report history after a brief delay
-        setTimeout(() => {
-          console.log("Redirecting to report history");
-          setLocation("/reports/history");
-        }, 500);
       }
-      // If no PDF but has share URL, navigate to the report view
-      else if (data.shareUrl) {
-        console.log("Navigating to share URL:", data.shareUrl);
-        setLocation(data.shareUrl);
-      }
-      // Fallback: redirect to report history
-      else {
-        console.log("No PDF or share URL, redirecting to report history");
+
+      // Always redirect to report history after generation
+      console.log("Redirecting to report history");
+      setTimeout(() => {
         setLocation("/reports/history");
-      }
+      }, 500);
     },
     onError: (error) => {
       console.error("Report generation error:", error);
