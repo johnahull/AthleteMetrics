@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, useRef, useMemo, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -13,6 +13,7 @@ import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import { DateSelector } from '@/components/ui/date-selector';
 import { ChartContainer } from '@/components/charts/ChartContainer';
+import { useToast } from '@/hooks/use-toast';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
@@ -26,6 +27,16 @@ import { GroupSelector } from './GroupSelector';
 import type { AnalysisType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
+
+/**
+ * Toast notification object for multi-group mode transitions
+ */
+interface MultiGroupToastNotification {
+  /** Whether the toast should be displayed */
+  show: boolean;
+  /** The message to display in the toast */
+  message: string;
+}
 
 interface BaseAnalyticsViewProps {
   // Required props
@@ -79,6 +90,9 @@ function BaseAnalyticsViewContent({
   children
 }: Omit<BaseAnalyticsViewProps, 'organizationId' | 'userId' | 'requireRole'>) {
   const { state, isDataReady, shouldFetchData, chartData: memoizedChartData } = useAnalyticsContext();
+  const { toast } = useToast();
+  const previousAnalysisTypeRef = useRef<AnalysisType>(state.analysisType);
+
   const {
     fetchAnalyticsData,
     chartConfig,
@@ -139,6 +153,46 @@ function BaseAnalyticsViewContent({
       onError(state.error);
     }
   }, [state.error, onError]);
+
+  // Memoize toast notification conditions for performance
+  // Only depend on specific values rather than entire objects
+  const additionalMetricsCount = state.previousMetrics?.additional.length ?? 0;
+  const previousTimeframeType = state.previousTimeframe?.type;
+
+  const toastNotification = useMemo<MultiGroupToastNotification>(() => {
+    const wasMultiGroup = previousAnalysisTypeRef.current === 'multi_group';
+    const isMultiGroup = state.analysisType === 'multi_group';
+    const hadAdditionalMetrics = additionalMetricsCount > 0;
+    const hadTrends = previousTimeframeType === 'trends';
+
+    const shouldShowToast = isMultiGroup && !wasMultiGroup && (hadAdditionalMetrics || hadTrends);
+
+    if (shouldShowToast) {
+      const changes: string[] = [];
+      if (hadAdditionalMetrics) changes.push('additional metrics cleared');
+      if (hadTrends) changes.push('timeframe changed to best values');
+
+      return {
+        show: true,
+        message: `${changes.join(' and ')} for fair comparison. Your previous settings will be restored when you exit multi-group mode.`
+      };
+    }
+
+    return { show: false, message: '' };
+  }, [state.analysisType, additionalMetricsCount, previousTimeframeType]);
+
+  // Notify user when switching to multi-group mode with state changes
+  useEffect(() => {
+    if (toastNotification.show) {
+      toast({
+        title: 'Multi-group mode activated',
+        description: toastNotification.message,
+        duration: 5000,
+      });
+    }
+
+    previousAnalysisTypeRef.current = state.analysisType;
+  }, [toastNotification, state.analysisType, toast]);
 
   // Prepare athletes for selector
   const athletesForSelector = state.availableAthletes.map(athlete => ({
@@ -335,6 +389,7 @@ function BaseAnalyticsViewContent({
             <MetricsSelector
               metrics={state.metrics}
               onMetricsChange={updateMetrics}
+              analysisType={state.analysisType}
             />
             <TimeframeSelector
               timeframe={state.timeframe}

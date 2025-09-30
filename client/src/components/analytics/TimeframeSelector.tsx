@@ -17,6 +17,13 @@ import type { TimeframeConfig, TimeframeType, TimePeriod } from '@shared/analyti
 interface TimeframeSelectorProps {
   timeframe: TimeframeConfig;
   onTimeframeChange: (timeframe: TimeframeConfig) => void;
+  /**
+   * Type of analysis being performed
+   * Controls which timeframe types are available:
+   * - 'individual' and 'intra_group': All timeframe types available
+   * - 'multi_group': Only 'best' values allowed (trends disabled for fair comparison)
+   * @default 'individual'
+   */
   analysisType?: 'individual' | 'intra_group' | 'multi_group';
   showRecommendations?: boolean;
   className?: string;
@@ -152,16 +159,28 @@ export function TimeframeSelector({
                   </span>
                 </div>
               </SelectItem>
-              <SelectItem value="trends">
-                <div className="flex flex-col">
-                  <span>Trends Over Time</span>
-                  <span className="text-xs text-muted-foreground">
-                    Progress and change analysis
-                  </span>
-                </div>
-              </SelectItem>
+              {analysisType !== 'multi_group' && (
+                <SelectItem value="trends">
+                  <div className="flex flex-col">
+                    <span>Trends Over Time</span>
+                    <span className="text-xs text-muted-foreground">
+                      Progress and change analysis
+                    </span>
+                  </div>
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
+          {analysisType === 'multi_group' && (
+            <p
+              id="multi-group-timeframe-help"
+              className="text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              Multi-group mode uses best values for fair comparison. Trends unavailable in this mode.
+            </p>
+          )}
         </div>
 
         {/* Time Period Selection */}

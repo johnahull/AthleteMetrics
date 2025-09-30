@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
-import { getGroupColor as getChartGroupColor, sanitizeColor } from '@/utils/chart-colors';
+import { getGroupColor as getChartGroupColor, sanitizeColor, DEFAULT_GROUP_COLOR } from '@/utils/chart-colors';
 
 /**
  * Sanitize group name to prevent XSS and ensure valid input
@@ -248,7 +248,7 @@ export function GroupSelector({
               <Badge
                 key={group.id}
                 variant="secondary"
-                style={{ borderLeft: `4px solid ${sanitizeColor(group.color)}` }}
+                style={{ borderLeft: `4px solid ${sanitizeColor(group.color || DEFAULT_GROUP_COLOR)}` }}
                 className="pl-2"
                 role="listitem"
               >

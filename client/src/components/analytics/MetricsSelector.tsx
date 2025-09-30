@@ -12,22 +12,40 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
 import { METRIC_CONFIG } from '@shared/analytics-types';
-import type { MetricSelection } from '@shared/analytics-types';
+import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
 
 interface MetricsSelectorProps {
   metrics: MetricSelection;
   onMetricsChange: (metrics: MetricSelection) => void;
   maxAdditional?: number;
   className?: string;
+  /**
+   * Type of analysis being performed
+   * Controls metric selection behavior:
+   * - 'individual' and 'intra_group': Additional metrics can be added (up to maxAdditional)
+   * - 'multi_group': Additional metrics disabled (single metric required for fair comparison)
+   *
+   * Multi-group mode enforces a single metric to ensure:
+   * - Consistent measurement across all groups
+   * - Fair cross-group comparisons
+   * - Clear, interpretable visualizations
+   *
+   * @default 'individual'
+   */
+  analysisType?: AnalysisType;
 }
 
 export function MetricsSelector({
   metrics,
   onMetricsChange,
   maxAdditional = 5,
-  className
+  className,
+  analysisType = 'individual'
 }: MetricsSelectorProps) {
   const availableMetrics = Object.keys(METRIC_CONFIG);
+
+  // Memoize multi-group check to avoid recalculating in map loop
+  const isMultiGroupMode = analysisType === 'multi_group';
 
   const handlePrimaryMetricChange = (metric: string) => {
     // Remove from additional if it was there
@@ -146,6 +164,16 @@ export function MetricsSelector({
           <Label className="text-sm font-medium">
             Add More Metrics ({metrics.additional.length}/{maxAdditional})
           </Label>
+          {isMultiGroupMode && (
+            <p
+              id="multi-group-metrics-help"
+              className="text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              Multi-group mode requires a single metric for fair comparison.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
             {availableMetrics
               .filter((metric: string) =>
@@ -154,6 +182,7 @@ export function MetricsSelector({
               )
               .map((metric: string) => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const isDisabled = metrics.additional.length >= maxAdditional || isMultiGroupMode;
                 return (
                   <div key={metric} className="flex items-start space-x-2">
                     <Checkbox
@@ -162,7 +191,8 @@ export function MetricsSelector({
                       onCheckedChange={(checked) =>
                         handleAdditionalMetricToggle(metric, checked as boolean)
                       }
-                      disabled={metrics.additional.length >= maxAdditional}
+                      disabled={isDisabled}
+                      aria-describedby={isMultiGroupMode ? 'multi-group-metrics-help' : undefined}
                     />
                     <label
                       htmlFor={`metric-${metric}`}
