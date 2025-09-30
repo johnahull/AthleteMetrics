@@ -172,7 +172,12 @@ export function TimeframeSelector({
             </SelectContent>
           </Select>
           {analysisType === 'multi_group' && (
-            <p id="multi-group-timeframe-help" className="text-xs text-muted-foreground">
+            <p
+              id="multi-group-timeframe-help"
+              className="text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
               Multi-group mode uses best values for fair comparison. Trends unavailable in this mode.
             </p>
           )}

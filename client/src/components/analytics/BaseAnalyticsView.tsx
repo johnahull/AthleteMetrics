@@ -28,6 +28,16 @@ import type { AnalysisType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
+/**
+ * Toast notification object for multi-group mode transitions
+ */
+interface MultiGroupToastNotification {
+  /** Whether the toast should be displayed */
+  show: boolean;
+  /** The message to display in the toast */
+  message: string;
+}
+
 interface BaseAnalyticsViewProps {
   // Required props
   title: string;
@@ -145,11 +155,15 @@ function BaseAnalyticsViewContent({
   }, [state.error, onError]);
 
   // Memoize toast notification conditions for performance
-  const toastNotification = useMemo(() => {
+  // Only depend on specific values rather than entire objects
+  const additionalMetricsCount = state.previousMetrics?.additional.length ?? 0;
+  const previousTimeframeType = state.previousTimeframe?.type;
+
+  const toastNotification = useMemo<MultiGroupToastNotification>(() => {
     const wasMultiGroup = previousAnalysisTypeRef.current === 'multi_group';
     const isMultiGroup = state.analysisType === 'multi_group';
-    const hadAdditionalMetrics = state.previousMetrics && state.previousMetrics.additional.length > 0;
-    const hadTrends = state.previousTimeframe && state.previousTimeframe.type === 'trends';
+    const hadAdditionalMetrics = additionalMetricsCount > 0;
+    const hadTrends = previousTimeframeType === 'trends';
 
     const shouldShowToast = isMultiGroup && !wasMultiGroup && (hadAdditionalMetrics || hadTrends);
 
@@ -165,7 +179,7 @@ function BaseAnalyticsViewContent({
     }
 
     return { show: false, message: '' };
-  }, [state.analysisType, state.previousMetrics, state.previousTimeframe]);
+  }, [state.analysisType, additionalMetricsCount, previousTimeframeType]);
 
   // Notify user when switching to multi-group mode with state changes
   useEffect(() => {

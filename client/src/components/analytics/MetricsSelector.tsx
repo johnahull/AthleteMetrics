@@ -165,7 +165,12 @@ export function MetricsSelector({
             Add More Metrics ({metrics.additional.length}/{maxAdditional})
           </Label>
           {isMultiGroupMode && (
-            <p id="multi-group-metrics-help" className="text-xs text-muted-foreground">
+            <p
+              id="multi-group-metrics-help"
+              className="text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
               Multi-group mode requires a single metric for fair comparison.
             </p>
           )}
