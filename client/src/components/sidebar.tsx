@@ -84,8 +84,12 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   let navigation = Array.isArray(baseConfig) ? [...baseConfig] : [...baseConfig.default];
   
   // Special handling for athletes with profiles
+  console.log('Sidebar - athlete check:', { role, athleteId: user?.athleteId, userId: user?.id, user });
   if (role === "athlete" && user?.athleteId) {
     navigation.unshift({ name: "My Profile", href: `/athletes/${user.athleteId}`, icon: UsersRound });
+  } else if (role === "athlete" && user?.id) {
+    // Fallback: use user.id if athleteId is not set
+    navigation.unshift({ name: "My Profile", href: `/athletes/${user.id}`, icon: UsersRound });
   }
   
   // Update org admin organization link with specific ID
