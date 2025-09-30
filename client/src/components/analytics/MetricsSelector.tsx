@@ -155,8 +155,8 @@ export function MetricsSelector({
             Add More Metrics ({metrics.additional.length}/{maxAdditional})
           </Label>
           {analysisType === 'multi_group' && (
-            <p className="text-xs text-muted-foreground">
-              Multi-group analysis requires a single metric for comparison.
+            <p id="multi-group-metrics-help" className="text-xs text-muted-foreground">
+              Multi-group mode requires a single metric for fair comparison.
             </p>
           )}
           <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
@@ -167,6 +167,7 @@ export function MetricsSelector({
               )
               .map((metric: string) => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const isDisabled = metrics.additional.length >= maxAdditional || analysisType === 'multi_group';
                 return (
                   <div key={metric} className="flex items-start space-x-2">
                     <Checkbox
@@ -175,7 +176,8 @@ export function MetricsSelector({
                       onCheckedChange={(checked) =>
                         handleAdditionalMetricToggle(metric, checked as boolean)
                       }
-                      disabled={metrics.additional.length >= maxAdditional || analysisType === 'multi_group'}
+                      disabled={isDisabled}
+                      aria-describedby={analysisType === 'multi_group' ? 'multi-group-metrics-help' : undefined}
                     />
                     <label
                       htmlFor={`metric-${metric}`}

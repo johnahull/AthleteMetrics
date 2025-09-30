@@ -117,6 +117,14 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
         selectedAthleteId: action.payload === 'individual' ? state.selectedAthleteId : '',
         selectedAthlete: action.payload === 'individual' ? state.selectedAthlete : null,
         selectedAthleteIds: action.payload !== 'individual' ? state.selectedAthleteIds : [],
+        // Clear additional metrics when switching to multi-group mode (requires single metric)
+        metrics: action.payload === 'multi_group'
+          ? { ...state.metrics, additional: [] }
+          : state.metrics,
+        // Force 'best' timeframe type for multi-group mode (trends not supported)
+        timeframe: action.payload === 'multi_group' && state.timeframe.type === 'trends'
+          ? { ...state.timeframe, type: 'best' }
+          : state.timeframe,
       };
 
     case 'SET_FILTERS':
