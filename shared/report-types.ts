@@ -8,6 +8,21 @@ import { z } from "zod";
 // Report type enum
 export type ReportType = "individual" | "team" | "multi_athlete" | "recruiting";
 
+// Map report types to analytics analysis types
+export function getAnalysisTypeForReport(reportType: ReportType): "individual" | "intra_group" | "inter_group" {
+  switch (reportType) {
+    case "individual":
+    case "recruiting":
+      return "individual";
+    case "multi_athlete":
+      return "intra_group"; // Multiple athletes within same group
+    case "team":
+      return "inter_group"; // Multiple groups/teams comparison
+    default:
+      return "individual";
+  }
+}
+
 // Chart types available for reports
 export type ReportChartType =
   | "line"
@@ -24,6 +39,9 @@ export type ReportChartType =
 
 // Report configuration for templates
 export interface ReportTemplateConfig {
+  // Timeframe type - best performances or trends over time
+  timeframeType: "best" | "trends";
+
   // Metrics to include
   metrics: {
     primary: string;
@@ -132,6 +150,7 @@ export interface ReportSection {
 
 // Default template configurations
 export const DEFAULT_INDIVIDUAL_TEMPLATE: ReportTemplateConfig = {
+  timeframeType: "trends",
   metrics: {
     primary: "FLY10_TIME",
     additional: ["VERTICAL_JUMP", "AGILITY_505"],
@@ -151,6 +170,7 @@ export const DEFAULT_INDIVIDUAL_TEMPLATE: ReportTemplateConfig = {
 };
 
 export const DEFAULT_TEAM_TEMPLATE: ReportTemplateConfig = {
+  timeframeType: "best",
   metrics: {
     primary: "FLY10_TIME",
     additional: ["VERTICAL_JUMP", "AGILITY_505", "DASH_40YD"],
@@ -170,6 +190,7 @@ export const DEFAULT_TEAM_TEMPLATE: ReportTemplateConfig = {
 };
 
 export const DEFAULT_MULTI_ATHLETE_TEMPLATE: ReportTemplateConfig = {
+  timeframeType: "best",
   metrics: {
     primary: "FLY10_TIME",
     additional: ["VERTICAL_JUMP", "AGILITY_505"],
@@ -188,6 +209,7 @@ export const DEFAULT_MULTI_ATHLETE_TEMPLATE: ReportTemplateConfig = {
 };
 
 export const DEFAULT_RECRUITING_TEMPLATE: ReportTemplateConfig = {
+  timeframeType: "trends",
   metrics: {
     primary: "FLY10_TIME",
     additional: ["VERTICAL_JUMP", "AGILITY_505", "DASH_40YD", "T_TEST"],

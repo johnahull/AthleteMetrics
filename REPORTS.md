@@ -1,6 +1,6 @@
 # Report Generation System
 
-Complete implementation of Phases 1, 2, and 3 for coach-generated athlete reports.
+Complete implementation of Phases 1-4 for coach-generated athlete reports with full analytics integration.
 
 ## Features Implemented
 
@@ -42,14 +42,38 @@ Complete implementation of Phases 1, 2, and 3 for coach-generated athlete report
 - **Report Builder UI** (`client/src/pages/ReportBuilder.tsx`):
   - Interactive report type selection
   - Athlete/team picker
+  - **Timeframe selector**: Choose "Best Performances" or "Performance Trends"
   - PDF generation toggle
-  - Configuration options
+  - Configuration options with partial override support
 - **Report History** (`client/src/pages/ReportHistory.tsx`):
   - List all generated reports
   - Download, share, and delete actions
   - Filterable by organization
 - **Routing**: Added `/reports/builder` and `/reports/history` routes
 - **Integration**: "Generate Report" and "View Reports" buttons on CoachAnalytics page
+
+### Phase 4: Analytics Integration ✅
+- **Analytics Service Integration** (`server/reports.ts`):
+  - Reports now use real analytics data from `AnalyticsService`
+  - Automatic mapping of report types to analysis types:
+    - Individual/Recruiting → `individual`
+    - Multi-Athlete → `intra_group`
+    - Team → `inter_group`
+  - Support for both "best" and "trends" timeframe modes
+  - Partial config merging with defaults
+- **Data Transformation** (`server/report-data-transformer.ts`):
+  - Transforms `AnalyticsResponse` to `ReportData` structure
+  - Creates chart sections with proper data for each chart type
+  - Generates statistics sections from analytics summaries
+  - Extracts athlete information from data points
+- **Timeframe Support**:
+  - **"Best"**: Shows personal bests and peak performance data
+  - **"Trends"**: Shows progress and development over time
+  - User-selectable in ReportBuilder UI
+- **Full Chart Coverage**:
+  - All analytics chart types supported in reports
+  - Charts receive real `TrendData`, `MultiMetricData`, or `ChartDataPoint[]`
+  - Statistics and percentiles included from analytics
 
 ## Usage
 

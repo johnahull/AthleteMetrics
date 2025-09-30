@@ -25,7 +25,11 @@ import {
   DEFAULT_TEAM_TEMPLATE,
   DEFAULT_MULTI_ATHLETE_TEMPLATE,
   DEFAULT_RECRUITING_TEMPLATE,
+  getAnalysisTypeForReport,
 } from "@shared/report-types";
+import type { AnalyticsRequest } from "@shared/analytics-types";
+import { AnalyticsService } from "./analytics";
+import { transformAnalyticsToReportData } from "./report-data-transformer";
 import { randomBytes } from "crypto";
 import puppeteer from "puppeteer";
 import path from "path";
@@ -33,11 +37,13 @@ import fs from "fs/promises";
 
 export class ReportService {
   private reportsDir: string;
+  private analyticsService: AnalyticsService;
 
   constructor() {
     // Store generated reports in ./reports directory
     this.reportsDir = path.join(process.cwd(), "reports");
     this.ensureReportsDirectory();
+    this.analyticsService = new AnalyticsService();
   }
 
   /**
@@ -61,8 +67,8 @@ export class ReportService {
     // Get template configuration
     const config = await this.getReportConfig(request);
 
-    // Fetch report data
-    const reportData = await this.fetchReportData(request, config);
+    // Fetch report data using analytics service
+    const reportData = await this.fetchReportData(request, config, userId);
 
     // Generate PDF if requested
     let filePath: string | undefined;
@@ -132,12 +138,9 @@ export class ReportService {
   private async getReportConfig(
     request: GenerateReportRequest
   ): Promise<ReportTemplateConfig> {
-    // If config provided directly, use it
-    if (request.config) {
-      return request.config;
-    }
+    // Get base config from template or defaults
+    let baseConfig: ReportTemplateConfig;
 
-    // If template ID provided, fetch it
     if (request.templateId) {
       const [template] = await db
         .select()
@@ -146,12 +149,35 @@ export class ReportService {
         .limit(1);
 
       if (template) {
-        return JSON.parse(template.config);
+        baseConfig = JSON.parse(template.config);
+      } else {
+        baseConfig = this.getDefaultTemplate(request.reportType);
       }
+    } else {
+      baseConfig = this.getDefaultTemplate(request.reportType);
     }
 
-    // Otherwise, use default template based on report type
-    switch (request.reportType) {
+    // Merge with provided config (allows partial overrides)
+    if (request.config) {
+      return {
+        ...baseConfig,
+        ...request.config,
+        metrics: request.config.metrics || baseConfig.metrics,
+        charts: request.config.charts || baseConfig.charts,
+        filters: request.config.filters ? { ...baseConfig.filters, ...request.config.filters } : baseConfig.filters,
+        dateRange: request.config.dateRange ? { ...baseConfig.dateRange, ...request.config.dateRange } : baseConfig.dateRange,
+        displayOptions: request.config.displayOptions ? { ...baseConfig.displayOptions, ...request.config.displayOptions } : baseConfig.displayOptions,
+      };
+    }
+
+    return baseConfig;
+  }
+
+  /**
+   * Get default template for report type
+   */
+  private getDefaultTemplate(reportType: string): ReportTemplateConfig {
+    switch (reportType) {
       case "individual":
         return DEFAULT_INDIVIDUAL_TEMPLATE;
       case "team":
@@ -166,11 +192,12 @@ export class ReportService {
   }
 
   /**
-   * Fetch all data needed for the report
+   * Fetch all data needed for the report using analytics service
    */
   private async fetchReportData(
     request: GenerateReportRequest,
-    config: ReportTemplateConfig
+    config: ReportTemplateConfig,
+    userId: string
   ): Promise<ReportData> {
     // Fetch organization info
     const [org] = await db
@@ -179,50 +206,95 @@ export class ReportService {
       .where(eq(organizations.id, request.organizationId))
       .limit(1);
 
-    // Fetch user info
+    // Fetch user info (person generating the report)
     const [generatedBy] = await db
       .select()
       .from(users)
-      .where(eq(users.id, request.organizationId))
+      .where(eq(users.id, userId))
       .limit(1);
 
-    // Fetch athletes
-    const athleteIds = request.athleteIds || [];
-    const athletes = await db
-      .select({
-        id: users.id,
-        name: users.fullName,
-        birthYear: users.birthYear,
-        gender: users.gender,
-      })
-      .from(users)
-      .where(inArray(users.id, athleteIds));
+    // Determine date range
+    const dateRange = this.getDateRange(config.dateRange);
 
-    // TODO: Fetch measurements, calculate statistics, generate chart data
-    // This would integrate with the existing analytics service
+    // Build analytics request
+    const analysisType = getAnalysisTypeForReport(request.reportType);
+    const athleteId = request.reportType === "individual" || request.reportType === "recruiting"
+      ? request.athleteIds?.[0]
+      : undefined;
 
-    // Build report data structure
-    const reportData: ReportData = {
-      meta: {
+    const analyticsRequest: AnalyticsRequest = {
+      analysisType,
+      athleteId,
+      filters: {
+        organizationId: request.organizationId,
+        athleteIds: request.athleteIds,
+        teams: request.teamIds,
+        ...config.filters,
+      },
+      metrics: config.metrics,
+      timeframe: {
+        type: config.timeframeType,
+        period: config.dateRange?.type || "all_time",
+        startDate: dateRange.start,
+        endDate: dateRange.end,
+      },
+    };
+
+    // Call analytics service to get actual data
+    const analyticsResponse = await this.analyticsService.getAnalyticsData(analyticsRequest);
+
+    // Transform analytics response to report data
+    const reportData = transformAnalyticsToReportData(
+      analyticsResponse,
+      config,
+      {
         title: request.title,
         organizationName: org?.name || "Unknown Organization",
         generatedBy: generatedBy?.fullName || "Unknown",
         generatedAt: new Date().toISOString(),
-        dateRange: {
-          start: config.dateRange?.startDate || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
-          end: config.dateRange?.endDate || new Date().toISOString(),
-        },
-      },
-      athletes: athletes.map((a) => ({
-        id: a.id,
-        name: a.name,
-        birthYear: a.birthYear || undefined,
-        gender: a.gender || undefined,
-      })),
-      sections: [],
-    };
+        dateRangeStart: dateRange.start.toISOString(),
+        dateRangeEnd: dateRange.end.toISOString(),
+      }
+    );
 
     return reportData;
+  }
+
+  /**
+   * Calculate date range from config
+   */
+  private getDateRange(dateRangeConfig?: {
+    type: string;
+    startDate?: string;
+    endDate?: string;
+  }): { start: Date; end: Date } {
+    const end = new Date();
+    let start = new Date();
+
+    if (dateRangeConfig?.type === "custom" && dateRangeConfig.startDate && dateRangeConfig.endDate) {
+      return {
+        start: new Date(dateRangeConfig.startDate),
+        end: new Date(dateRangeConfig.endDate),
+      };
+    }
+
+    switch (dateRangeConfig?.type) {
+      case "this_year":
+        start = new Date(end.getFullYear(), 0, 1);
+        break;
+      case "last_30_days":
+        start.setDate(end.getDate() - 30);
+        break;
+      case "last_90_days":
+        start.setDate(end.getDate() - 90);
+        break;
+      case "all_time":
+      default:
+        start.setFullYear(end.getFullYear() - 5); // 5 years back
+        break;
+    }
+
+    return { start, end };
   }
 
   /**

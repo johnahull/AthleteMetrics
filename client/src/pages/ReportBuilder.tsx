@@ -26,6 +26,7 @@ export function ReportBuilder() {
   const { user, organizationContext } = useAuth();
   const [reportType, setReportType] = useState<string>("individual");
   const [title, setTitle] = useState("");
+  const [timeframeType, setTimeframeType] = useState<"best" | "trends">("trends");
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [generatePdf, setGeneratePdf] = useState(true);
@@ -89,6 +90,9 @@ export function ReportBuilder() {
       organizationId: organizationContext,
       athleteIds: selectedAthletes.length > 0 ? selectedAthletes : undefined,
       teamIds: selectedTeams.length > 0 ? selectedTeams : undefined,
+      config: {
+        timeframeType,
+      },
       options: {
         generatePdf,
       },
@@ -167,6 +171,30 @@ export function ReportBuilder() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
+            </div>
+
+            {/* Timeframe Type */}
+            <div className="space-y-2">
+              <Label htmlFor="timeframeType">Timeframe Type</Label>
+              <Select value={timeframeType} onValueChange={(value: "best" | "trends") => setTimeframeType(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="best">
+                    <div>
+                      <div className="font-medium">Best Performances</div>
+                      <div className="text-xs text-gray-500">Show personal bests and peak performance data</div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="trends">
+                    <div>
+                      <div className="font-medium">Performance Trends</div>
+                      <div className="text-xs text-gray-500">Show progress and development over time</div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Athlete Selection (for individual/multi-athlete/recruiting) */}
