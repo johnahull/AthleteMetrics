@@ -13,6 +13,24 @@ import fs from "fs/promises";
 const router = Router();
 
 /**
+ * GET /api/reports/capabilities
+ * Check what report generation capabilities are available
+ */
+router.get("/capabilities", async (req: Request, res: Response) => {
+  try {
+    const pdfAvailable = await reportService.isPdfGenerationAvailable();
+    res.json({
+      pdfGeneration: pdfAvailable,
+    });
+  } catch (error) {
+    console.error("Error checking capabilities:", error);
+    res.json({
+      pdfGeneration: false,
+    });
+  }
+});
+
+/**
  * POST /api/reports/generate
  * Generate a new report
  */

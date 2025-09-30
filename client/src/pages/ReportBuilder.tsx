@@ -54,6 +54,17 @@ export function ReportBuilder() {
     enabled: !!user?.isSiteAdmin,
   });
 
+  // Check PDF generation capability
+  const { data: capabilities } = useQuery({
+    queryKey: ["report-capabilities"],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/capabilities`);
+      if (!res.ok) return { pdfGeneration: false };
+      return res.json();
+    },
+    staleTime: Infinity, // Cache indefinitely
+  });
+
   // Fetch athletes for selection
   const { data: athletes, error: athletesError, isLoading: athletesLoading } = useQuery({
     queryKey: ["athletes", activeOrgContext],
@@ -83,6 +94,7 @@ export function ReportBuilder() {
   // Generate report mutation
   const generateReportMutation = useMutation({
     mutationFn: async (request: GenerateReportRequest) => {
+      console.log("Sending report request:", request);
       const res = await fetch("/api/reports/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -92,30 +104,43 @@ export function ReportBuilder() {
 
       if (!res.ok) {
         const error = await res.json();
+        console.error("Report generation failed:", error);
         throw new Error(error.message || "Failed to generate report");
       }
 
-      return res.json();
+      const data = await res.json();
+      console.log("Report response received:", data);
+      return data;
     },
     onSuccess: (data) => {
-      console.log("Report generated:", data);
+      console.log("Report generated successfully:", data);
+      console.log("PDF URL:", data.pdfUrl);
+      console.log("Share URL:", data.shareUrl);
 
       // If PDF was generated, open it in a new tab
       if (data.pdfUrl) {
+        console.log("Opening PDF in new tab:", data.pdfUrl);
         window.open(data.pdfUrl, "_blank");
         // Optionally redirect to report history after a brief delay
         setTimeout(() => {
-          setLocation("/report-history");
+          console.log("Redirecting to report history");
+          setLocation("/reports/history");
         }, 500);
       }
       // If no PDF but has share URL, navigate to the report view
       else if (data.shareUrl) {
+        console.log("Navigating to share URL:", data.shareUrl);
         setLocation(data.shareUrl);
       }
       // Fallback: redirect to report history
       else {
-        setLocation("/report-history");
+        console.log("No PDF or share URL, redirecting to report history");
+        setLocation("/reports/history");
       }
+    },
+    onError: (error) => {
+      console.error("Report generation error:", error);
+      alert(`Failed to generate report: ${error.message}`);
     },
   });
 
@@ -355,15 +380,26 @@ export function ReportBuilder() {
             )}
 
             {/* PDF Generation Option */}
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="generatePdf"
-                checked={generatePdf}
-                onCheckedChange={(checked) => setGeneratePdf(checked as boolean)}
-              />
-              <Label htmlFor="generatePdf" className="cursor-pointer">
-                Generate PDF (for download and sharing)
-              </Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="generatePdf"
+                  checked={generatePdf}
+                  disabled={!capabilities?.pdfGeneration}
+                  onCheckedChange={(checked) => setGeneratePdf(checked as boolean)}
+                />
+                <Label
+                  htmlFor="generatePdf"
+                  className={capabilities?.pdfGeneration ? "cursor-pointer" : "cursor-not-allowed opacity-50"}
+                >
+                  Generate PDF (for download and sharing)
+                </Label>
+              </div>
+              {!capabilities?.pdfGeneration && (
+                <p className="text-xs text-amber-600">
+                  PDF generation is not available in this environment. Reports will be generated as web pages only.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

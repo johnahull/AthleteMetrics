@@ -38,6 +38,7 @@ import fs from "fs/promises";
 export class ReportService {
   private reportsDir: string;
   private analyticsService: AnalyticsService;
+  private pdfAvailableCache: boolean | null = null;
 
   constructor() {
     // Store generated reports in ./reports directory
@@ -54,6 +55,31 @@ export class ReportService {
       await fs.access(this.reportsDir);
     } catch {
       await fs.mkdir(this.reportsDir, { recursive: true });
+    }
+  }
+
+  /**
+   * Check if PDF generation is available
+   * Tests if Puppeteer can launch a browser
+   */
+  async isPdfGenerationAvailable(): Promise<boolean> {
+    // Return cached result if available
+    if (this.pdfAvailableCache !== null) {
+      return this.pdfAvailableCache;
+    }
+
+    try {
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      });
+      await browser.close();
+      this.pdfAvailableCache = true;
+      return true;
+    } catch (error) {
+      console.warn("PDF generation not available:", error instanceof Error ? error.message : error);
+      this.pdfAvailableCache = false;
+      return false;
     }
   }
 
