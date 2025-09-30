@@ -126,9 +126,7 @@ export function ReportHistory() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {reports.map((report: any) => {
-                  console.log("Report:", report.title, "shareToken:", report.shareToken, "filePath:", report.filePath);
-                  return (
+                {reports.map((report: any) => (
                   <TableRow key={report.id}>
                     <TableCell className="font-medium">
                       {report.shareToken ? (
@@ -204,8 +202,7 @@ export function ReportHistory() {
                       </div>
                     </TableCell>
                   </TableRow>
-                  );
-                })}
+                ))}
               </TableBody>
             </Table>
           </CardContent>
