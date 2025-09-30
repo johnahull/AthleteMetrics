@@ -24,7 +24,7 @@ import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
 
-import type { AnalysisType } from '@shared/analytics-types';
+import type { AnalysisType, AnalyticsFilters } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
@@ -66,6 +66,9 @@ interface BaseAnalyticsViewProps {
   // Callbacks
   onAnalyticsDataChange?: (data: any) => void;
   onError?: (error: string) => void;
+
+  // Initial state
+  initialFilters?: Partial<AnalyticsFilters>;
 
   className?: string;
   children?: React.ReactNode;
@@ -609,6 +612,7 @@ export function BaseAnalyticsView({
   userId,
   requireRole,
   defaultAnalysisType = 'individual',
+  initialFilters,
   ...props
 }: BaseAnalyticsViewProps) {
   // Role-based access control would be handled here
@@ -619,6 +623,7 @@ export function BaseAnalyticsView({
       organizationId={organizationId}
       userId={userId}
       initialAnalysisType={defaultAnalysisType}
+      initialFilters={initialFilters}
     >
       <BaseAnalyticsViewContent
         defaultAnalysisType={defaultAnalysisType}

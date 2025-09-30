@@ -9,10 +9,13 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, Download, Trophy, Target } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
+import { useAthleteTeams } from '@/hooks/useAthleteTeams';
+import type { AnalyticsFilters } from '@shared/analytics-types';
 
 export function AthleteAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   const { user } = useAuth();
+  const { teamIds } = useAthleteTeams();
 
   // Header actions for athlete-specific view
   const headerActions = (
@@ -63,6 +66,12 @@ export function AthleteAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
+  // Create initial filters with the athlete's teams pre-selected
+  const initialFilters: Partial<AnalyticsFilters> = {
+    athleteIds: user.athleteId ? [user.athleteId] : undefined,
+    teams: teamIds.length > 0 ? teamIds : undefined
+  };
+
   return (
     <BaseAnalyticsView
       title="My Athletics Performance"
@@ -70,11 +79,13 @@ export function AthleteAnalytics() {
       organizationId={user?.currentOrganization?.id}
       userId={user.id}
       defaultAnalysisType="individual"
-      allowedAnalysisTypes={['individual', 'intra_group']} // Athletes can compare with teammates
+      allowedAnalysisTypes={['individual']} // Athletes only see individual analysis
       requireRole={['athlete', 'coach', 'org_admin', 'site_admin']}
       headerActions={headerActions}
       additionalFilters={additionalFilters}
       showIndividualAthleteSelection={false} // Athletes don't need to select themselves
+      showAnalysisTypeTabs={false} // Hide analysis type tabs for athletes
+      initialFilters={initialFilters} // Pre-select athlete's teams
       className="athlete-analytics"
     />
   );

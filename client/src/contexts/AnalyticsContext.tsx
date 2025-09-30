@@ -381,13 +381,15 @@ interface AnalyticsProviderProps {
   organizationId?: string;
   userId?: string;
   initialAnalysisType?: AnalysisType;
+  initialFilters?: Partial<AnalyticsFilters>;
 }
 
 export function AnalyticsProvider({
   children,
   organizationId = '',
   userId,
-  initialAnalysisType = 'individual'
+  initialAnalysisType = 'individual',
+  initialFilters
 }: AnalyticsProviderProps) {
   const [state, dispatch] = useReducer(analyticsReducer, getDefaultState(organizationId, userId));
 
@@ -401,8 +403,12 @@ export function AnalyticsProvider({
       if (initialAnalysisType !== 'individual') {
         dispatch({ type: 'SET_ANALYSIS_TYPE', payload: initialAnalysisType });
       }
+      // Apply initial filters if provided
+      if (initialFilters) {
+        dispatch({ type: 'SET_FILTERS', payload: initialFilters });
+      }
     }
-  }, [organizationId, userId, initialAnalysisType]);
+  }, [organizationId, userId, initialAnalysisType, initialFilters]);
 
   // Computed properties
   const contextValue = useMemo(() => {
