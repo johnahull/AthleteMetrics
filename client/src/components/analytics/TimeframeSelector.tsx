@@ -17,6 +17,13 @@ import type { TimeframeConfig, TimeframeType, TimePeriod } from '@shared/analyti
 interface TimeframeSelectorProps {
   timeframe: TimeframeConfig;
   onTimeframeChange: (timeframe: TimeframeConfig) => void;
+  /**
+   * Type of analysis being performed
+   * Controls which timeframe types are available:
+   * - 'individual' and 'intra_group': All timeframe types available
+   * - 'multi_group': Only 'best' values allowed (trends disabled for fair comparison)
+   * @default 'individual'
+   */
   analysisType?: 'individual' | 'intra_group' | 'multi_group';
   showRecommendations?: boolean;
   className?: string;

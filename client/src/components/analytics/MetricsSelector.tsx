@@ -21,9 +21,15 @@ interface MetricsSelectorProps {
   className?: string;
   /**
    * Type of analysis being performed
-   * When set to 'multi_group', additional metrics are disabled because
-   * multi-group comparisons require a single consistent metric across all groups
-   * to ensure fair and meaningful cross-group analysis
+   * Controls metric selection behavior:
+   * - 'individual' and 'intra_group': Additional metrics can be added (up to maxAdditional)
+   * - 'multi_group': Additional metrics disabled (single metric required for fair comparison)
+   *
+   * Multi-group mode enforces a single metric to ensure:
+   * - Consistent measurement across all groups
+   * - Fair cross-group comparisons
+   * - Clear, interpretable visualizations
+   *
    * @default 'individual'
    */
   analysisType?: AnalysisType;
