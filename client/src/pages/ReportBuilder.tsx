@@ -23,13 +23,20 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { GenerateReportRequest } from "@shared/report-types";
 
 export function ReportBuilder() {
-  const { user, organizationContext, setOrganizationContext } = useAuth();
+  const { user, organizationContext, setOrganizationContext, isLoading } = useAuth();
   const [reportType, setReportType] = useState<string>("individual");
   const [title, setTitle] = useState("");
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [generatePdf, setGeneratePdf] = useState(true);
   const [localOrgContext, setLocalOrgContext] = useState<string | null>(organizationContext);
+
+  // Update local context when organizationContext changes
+  React.useEffect(() => {
+    if (organizationContext && !localOrgContext) {
+      setLocalOrgContext(organizationContext);
+    }
+  }, [organizationContext]);
 
   // Use localOrgContext or organizationContext
   const activeOrgContext = localOrgContext || organizationContext;
@@ -114,6 +121,10 @@ export function ReportBuilder() {
 
     generateReportMutation.mutate(request);
   };
+
+  if (isLoading) {
+    return <div className="p-6">Loading...</div>;
+  }
 
   if (!user) {
     return <div className="p-6">Please log in to access report builder.</div>;
