@@ -264,7 +264,7 @@ export async function registerRoutes(app: Express) {
   let redisClient = null;
   try {
     // Try to dynamically import Redis packages if available
-    const redisModule = await import("redis").catch(() => null);
+    const redisModule = await import("redis" as any).catch(() => null);
     
     if (redisModule) {
       const { createClient } = redisModule;
@@ -312,7 +312,7 @@ export async function registerRoutes(app: Express) {
   // Use Redis store if available, otherwise fall back to memory store
   if (redisClient) {
     try {
-      const redisStoreModule = await import("connect-redis").catch(() => null);
+      const redisStoreModule = await import("connect-redis" as any).catch(() => null);
       if (redisStoreModule) {
         const { RedisStore } = redisStoreModule;
         sessionConfig.store = new RedisStore({

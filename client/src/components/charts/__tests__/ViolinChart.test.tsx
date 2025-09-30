@@ -53,7 +53,6 @@ describe('ViolinChart', () => {
       value: 1.5,
       date: new Date('2024-01-01'),
       teamName: 'Team A',
-      isPersonalBest: false,
       grouping: 'Team A'
     },
     {
@@ -63,7 +62,6 @@ describe('ViolinChart', () => {
       value: 1.6,
       date: new Date('2024-01-01'),
       teamName: 'Team A',
-      isPersonalBest: false,
       grouping: 'Team A'
     },
     {
@@ -73,7 +71,6 @@ describe('ViolinChart', () => {
       value: 1.7,
       date: new Date('2024-01-01'),
       teamName: 'Team B',
-      isPersonalBest: false,
       grouping: 'Team B'
     },
     {
@@ -83,7 +80,6 @@ describe('ViolinChart', () => {
       value: 1.8,
       date: new Date('2024-01-01'),
       teamName: 'Team B',
-      isPersonalBest: false,
       grouping: 'Team B'
     },
   ];
@@ -101,22 +97,38 @@ describe('ViolinChart', () => {
     'Team A': {
       mean: 1.55,
       median: 1.55,
-      stdDev: 0.05,
+      std: 0.05,
       min: 1.5,
       max: 1.6,
       count: 2,
-      q1: 1.525,
-      q3: 1.575
+      variance: 0.0025,
+      percentiles: {
+        p5: 1.505,
+        p10: 1.51,
+        p25: 1.525,
+        p50: 1.55,
+        p75: 1.575,
+        p90: 1.59,
+        p95: 1.595
+      }
     },
     'Team B': {
       mean: 1.75,
       median: 1.75,
-      stdDev: 0.05,
+      std: 0.05,
       min: 1.7,
       max: 1.8,
       count: 2,
-      q1: 1.725,
-      q3: 1.775
+      variance: 0.0025,
+      percentiles: {
+        p5: 1.705,
+        p10: 1.71,
+        p25: 1.725,
+        p50: 1.75,
+        p75: 1.775,
+        p90: 1.79,
+        p95: 1.795
+      }
     }
   };
 
@@ -270,8 +282,7 @@ describe('ViolinChart', () => {
           value: 1.5,
           date: new Date('2024-01-01'),
           teamName: 'Team A',
-          isPersonalBest: false,
-          grouping: 'Team A'
+              grouping: 'Team A'
         },
         {
           athleteId: 'athlete-2',
@@ -280,8 +291,7 @@ describe('ViolinChart', () => {
           value: 1.5,
           date: new Date('2024-01-01'),
           teamName: 'Team A',
-          isPersonalBest: false,
-          grouping: 'Team A'
+              grouping: 'Team A'
         },
       ];
 
@@ -306,8 +316,7 @@ describe('ViolinChart', () => {
         value: 1.5 + (i % 100) / 100,
         date: new Date('2024-01-01'),
         teamName: 'Team A',
-        isPersonalBest: false,
-        grouping: 'Team A'
+          grouping: 'Team A'
       }));
 
       render(
@@ -368,8 +377,7 @@ describe('ViolinChart', () => {
           value: 1.55,
           date: new Date('2024-01-01'),
           teamName: 'Team A',
-          isPersonalBest: false,
-          grouping: 'Team A'
+              grouping: 'Team A'
         }
       ];
 
@@ -531,8 +539,7 @@ describe('ViolinChart', () => {
         value: 1.5 + Math.random(),
         date: new Date('2024-01-01'),
         teamName: 'Team A',
-        isPersonalBest: false,
-        grouping: 'Team A'
+          grouping: 'Team A'
       }));
 
       const start = performance.now();
