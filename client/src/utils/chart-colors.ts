@@ -3,6 +3,12 @@
  */
 
 /**
+ * Default fallback color for groups when color is undefined or invalid
+ * Blue (#3B82F6) - matches the primary brand color
+ */
+export const DEFAULT_GROUP_COLOR = '#3B82F6';
+
+/**
  * Validate if a color string is safe for CSS injection
  * Only allows hex colors and rgb/rgba formats
  * @param color - Color string to validate
@@ -26,10 +32,10 @@ export function isValidColor(color: string): boolean {
  * Sanitize color value for safe CSS usage
  * Returns validated color or fallback
  * @param color - Color string to sanitize
- * @param fallback - Fallback color if validation fails
+ * @param fallback - Fallback color if validation fails (defaults to DEFAULT_GROUP_COLOR)
  * @returns Safe color string
  */
-export function sanitizeColor(color: string, fallback: string = '#3B82F6'): string {
+export function sanitizeColor(color: string, fallback: string = DEFAULT_GROUP_COLOR): string {
   return isValidColor(color) ? color : fallback;
 }
 

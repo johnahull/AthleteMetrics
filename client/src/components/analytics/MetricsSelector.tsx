@@ -19,6 +19,12 @@ interface MetricsSelectorProps {
   onMetricsChange: (metrics: MetricSelection) => void;
   maxAdditional?: number;
   className?: string;
+  /**
+   * Type of analysis being performed
+   * When set to 'multi_group', additional metrics are disabled because
+   * multi-group comparisons require a single consistent metric across all groups
+   * to ensure fair and meaningful cross-group analysis
+   */
   analysisType?: AnalysisType;
 }
 

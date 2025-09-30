@@ -164,9 +164,9 @@ export function TimeframeSelector({
               )}
             </SelectContent>
           </Select>
-          {analysisType === 'multi_group' && (
+          {analysisType === 'multi_group' && timeframe.type === 'best' && (
             <p className="text-xs text-muted-foreground">
-              Multi-group comparisons use best values for fair cross-group analysis.
+              Multi-group comparisons use best values for fair cross-group analysis. Trends over time are not available for multi-group comparisons.
             </p>
           )}
         </div>
