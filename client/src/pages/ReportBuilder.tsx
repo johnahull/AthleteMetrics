@@ -23,41 +23,52 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { GenerateReportRequest } from "@shared/report-types";
 
 export function ReportBuilder() {
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, setOrganizationContext } = useAuth();
   const [reportType, setReportType] = useState<string>("individual");
   const [title, setTitle] = useState("");
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [generatePdf, setGeneratePdf] = useState(true);
+  const [localOrgContext, setLocalOrgContext] = useState<string | null>(organizationContext);
+
+  // Use localOrgContext or organizationContext
+  const activeOrgContext = localOrgContext || organizationContext;
+
+  // Fetch organizations (for site admins)
+  const { data: organizations } = useQuery({
+    queryKey: ["organizations"],
+    queryFn: async () => {
+      const res = await fetch(`/api/organizations`);
+      if (!res.ok) throw new Error("Failed to fetch organizations");
+      return res.json();
+    },
+    enabled: !!user?.isSiteAdmin,
+  });
 
   // Fetch athletes for selection
   const { data: athletes, error: athletesError, isLoading: athletesLoading } = useQuery({
-    queryKey: ["athletes", organizationContext],
+    queryKey: ["athletes", activeOrgContext],
     queryFn: async () => {
-      if (!organizationContext) return [];
-      console.log("Fetching athletes for org:", organizationContext);
-      const res = await fetch(`/api/athletes?organizationId=${organizationContext}`);
+      if (!activeOrgContext) return [];
+      const res = await fetch(`/api/athletes?organizationId=${activeOrgContext}`);
       if (!res.ok) throw new Error("Failed to fetch athletes");
       const data = await res.json();
-      console.log("Athletes data:", data);
       return data;
     },
-    enabled: !!organizationContext,
+    enabled: !!activeOrgContext,
   });
 
   // Fetch teams for selection
   const { data: teams, error: teamsError, isLoading: teamsLoading } = useQuery({
-    queryKey: ["teams", organizationContext],
+    queryKey: ["teams", activeOrgContext],
     queryFn: async () => {
-      if (!organizationContext) return [];
-      console.log("Fetching teams for org:", organizationContext);
-      const res = await fetch(`/api/teams?organizationId=${organizationContext}`);
+      if (!activeOrgContext) return [];
+      const res = await fetch(`/api/teams?organizationId=${activeOrgContext}`);
       if (!res.ok) throw new Error("Failed to fetch teams");
       const data = await res.json();
-      console.log("Teams data:", data);
       return data;
     },
-    enabled: !!organizationContext,
+    enabled: !!activeOrgContext,
   });
 
   // Generate report mutation
@@ -87,12 +98,12 @@ export function ReportBuilder() {
   });
 
   const handleGenerateReport = () => {
-    if (!organizationContext) return;
+    if (!activeOrgContext) return;
 
     const request: GenerateReportRequest = {
       reportType: reportType as any,
       title: title || `${reportType.replace("_", " ")} Report`,
-      organizationId: organizationContext,
+      organizationId: activeOrgContext,
       athleteIds: selectedAthletes.length > 0 ? selectedAthletes : undefined,
       teamIds: selectedTeams.length > 0 ? selectedTeams : undefined,
       // Don't pass config, let the backend use default templates
@@ -108,13 +119,45 @@ export function ReportBuilder() {
     return <div className="p-6">Please log in to access report builder.</div>;
   }
 
-  if (!organizationContext) {
+  // If site admin without org context selected, show org selector
+  if (!activeOrgContext && user.isSiteAdmin) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Report Builder</h1>
+          <Card>
+            <CardHeader>
+              <CardTitle>Select Organization</CardTitle>
+              <CardDescription>Choose an organization to create reports for</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select onValueChange={(value) => setLocalOrgContext(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose organization..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {organizations?.map((org: any) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // If coach/org admin without org context, show error
+  if (!activeOrgContext && (user.role === 'coach' || user.role === 'org_admin')) {
     return (
       <div className="container mx-auto p-6 max-w-4xl">
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">Report Builder</h1>
           <p className="text-red-600">
-            Please select an organization from your profile to use the report builder.
+            No organization found for your account. Please contact your administrator.
           </p>
         </div>
       </div>
@@ -128,14 +171,6 @@ export function ReportBuilder() {
         <p className="text-gray-600">
           Create customized performance reports for athletes, teams, and groups
         </p>
-        {(athletesLoading || teamsLoading) && (
-          <p className="text-sm text-blue-600 mt-2">Loading data...</p>
-        )}
-        {(athletesError || teamsError) && (
-          <p className="text-sm text-red-600 mt-2">
-            Error loading data: {athletesError?.message || teamsError?.message}
-          </p>
-        )}
       </div>
 
       <div className="grid gap-6">
