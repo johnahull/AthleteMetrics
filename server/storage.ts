@@ -1360,12 +1360,13 @@ export class DatabaseStorage implements IStorage {
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
     // Join to userTeams to get ALL team memberships active at measurement date
+    // Cast measurement.date to timestamp for comparison with timestamp fields
     .leftJoin(userTeams, and(
       eq(users.id, userTeams.userId),
-      lte(userTeams.joinedAt, measurements.date),
+      sql`${userTeams.joinedAt} <= ${measurements.date}::timestamp`,
       or(
         isNull(userTeams.leftAt),
-        gte(userTeams.leftAt, measurements.date)
+        sql`${userTeams.leftAt} >= ${measurements.date}::timestamp`
       )
     ))
     // Join teams using userTeams relationship
@@ -1453,14 +1454,27 @@ export class DatabaseStorage implements IStorage {
 
     const result = await finalQuery
       .groupBy(
-        measurements.id, 
-        users.id, 
+        measurements.id,
+        users.id,
         sql`submitter_info.first_name`,
         sql`submitter_info.last_name`,
         sql`verifier_info.first_name`,
         sql`verifier_info.last_name`
       )
       .orderBy(desc(measurements.date), desc(measurements.createdAt));
+
+    // Debug logging to see what teams are being returned
+    if (result.length > 0) {
+      console.log('Sample measurement with teams:', JSON.stringify({
+        id: result[0].id,
+        userId: result[0].userId,
+        date: result[0].date,
+        user: {
+          fullName: result[0].user.fullName,
+          teams: result[0].user.teams
+        }
+      }, null, 2));
+    }
 
     // Apply remaining filters (team/org filtering now done in query for better performance)
     let filteredMeasurements = result;
