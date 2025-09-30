@@ -21,8 +21,14 @@ export function TeamReport({
   onDownloadPdf,
   onShare,
 }: TeamReportProps) {
+  // Debug logging
+  console.log('[TeamReport] Report data:', data);
+  console.log('[TeamReport] Sections:', data.sections);
+  console.log('[TeamReport] Athletes:', data.athletes);
+
   // Extract statistics from sections
   const statsSection = data.sections.find((s) => s.type === "statistics");
+  console.log('[TeamReport] Stats section:', statsSection);
   const stats = statsSection?.content?.stats || [];
 
   // Extract chart sections
