@@ -2027,6 +2027,30 @@ export async function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Authorization: Athletes can only view their own teams
+      if (currentUser.role === "athlete") {
+        if (currentUser.athleteId !== userId && currentUser.id !== userId) {
+          return res.status(403).json({ message: "Athletes can only view their own teams" });
+        }
+      } else if (!userIsSiteAdmin) {
+        // Coaches and org admins: verify athlete is in their organization
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "Access denied - no organization access" });
+        }
+
+        const athleteOrgs = await storage.getUserOrganizations(userId);
+        const hasSharedOrg = userOrgs.some(userOrg =>
+          athleteOrgs.some(athleteOrg => athleteOrg.organizationId === userOrg.organizationId)
+        );
+
+        if (!hasSharedOrg) {
+          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+        }
+      }
+
       // Use current date if not provided, validate date format
       let measurementDate = new Date();
       if (date) {

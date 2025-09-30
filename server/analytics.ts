@@ -110,12 +110,11 @@ export class AnalyticsService {
     if (filters.teams?.length) {
       // For team filtering, we need to check if the athlete (user) is a member of the team
       // This is done via the user_teams table, not measurements.teamId
-      const teamIds = filters.teams.map(id => `'${id}'`).join(', ');
       allConditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${userTeams}
           WHERE ${userTeams.userId} = ${measurements.userId}
-            AND ${userTeams.teamId} IN (${sql.raw(teamIds)})
+            AND ${inArray(userTeams.teamId, filters.teams)}
             AND ${userTeams.isActive} = 'true'
         )`
       );

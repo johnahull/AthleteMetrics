@@ -63,14 +63,21 @@ export function AthleteAnalytics() {
 
   // Conditional rendering AFTER all hooks - prevents hooks order violations
   if (!user) {
-    return <div className="p-6">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your profile...</p>
+        </div>
+      </div>
+    );
   }
 
   // Get the organization ID from user context, organizationContext, or primaryOrganizationId
   const organizationId =
     user.currentOrganization?.id ||
     organizationContext ||
-    (user as any).primaryOrganizationId;
+    user.primaryOrganizationId;
 
   // Don't render if we don't have an organization ID
   if (!organizationId) {
