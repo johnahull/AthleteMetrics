@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, useRef, Suspense } from 'react';
+import React, { useEffect, useRef, useMemo, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -144,30 +144,41 @@ function BaseAnalyticsViewContent({
     }
   }, [state.error, onError]);
 
-  // Notify user when switching to multi-group mode with state changes
-  useEffect(() => {
+  // Memoize toast notification conditions for performance
+  const toastNotification = useMemo(() => {
     const wasMultiGroup = previousAnalysisTypeRef.current === 'multi_group';
     const isMultiGroup = state.analysisType === 'multi_group';
+    const hadAdditionalMetrics = state.previousMetrics && state.previousMetrics.additional.length > 0;
+    const hadTrends = state.previousTimeframe && state.previousTimeframe.type === 'trends';
 
-    if (isMultiGroup && !wasMultiGroup) {
-      const hadAdditionalMetrics = state.previousMetrics && state.previousMetrics.additional.length > 0;
-      const hadTrends = state.previousTimeframe && state.previousTimeframe.type === 'trends';
+    const shouldShowToast = isMultiGroup && !wasMultiGroup && (hadAdditionalMetrics || hadTrends);
 
-      if (hadAdditionalMetrics || hadTrends) {
-        const changes = [];
-        if (hadAdditionalMetrics) changes.push('additional metrics cleared');
-        if (hadTrends) changes.push('timeframe changed to best values');
+    if (shouldShowToast) {
+      const changes: string[] = [];
+      if (hadAdditionalMetrics) changes.push('additional metrics cleared');
+      if (hadTrends) changes.push('timeframe changed to best values');
 
-        toast({
-          title: 'Multi-group mode activated',
-          description: `${changes.join(' and ')} for fair comparison. Your previous settings will be restored when you exit multi-group mode.`,
-          duration: 5000,
-        });
-      }
+      return {
+        show: true,
+        message: `${changes.join(' and ')} for fair comparison. Your previous settings will be restored when you exit multi-group mode.`
+      };
+    }
+
+    return { show: false, message: '' };
+  }, [state.analysisType, state.previousMetrics, state.previousTimeframe]);
+
+  // Notify user when switching to multi-group mode with state changes
+  useEffect(() => {
+    if (toastNotification.show) {
+      toast({
+        title: 'Multi-group mode activated',
+        description: toastNotification.message,
+        duration: 5000,
+      });
     }
 
     previousAnalysisTypeRef.current = state.analysisType;
-  }, [state.analysisType, state.previousMetrics, state.previousTimeframe, toast]);
+  }, [toastNotification, state.analysisType, toast]);
 
   // Prepare athletes for selector
   const athletesForSelector = state.availableAthletes.map(athlete => ({

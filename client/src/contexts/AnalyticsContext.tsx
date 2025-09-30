@@ -105,6 +105,73 @@ const getDefaultState = (organizationId: string = '', userId?: string): Analytic
   availableAthletes: []
 });
 
+/**
+ * Helper Functions for Analysis Type Transitions
+ */
+
+/**
+ * Determines if the transition is entering multi-group mode
+ */
+const isEnteringMultiGroup = (current: AnalysisType, next: AnalysisType): boolean =>
+  current !== 'multi_group' && next === 'multi_group';
+
+/**
+ * Determines if the transition is exiting multi-group mode
+ */
+const isExitingMultiGroup = (current: AnalysisType, next: AnalysisType): boolean =>
+  current === 'multi_group' && next !== 'multi_group';
+
+/**
+ * Handles state transitions when entering multi-group mode
+ * Preserves current metrics/timeframe for restoration later
+ */
+const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
+  ...state,
+  analysisType: nextType,
+  selectedAthleteId: '',
+  selectedAthlete: null,
+  selectedAthleteIds: [],
+  // Store current state for restoration later (only if there's something to preserve)
+  previousMetrics: state.metrics.additional.length > 0 ? state.metrics : state.previousMetrics,
+  previousTimeframe: state.timeframe.type === 'trends' ? state.timeframe : state.previousTimeframe,
+  // Clear additional metrics (multi-group requires single metric)
+  metrics: { ...state.metrics, additional: [] },
+  // Force 'best' timeframe type (trends not supported in multi-group)
+  timeframe: state.timeframe.type === 'trends'
+    ? { ...state.timeframe, type: 'best' }
+    : state.timeframe,
+});
+
+/**
+ * Handles state transitions when exiting multi-group mode
+ * Restores previously saved metrics/timeframe if available
+ */
+const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
+  ...state,
+  analysisType: nextType,
+  selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
+  selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
+  selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+  // Restore previous metrics if they existed
+  metrics: state.previousMetrics || state.metrics,
+  // Restore previous timeframe if it existed
+  timeframe: state.previousTimeframe || state.timeframe,
+  // Clear saved state
+  previousMetrics: null,
+  previousTimeframe: null,
+});
+
+/**
+ * Handles normal analysis type changes (not involving multi-group transitions)
+ */
+const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
+  ...state,
+  analysisType: nextType,
+  selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
+  selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
+  selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+});
+
 // Analytics Reducer
 function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): AnalyticsState {
   switch (action.type) {
@@ -118,55 +185,16 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       };
 
     case 'SET_ANALYSIS_TYPE': {
-      const wasMultiGroup = state.analysisType === 'multi_group';
-      const isMultiGroup = action.payload === 'multi_group';
-
-      // Entering multi-group mode
-      if (isMultiGroup && !wasMultiGroup) {
-        return {
-          ...state,
-          analysisType: action.payload,
-          selectedAthleteId: '',
-          selectedAthlete: null,
-          selectedAthleteIds: [],
-          // Store current state for restoration later
-          previousMetrics: state.metrics.additional.length > 0 ? state.metrics : state.previousMetrics,
-          previousTimeframe: state.timeframe.type === 'trends' ? state.timeframe : state.previousTimeframe,
-          // Clear additional metrics (multi-group requires single metric)
-          metrics: { ...state.metrics, additional: [] },
-          // Force 'best' timeframe type (trends not supported in multi-group)
-          timeframe: state.timeframe.type === 'trends'
-            ? { ...state.timeframe, type: 'best' }
-            : state.timeframe,
-        };
+      // Use helper functions for cleaner, more maintainable logic
+      if (isEnteringMultiGroup(state.analysisType, action.payload)) {
+        return handleEnterMultiGroup(state, action.payload);
       }
 
-      // Exiting multi-group mode - restore previous state if available
-      if (!isMultiGroup && wasMultiGroup) {
-        return {
-          ...state,
-          analysisType: action.payload,
-          selectedAthleteId: action.payload === 'individual' ? state.selectedAthleteId : '',
-          selectedAthlete: action.payload === 'individual' ? state.selectedAthlete : null,
-          selectedAthleteIds: action.payload !== 'individual' ? state.selectedAthleteIds : [],
-          // Restore previous metrics if they existed
-          metrics: state.previousMetrics || state.metrics,
-          // Restore previous timeframe if it existed
-          timeframe: state.previousTimeframe || state.timeframe,
-          // Clear saved state
-          previousMetrics: null,
-          previousTimeframe: null,
-        };
+      if (isExitingMultiGroup(state.analysisType, action.payload)) {
+        return handleExitMultiGroup(state, action.payload);
       }
 
-      // Normal analysis type change (not involving multi-group)
-      return {
-        ...state,
-        analysisType: action.payload,
-        selectedAthleteId: action.payload === 'individual' ? state.selectedAthleteId : '',
-        selectedAthlete: action.payload === 'individual' ? state.selectedAthlete : null,
-        selectedAthleteIds: action.payload !== 'individual' ? state.selectedAthleteIds : [],
-      };
+      return handleNormalTypeChange(state, action.payload);
     }
 
     case 'SET_FILTERS':
