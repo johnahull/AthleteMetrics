@@ -14,7 +14,7 @@ import type { AnalyticsFilters } from '@shared/analytics-types';
 
 export function AthleteAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
-  const { user } = useAuth();
+  const { user, organizationContext } = useAuth();
   const { teamIds } = useAthleteTeams();
 
   // Header actions for athlete-specific view
@@ -66,8 +66,25 @@ export function AthleteAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
-  // Get the organization ID from user context
-  const organizationId = user.currentOrganization?.id || (user as any).primaryOrganizationId;
+  // Get the organization ID from user context, organizationContext, or primaryOrganizationId
+  const organizationId =
+    user.currentOrganization?.id ||
+    organizationContext ||
+    (user as any).primaryOrganizationId;
+
+  // Don't render if we don't have an organization ID
+  if (!organizationId) {
+    return (
+      <div className="p-6">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">No Organization Found</h2>
+          <p className="text-muted-foreground">
+            You must be associated with an organization to view analytics.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Create initial filters with the athlete's teams pre-selected and athleteId
   const initialFilters: Partial<AnalyticsFilters> = {
