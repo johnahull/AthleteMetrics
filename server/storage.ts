@@ -1459,6 +1459,7 @@ export class DatabaseStorage implements IStorage {
     // Only query for teams if we have user IDs
     let allUserTeams: TeamMembership[] = [];
     if (uniqueUserIds.length > 0) {
+      console.log(`[getMeasurements] Fetching teams for ${uniqueUserIds.length} unique users`);
       allUserTeams = await db
         .select({
           userId: userTeams.userId,
@@ -1477,6 +1478,10 @@ export class DatabaseStorage implements IStorage {
           eq(userTeams.isActive, "true"),
           eq(teams.isArchived, "false")
         ));
+      console.log(`[getMeasurements] Found ${allUserTeams.length} team memberships`);
+      if (allUserTeams.length > 0) {
+        console.log(`[getMeasurements] Sample team membership:`, JSON.stringify(allUserTeams[0], null, 2));
+      }
     }
 
     // Build a map of userId -> array of team memberships
