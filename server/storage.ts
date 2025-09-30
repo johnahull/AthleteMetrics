@@ -1360,14 +1360,16 @@ export class DatabaseStorage implements IStorage {
     .from(measurements)
     .innerJoin(users, eq(measurements.userId, users.id))
     // Join to userTeams to get ALL team memberships active at measurement date
-    // Cast measurement.date to timestamp for comparison with timestamp fields
+    // Cast measurement.date to timestamp and also cast userTeams timestamps to date for comparison
+    // This ensures we're comparing dates consistently
     .leftJoin(userTeams, and(
       eq(users.id, userTeams.userId),
-      sql`${userTeams.joinedAt} <= ${measurements.date}::timestamp`,
+      sql`${userTeams.joinedAt}::date <= ${measurements.date}`,
       or(
         isNull(userTeams.leftAt),
-        sql`${userTeams.leftAt} >= ${measurements.date}::timestamp`
-      )
+        sql`${userTeams.leftAt}::date >= ${measurements.date}`
+      ),
+      eq(userTeams.isActive, "true") // Only active memberships
     ))
     // Join teams using userTeams relationship
     // This will create multiple rows if athlete was on multiple teams at measurement date
