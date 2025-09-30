@@ -1340,7 +1340,7 @@ export class DatabaseStorage implements IStorage {
         'birthYear', ${users.birthYear},
         'sports', ${users.sports},
         'gender', ${users.gender},
-        'position', ${users.position}
+        'positions', ${users.positions}
       )`,
       // Submitter and verifier info
       submitterInfo: sql<any>`submitter_info.first_name || ' ' || submitter_info.last_name`,
@@ -1443,9 +1443,19 @@ export class DatabaseStorage implements IStorage {
     }));
 
     // Get unique user IDs
-    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId))];
+    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string))];
 
     // Fetch all team memberships for these users
+    type TeamMembership = {
+      userId: string;
+      teamId: string;
+      teamName: string;
+      joinedAt: Date;
+      leftAt: Date | null;
+      organizationId: string;
+      organizationName: string;
+    };
+
     const allUserTeams = await db
       .select({
         userId: userTeams.userId,
@@ -1467,7 +1477,7 @@ export class DatabaseStorage implements IStorage {
 
     // Build a map of userId -> array of team memberships
     const userTeamsMap = new Map<string, typeof allUserTeams>();
-    allUserTeams.forEach((ut) => {
+    allUserTeams.forEach((ut: typeof allUserTeams[0]) => {
       if (!userTeamsMap.has(ut.userId)) {
         userTeamsMap.set(ut.userId, []);
       }
@@ -1480,7 +1490,7 @@ export class DatabaseStorage implements IStorage {
       const userMemberships = userTeamsMap.get(measurement.userId) || [];
 
       // Filter memberships to only those active at measurement date
-      const activeTeamsAtDate = userMemberships.filter((membership) => {
+      const activeTeamsAtDate = userMemberships.filter((membership: typeof allUserTeams[0]) => {
         const joinedDate = new Date(membership.joinedAt);
         const leftDate = membership.leftAt ? new Date(membership.leftAt) : null;
 
@@ -1491,7 +1501,7 @@ export class DatabaseStorage implements IStorage {
       });
 
       // Build teams array
-      const teams = activeTeamsAtDate.map((membership) => ({
+      const teams = activeTeamsAtDate.map((membership: typeof allUserTeams[0]) => ({
         id: membership.teamId,
         name: membership.teamName,
         organization: {
