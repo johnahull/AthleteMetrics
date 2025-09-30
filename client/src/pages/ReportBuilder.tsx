@@ -40,6 +40,13 @@ export function ReportBuilder() {
     }
   }, [organizationContext]);
 
+  // Disable PDF generation if not available
+  React.useEffect(() => {
+    if (capabilities && !capabilities.pdfGeneration && generatePdf) {
+      setGeneratePdf(false);
+    }
+  }, [capabilities]);
+
   // Use localOrgContext or organizationContext
   const activeOrgContext = localOrgContext || organizationContext;
 

@@ -96,14 +96,19 @@ export class ReportService {
     // Fetch report data using analytics service
     const reportData = await this.fetchReportData(request, config, userId);
 
-    // Generate PDF if requested
+    // Generate PDF if requested and available
     let filePath: string | undefined;
     let fileSize: number | undefined;
 
     if (request.options?.generatePdf) {
-      const pdfResult = await this.generatePdf(reportData, config);
-      filePath = pdfResult.filePath;
-      fileSize = pdfResult.fileSize;
+      const pdfAvailable = await this.isPdfGenerationAvailable();
+      if (pdfAvailable) {
+        const pdfResult = await this.generatePdf(reportData, config);
+        filePath = pdfResult.filePath;
+        fileSize = pdfResult.fileSize;
+      } else {
+        console.warn("PDF generation requested but not available, skipping PDF generation");
+      }
     }
 
     // Generate share token
