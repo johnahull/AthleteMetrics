@@ -307,10 +307,22 @@ export class ReportService {
     };
 
     // Call analytics service to get both best and trends data
+    console.log('[ReportService] Fetching analytics data with requests:', {
+      best: { ...bestRequest, timeframe: bestRequest.timeframe },
+      trends: { ...trendsRequest, timeframe: trendsRequest.timeframe },
+    });
+
     const [bestResponse, trendsResponse] = await Promise.all([
       this.analyticsService.getAnalyticsData(bestRequest),
       this.analyticsService.getAnalyticsData(trendsRequest),
     ]);
+
+    console.log('[ReportService] Analytics responses:', {
+      bestDataCount: bestResponse.data?.length || 0,
+      trendsDataCount: trendsResponse.data?.length || 0,
+      bestStatistics: Object.keys(bestResponse.statistics || {}),
+      trendsTrends: trendsResponse.trends?.length || 0,
+    });
 
     // Filter metrics to only those with actual data
     const availableMetrics = this.getAvailableMetrics(bestResponse, trendsResponse);
