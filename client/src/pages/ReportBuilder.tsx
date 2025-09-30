@@ -36,7 +36,7 @@ export function ReportBuilder() {
     queryKey: ["athletes", organizationContext],
     queryFn: async () => {
       if (!organizationContext) return [];
-      const res = await fetch(`/api/organizations/${organizationContext}/athletes`);
+      const res = await fetch(`/api/athletes?organizationId=${organizationContext}`);
       if (!res.ok) throw new Error("Failed to fetch athletes");
       return res.json();
     },
@@ -48,7 +48,7 @@ export function ReportBuilder() {
     queryKey: ["teams", organizationContext],
     queryFn: async () => {
       if (!organizationContext) return [];
-      const res = await fetch(`/api/organizations/${organizationContext}/teams`);
+      const res = await fetch(`/api/teams?organizationId=${organizationContext}`);
       if (!res.ok) throw new Error("Failed to fetch teams");
       return res.json();
     },
