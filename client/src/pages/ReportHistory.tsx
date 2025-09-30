@@ -132,14 +132,18 @@ export function ReportHistory() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDownload(report.id, report.title)}
-                          title="Download PDF"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        {report.filePath ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDownload(report.id, report.title)}
+                            title="Download PDF"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-gray-500 px-2">Web report</span>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
