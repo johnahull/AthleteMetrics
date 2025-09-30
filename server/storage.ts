@@ -1459,7 +1459,6 @@ export class DatabaseStorage implements IStorage {
     // Only query for teams if we have user IDs
     let allUserTeams: TeamMembership[] = [];
     if (uniqueUserIds.length > 0) {
-      console.log(`[getMeasurements] Fetching teams for ${uniqueUserIds.length} unique users`);
       allUserTeams = await db
         .select({
           userId: userTeams.userId,
@@ -1478,10 +1477,6 @@ export class DatabaseStorage implements IStorage {
           eq(userTeams.isActive, "true"),
           eq(teams.isArchived, "false")
         ));
-      console.log(`[getMeasurements] Found ${allUserTeams.length} team memberships`);
-      if (allUserTeams.length > 0) {
-        console.log(`[getMeasurements] Sample team membership:`, JSON.stringify(allUserTeams[0], null, 2));
-      }
     }
 
     // Build a map of userId -> array of team memberships
@@ -1498,15 +1493,14 @@ export class DatabaseStorage implements IStorage {
       const measurementDate = new Date(measurement.date);
       const userMemberships = userTeamsMap.get(measurement.userId) || [];
 
-      // Filter memberships to only those active at measurement date
+      // Show currently active teams (not filtered by measurement date)
+      // This ensures athletes show with their current team affiliations
       const activeTeamsAtDate = userMemberships.filter((membership: typeof allUserTeams[0]) => {
-        const joinedDate = new Date(membership.joinedAt);
+        // Only filter out if they've explicitly left the team
         const leftDate = membership.leftAt ? new Date(membership.leftAt) : null;
-
-        return (
-          joinedDate <= measurementDate &&
-          (!leftDate || leftDate >= measurementDate)
-        );
+        const now = new Date();
+        
+        return (!leftDate || leftDate >= now);
       });
 
       // Build teams array

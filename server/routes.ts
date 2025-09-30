@@ -2009,16 +2009,6 @@ export async function registerRoutes(app: Express) {
       };
 
       const measurements = await storage.getMeasurements(filters);
-      
-      // Debug: Log sample measurement to verify teams are included
-      if (measurements.length > 0) {
-        console.log("Sample measurement with teams:", JSON.stringify({
-          athlete: measurements[0].user.fullName,
-          teams: measurements[0].user.teams,
-          teamsCount: measurements[0].user.teams?.length || 0
-        }, null, 2));
-      }
-      
       res.json(measurements);
     } catch (error) {
       console.error("Error fetching measurements:", error);
