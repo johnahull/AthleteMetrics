@@ -108,7 +108,17 @@ export class AnalyticsService {
 
     // Add dimensional filters
     if (filters.teams?.length) {
-      allConditions.push(inArray(measurements.teamId!, filters.teams));
+      // For team filtering, we need to check if the athlete (user) is a member of the team
+      // This is done via the user_teams table, not measurements.teamId
+      const teamIds = filters.teams.map(id => `'${id}'`).join(', ');
+      allConditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${userTeams}
+          WHERE ${userTeams.userId} = ${measurements.userId}
+            AND ${userTeams.teamId} IN (${sql.raw(teamIds)})
+            AND ${userTeams.isActive} = 'true'
+        )`
+      );
     }
 
     if (filters.genders?.length) {
