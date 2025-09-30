@@ -40,6 +40,12 @@ export interface AnalyticsState {
   selectedAthleteIds: string[];
   selectedDates: string[];
 
+  // State Preservation (for mode switching)
+  // Stores previous metrics/timeframe when entering multi-group mode
+  // Allows restoration when exiting multi-group mode
+  previousMetrics: MetricSelection | null;
+  previousTimeframe: TimeframeConfig | null;
+
   // Available Options
   availableTeams: Array<{ id: string; name: string }>;
   availableAthletes: Array<{
@@ -93,6 +99,8 @@ const getDefaultState = (organizationId: string = '', userId?: string): Analytic
   selectedAthlete: null,
   selectedAthleteIds: [],
   selectedDates: [],
+  previousMetrics: null,
+  previousTimeframe: null,
   availableTeams: [],
   availableAthletes: []
 });
@@ -109,23 +117,57 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
         }
       };
 
-    case 'SET_ANALYSIS_TYPE':
+    case 'SET_ANALYSIS_TYPE': {
+      const wasMultiGroup = state.analysisType === 'multi_group';
+      const isMultiGroup = action.payload === 'multi_group';
+
+      // Entering multi-group mode
+      if (isMultiGroup && !wasMultiGroup) {
+        return {
+          ...state,
+          analysisType: action.payload,
+          selectedAthleteId: '',
+          selectedAthlete: null,
+          selectedAthleteIds: [],
+          // Store current state for restoration later
+          previousMetrics: state.metrics.additional.length > 0 ? state.metrics : state.previousMetrics,
+          previousTimeframe: state.timeframe.type === 'trends' ? state.timeframe : state.previousTimeframe,
+          // Clear additional metrics (multi-group requires single metric)
+          metrics: { ...state.metrics, additional: [] },
+          // Force 'best' timeframe type (trends not supported in multi-group)
+          timeframe: state.timeframe.type === 'trends'
+            ? { ...state.timeframe, type: 'best' }
+            : state.timeframe,
+        };
+      }
+
+      // Exiting multi-group mode - restore previous state if available
+      if (!isMultiGroup && wasMultiGroup) {
+        return {
+          ...state,
+          analysisType: action.payload,
+          selectedAthleteId: action.payload === 'individual' ? state.selectedAthleteId : '',
+          selectedAthlete: action.payload === 'individual' ? state.selectedAthlete : null,
+          selectedAthleteIds: action.payload !== 'individual' ? state.selectedAthleteIds : [],
+          // Restore previous metrics if they existed
+          metrics: state.previousMetrics || state.metrics,
+          // Restore previous timeframe if it existed
+          timeframe: state.previousTimeframe || state.timeframe,
+          // Clear saved state
+          previousMetrics: null,
+          previousTimeframe: null,
+        };
+      }
+
+      // Normal analysis type change (not involving multi-group)
       return {
         ...state,
         analysisType: action.payload,
-        // Clear athlete selections when changing analysis type
         selectedAthleteId: action.payload === 'individual' ? state.selectedAthleteId : '',
         selectedAthlete: action.payload === 'individual' ? state.selectedAthlete : null,
         selectedAthleteIds: action.payload !== 'individual' ? state.selectedAthleteIds : [],
-        // Clear additional metrics when switching to multi-group mode (requires single metric)
-        metrics: action.payload === 'multi_group'
-          ? { ...state.metrics, additional: [] }
-          : state.metrics,
-        // Force 'best' timeframe type for multi-group mode (trends not supported)
-        timeframe: action.payload === 'multi_group' && state.timeframe.type === 'trends'
-          ? { ...state.timeframe, type: 'best' }
-          : state.timeframe,
       };
+    }
 
     case 'SET_FILTERS':
       return {
