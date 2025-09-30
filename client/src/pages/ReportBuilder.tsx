@@ -31,25 +31,31 @@ export function ReportBuilder() {
   const [generatePdf, setGeneratePdf] = useState(true);
 
   // Fetch athletes for selection
-  const { data: athletes } = useQuery({
+  const { data: athletes, error: athletesError, isLoading: athletesLoading } = useQuery({
     queryKey: ["athletes", organizationContext],
     queryFn: async () => {
       if (!organizationContext) return [];
+      console.log("Fetching athletes for org:", organizationContext);
       const res = await fetch(`/api/athletes?organizationId=${organizationContext}`);
       if (!res.ok) throw new Error("Failed to fetch athletes");
-      return res.json();
+      const data = await res.json();
+      console.log("Athletes data:", data);
+      return data;
     },
     enabled: !!organizationContext,
   });
 
   // Fetch teams for selection
-  const { data: teams } = useQuery({
+  const { data: teams, error: teamsError, isLoading: teamsLoading } = useQuery({
     queryKey: ["teams", organizationContext],
     queryFn: async () => {
       if (!organizationContext) return [];
+      console.log("Fetching teams for org:", organizationContext);
       const res = await fetch(`/api/teams?organizationId=${organizationContext}`);
       if (!res.ok) throw new Error("Failed to fetch teams");
-      return res.json();
+      const data = await res.json();
+      console.log("Teams data:", data);
+      return data;
     },
     enabled: !!organizationContext,
   });
@@ -102,6 +108,19 @@ export function ReportBuilder() {
     return <div className="p-6">Please log in to access report builder.</div>;
   }
 
+  if (!organizationContext) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Report Builder</h1>
+          <p className="text-red-600">
+            Please select an organization from your profile to use the report builder.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-6">
@@ -109,6 +128,14 @@ export function ReportBuilder() {
         <p className="text-gray-600">
           Create customized performance reports for athletes, teams, and groups
         </p>
+        {(athletesLoading || teamsLoading) && (
+          <p className="text-sm text-blue-600 mt-2">Loading data...</p>
+        )}
+        {(athletesError || teamsError) && (
+          <p className="text-sm text-red-600 mt-2">
+            Error loading data: {athletesError?.message || teamsError?.message}
+          </p>
+        )}
       </div>
 
       <div className="grid gap-6">
