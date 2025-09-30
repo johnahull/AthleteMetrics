@@ -124,42 +124,90 @@ const isExitingMultiGroup = (current: AnalysisType, next: AnalysisType): boolean
 /**
  * Handles state transitions when entering multi-group mode
  * Preserves current metrics/timeframe for restoration later
+ *
+ * @param state - Current analytics state
+ * @param nextType - The analysis type being transitioned to
+ * @returns New state with preserved settings and multi-group constraints applied
+ *
+ * State preservation occurs when:
+ * - Additional metrics exist (length > 0) - saved to previousMetrics
+ * - Timeframe type is 'trends' - saved to previousTimeframe
+ *
+ * Restrictions applied:
+ * - Additional metrics cleared (single metric required for fair comparison)
+ * - Timeframe forced to 'best' if currently 'trends' (trends not supported)
  */
-const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
-  ...state,
-  analysisType: nextType,
-  selectedAthleteId: '',
-  selectedAthlete: null,
-  selectedAthleteIds: [],
-  // Store current state for restoration later (only if there's something to preserve)
-  previousMetrics: state.metrics.additional.length > 0 ? state.metrics : state.previousMetrics,
-  previousTimeframe: state.timeframe.type === 'trends' ? state.timeframe : state.previousTimeframe,
-  // Clear additional metrics (multi-group requires single metric)
-  metrics: { ...state.metrics, additional: [] },
-  // Force 'best' timeframe type (trends not supported in multi-group)
-  timeframe: state.timeframe.type === 'trends'
-    ? { ...state.timeframe, type: 'best' }
-    : state.timeframe,
-});
+const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
+  // Deep clone current state to avoid reference issues
+  const preservedMetrics = state.metrics.additional.length > 0
+    ? { ...state.metrics, additional: [...state.metrics.additional] }
+    : state.previousMetrics;
+
+  const preservedTimeframe = state.timeframe.type === 'trends'
+    ? { ...state.timeframe }
+    : state.previousTimeframe;
+
+  return {
+    ...state,
+    analysisType: nextType,
+    selectedAthleteId: '',
+    selectedAthlete: null,
+    selectedAthleteIds: [],
+    // Store current state for restoration later (only if there's something to preserve)
+    previousMetrics: preservedMetrics,
+    previousTimeframe: preservedTimeframe,
+    // Clear additional metrics (multi-group requires single metric)
+    metrics: { ...state.metrics, additional: [] },
+    // Force 'best' timeframe type (trends not supported in multi-group)
+    timeframe: state.timeframe.type === 'trends'
+      ? { ...state.timeframe, type: 'best' }
+      : state.timeframe,
+  };
+};
 
 /**
  * Handles state transitions when exiting multi-group mode
  * Restores previously saved metrics/timeframe if available
+ *
+ * @param state - Current analytics state
+ * @param nextType - The analysis type being transitioned to
+ * @returns New state with restored settings (if available)
+ *
+ * Restoration logic:
+ * - If previousMetrics exists: Restore with deep clone to avoid reference issues
+ * - If previousMetrics null: Keep current metrics (user made no changes worth preserving)
+ * - If previousTimeframe exists: Restore saved timeframe
+ * - If previousTimeframe null: Keep current timeframe
+ *
+ * Edge cases handled:
+ * - Prevents restoring null/undefined values
+ * - Deep clones restored state to prevent mutation issues
+ * - Clears saved state after restoration to prevent memory leaks
  */
-const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
-  ...state,
-  analysisType: nextType,
-  selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
-  selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
-  selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
-  // Restore previous metrics if they existed
-  metrics: state.previousMetrics || state.metrics,
-  // Restore previous timeframe if it existed
-  timeframe: state.previousTimeframe || state.timeframe,
-  // Clear saved state
-  previousMetrics: null,
-  previousTimeframe: null,
-});
+const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
+  // Deep clone previous state to avoid reference mutations
+  const restoredMetrics = state.previousMetrics
+    ? { ...state.previousMetrics, additional: [...state.previousMetrics.additional] }
+    : state.metrics;
+
+  const restoredTimeframe = state.previousTimeframe
+    ? { ...state.previousTimeframe }
+    : state.timeframe;
+
+  return {
+    ...state,
+    analysisType: nextType,
+    selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
+    selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
+    selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+    // Restore previous metrics/timeframe with deep clones
+    metrics: restoredMetrics,
+    timeframe: restoredTimeframe,
+    // Clear saved state to prevent memory leaks
+    previousMetrics: null,
+    previousTimeframe: null,
+  };
+};
 
 /**
  * Handles normal analysis type changes (not involving multi-group transitions)
