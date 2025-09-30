@@ -12,20 +12,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
 import { METRIC_CONFIG } from '@shared/analytics-types';
-import type { MetricSelection } from '@shared/analytics-types';
+import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
 
 interface MetricsSelectorProps {
   metrics: MetricSelection;
   onMetricsChange: (metrics: MetricSelection) => void;
   maxAdditional?: number;
   className?: string;
+  analysisType?: AnalysisType;
 }
 
 export function MetricsSelector({
   metrics,
   onMetricsChange,
   maxAdditional = 5,
-  className
+  className,
+  analysisType
 }: MetricsSelectorProps) {
   const availableMetrics = Object.keys(METRIC_CONFIG);
 
@@ -146,6 +148,11 @@ export function MetricsSelector({
           <Label className="text-sm font-medium">
             Add More Metrics ({metrics.additional.length}/{maxAdditional})
           </Label>
+          {analysisType === 'multi_group' && (
+            <p className="text-xs text-muted-foreground">
+              Multi-group analysis requires a single metric for comparison.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
             {availableMetrics
               .filter((metric: string) =>
@@ -162,7 +169,7 @@ export function MetricsSelector({
                       onCheckedChange={(checked) =>
                         handleAdditionalMetricToggle(metric, checked as boolean)
                       }
-                      disabled={metrics.additional.length >= maxAdditional}
+                      disabled={metrics.additional.length >= maxAdditional || analysisType === 'multi_group'}
                     />
                     <label
                       htmlFor={`metric-${metric}`}
