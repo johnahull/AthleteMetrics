@@ -5,6 +5,7 @@
 import { BaseService } from "./base-service";
 import { insertTeamSchema, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
 import type { Team, InsertTeam } from "@shared/schema";
+import { AuthorizationError } from "../utils/errors";
 
 export interface TeamFilters {
   organizationId?: string;
@@ -19,23 +20,38 @@ export class TeamService extends BaseService {
    */
   async getTeams(filters: TeamFilters, requestingUserId: string): Promise<Team[]> {
     try {
-      // Get user's accessible organizations
-      const userOrgs = await this.getUserOrganizations(requestingUserId);
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      
+      this.logger.debug('Getting teams', { userId: requestingUserId, filters });
+
       // Site admins can see all teams
-      if (requestingUser?.isSiteAdmin === "true") {
-        return await this.storage.getTeams(filters.organizationId);
+      if (await this.isSiteAdmin(requestingUserId)) {
+        const teams = await this.executeQuery(
+          'getTeams',
+          () => this.storage.getTeams(filters.organizationId),
+          { userId: requestingUserId, filters }
+        );
+        return teams;
       }
 
-      // Filter teams by user's organizations
-      const accessibleOrgIds = userOrgs.map(org => org.organizationId);
-      // For now, use the first accessible organization ID
-      const teams = await this.storage.getTeams(accessibleOrgIds[0]);
+      // Get user's accessible organizations
+      const userOrgs = await this.getUserOrganizations(requestingUserId);
+
+      if (userOrgs.length === 0) {
+        this.logger.security('User with no organizations attempted to access teams', {
+          userId: requestingUserId,
+        });
+        return [];
+      }
+
+      // Use the first accessible organization ID
+      const teams = await this.executeQuery(
+        'getTeams',
+        () => this.storage.getTeams(userOrgs[0].organizationId),
+        { userId: requestingUserId, organizationId: userOrgs[0].organizationId }
+      );
 
       return teams;
     } catch (error) {
-      this.handleError(error, "TeamService.getTeams");
+      this.handleError(error, "getTeams", requestingUserId);
     }
   }
 
@@ -44,27 +60,35 @@ export class TeamService extends BaseService {
    */
   async createTeam(teamData: InsertTeam, requestingUserId: string): Promise<Team> {
     try {
-      // Validate input
       const validatedData = insertTeamSchema.parse(teamData);
 
-      // Validate organization access if organizationId provided
+      this.logger.info('Creating new team', {
+        userId: requestingUserId,
+        teamName: validatedData.name,
+        organizationId: validatedData.organizationId,
+      });
+
+      // Validate organization access
       if (validatedData.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          validatedData.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this organization");
-          }
-        }
+        await this.requireOrganizationAccess(requestingUserId, validatedData.organizationId);
       }
 
-      return await this.storage.createTeam(validatedData);
+      const team = await this.executeQuery(
+        'createTeam',
+        () => this.storage.createTeam(validatedData),
+        { userId: requestingUserId, teamName: validatedData.name }
+      );
+
+      this.logger.audit('Team created', {
+        userId: requestingUserId,
+        teamId: team.id,
+        teamName: team.name,
+        organizationId: team.organizationId,
+      });
+
+      return team;
     } catch (error) {
-      this.handleError(error, "TeamService.createTeam");
+      this.handleError(error, "createTeam", requestingUserId);
     }
   }
 
@@ -72,50 +96,46 @@ export class TeamService extends BaseService {
    * Update team with access validation
    */
   async updateTeam(
-    teamId: string, 
-    teamData: Partial<InsertTeam>, 
+    teamId: string,
+    teamData: Partial<InsertTeam>,
     requestingUserId: string
   ): Promise<Team> {
     try {
-      // Get existing team
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+      const existingTeam = await this.getOneOrFail(
+        () => this.storage.getTeam(teamId),
+        'Team',
+        teamId
+      );
 
-      // Validate access
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
+      this.logger.info('Updating team', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+      });
+
+      // Validate access to current organization
+      await this.requireOrganizationAccess(requestingUserId, existingTeam.organizationId);
 
       // Validate new organization if changing
       if (teamData.organizationId && teamData.organizationId !== existingTeam.organizationId) {
-        const hasNewOrgAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          teamData.organizationId
-        );
-        
-        if (!hasNewOrgAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to target organization");
-          }
-        }
+        await this.requireOrganizationAccess(requestingUserId, teamData.organizationId);
       }
 
-      return await this.storage.updateTeam(teamId, teamData);
+      const team = await this.executeQuery(
+        'updateTeam',
+        () => this.storage.updateTeam(teamId, teamData),
+        { userId: requestingUserId, teamId }
+      );
+
+      this.logger.audit('Team updated', {
+        userId: requestingUserId,
+        teamId,
+        teamName: team.name,
+      });
+
+      return team;
     } catch (error) {
-      this.handleError(error, "TeamService.updateTeam");
+      this.handleError(error, "updateTeam", requestingUserId);
     }
   }
 
@@ -124,30 +144,33 @@ export class TeamService extends BaseService {
    */
   async deleteTeam(teamId: string, requestingUserId: string): Promise<void> {
     try {
-      // Get existing team
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+      const existingTeam = await this.getOneOrFail(
+        () => this.storage.getTeam(teamId),
+        'Team',
+        teamId
+      );
 
-      // Validate access
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
+      this.logger.warn('Deleting team', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+      });
 
-      await this.storage.deleteTeam(teamId);
+      await this.requireOrganizationAccess(requestingUserId, existingTeam.organizationId);
+
+      await this.executeQuery(
+        'deleteTeam',
+        () => this.storage.deleteTeam(teamId),
+        { userId: requestingUserId, teamId }
+      );
+
+      this.logger.audit('Team deleted', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+      });
     } catch (error) {
-      this.handleError(error, "TeamService.deleteTeam");
+      this.handleError(error, "deleteTeam", requestingUserId);
     }
   }
 
@@ -155,37 +178,42 @@ export class TeamService extends BaseService {
    * Archive team
    */
   async archiveTeam(
-    teamId: string, 
-    archiveData: any, 
+    teamId: string,
+    archiveData: any,
     requestingUserId: string
   ): Promise<void> {
     try {
-      // Validate archive data
       const validatedData = archiveTeamSchema.parse(archiveData);
 
-      // Get existing team and validate access
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+      const existingTeam = await this.getOneOrFail(
+        () => this.storage.getTeam(teamId),
+        'Team',
+        teamId
+      );
 
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
+      this.logger.info('Archiving team', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+        season: validatedData.season,
+      });
 
-      await this.storage.archiveTeam(teamId, validatedData.archiveDate || new Date(), validatedData.season);
+      await this.requireOrganizationAccess(requestingUserId, existingTeam.organizationId);
+
+      await this.executeQuery(
+        'archiveTeam',
+        () => this.storage.archiveTeam(teamId, validatedData.archiveDate || new Date(), validatedData.season),
+        { userId: requestingUserId, teamId, season: validatedData.season }
+      );
+
+      this.logger.audit('Team archived', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+        season: validatedData.season,
+      });
     } catch (error) {
-      this.handleError(error, "TeamService.archiveTeam");
+      this.handleError(error, "archiveTeam", requestingUserId);
     }
   }
 
@@ -194,29 +222,33 @@ export class TeamService extends BaseService {
    */
   async unarchiveTeam(teamId: string, requestingUserId: string): Promise<void> {
     try {
-      // Get existing team and validate access
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+      const existingTeam = await this.getOneOrFail(
+        () => this.storage.getTeam(teamId),
+        'Team',
+        teamId
+      );
 
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
+      this.logger.info('Unarchiving team', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+      });
 
-      await this.storage.unarchiveTeam(teamId);
+      await this.requireOrganizationAccess(requestingUserId, existingTeam.organizationId);
+
+      await this.executeQuery(
+        'unarchiveTeam',
+        () => this.storage.unarchiveTeam(teamId),
+        { userId: requestingUserId, teamId }
+      );
+
+      this.logger.audit('Team unarchived', {
+        userId: requestingUserId,
+        teamId,
+        teamName: existingTeam.name,
+      });
     } catch (error) {
-      this.handleError(error, "TeamService.unarchiveTeam");
+      this.handleError(error, "unarchiveTeam", requestingUserId);
     }
   }
 
@@ -230,32 +262,36 @@ export class TeamService extends BaseService {
     requestingUserId: string
   ): Promise<void> {
     try {
-      // Validate membership data
       const validatedData = updateTeamMembershipSchema.parse(membershipData);
 
-      // Get existing team and validate access
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+      const existingTeam = await this.getOneOrFail(
+        () => this.storage.getTeam(teamId),
+        'Team',
+        teamId
+      );
 
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
+      this.logger.info('Updating team membership', {
+        userId: requestingUserId,
+        teamId,
+        targetUserId: userId,
+      });
 
-      await this.storage.updateTeamMembership(teamId, userId, validatedData);
+      await this.requireOrganizationAccess(requestingUserId, existingTeam.organizationId);
+
+      await this.executeQuery(
+        'updateTeamMembership',
+        () => this.storage.updateTeamMembership(teamId, userId, validatedData),
+        { userId: requestingUserId, teamId, targetUserId: userId }
+      );
+
+      this.logger.audit('Team membership updated', {
+        userId: requestingUserId,
+        teamId,
+        targetUserId: userId,
+        teamName: existingTeam.name,
+      });
     } catch (error) {
-      this.handleError(error, "TeamService.updateTeamMembership");
+      this.handleError(error, "updateTeamMembership", requestingUserId);
     }
   }
 }
