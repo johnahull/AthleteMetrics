@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, date, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -80,7 +80,11 @@ export const userTeams = pgTable("user_teams", {
   season: text("season"), // "2024-Fall", "2025-Spring"
   isActive: text("is_active").default("true").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Performance indexes for team membership queries
+  userTeamActiveIdx: index("idx_user_teams_user_team_active").on(table.userId, table.teamId, table.isActive),
+  teamActiveIdx: index("idx_user_teams_team_active").on(table.teamId, table.isActive),
+}));
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -100,7 +104,13 @@ export const measurements = pgTable("measurements", {
   season: text("season"), // Season designation (e.g., "2024-Fall")
   teamContextAuto: text("team_context_auto").default("true"), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Performance indexes for analytics queries
+  userMetricIdx: index("idx_measurements_user_metric").on(table.userId, table.metric),
+  dateIdx: index("idx_measurements_date").on(table.date),
+  teamDateIdx: index("idx_measurements_team_date").on(table.teamId, table.date),
+  metricVerifiedIdx: index("idx_measurements_metric_verified").on(table.metric, table.isVerified),
+}));
 
 export const userOrganizations = pgTable("user_organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -110,7 +120,10 @@ export const userOrganizations = pgTable("user_organizations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Enforce exactly one role per user per organization
-  uniqueUserOrgRole: sql`UNIQUE(${table.userId}, ${table.organizationId})`
+  uniqueUserOrgRole: sql`UNIQUE(${table.userId}, ${table.organizationId})`,
+  // Performance indexes for access control queries
+  userOrgIdx: index("idx_user_organizations_user_org").on(table.userId, table.organizationId),
+  orgRoleIdx: index("idx_user_organizations_org_role").on(table.organizationId, table.role),
 }));
 
 export const invitations = pgTable("invitations", {

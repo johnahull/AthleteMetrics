@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { env } from "./config/env"; // Validate environment variables first
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 

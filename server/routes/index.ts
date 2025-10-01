@@ -3,6 +3,7 @@
  */
 
 import type { Express } from "express";
+import healthRoutes from "./health-routes";
 import { registerAuthRoutes } from "./auth-routes";
 import { registerUserRoutes } from "./user-routes";
 import { registerOrganizationRoutes } from "./organization-routes";
@@ -16,24 +17,27 @@ import { registerAthleteRoutes } from "./athlete-routes";
  * Register all application routes
  */
 export function registerAllRoutes(app: Express) {
+  // Health check routes (no auth required)
+  app.use('/api', healthRoutes);
+
   // Authentication routes
   registerAuthRoutes(app);
-  
+
   // User management routes
   registerUserRoutes(app);
-  
+
   // Organization management routes
   registerOrganizationRoutes(app);
-  
+
   // Athlete management routes
   registerAthleteRoutes(app);
-  
+
   // TODO: Add remaining route modules
   // registerTeamRoutes(app);
   // registerMeasurementRoutes(app);
   // registerAnalyticsRoutes(app);
   // registerImportRoutes(app);
-  
+
   console.log("✅ All routes registered successfully");
 }
 
