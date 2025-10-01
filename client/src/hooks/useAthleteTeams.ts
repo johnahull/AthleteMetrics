@@ -4,8 +4,6 @@
  *
  * Uses React Query for automatic caching, deduplication, and background refetching
  */
-
-import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { getAthleteUserId } from '@/lib/athlete-utils';
@@ -33,8 +31,8 @@ interface UseAthleteTeamsResult {
 export function useAthleteTeams(): UseAthleteTeamsResult {
   const { user } = useAuth();
 
-  // Compute athleteUserId once and use it as query key dependency
-  const athleteUserId = useMemo(() => getAthleteUserId(user), [user?.athleteId, user?.id]);
+  // getAthleteUserId is trivial, no need for memoization
+  const athleteUserId = getAthleteUserId(user);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['athlete-teams', athleteUserId],
@@ -76,17 +74,19 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
     gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after last use
     retry: 2, // Retry failed requests twice
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    onError: (err) => {
+      console.error('Error fetching athlete teams:', err);
+    },
   });
 
   const teams = data || [];
-
-  // Memoize team IDs array to prevent unnecessary re-renders
-  const teamIds = useMemo(() => teams.map(team => team.id), [teams]);
+  // React Query maintains referential stability for cached data, no memoization needed
+  const teamIds = teams.map(team => team.id);
 
   return {
     teams,
     teamIds,
     isLoading,
-    error: error instanceof Error ? error.message : null
+    error: error ? (error instanceof Error ? error.message : String(error)) : null
   };
 }
