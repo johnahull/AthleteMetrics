@@ -58,7 +58,7 @@ export class AuthService extends BaseService {
 
       return { success: true, user };
     } catch (error) {
-      console.error("AuthService.login:", error);
+      this.logger.error('Login failed', {}, error as Error);
       return { success: false, error: "Login failed" };
     }
   }
@@ -70,7 +70,7 @@ export class AuthService extends BaseService {
     try {
       return await this.storage.getUserOrganizations(userId);
     } catch (error) {
-      console.error("AuthService.getUserOrganizations:", error);
+      this.logger.error('Failed to get user organizations', { userId }, error as Error);
       return [];
     }
   }
@@ -106,7 +106,7 @@ export class AuthService extends BaseService {
         primaryOrganizationId: primaryOrg.organizationId
       };
     } catch (error) {
-      console.error("AuthService.determineUserRoleAndContext:", error);
+      this.logger.error('Failed to determine user role and context', { userId: user.id }, error as Error);
       return {
         role: "athlete", // Safe fallback
         primaryOrganizationId: undefined
@@ -137,7 +137,7 @@ export class AuthService extends BaseService {
 
       return targetUser;
     } catch (error) {
-      console.error("AuthService.startImpersonation:", error);
+      this.logger.error('Failed to start impersonation', { adminUserId, targetUserId }, error as Error);
       throw error;
     }
   }
@@ -153,7 +153,7 @@ export class AuthService extends BaseService {
       }
       return user;
     } catch (error) {
-      console.error("AuthService.validateSessionUser:", error);
+      this.logger.error('Failed to validate session user', { userId }, error as Error);
       return null;
     }
   }

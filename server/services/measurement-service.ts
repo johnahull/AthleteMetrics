@@ -282,7 +282,7 @@ export class MeasurementService extends BaseService {
             }
           });
         } catch (error) {
-          console.error('Error processing measurement row:', error);
+          this.logger.error('Error processing measurement row', {}, error as Error);
           errors.push({ 
             row: rowNum, 
             error: error instanceof Error ? error.message : 'Unknown error' 
