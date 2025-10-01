@@ -115,7 +115,7 @@ export class AnalyticsService {
           SELECT 1 FROM ${userTeams}
           WHERE ${userTeams.userId} = ${measurements.userId}
             AND ${inArray(userTeams.teamId, filters.teams)}
-            AND ${userTeams.isActive} = 'true'
+            AND ${eq(userTeams.isActive, 'true')}
         )`
       );
     }

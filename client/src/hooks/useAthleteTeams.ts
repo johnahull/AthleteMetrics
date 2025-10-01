@@ -3,7 +3,7 @@
  * Used to pre-populate team filters for athlete users
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 
 export interface AthleteTeam {
@@ -27,20 +27,31 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
 
   useEffect(() => {
     const fetchAthleteTeams = async () => {
-      // Only fetch if user is an athlete and has an athleteId
-      if (!user?.athleteId) {
+      // Validate user session before making API call
+      if (!user?.id) {
+        setError('User not authenticated');
         return;
       }
+
+      // Use athleteId or fall back to user.id
+      const athleteUserId = user.athleteId || user.id;
 
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await fetch(`/api/athletes/${user.athleteId}`, {
+        const response = await fetch(`/api/athletes/${athleteUserId}`, {
           credentials: 'include'
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('Session expired. Please log in again.');
+          } else if (response.status === 403) {
+            throw new Error('Access denied');
+          } else if (response.status === 404) {
+            throw new Error('Athlete profile not found');
+          }
           throw new Error('Failed to fetch athlete data');
         }
 
@@ -67,10 +78,10 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
     };
 
     fetchAthleteTeams();
-  }, [user?.athleteId]);
+  }, [user?.athleteId, user?.id]);
 
-  // Extract just the team IDs for easy use in filters
-  const teamIds = teams.map(team => team.id);
+  // Memoize team IDs array to prevent unnecessary re-renders
+  const teamIds = useMemo(() => teams.map(team => team.id), [teams]);
 
   return {
     teams,
