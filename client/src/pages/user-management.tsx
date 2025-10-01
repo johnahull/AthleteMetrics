@@ -506,18 +506,6 @@ export default function UserManagement() {
     });
   };
 
-  const toggleOrgExpansion = (orgId: string) => {
-    setExpandedOrgs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(orgId)) {
-        newSet.delete(orgId);
-      } else {
-        newSet.add(orgId);
-      }
-      return newSet;
-    });
-  };
-
   const copyExistingInviteLink = async (invitation: any) => {
     try {
       // Get the invitation details to build the link

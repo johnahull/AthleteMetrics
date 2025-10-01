@@ -27,8 +27,8 @@ interface PerformanceChartProps {
   organizationId?: string | null;
 }
 
-export default function PerformanceChart({ organizationId }: PerformanceChartProps = {}) {
-  const { data: measurements } = useQuery({
+export default function PerformanceChart({ organizationId = null }: PerformanceChartProps) {
+  const { data: measurements, isError, error } = useQuery({
     queryKey: ["/api/measurements", organizationId],
     queryFn: async () => {
       const url = organizationId
@@ -153,6 +153,24 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
       },
     },
   };
+
+  if (isError) {
+    return (
+      <Card className="bg-white">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Performance Trends</h3>
+          </div>
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-red-600 font-medium">Error loading performance data</p>
+              <p className="text-sm text-gray-500 mt-2">{error instanceof Error ? error.message : 'Unknown error'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="bg-white">
