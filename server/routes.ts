@@ -2347,12 +2347,9 @@ export async function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        // Site admin can request specific org stats
+        // Site admin can request specific org stats or view site-wide stats
         organizationId = requestedOrgId;
-        // For site admins, if no organization specified, require it to prevent accidental data exposure
-        if (!organizationId) {
-          return res.status(400).json({ message: "Organization ID required for dashboard statistics" });
-        }
+        // If no organizationId provided, return site-wide stats (all organizations)
       } else {
         // Org admins and coaches see their organization stats only
         organizationId = currentUser.primaryOrganizationId;

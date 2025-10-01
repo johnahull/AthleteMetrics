@@ -23,9 +23,25 @@ ChartJS.register(
   Legend
 );
 
-export default function PerformanceChart() {
+interface PerformanceChartProps {
+  organizationId?: string | null;
+}
+
+export default function PerformanceChart({ organizationId }: PerformanceChartProps = {}) {
   const { data: measurements } = useQuery({
-    queryKey: ["/api/measurements"],
+    queryKey: ["/api/measurements", organizationId],
+    queryFn: async () => {
+      const url = organizationId
+        ? `/api/measurements?organizationId=${organizationId}`
+        : `/api/measurements`;
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
   });
 
   // Process data for weekly trends
