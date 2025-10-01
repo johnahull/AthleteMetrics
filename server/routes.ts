@@ -2347,9 +2347,13 @@ export async function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        // Site admin can request specific org stats or view site-wide stats
+        // Site admin must select an organization - no site-wide access
+        if (!requestedOrgId) {
+          return res.status(400).json({
+            message: "Organization ID required. Please select an organization to view dashboard."
+          });
+        }
         organizationId = requestedOrgId;
-        // If no organizationId provided, return site-wide stats (all organizations)
       } else {
         // Org admins and coaches see their organization stats only
         organizationId = currentUser.primaryOrganizationId;
