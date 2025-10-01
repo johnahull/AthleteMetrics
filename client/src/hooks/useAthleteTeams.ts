@@ -1,9 +1,12 @@
 /**
  * Custom hook for fetching athlete's team memberships
  * Used to pre-populate team filters for athlete users
+ *
+ * Uses React Query for automatic caching, deduplication, and background refetching
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { getAthleteUserId } from '@/lib/athlete-utils';
 
@@ -29,64 +32,53 @@ interface UseAthleteTeamsResult {
 
 export function useAthleteTeams(): UseAthleteTeamsResult {
   const { user } = useAuth();
-  const [teams, setTeams] = useState<AthleteTeam[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchAthleteTeams = async () => {
-      // Get athlete user ID using utility function
-      const athleteUserId = getAthleteUserId(user);
+  // Compute athleteUserId once and use it as query key dependency
+  const athleteUserId = useMemo(() => getAthleteUserId(user), [user?.athleteId, user?.id]);
 
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['athlete-teams', athleteUserId],
+    queryFn: async (): Promise<AthleteTeam[]> => {
       if (!athleteUserId) {
-        setError('User not authenticated');
-        setIsLoading(false);
-        return;
+        throw new Error('User not authenticated');
       }
 
-      setIsLoading(true);
-      setError(null);
+      const response = await fetch(`/api/athletes/${athleteUserId}`, {
+        credentials: 'include'
+      });
 
-      try {
-        const response = await fetch(`/api/athletes/${athleteUserId}`, {
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error('Session expired. Please log in again.');
-          } else if (response.status === 403) {
-            throw new Error('Access denied');
-          } else if (response.status === 404) {
-            throw new Error('Athlete profile not found');
-          }
-          throw new Error('Failed to fetch athlete data');
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Session expired. Please log in again.');
+        } else if (response.status === 403) {
+          throw new Error('Access denied');
+        } else if (response.status === 404) {
+          throw new Error('Athlete profile not found');
         }
-
-        const athleteData = await response.json();
-
-        // Extract teams from the athlete data
-        if (athleteData.teams && Array.isArray(athleteData.teams)) {
-          const athleteTeams: AthleteTeam[] = athleteData.teams.map((team: AthleteTeamResponse) => ({
-            id: team.id,
-            name: team.name,
-            organizationId: team.organization?.id || team.organizationId || ''
-          }));
-          setTeams(athleteTeams);
-        } else {
-          setTeams([]);
-        }
-      } catch (err) {
-        console.error('Error fetching athlete teams:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch teams');
-        setTeams([]);
-      } finally {
-        setIsLoading(false);
+        throw new Error('Failed to fetch athlete data');
       }
-    };
 
-    fetchAthleteTeams();
-  }, [user?.athleteId, user?.id]);
+      const athleteData = await response.json();
+
+      // Extract teams from the athlete data
+      if (athleteData.teams && Array.isArray(athleteData.teams)) {
+        return athleteData.teams.map((team: AthleteTeamResponse) => ({
+          id: team.id,
+          name: team.name,
+          organizationId: team.organization?.id || team.organizationId || ''
+        }));
+      }
+
+      return [];
+    },
+    enabled: Boolean(athleteUserId),
+    staleTime: 5 * 60 * 1000, // 5 minutes - teams don't change frequently
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after last use
+    retry: 2, // Retry failed requests twice
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+  });
+
+  const teams = data || [];
 
   // Memoize team IDs array to prevent unnecessary re-renders
   const teamIds = useMemo(() => teams.map(team => team.id), [teams]);
@@ -95,6 +87,6 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
     teams,
     teamIds,
     isLoading,
-    error
+    error: error instanceof Error ? error.message : null
   };
 }
