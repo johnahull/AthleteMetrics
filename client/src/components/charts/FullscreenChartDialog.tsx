@@ -5,8 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ErrorBoundary } from '../ErrorBoundary';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -27,6 +26,7 @@ import type {
   MultiMetricData,
   GroupDefinition
 } from '@shared/analytics-types';
+import { getChartDataForType } from './chartDataUtils';
 
 // Register zoom plugin for fullscreen charts
 ChartJS.register(
@@ -93,24 +93,37 @@ export function FullscreenChartDialog({
   selectedGroups
 }: FullscreenChartDialogProps) {
   // Determine which data to pass based on chart type
-  const chartData = React.useMemo(() => {
-    switch (chartType) {
-      case 'line_chart':
-      case 'multi_line':
-      case 'connected_scatter':
-      case 'time_series_box_swarm':
-        return trends;
-      case 'radar_chart':
-        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
-      default:
-        return data;
-    }
-  }, [chartType, data, trends, multiMetric]);
+  const chartData = React.useMemo(
+    () => getChartDataForType(chartType, data, trends, multiMetric),
+    [chartType, data, trends, multiMetric]
+  );
 
   // Enhanced config for fullscreen with zoom enabled
   const fullscreenConfig: ChartConfiguration = {
     ...config,
     aspectRatio: 1.8, // Wider aspect ratio for fullscreen
+    plugins: {
+      ...config.plugins,
+      zoom: {
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true,
+          },
+          mode: 'xy',
+        },
+        pan: {
+          enabled: true,
+          mode: 'xy',
+        },
+        limits: {
+          x: { min: 'original', max: 'original' },
+          y: { min: 'original', max: 'original' },
+        },
+      },
+    },
   };
 
   const renderChart = () => {
@@ -245,40 +258,31 @@ export function FullscreenChartDialog({
       <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] max-h-[95vh] p-0 gap-0 flex flex-col">
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 pr-8">
-              <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
-              {subtitle && (
-                <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
-              )}
-              <p className="text-xs text-muted-foreground mt-2">
-                💡 Use mouse wheel to zoom, drag to pan. Double-click to reset.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
-              onClick={() => onOpenChange(false)}
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
+          <div className="flex-1">
+            <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
+            {subtitle && (
+              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-2">
+              💡 Use mouse wheel to zoom, drag to pan. Double-click to reset.
+            </p>
           </div>
         </DialogHeader>
 
         {/* Chart Content */}
         <div className="flex-1 p-6 overflow-auto">
           <div className="w-full h-full min-h-[600px]">
-            <React.Suspense
-              fallback={
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-muted-foreground">Loading chart...</div>
-                </div>
-              }
-            >
-              {renderChart()}
-            </React.Suspense>
+            <ErrorBoundary>
+              <React.Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-muted-foreground">Loading chart...</div>
+                  </div>
+                }
+              >
+                {renderChart()}
+              </React.Suspense>
+            </ErrorBoundary>
           </div>
         </div>
       </DialogContent>

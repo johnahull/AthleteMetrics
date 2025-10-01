@@ -17,6 +17,7 @@ import type {
   GroupDefinition
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
+import { getChartDataForType } from './chartDataUtils';
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
@@ -101,6 +102,9 @@ export function ChartContainer({
 
   // Handle fullscreen toggle
   const handleFullscreen = () => {
+    if (onFullscreen) {
+      onFullscreen();
+    }
     setIsFullscreenOpen(true);
   };
 
@@ -157,18 +161,7 @@ export function ChartContainer({
       isPreAggregated: data && data.length > 0 && data[0].athleteId?.startsWith?.('group-')
     });
 
-    switch (chartType) {
-      case 'line_chart':
-      case 'multi_line':
-      case 'connected_scatter':
-      case 'time_series_box_swarm':
-        return trends;
-      case 'radar_chart':
-        // For radar charts, we need multiMetric data, but fall back to data if multiMetric is not available
-        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
-      default:
-        return data;
-    }
+    return getChartDataForType(chartType, data, trends, multiMetric);
   }, [chartType, data, trends, multiMetric]);
 
   if (isLoading) {
