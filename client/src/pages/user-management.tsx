@@ -13,7 +13,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
-import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff } from "lucide-react";
+import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 
@@ -95,6 +95,7 @@ export default function UserManagement() {
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
 
   // Get user's primary role to check access
   const { data: userOrganizations } = useQuery({
@@ -349,6 +350,18 @@ export default function UserManagement() {
     createSiteAdminMutation.mutate(data);
   };
 
+  const toggleOrgExpansion = (orgId: string) => {
+    setExpandedOrgs((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(orgId)) {
+        newSet.delete(orgId);
+      } else {
+        newSet.add(orgId);
+      }
+      return newSet;
+    });
+  };
+
   const handleRoleChange = (userId: string, newRole: string) => {
     updateUserRoleMutation.mutate({ userId, role: newRole });
   };
@@ -490,6 +503,18 @@ export default function UserManagement() {
       description: `Are you sure you want to delete the invitation for ${email || 'this user'}? This action cannot be undone.`,
       confirmText: "Delete",
       onConfirm: () => deleteInvitationMutation.mutate(invitationId),
+    });
+  };
+
+  const toggleOrgExpansion = (orgId: string) => {
+    setExpandedOrgs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(orgId)) {
+        newSet.delete(orgId);
+      } else {
+        newSet.add(orgId);
+      }
+      return newSet;
     });
   };
 
@@ -892,16 +917,31 @@ export default function UserManagement() {
               </div>
 
               {/* Users by Organization */}
-              {organizations?.map((org: Organization) => (
-                <div key={org.id} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900">{org.name}</h3>
-                    <span className="text-sm text-gray-500">
-                      {org.users?.length || 0} users
-                    </span>
-                  </div>
+              {organizations?.map((org: Organization) => {
+                const isExpanded = expandedOrgs.has(org.id);
+                const totalUsers = (org.users?.length || 0) + (org.invitations?.filter(inv => inv.isUsed === "false").length || 0);
 
-                  <div className="space-y-2">
+                return (
+                  <div key={org.id} className="space-y-3 border-b pb-6">
+                    <div
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -m-2"
+                      onClick={() => toggleOrgExpansion(org.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronDown className="h-5 w-5 text-gray-600" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5 text-gray-600" />
+                        )}
+                        <h3 className="text-lg font-semibold text-gray-900">{org.name}</h3>
+                      </div>
+                      <span className="text-sm text-gray-500">
+                        {totalUsers} {totalUsers === 1 ? 'user' : 'users'}
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="space-y-2 ml-7">
                     {/* Active Users */}
                     {org.users?.map((userOrg) => (
                       <div
@@ -1086,9 +1126,11 @@ export default function UserManagement() {
                     {(!org.users || org.users.length === 0) && (!org.invitations || org.invitations.length === 0) && (
                       <p className="text-gray-500 text-sm py-4">No users or pending invitations in this organization</p>
                     )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {!organizations?.length && (
                 <p className="text-gray-500 text-center py-8">No organizations available</p>
