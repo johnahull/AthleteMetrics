@@ -38,5 +38,9 @@ waitForPort = 5000
 [agent]
 
 [[ports]]
-localPort = 5000
+localPort = 43479
 externalPort = 80
+
+[[ports]]
+localPort = 45057
+externalPort = 3000
