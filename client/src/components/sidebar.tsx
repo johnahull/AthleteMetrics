@@ -24,7 +24,6 @@ const NAVIGATION_CONFIGS = {
   site_admin: {
     default: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Analytics", href: "/analytics", icon: BarChart3 },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog }
     ],
