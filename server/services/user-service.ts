@@ -7,6 +7,7 @@ import { BaseService } from "./base-service";
 import { insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
 import type { User, InsertUser } from "@shared/schema";
 import { z } from "zod";
+import { AuthenticationError, AuthorizationError, NotFoundError, ValidationError, ConflictError } from "../utils/errors";
 
 export interface UserFilters {
   organizationId?: string;
@@ -30,39 +31,60 @@ export interface ProfileUpdateData {
   soccerPosition?: string;
 }
 
+export type SanitizedUser = Omit<User, 'password' | 'mfaSecret' | 'backupCodes'>;
+
 export class UserService extends BaseService {
   /**
    * Create a new user
    */
-  async createUser(userData: InsertUser, createdBy: string): Promise<User> {
+  async createUser(userData: InsertUser, createdBy: string): Promise<SanitizedUser> {
     try {
       // Validate input
       const validatedData = insertUserSchema.parse(userData);
+
+      this.logger.info('Creating new user', {
+        userId: createdBy,
+        username: validatedData.username,
+        role: validatedData.role,
+      });
 
       // Hash password if provided
       if (validatedData.password && validatedData.password !== "INVITATION_PENDING") {
         validatedData.password = await bcrypt.hash(validatedData.password, 10);
       }
 
-      const user = await this.storage.createUser(validatedData);
-      return user;
+      const user = await this.executeQuery(
+        'createUser',
+        () => this.storage.createUser(validatedData),
+        { createdBy, username: validatedData.username }
+      );
+
+      this.logger.audit('User created', {
+        userId: createdBy,
+        targetUserId: user.id,
+        username: user.username,
+      });
+
+      return this.sanitizeUser(user);
     } catch (error) {
-      console.error("UserService.createUser:", error);
-      throw error;
+      this.handleError(error, 'createUser', createdBy);
     }
   }
 
   /**
    * Get users with filtering
    */
-  async getUsers(filters: UserFilters = {}): Promise<User[]> {
+  async getUsers(filters: UserFilters = {}): Promise<SanitizedUser[]> {
     try {
-      // Since storage.getUsers() doesn't accept filters, we get all users
-      // and filter in memory. For production, this should be moved to storage layer.
-      const allUsers = await this.storage.getUsers();
-      return allUsers; // TODO: Implement filtering logic if needed
+      const allUsers = await this.executeQuery(
+        'getUsers',
+        () => this.storage.getUsers(),
+        filters
+      );
+
+      return this.sanitizeUsers(allUsers);
     } catch (error) {
-      console.error("UserService.getUsers:", error);
+      this.logger.error('Failed to get users', filters, error as Error);
       return [];
     }
   }
@@ -70,47 +92,66 @@ export class UserService extends BaseService {
   /**
    * Get user by ID with organization access validation
    */
-  async getUserById(userId: string, requestingUserId: string): Promise<User | null> {
+  async getUserById(userId: string, requestingUserId: string): Promise<SanitizedUser | null> {
     try {
-      const user = await this.storage.getUser(userId);
-      if (!user) return null;
+      const user = await this.getOneOrFail(
+        () => this.storage.getUser(userId),
+        'User',
+        userId
+      );
 
       // Site admins can access any user
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (requestingUser?.isSiteAdmin === "true") {
-        return user;
+      if (await this.isSiteAdmin(requestingUserId)) {
+        return this.sanitizeUser(user);
       }
 
       // Users can access their own profile
       if (userId === requestingUserId) {
-        return user;
+        return this.sanitizeUser(user);
       }
 
       // Check if users share an organization
       const requestingUserOrgs = await this.getUserOrganizations(requestingUserId);
       const targetUserOrgs = await this.getUserOrganizations(userId);
-      
-      const sharedOrg = requestingUserOrgs.some(reqOrg => 
+
+      const sharedOrg = requestingUserOrgs.some(reqOrg =>
         targetUserOrgs.some(targetOrg => targetOrg.organizationId === reqOrg.organizationId)
       );
 
-      return sharedOrg ? user : null;
+      if (!sharedOrg) {
+        this.logger.security('Unauthorized user access attempt', {
+          userId: requestingUserId,
+          targetUserId: userId,
+        });
+        throw new AuthorizationError('Access denied to this user');
+      }
+
+      return this.sanitizeUser(user);
     } catch (error) {
-      console.error("UserService.getUserById:", error);
-      return null;
+      this.handleError(error, 'getUserById', requestingUserId);
     }
   }
 
   /**
    * Update user profile
    */
-  async updateProfile(userId: string, profileData: ProfileUpdateData): Promise<User> {
+  async updateProfile(userId: string, profileData: ProfileUpdateData): Promise<SanitizedUser> {
     try {
       const validatedData = updateProfileSchema.parse(profileData);
-      return await this.storage.updateUser(userId, validatedData);
+
+      this.logger.info('Updating user profile', { userId });
+
+      const user = await this.executeQuery(
+        'updateUserProfile',
+        () => this.storage.updateUser(userId, validatedData),
+        { userId }
+      );
+
+      this.logger.audit('User profile updated', { userId });
+
+      return this.sanitizeUser(user);
     } catch (error) {
-      console.error("UserService.updateProfile:", error);
-      throw error;
+      this.handleError(error, 'updateProfile', userId);
     }
   }
 
@@ -118,59 +159,41 @@ export class UserService extends BaseService {
    * Change user password
    */
   async changePassword(
-    userId: string, 
-    currentPassword: string, 
+    userId: string,
+    currentPassword: string,
     newPassword: string
   ): Promise<void> {
     try {
       // Validate new password
-      changePasswordSchema.parse({ currentPassword, newPassword });
+      changePasswordSchema.parse({ currentPassword, newPassword, confirmPassword: newPassword });
 
       // Get current user
-      const user = await this.storage.getUser(userId);
-      if (!user) {
-        throw new Error("User not found");
-      }
+      const user = await this.getOneOrFail(
+        () => this.storage.getUser(userId),
+        'User',
+        userId
+      );
 
       // Verify current password (skip for invitation pending)
       if (user.password !== "INVITATION_PENDING") {
         const isValidPassword = await bcrypt.compare(currentPassword, user.password);
         if (!isValidPassword) {
-          throw new Error("Current password is incorrect");
+          throw new AuthenticationError("Current password is incorrect");
         }
       }
 
       // Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      
-      await this.storage.updateUserPassword(userId, hashedPassword);
-    } catch (error) {
-      console.error("UserService.changePassword:", error);
-      throw error;
-    }
-  }
 
-  /**
-   * Update user role (admin only)
-   */
-  async updateUserRole(
-    userId: string, 
-    newRole: string, 
-    requestingUserId: string
-  ): Promise<User> {
-    try {
-      // Verify requesting user is admin
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser?.isSiteAdmin) {
-        throw new Error("Unauthorized: Only site administrators can update user roles");
-      }
+      await this.executeQuery(
+        'updateUserPassword',
+        () => this.storage.updateUserPassword(userId, hashedPassword),
+        { userId }
+      );
 
-      // Update user role in organization context instead of user table
-      // Since roles are organization-specific, this should be handled by OrganizationService
-      throw new Error("Role updates should be handled through organization role management");
+      this.logger.audit('User password changed', { userId });
     } catch (error) {
-      console.error("UserService.updateUserRole:", error);
-      throw error;
+      this.handleError(error, 'changePassword', userId);
     }
   }
 
@@ -178,26 +201,40 @@ export class UserService extends BaseService {
    * Update user status (activate/deactivate)
    */
   async updateUserStatus(
-    userId: string, 
-    isActive: boolean, 
+    userId: string,
+    isActive: boolean,
     requestingUserId: string
-  ): Promise<User> {
+  ): Promise<SanitizedUser> {
     try {
       // Verify permissions
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser?.isSiteAdmin) {
-        throw new Error("Unauthorized: Only site administrators can update user status");
-      }
+      await this.requireSiteAdmin(requestingUserId);
 
       // Prevent self-deactivation
       if (userId === requestingUserId && !isActive) {
-        throw new Error("Cannot deactivate your own account");
+        throw new ValidationError("Cannot deactivate your own account");
       }
 
-      return await this.storage.updateUser(userId, { isActive: isActive ? "true" : "false" });
+      this.logger.info('Updating user status', {
+        userId: requestingUserId,
+        targetUserId: userId,
+        isActive,
+      });
+
+      const user = await this.executeQuery(
+        'updateUserStatus',
+        () => this.storage.updateUser(userId, { isActive: isActive ? "true" : "false" }),
+        { userId, isActive }
+      );
+
+      this.logger.audit('User status updated', {
+        userId: requestingUserId,
+        targetUserId: userId,
+        isActive,
+      });
+
+      return this.sanitizeUser(user);
     } catch (error) {
-      console.error("UserService.updateUserStatus:", error);
-      throw error;
+      this.handleError(error, 'updateUserStatus', requestingUserId);
     }
   }
 
@@ -207,36 +244,48 @@ export class UserService extends BaseService {
   async deleteUser(userId: string, requestingUserId: string): Promise<void> {
     try {
       // Verify permissions
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser?.isSiteAdmin) {
-        throw new Error("Unauthorized: Only site administrators can delete users");
-      }
+      await this.requireSiteAdmin(requestingUserId);
 
       // Prevent self-deletion
       if (userId === requestingUserId) {
-        throw new Error("Cannot delete your own account");
+        throw new ValidationError("Cannot delete your own account");
       }
 
-      await this.storage.deleteUser(userId);
+      this.logger.warn('Deleting user', {
+        userId: requestingUserId,
+        targetUserId: userId,
+      });
+
+      await this.executeQuery(
+        'deleteUser',
+        () => this.storage.deleteUser(userId),
+        { userId }
+      );
+
+      this.logger.audit('User deleted', {
+        userId: requestingUserId,
+        targetUserId: userId,
+      });
     } catch (error) {
-      console.error("UserService.deleteUser:", error);
-      throw error;
+      this.handleError(error, 'deleteUser', requestingUserId);
     }
   }
 
   /**
    * Create site administrator
    */
-  async createSiteAdmin(adminData: any, requestingUserId: string): Promise<User> {
+  async createSiteAdmin(adminData: any, requestingUserId: string): Promise<SanitizedUser> {
     try {
       // Verify permissions
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser?.isSiteAdmin) {
-        throw new Error("Unauthorized: Only site administrators can create site admins");
-      }
+      await this.requireSiteAdmin(requestingUserId);
 
       // Validate input
       const validatedData = createSiteAdminSchema.parse(adminData);
+
+      this.logger.info('Creating site admin', {
+        userId: requestingUserId,
+        username: validatedData.username,
+      });
 
       // Hash password
       const hashedPassword = await bcrypt.hash(validatedData.password, 10);
@@ -245,17 +294,28 @@ export class UserService extends BaseService {
         username: validatedData.username,
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
-        emails: [`${validatedData.username}@admin.local`], // Temporary email based on username
+        emails: [`${validatedData.username}@admin.local`],
         password: hashedPassword,
         role: "site_admin",
         isSiteAdmin: "true",
         isActive: "true"
       };
 
-      return await this.storage.createUser(userData);
+      const user = await this.executeQuery(
+        'createSiteAdmin',
+        () => this.storage.createUser(userData),
+        { createdBy: requestingUserId, username: userData.username }
+      );
+
+      this.logger.audit('Site admin created', {
+        userId: requestingUserId,
+        targetUserId: user.id,
+        username: user.username,
+      });
+
+      return this.sanitizeUser(user);
     } catch (error) {
-      console.error("UserService.createSiteAdmin:", error);
-      throw error;
+      this.handleError(error, 'createSiteAdmin', requestingUserId);
     }
   }
 
@@ -267,7 +327,7 @@ export class UserService extends BaseService {
       const existingUser = await this.storage.getUserByUsername(username);
       return !existingUser;
     } catch (error) {
-      console.error("UserService.checkUsernameAvailability:", error);
+      this.logger.error('Failed to check username availability', { username }, error as Error);
       return false;
     }
   }

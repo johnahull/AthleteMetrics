@@ -229,25 +229,13 @@ export function registerUserRoutes(app: Express) {
 
   /**
    * Update user role (admin only)
+   * Note: Role updates are now handled through organization role management
+   * This endpoint is deprecated and should be removed once clients are updated
    */
   app.put("/api/users/:id/role", requireAuth, async (req, res) => {
-    try {
-      const userId = req.params.id;
-      const { role } = req.body;
-      
-      const updatedUser = await userService.updateUserRole(
-        userId, 
-        role, 
-        req.session.user!.id
-      );
-      
-      res.json(updatedUser);
-    } catch (error) {
-      console.error("Update user role error:", error);
-      const message = error instanceof Error ? error.message : "Failed to update user role";
-      const statusCode = message.includes("Unauthorized") ? 403 : 500;
-      res.status(statusCode).json({ message });
-    }
+    res.status(400).json({
+      message: "Role updates should be handled through organization role management endpoints"
+    });
   });
 
   /**
