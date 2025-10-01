@@ -99,30 +99,35 @@ export function FullscreenChartDialog({
   );
 
   // Enhanced config for fullscreen with zoom enabled
+  // Only add zoom config for chart types that support it
+  const supportsZoom = ['line_chart', 'multi_line', 'scatter_plot', 'connected_scatter', 'box_plot', 'box_swarm_combo', 'swarm_plot'].includes(chartType);
+
   const fullscreenConfig: ChartConfiguration = {
     ...config,
     aspectRatio: 1.8, // Wider aspect ratio for fullscreen
     plugins: {
       ...config.plugins,
-      zoom: {
+      ...(supportsZoom && {
         zoom: {
-          wheel: {
-            enabled: true,
+          zoom: {
+            wheel: {
+              enabled: true,
+            },
+            pinch: {
+              enabled: true,
+            },
+            mode: 'xy' as const,
           },
-          pinch: {
+          pan: {
             enabled: true,
+            mode: 'xy' as const,
           },
-          mode: 'xy',
+          limits: {
+            x: { min: 'original', max: 'original' },
+            y: { min: 'original', max: 'original' },
+          },
         },
-        pan: {
-          enabled: true,
-          mode: 'xy',
-        },
-        limits: {
-          x: { min: 'original', max: 'original' },
-          y: { min: 'original', max: 'original' },
-        },
-      },
+      }),
     },
   };
 
@@ -263,9 +268,11 @@ export function FullscreenChartDialog({
             {subtitle && (
               <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
             )}
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Use mouse wheel to zoom, drag to pan. Double-click to reset.
-            </p>
+            {supportsZoom && (
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 Use mouse wheel to zoom, drag to pan. Double-click to reset.
+              </p>
+            )}
           </div>
         </DialogHeader>
 
