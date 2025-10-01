@@ -28,7 +28,7 @@ import type {
   MultiMetricData,
   GroupDefinition
 } from '@shared/analytics-types';
-import { getChartDataForType, hasValidDataForChartType } from './chartDataUtils';
+import { getChartDataForType } from './chartDataUtils';
 
 // Register zoom plugin for fullscreen charts
 ChartJS.register(
@@ -113,7 +113,8 @@ export function FullscreenChartDialog({
   metric,
   selectedGroups
 }: FullscreenChartDialogProps) {
-  const chartRef = useRef<any>(null);
+  // Ref to access chart container for zoom reset
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Determine which data to pass based on chart type
   const chartData = React.useMemo(
@@ -162,10 +163,15 @@ export function FullscreenChartDialog({
     return baseConfig;
   }, [config, supportsZoom]);
 
-  // Handle reset zoom
+  // Handle reset zoom - DOM-based approach to find Chart.js instance
   const handleResetZoom = () => {
-    if (chartRef.current?.resetZoom) {
-      chartRef.current.resetZoom();
+    // Find Chart.js instance in the DOM
+    const chartCanvas = chartContainerRef.current?.querySelector('canvas');
+    if (chartCanvas) {
+      const chartInstance = ChartJS.getChart(chartCanvas);
+      if (chartInstance && typeof chartInstance.resetZoom === 'function') {
+        chartInstance.resetZoom();
+      }
     }
   };
 
@@ -220,7 +226,7 @@ export function FullscreenChartDialog({
         }
         return (
           <LineChart
-            data={trends}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -235,7 +241,7 @@ export function FullscreenChartDialog({
         }
         return (
           <MultiLineChart
-            data={trends}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -259,14 +265,12 @@ export function FullscreenChartDialog({
         );
 
       case 'radar_chart':
-        if (!multiMetric || multiMetric.length === 0) {
-          if (!data || data.length === 0) {
-            return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for radar chart</div>;
-          }
+        if ((!multiMetric || multiMetric.length === 0) && (!data || data.length === 0)) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for radar chart</div>;
         }
         return (
           <RadarChart
-            data={multiMetric || []}
+            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as any[])}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -295,7 +299,7 @@ export function FullscreenChartDialog({
         }
         return (
           <ConnectedScatterChart
-            data={trends}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -311,7 +315,7 @@ export function FullscreenChartDialog({
         }
         return (
           <TimeSeriesBoxSwarmChart
-            data={trends}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             selectedDates={selectedDates || []}
@@ -384,6 +388,7 @@ export function FullscreenChartDialog({
         {/* Chart Content */}
         <div className="flex-1 p-6 overflow-auto">
           <div
+            ref={chartContainerRef}
             className="w-full h-full"
             style={{ minHeight: `${MIN_CHART_HEIGHT}px` }}
             role="img"
