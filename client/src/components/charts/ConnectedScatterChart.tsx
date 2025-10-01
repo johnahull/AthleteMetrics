@@ -424,6 +424,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      ...config.plugins,
       title: {
         display: true,
         text: config.title,

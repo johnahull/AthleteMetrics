@@ -161,6 +161,7 @@ export interface ChartConfiguration {
   showTooltips: boolean;
   responsive: boolean;
   aspectRatio?: number;
+  plugins?: Record<string, any>; // Chart.js plugin configurations (e.g., zoom)
   customOptions?: Record<string, any>;
 }
 

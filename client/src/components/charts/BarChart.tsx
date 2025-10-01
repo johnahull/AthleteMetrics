@@ -131,6 +131,7 @@ export function BarChart({
     maintainAspectRatio: false,
     indexAxis: 'y' as const, // Horizontal bars for better athlete name visibility
     plugins: {
+      ...config.plugins,
       title: {
         display: true,
         text: config.title,

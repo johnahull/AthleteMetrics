@@ -303,6 +303,7 @@ export function TimeSeriesBoxSwarmChart({
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
+        ...config.plugins,
         title: {
           display: !!config.title,
           text: config.title

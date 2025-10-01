@@ -160,6 +160,7 @@ export function SwarmChart({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      ...config.plugins,
       title: {
         display: true,
         text: config.title,

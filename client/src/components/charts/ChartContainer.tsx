@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -6,6 +6,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { FullscreenChartDialog } from './FullscreenChartDialog';
 import type {
   ChartDataPoint,
   ChartConfiguration,
@@ -16,6 +17,7 @@ import type {
   GroupDefinition
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
+import { getChartDataForType } from './chartDataUtils';
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
@@ -95,6 +97,17 @@ export function ChartContainer({
   onFullscreen,
   className
 }: ChartContainerProps) {
+  // Fullscreen state
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+
+  // Handle fullscreen toggle
+  const handleFullscreen = () => {
+    if (onFullscreen) {
+      onFullscreen();
+    }
+    setIsFullscreenOpen(true);
+  };
+
   // Memoize chart component selection for generic cases only
   // Exclude types that are handled explicitly with custom props
   const ChartComponent = useMemo(() => {
@@ -148,18 +161,7 @@ export function ChartContainer({
       isPreAggregated: data && data.length > 0 && data[0].athleteId?.startsWith?.('group-')
     });
 
-    switch (chartType) {
-      case 'line_chart':
-      case 'multi_line':
-      case 'connected_scatter':
-      case 'time_series_box_swarm':
-        return trends;
-      case 'radar_chart':
-        // For radar charts, we need multiMetric data, but fall back to data if multiMetric is not available
-        return multiMetric && multiMetric.length > 0 ? multiMetric : data;
-      default:
-        return data;
-    }
+    return getChartDataForType(chartType, data, trends, multiMetric);
   }, [chartType, data, trends, multiMetric]);
 
   if (isLoading) {
@@ -271,16 +273,14 @@ export function ChartContainer({
               <Download className="h-4 w-4" />
             </Button>
           )}
-          {onFullscreen && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onFullscreen}
-              title="View fullscreen"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleFullscreen}
+            title="View fullscreen"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
@@ -388,6 +388,27 @@ export function ChartContainer({
           </ErrorBoundary>
         </div>
       </CardContent>
+
+      {/* Fullscreen Chart Dialog */}
+      <FullscreenChartDialog
+        open={isFullscreenOpen}
+        onOpenChange={setIsFullscreenOpen}
+        title={title}
+        subtitle={subtitle}
+        chartType={chartType}
+        data={data}
+        rawData={rawData}
+        trends={trends}
+        multiMetric={multiMetric}
+        statistics={statistics}
+        config={chartConfig}
+        highlightAthlete={highlightAthlete}
+        selectedAthleteIds={selectedAthleteIds}
+        onAthleteSelectionChange={onAthleteSelectionChange}
+        selectedDates={selectedDates}
+        metric={metric}
+        selectedGroups={selectedGroups}
+      />
     </Card>
   );
 }
