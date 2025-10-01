@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getChartDataForType, hasValidDataForChartType } from '../utils/chartDataUtils';
+import { getChartDataForType, hasValidDataForChartType } from '../chartDataUtils';
 import type { ChartDataPoint, TrendData, MultiMetricData, ChartType } from '@shared/analytics-types';
 
 describe('getChartDataForType', () => {

@@ -28,7 +28,7 @@ import type {
   MultiMetricData,
   GroupDefinition
 } from '@shared/analytics-types';
-import { getChartDataForType, hasValidDataForChartType } from './utils/chartDataUtils';
+import { getChartDataForType, hasValidDataForChartType } from './chartDataUtils';
 
 // Register zoom plugin for fullscreen charts
 ChartJS.register(
@@ -134,28 +134,25 @@ export function FullscreenChartDialog({
     if (supportsZoom) {
       return {
         ...baseConfig,
-        customOptions: {
-          ...config.customOptions,
-          plugins: {
-            ...(config.customOptions?.plugins || {}),
+        plugins: {
+          ...config.plugins,
+          zoom: {
             zoom: {
-              zoom: {
-                wheel: {
-                  enabled: true,
-                },
-                pinch: {
-                  enabled: true,
-                },
-                mode: 'xy',
-              },
-              pan: {
+              wheel: {
                 enabled: true,
-                mode: 'xy',
               },
-              limits: {
-                x: { min: 'original', max: 'original' },
-                y: { min: 'original', max: 'original' },
+              pinch: {
+                enabled: true,
               },
+              mode: 'xy',
+            },
+            pan: {
+              enabled: true,
+              mode: 'xy',
+            },
+            limits: {
+              x: { min: 'original', max: 'original' },
+              y: { min: 'original', max: 'original' },
             },
           },
         },

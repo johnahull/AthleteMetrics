@@ -297,6 +297,7 @@ export function MultiLineChart({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      ...config.plugins,
       title: {
         display: true,
         text: config.title,

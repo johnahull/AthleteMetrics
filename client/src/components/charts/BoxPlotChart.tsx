@@ -1149,6 +1149,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       }
     },
     plugins: {
+      ...config.plugins,
       title: {
         display: true,
         text: config.title,

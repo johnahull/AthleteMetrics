@@ -264,6 +264,7 @@ export async function registerRoutes(app: Express) {
   let redisClient = null;
   try {
     // Try to dynamically import Redis packages if available
+    // @ts-expect-error - Redis is an optional dependency that may not be installed
     const redisModule = await import("redis").catch(() => null);
     
     if (redisModule) {
@@ -312,6 +313,7 @@ export async function registerRoutes(app: Express) {
   // Use Redis store if available, otherwise fall back to memory store
   if (redisClient) {
     try {
+      // @ts-expect-error - connect-redis is an optional dependency that may not be installed
       const redisStoreModule = await import("connect-redis").catch(() => null);
       if (redisStoreModule) {
         const { RedisStore } = redisStoreModule;
