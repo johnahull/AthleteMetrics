@@ -13,6 +13,13 @@ export interface AthleteTeam {
   organizationId: string;
 }
 
+interface AthleteTeamResponse {
+  id: string;
+  name: string;
+  organization?: { id: string };
+  organizationId?: string;
+}
+
 interface UseAthleteTeamsResult {
   teams: AthleteTeam[];
   teamIds: string[];
@@ -60,10 +67,10 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
 
         // Extract teams from the athlete data
         if (athleteData.teams && Array.isArray(athleteData.teams)) {
-          const athleteTeams: AthleteTeam[] = athleteData.teams.map((team: any) => ({
+          const athleteTeams: AthleteTeam[] = athleteData.teams.map((team: AthleteTeamResponse) => ({
             id: team.id,
             name: team.name,
-            organizationId: team.organization?.id || team.organizationId
+            organizationId: team.organization?.id || team.organizationId || ''
           }));
           setTeams(athleteTeams);
         } else {

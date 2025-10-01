@@ -108,8 +108,15 @@ export class AnalyticsService {
 
     // Add dimensional filters
     if (filters.teams?.length) {
-      // For team filtering, we need to check if the athlete (user) is a member of the team
-      // This is done via the user_teams table, not measurements.teamId
+      // Team Filtering Business Logic:
+      // Shows ALL measurements for athletes who are currently members of the selected teams,
+      // regardless of which team they were on when the measurement was taken.
+      //
+      // This design allows coaches to see historical performance data for athletes
+      // who have transferred to their team, providing complete athlete history.
+      //
+      // If you need to filter by team-at-time-of-measurement instead, use measurements.teamId
+      // directly and join with user_teams to verify the athlete was on that team at that date.
       allConditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${userTeams}
