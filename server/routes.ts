@@ -2032,7 +2032,8 @@ export async function registerRoutes(app: Express) {
       // Authorization: Athletes can only view their own teams
       if (currentUser.role === "athlete") {
         const athleteUserId = currentUser.athleteId || currentUser.id;
-        if (athleteUserId !== userId) {
+        if (!athleteUserId || athleteUserId !== userId) {
+          console.warn(`[Security] Athlete access attempt - User: ${currentUser.id}, Target: ${userId}, AthleteId: ${athleteUserId}`);
           return res.status(403).json({ message: "Athletes can only view their own teams" });
         }
       } else if (!userIsSiteAdmin) {

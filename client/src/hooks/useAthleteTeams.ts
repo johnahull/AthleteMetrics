@@ -33,6 +33,7 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
 
       if (!athleteUserId) {
         setError('User not authenticated');
+        setIsLoading(false);
         return;
       }
 

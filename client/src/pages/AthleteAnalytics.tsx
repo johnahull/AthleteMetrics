@@ -94,6 +94,18 @@ export function AthleteAnalytics() {
     );
   }
 
+  // Show loading state while teams are being fetched
+  if (teamsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center" role="status" aria-label="Loading teams">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
+          <p className="text-muted-foreground">Loading your teams...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Show error if teams failed to load
   if (teamsError) {
     return (
