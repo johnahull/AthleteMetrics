@@ -165,13 +165,27 @@ export function FullscreenChartDialog({
 
   // Handle reset zoom - DOM-based approach to find Chart.js instance
   const handleResetZoom = () => {
-    // Find Chart.js instance in the DOM
-    const chartCanvas = chartContainerRef.current?.querySelector('canvas');
-    if (chartCanvas) {
-      const chartInstance = ChartJS.getChart(chartCanvas);
-      if (chartInstance && typeof chartInstance.resetZoom === 'function') {
-        chartInstance.resetZoom();
+    try {
+      // Find Chart.js instance in the DOM
+      const chartCanvas = chartContainerRef.current?.querySelector('canvas');
+      if (!chartCanvas) {
+        console.warn('Reset zoom failed: canvas element not found');
+        return;
       }
+
+      const chartInstance = ChartJS.getChart(chartCanvas);
+      if (!chartInstance) {
+        console.warn('Reset zoom failed: Chart.js instance not found');
+        return;
+      }
+
+      if (typeof chartInstance.resetZoom === 'function') {
+        chartInstance.resetZoom();
+      } else {
+        console.warn('Reset zoom failed: resetZoom method not available');
+      }
+    } catch (error) {
+      console.error('Error resetting zoom:', error);
     }
   };
 
@@ -270,7 +284,7 @@ export function FullscreenChartDialog({
         }
         return (
           <RadarChart
-            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as any[])}
+            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as MultiMetricData[])}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
