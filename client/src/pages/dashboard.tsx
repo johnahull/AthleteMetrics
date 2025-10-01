@@ -125,10 +125,10 @@ export default function Dashboard() {
 
   // Redirect athletes away from organization dashboard (MUST be before any early returns)
   useEffect(() => {
-    if (!isSiteAdmin && userRole === "athlete" && user?.id) {
-      setLocation(`/athletes/${user.id}`);
+    if (!isSiteAdmin && userRole === "athlete" && user?.athleteId) {
+      setLocation(`/athletes/${user.athleteId}`);
     }
-  }, [isSiteAdmin, userRole, user?.id, setLocation]);
+  }, [isSiteAdmin, userRole, user?.athleteId, setLocation]);
 
   if (isLoading) {
     return (

@@ -245,11 +245,23 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       return handleNormalTypeChange(state, action.payload);
     }
 
-    case 'SET_FILTERS':
+    case 'SET_FILTERS': {
+      const newFilters = { ...state.filters, ...action.payload };
+
+      // If athleteIds is set and we're in individual mode, also set selectedAthleteId
+      const newSelectedAthleteId =
+        state.analysisType === 'individual' &&
+        action.payload.athleteIds &&
+        action.payload.athleteIds.length > 0
+          ? action.payload.athleteIds[0]
+          : state.selectedAthleteId;
+
       return {
         ...state,
-        filters: { ...state.filters, ...action.payload }
+        filters: newFilters,
+        selectedAthleteId: newSelectedAthleteId
       };
+    }
 
     case 'SET_METRICS':
       return {
@@ -381,13 +393,15 @@ interface AnalyticsProviderProps {
   organizationId?: string;
   userId?: string;
   initialAnalysisType?: AnalysisType;
+  initialFilters?: Partial<AnalyticsFilters>;
 }
 
 export function AnalyticsProvider({
   children,
   organizationId = '',
   userId,
-  initialAnalysisType = 'individual'
+  initialAnalysisType = 'individual',
+  initialFilters
 }: AnalyticsProviderProps) {
   const [state, dispatch] = useReducer(analyticsReducer, getDefaultState(organizationId, userId));
 
@@ -401,8 +415,12 @@ export function AnalyticsProvider({
       if (initialAnalysisType !== 'individual') {
         dispatch({ type: 'SET_ANALYSIS_TYPE', payload: initialAnalysisType });
       }
+      // Apply initial filters if provided
+      if (initialFilters) {
+        dispatch({ type: 'SET_FILTERS', payload: initialFilters });
+      }
     }
-  }, [organizationId, userId, initialAnalysisType]);
+  }, [organizationId, userId, initialAnalysisType, initialFilters]);
 
   // Computed properties
   const contextValue = useMemo(() => {
