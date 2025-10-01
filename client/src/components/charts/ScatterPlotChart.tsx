@@ -460,6 +460,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      ...config.plugins,
       title: {
         display: true,
         text: scatterData ? `${scatterData.xLabel} vs ${scatterData.yLabel}` : config.title,
