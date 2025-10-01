@@ -94,7 +94,7 @@ export default function UserProfile() {
 
               <div>
                 <Badge variant="outline">
-                  {userProfile.role === 'site_admin' ? 'Site Admin' : 
+                  {(userProfile.isSiteAdmin && userProfile.role === 'site_admin') ? 'Site Admin' :
                    userProfile.role === 'org_admin' ? 'Organization Admin' :
                    userProfile.role === 'coach' ? 'Coach' : 'Athlete'}
                 </Badge>
