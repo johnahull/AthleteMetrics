@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, Info } from 'lucide-react';
+import { Info, RotateCcw } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import {
   Chart as ChartJS,
@@ -55,6 +55,25 @@ const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ 
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
+// Constants
+const FULLSCREEN_ASPECT_RATIO = 1.8; // Optimized for widescreen displays
+const MIN_CHART_HEIGHT = 600; // Ensures charts remain readable
+
+// Chart types that support zoom/pan
+const ZOOM_SUPPORTED_CHARTS: ChartType[] = [
+  'box_plot',
+  'box_swarm_combo',
+  'distribution',
+  'bar_chart',
+  'line_chart',
+  'multi_line',
+  'scatter_plot',
+  'connected_scatter',
+  'swarm_plot',
+  'time_series_box_swarm',
+  'violin_plot'
+];
+
 interface FullscreenChartDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,7 +113,7 @@ export function FullscreenChartDialog({
   metric,
   selectedGroups
 }: FullscreenChartDialogProps) {
-  // Ref to access chart instance for zoom reset
+  // Ref to access chart container for zoom reset
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Determine which data to pass based on chart type
@@ -103,86 +122,80 @@ export function FullscreenChartDialog({
     [chartType, data, trends, multiMetric]
   );
 
-  // Reset zoom handler
-  const handleResetZoom = () => {
-    // Find Chart.js instance in the DOM
-    const chartCanvas = chartContainerRef.current?.querySelector('canvas');
-    if (chartCanvas) {
-      const chartInstance = ChartJS.getChart(chartCanvas);
-      if (chartInstance && typeof chartInstance.resetZoom === 'function') {
-        chartInstance.resetZoom();
-      }
-    }
-  };
+  // Check if zoom is supported for this chart type
+  const supportsZoom = ZOOM_SUPPORTED_CHARTS.includes(chartType);
 
-  // Enhanced config for fullscreen with zoom enabled
-  // Only add zoom config for chart types that support it
-  const supportsZoom = ['line_chart', 'multi_line', 'scatter_plot', 'connected_scatter', 'box_plot', 'box_swarm_combo', 'swarm_plot'].includes(chartType);
+  // Enhanced config for fullscreen with zoom enabled (only for supported charts)
+  const fullscreenConfig: ChartConfiguration = React.useMemo(() => {
+    const baseConfig: ChartConfiguration = {
+      ...config,
+      aspectRatio: FULLSCREEN_ASPECT_RATIO,
+    };
 
-  const fullscreenConfig: ChartConfiguration = {
-    ...config,
-    aspectRatio: 1.8, // Wider aspect ratio for fullscreen
-    plugins: {
-      ...config.plugins,
-      ...(supportsZoom && {
-        zoom: {
+    if (supportsZoom) {
+      return {
+        ...baseConfig,
+        plugins: {
+          ...config.plugins,
           zoom: {
-            wheel: {
-              enabled: true,
+            zoom: {
+              wheel: {
+                enabled: true,
+              },
+              pinch: {
+                enabled: true,
+              },
+              mode: 'xy',
             },
-            pinch: {
+            pan: {
               enabled: true,
+              mode: 'xy',
             },
-            mode: 'xy' as const,
-          },
-          pan: {
-            enabled: true,
-            mode: 'xy' as const,
-          },
-          limits: {
-            x: { min: 'original', max: 'original' },
-            y: { min: 'original', max: 'original' },
+            limits: {
+              x: { min: 'original', max: 'original' },
+              y: { min: 'original', max: 'original' },
+            },
           },
         },
-      }),
-    },
+      };
+    }
+
+    return baseConfig;
+  }, [config, supportsZoom]);
+
+  // Handle reset zoom - DOM-based approach to find Chart.js instance
+  const handleResetZoom = () => {
+    try {
+      // Find Chart.js instance in the DOM
+      const chartCanvas = chartContainerRef.current?.querySelector('canvas');
+      if (!chartCanvas) {
+        console.warn('Reset zoom failed: canvas element not found');
+        return;
+      }
+
+      const chartInstance = ChartJS.getChart(chartCanvas);
+      if (!chartInstance) {
+        console.warn('Reset zoom failed: Chart.js instance not found');
+        return;
+      }
+
+      if (typeof chartInstance.resetZoom === 'function') {
+        chartInstance.resetZoom();
+      } else {
+        console.warn('Reset zoom failed: resetZoom method not available');
+      }
+    } catch (error) {
+      console.error('Error resetting zoom:', error);
+    }
   };
 
   const renderChart = () => {
-    // Validate data exists for the chart type
-    const validateData = () => {
-      if (chartType === 'line_chart' || chartType === 'multi_line' ||
-          chartType === 'connected_scatter' || chartType === 'time_series_box_swarm') {
-        if (!trends || trends.length === 0) {
-          return 'No trend data available for this chart type.';
-        }
-      } else if (chartType === 'radar_chart') {
-        if ((!multiMetric || multiMetric.length === 0) && (!data || data.length === 0)) {
-          return 'No data available for radar chart.';
-        }
-      } else {
-        if (!data || data.length === 0) {
-          return 'No data available for this chart type.';
-        }
-      }
-      return null;
-    };
-
-    const validationError = validateData();
-    if (validationError) {
-      return (
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          <div className="text-center">
-            <div className="text-lg font-medium mb-2">No Data Available</div>
-            <div className="text-sm">{validationError}</div>
-          </div>
-        </div>
-      );
-    }
-
     switch (chartType) {
       case 'box_plot':
       case 'box_swarm_combo':
+        if (!data || data.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for box plot</div>;
+        }
         return (
           <BoxPlotChart
             data={chartData as ChartDataPoint[]}
@@ -194,7 +207,11 @@ export function FullscreenChartDialog({
             selectedGroups={selectedGroups}
           />
         );
+
       case 'distribution':
+        if (!data || data.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for distribution chart</div>;
+        }
         return (
           <DistributionChart
             data={chartData as ChartDataPoint[]}
@@ -203,7 +220,11 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
           />
         );
+
       case 'bar_chart':
+        if (!data || data.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for bar chart</div>;
+        }
         return (
           <BarChart
             data={chartData as ChartDataPoint[]}
@@ -212,7 +233,11 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
           />
         );
+
       case 'line_chart':
+        if (!trends || trends.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No trend data available for line chart</div>;
+        }
         return (
           <LineChart
             data={trends!}
@@ -223,7 +248,11 @@ export function FullscreenChartDialog({
             onAthleteSelectionChange={onAthleteSelectionChange}
           />
         );
+
       case 'multi_line':
+        if (!trends || trends.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No trend data available for multi-line chart</div>;
+        }
         return (
           <MultiLineChart
             data={trends!}
@@ -235,7 +264,11 @@ export function FullscreenChartDialog({
             maxAthletes={3}
           />
         );
+
       case 'scatter_plot':
+        if (!data || data.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for scatter plot</div>;
+        }
         return (
           <ScatterPlotChart
             data={chartData as ChartDataPoint[]}
@@ -244,10 +277,14 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
           />
         );
+
       case 'radar_chart':
+        if ((!multiMetric || multiMetric.length === 0) && (!data || data.length === 0)) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for radar chart</div>;
+        }
         return (
           <RadarChart
-            data={multiMetric && multiMetric.length > 0 ? multiMetric : data as any[]}
+            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as MultiMetricData[])}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -256,7 +293,11 @@ export function FullscreenChartDialog({
             maxAthletes={10}
           />
         );
+
       case 'swarm_plot':
+        if (!data || data.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for swarm plot</div>;
+        }
         return (
           <SwarmChart
             data={chartData as ChartDataPoint[]}
@@ -265,7 +306,11 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
           />
         );
+
       case 'connected_scatter':
+        if (!trends || trends.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No trend data available for connected scatter chart</div>;
+        }
         return (
           <ConnectedScatterChart
             data={trends!}
@@ -277,7 +322,11 @@ export function FullscreenChartDialog({
             maxAthletes={10}
           />
         );
+
       case 'time_series_box_swarm':
+        if (!trends || trends.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No trend data available for time-series chart</div>;
+        }
         return (
           <TimeSeriesBoxSwarmChart
             data={trends!}
@@ -287,7 +336,11 @@ export function FullscreenChartDialog({
             metric={metric || ''}
           />
         );
+
       case 'violin_plot':
+        if (!rawData && (!data || data.length === 0)) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for violin plot</div>;
+        }
         return (
           <ViolinChart
             data={rawData || chartData as ChartDataPoint[]}
@@ -297,6 +350,7 @@ export function FullscreenChartDialog({
             selectedGroups={selectedGroups}
           />
         );
+
       default:
         return (
           <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -310,59 +364,57 @@ export function FullscreenChartDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-[95vw] w-[95vw] h-[95vh] max-h-[95vh] p-0 gap-0 flex flex-col"
-        aria-labelledby="fullscreen-chart-title"
-        aria-describedby="fullscreen-chart-description"
+        aria-label={`Fullscreen view of ${title}`}
       >
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
-          <div className="flex-1">
-            <DialogTitle id="fullscreen-chart-title" className="text-xl font-semibold">
-              {title}
-            </DialogTitle>
-            {subtitle && (
-              <p id="fullscreen-chart-description" className="text-sm text-muted-foreground mt-1">
-                {subtitle}
-              </p>
-            )}
-            {supportsZoom && (
-              <div className="flex items-center gap-2 mt-2">
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
+              {subtitle && (
+                <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+              )}
+              {supportsZoom && (
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                   <Info className="h-3 w-3 inline" aria-hidden="true" />
-                  <span>Use mouse wheel to zoom, drag to pan. Press ESC to close.</span>
+                  Use mouse wheel to zoom, drag to pan.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetZoom}
-                  className="ml-auto"
-                  aria-label="Reset zoom level to default view"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" aria-hidden="true" />
-                  Reset Zoom
-                </Button>
-              </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Press <kbd className="px-1 py-0.5 text-xs font-semibold bg-muted rounded">ESC</kbd> to close fullscreen view.
+              </p>
+            </div>
+            {supportsZoom && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetZoom}
+                aria-label="Reset zoom to original view"
+                title="Reset zoom"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" aria-hidden="true" />
+                Reset Zoom
+              </Button>
             )}
           </div>
         </DialogHeader>
 
         {/* Chart Content */}
-        <div
-          className="flex-1 p-6 overflow-auto"
-          ref={chartContainerRef}
-          role="region"
-          aria-label="Fullscreen chart visualization"
-        >
-          <div className="w-full h-full min-h-[600px]">
+        <div className="flex-1 p-6 overflow-auto">
+          <div
+            ref={chartContainerRef}
+            className="w-full h-full"
+            style={{ minHeight: `${MIN_CHART_HEIGHT}px` }}
+            role="img"
+            aria-label={`${title} chart visualization`}
+          >
             <ErrorBoundary>
               <React.Suspense
                 fallback={
-                  <div
-                    className="flex items-center justify-center h-full"
-                    role="status"
-                    aria-live="polite"
-                    aria-label="Loading chart"
-                  >
-                    <div className="text-muted-foreground">Loading chart...</div>
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-muted-foreground" role="status" aria-live="polite">
+                      Loading chart...
+                    </div>
                   </div>
                 }
               >

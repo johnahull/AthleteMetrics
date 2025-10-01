@@ -103,9 +103,12 @@ export function ChartContainer({
   // Handle fullscreen toggle
   const handleFullscreen = () => {
     if (onFullscreen) {
+      // If custom handler is provided, use it
       onFullscreen();
+    } else {
+      // Otherwise, use built-in fullscreen dialog
+      setIsFullscreenOpen(true);
     }
-    setIsFullscreenOpen(true);
   };
 
   // Memoize chart component selection for generic cases only
