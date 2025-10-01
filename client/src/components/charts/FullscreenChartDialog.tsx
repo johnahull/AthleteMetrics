@@ -92,11 +92,37 @@ export function FullscreenChartDialog({
   metric,
   selectedGroups
 }: FullscreenChartDialogProps) {
+  const chartContainerRef = React.useRef<HTMLDivElement>(null);
+
   // Determine which data to pass based on chart type
   const chartData = React.useMemo(
     () => getChartDataForType(chartType, data, trends, multiMetric),
     [chartType, data, trends, multiMetric]
   );
+
+  // Add double-click reset handler for zoom
+  React.useEffect(() => {
+    if (!open || !chartContainerRef.current) return;
+
+    const handleDoubleClick = (e: MouseEvent) => {
+      // Find the chart canvas
+      const canvas = chartContainerRef.current?.querySelector('canvas');
+      if (!canvas) return;
+
+      // Get Chart.js instance from the canvas
+      const chart = (ChartJS as any).getChart(canvas);
+      if (chart && typeof chart.resetZoom === 'function') {
+        chart.resetZoom();
+      }
+    };
+
+    const container = chartContainerRef.current;
+    container.addEventListener('dblclick', handleDoubleClick);
+
+    return () => {
+      container.removeEventListener('dblclick', handleDoubleClick);
+    };
+  }, [open]);
 
   // Enhanced config for fullscreen with zoom enabled
   // Only add zoom config for chart types that support it
@@ -117,6 +143,9 @@ export function FullscreenChartDialog({
               enabled: true,
             },
             mode: 'xy' as const,
+            onZoomComplete: ({ chart }: any) => {
+              chart.update('none');
+            },
           },
           pan: {
             enabled: true,
@@ -278,7 +307,7 @@ export function FullscreenChartDialog({
 
         {/* Chart Content */}
         <div className="flex-1 p-6 overflow-auto">
-          <div className="w-full h-full min-h-[600px]">
+          <div ref={chartContainerRef} className="w-full h-full min-h-[600px]">
             <ErrorBoundary>
               <React.Suspense
                 fallback={
