@@ -1126,7 +1126,7 @@ export default function UserManagement() {
                     {(!org.users || org.users.length === 0) && (!org.invitations || org.invitations.length === 0) && (
                       <p className="text-gray-500 text-sm py-4">No users or pending invitations in this organization</p>
                     )}
-                      </div>
+                    </div>
                     )}
                   </div>
                 );
