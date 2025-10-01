@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { RotateCcw, Info } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import {
   Chart as ChartJS,
@@ -92,11 +94,26 @@ export function FullscreenChartDialog({
   metric,
   selectedGroups
 }: FullscreenChartDialogProps) {
+  // Ref to access chart instance for zoom reset
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
   // Determine which data to pass based on chart type
   const chartData = React.useMemo(
     () => getChartDataForType(chartType, data, trends, multiMetric),
     [chartType, data, trends, multiMetric]
   );
+
+  // Reset zoom handler
+  const handleResetZoom = () => {
+    // Find Chart.js instance in the DOM
+    const chartCanvas = chartContainerRef.current?.querySelector('canvas');
+    if (chartCanvas) {
+      const chartInstance = ChartJS.getChart(chartCanvas);
+      if (chartInstance && typeof chartInstance.resetZoom === 'function') {
+        chartInstance.resetZoom();
+      }
+    }
+  };
 
   // Enhanced config for fullscreen with zoom enabled
   // Only add zoom config for chart types that support it
@@ -132,6 +149,37 @@ export function FullscreenChartDialog({
   };
 
   const renderChart = () => {
+    // Validate data exists for the chart type
+    const validateData = () => {
+      if (chartType === 'line_chart' || chartType === 'multi_line' ||
+          chartType === 'connected_scatter' || chartType === 'time_series_box_swarm') {
+        if (!trends || trends.length === 0) {
+          return 'No trend data available for this chart type.';
+        }
+      } else if (chartType === 'radar_chart') {
+        if ((!multiMetric || multiMetric.length === 0) && (!data || data.length === 0)) {
+          return 'No data available for radar chart.';
+        }
+      } else {
+        if (!data || data.length === 0) {
+          return 'No data available for this chart type.';
+        }
+      }
+      return null;
+    };
+
+    const validationError = validateData();
+    if (validationError) {
+      return (
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="text-center">
+            <div className="text-lg font-medium mb-2">No Data Available</div>
+            <div className="text-sm">{validationError}</div>
+          </div>
+        </div>
+      );
+    }
+
     switch (chartType) {
       case 'box_plot':
       case 'box_swarm_combo':
@@ -167,7 +215,7 @@ export function FullscreenChartDialog({
       case 'line_chart':
         return (
           <LineChart
-            data={trends || []}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -178,7 +226,7 @@ export function FullscreenChartDialog({
       case 'multi_line':
         return (
           <MultiLineChart
-            data={trends || []}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -199,7 +247,7 @@ export function FullscreenChartDialog({
       case 'radar_chart':
         return (
           <RadarChart
-            data={multiMetric || []}
+            data={multiMetric && multiMetric.length > 0 ? multiMetric : data as any[]}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -220,7 +268,7 @@ export function FullscreenChartDialog({
       case 'connected_scatter':
         return (
           <ConnectedScatterChart
-            data={trends || []}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
@@ -232,7 +280,7 @@ export function FullscreenChartDialog({
       case 'time_series_box_swarm':
         return (
           <TimeSeriesBoxSwarmChart
-            data={trends || []}
+            data={trends!}
             config={fullscreenConfig}
             statistics={statistics}
             selectedDates={selectedDates || []}
@@ -260,29 +308,60 @@ export function FullscreenChartDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] max-h-[95vh] p-0 gap-0 flex flex-col">
+      <DialogContent
+        className="max-w-[95vw] w-[95vw] h-[95vh] max-h-[95vh] p-0 gap-0 flex flex-col"
+        aria-labelledby="fullscreen-chart-title"
+        aria-describedby="fullscreen-chart-description"
+      >
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
           <div className="flex-1">
-            <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
+            <DialogTitle id="fullscreen-chart-title" className="text-xl font-semibold">
+              {title}
+            </DialogTitle>
             {subtitle && (
-              <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+              <p id="fullscreen-chart-description" className="text-sm text-muted-foreground mt-1">
+                {subtitle}
+              </p>
             )}
             {supportsZoom && (
-              <p className="text-xs text-muted-foreground mt-2">
-                💡 Use mouse wheel to zoom, drag to pan.
-              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3 inline" aria-hidden="true" />
+                  <span>Use mouse wheel to zoom, drag to pan. Press ESC to close.</span>
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetZoom}
+                  className="ml-auto"
+                  aria-label="Reset zoom level to default view"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Reset Zoom
+                </Button>
+              </div>
             )}
           </div>
         </DialogHeader>
 
         {/* Chart Content */}
-        <div className="flex-1 p-6 overflow-auto">
+        <div
+          className="flex-1 p-6 overflow-auto"
+          ref={chartContainerRef}
+          role="region"
+          aria-label="Fullscreen chart visualization"
+        >
           <div className="w-full h-full min-h-[600px]">
             <ErrorBoundary>
               <React.Suspense
                 fallback={
-                  <div className="flex items-center justify-center h-full">
+                  <div
+                    className="flex items-center justify-center h-full"
+                    role="status"
+                    aria-live="polite"
+                    aria-label="Loading chart"
+                  >
                     <div className="text-muted-foreground">Loading chart...</div>
                   </div>
                 }
