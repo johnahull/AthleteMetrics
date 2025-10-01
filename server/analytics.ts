@@ -113,7 +113,7 @@ export class AnalyticsService {
       allConditions.push(
         sql`EXISTS (
           SELECT 1 FROM ${userTeams}
-          WHERE ${userTeams.userId} = ${measurements.userId}
+          WHERE ${userTeams.userId} = ${users.id}
             AND ${inArray(userTeams.teamId, filters.teams)}
             AND ${eq(userTeams.isActive, 'true')}
         )`

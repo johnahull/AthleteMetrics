@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
+import { getAthleteUserId } from '@/lib/athlete-utils';
 
 export interface AthleteTeam {
   id: string;
@@ -27,14 +28,13 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
 
   useEffect(() => {
     const fetchAthleteTeams = async () => {
-      // Validate user session before making API call
-      if (!user?.id) {
+      // Get athlete user ID using utility function
+      const athleteUserId = getAthleteUserId(user);
+
+      if (!athleteUserId) {
         setError('User not authenticated');
         return;
       }
-
-      // Use athleteId or fall back to user.id
-      const athleteUserId = user.athleteId || user.id;
 
       setIsLoading(true);
       setError(null);

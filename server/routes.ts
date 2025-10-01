@@ -2017,7 +2017,7 @@ export async function registerRoutes(app: Express) {
   });
 
   // Get athlete's active teams at a specific date (for measurement form)
-  app.get("/api/athletes/:id/active-teams", requireAuth, async (req, res) => {
+  app.get("/api/athletes/:id/active-teams", createLimiter, requireAuth, async (req, res) => {
     try {
       const { id: userId } = req.params;
       const { date } = req.query;
