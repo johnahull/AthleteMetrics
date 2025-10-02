@@ -1,6 +1,13 @@
 import { storage } from "./storage";
 import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
+import {
+  AuthenticationError,
+  AuthorizationError,
+  NotFoundError,
+  ValidationError,
+  ConflictError
+} from "./utils/errors";
 
 // Extended request type with user info
 interface AuthenticatedRequest extends Request {
@@ -21,6 +28,37 @@ const canAccessOrganization = async (user: any, organizationId: string): Promise
 
   const userOrgs = await storage.getUserOrganizations(user.id);
   return userOrgs.some(org => org.organizationId === organizationId);
+};
+
+/**
+ * Async handler wrapper that catches errors and maps them to appropriate HTTP responses
+ * Eliminates need for try/catch in route handlers
+ */
+export const asyncHandler = (fn: Function) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch((error: Error) => {
+      // Map custom error classes to HTTP status codes
+      if (error instanceof AuthenticationError) {
+        return res.status(401).json({ message: error.message });
+      }
+      if (error instanceof AuthorizationError) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error instanceof ValidationError) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof ConflictError) {
+        return res.status(409).json({ message: error.message });
+      }
+
+      // Generic error fallback
+      const message = error.message || "Internal server error";
+      return res.status(500).json({ message });
+    });
+  };
 };
 
 // Base authentication middleware
