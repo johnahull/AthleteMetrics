@@ -5,6 +5,7 @@
 import { BaseService } from "./base-service";
 import { insertOrganizationSchema } from "@shared/schema";
 import type { Organization, InsertOrganization, User, UserOrganization } from "@shared/schema";
+import { AuthorizationError, NotFoundError, ValidationError } from "../utils/errors";
 
 export interface OrganizationFilters {
   search?: string;
@@ -26,16 +27,32 @@ export class OrganizationService extends BaseService {
     try {
       // Verify permissions
       if (!(await this.isSiteAdmin(requestingUserId))) {
-        throw new Error("Unauthorized: Only site administrators can create organizations");
+        throw new AuthorizationError("Only site administrators can create organizations");
       }
 
       // Validate input
       const validatedData = insertOrganizationSchema.parse(orgData);
-      
-      return await this.storage.createOrganization(validatedData);
+
+      this.logger.info('Creating organization', {
+        userId: requestingUserId,
+        organizationName: validatedData.name,
+      });
+
+      const organization = await this.executeQuery(
+        'createOrganization',
+        () => this.storage.createOrganization(validatedData),
+        { userId: requestingUserId, organizationName: validatedData.name }
+      );
+
+      this.logger.audit('Organization created', {
+        userId: requestingUserId,
+        organizationId: organization.id,
+        organizationName: organization.name,
+      });
+
+      return organization;
     } catch (error) {
-      console.error("OrganizationService.createOrganization:", error);
-      throw error;
+      this.handleError(error, 'createOrganization');
     }
   }
 
@@ -46,13 +63,20 @@ export class OrganizationService extends BaseService {
     try {
       // Verify permissions
       if (!(await this.isSiteAdmin(requestingUserId))) {
-        throw new Error("Unauthorized: Only site administrators can view all organizations");
+        throw new AuthorizationError("Only site administrators can view all organizations");
       }
 
-      return await this.storage.getOrganizations();
+      this.logger.info('Getting all organizations', {
+        userId: requestingUserId,
+      });
+
+      return await this.executeQuery(
+        'getAllOrganizations',
+        () => this.storage.getOrganizations(),
+        { userId: requestingUserId }
+      );
     } catch (error) {
-      console.error("OrganizationService.getAllOrganizations:", error);
-      return [];
+      this.handleError(error, 'getAllOrganizations');
     }
   }
 
@@ -64,8 +88,15 @@ export class OrganizationService extends BaseService {
     requestingUserId: string
   ): Promise<Organization | null> {
     try {
-      const organization = await this.storage.getOrganization(organizationId);
-      if (!organization) return null;
+      this.logger.info('Getting organization by ID', {
+        userId: requestingUserId,
+        organizationId,
+      });
+
+      const organization = await this.getOneOrFail(
+        () => this.storage.getOrganization(organizationId),
+        'Organization'
+      );
 
       // Site admins can access any organization
       const requestingUser = await this.storage.getUser(requestingUserId);
@@ -75,10 +106,17 @@ export class OrganizationService extends BaseService {
 
       // Check if user has access to this organization
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
-      return hasAccess ? organization : null;
+      if (!hasAccess) {
+        this.logger.security('Unauthorized organization access attempt', {
+          userId: requestingUserId,
+          organizationId,
+        });
+        throw new AuthorizationError('Access denied to this organization');
+      }
+
+      return organization;
     } catch (error) {
-      console.error("OrganizationService.getOrganizationById:", error);
-      return null;
+      this.handleError(error, 'getOrganizationById');
     }
   }
 
@@ -90,22 +128,35 @@ export class OrganizationService extends BaseService {
    */
   async getUserOrganizations(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
     try {
+      this.logger.info('Getting user organizations', {
+        userId,
+        cachedIsSiteAdmin,
+      });
+
       // Use cached value if provided, otherwise query database
       // This prevents N+1 queries when called multiple times with session data
       const userIsSiteAdmin = cachedIsSiteAdmin ?? await this.isSiteAdmin(userId);
 
       // Site admins can access all organizations
       if (userIsSiteAdmin) {
-        return await this.storage.getOrganizations();
+        return await this.executeQuery(
+          'getUserOrganizations',
+          () => this.storage.getOrganizations(),
+          { userId, isSiteAdmin: true }
+        );
       }
 
       // Regular users get only their assigned organizations
       // Extract the organization object from the nested structure
-      const userOrgs = await this.storage.getUserOrganizations(userId);
+      const userOrgs = await this.executeQuery(
+        'getUserOrganizations',
+        () => this.storage.getUserOrganizations(userId),
+        { userId }
+      );
+
       return userOrgs.map((userOrg: UserOrganizationWithOrg) => userOrg.organization);
     } catch (error) {
-      console.error("OrganizationService.getUserOrganizations:", error);
-      return [];
+      this.handleError(error, 'getUserOrganizations');
     }
   }
 
@@ -113,24 +164,38 @@ export class OrganizationService extends BaseService {
    * Get organization profile with users
    */
   async getOrganizationProfile(
-    organizationId: string, 
+    organizationId: string,
     requestingUserId: string
   ): Promise<any> {
     try {
+      this.logger.info('Getting organization profile', {
+        userId: requestingUserId,
+        organizationId,
+      });
+
       // Validate access
-      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
-      if (!hasAccess) {
-        throw new Error("Unauthorized: Access denied to this organization");
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        await this.requireOrganizationAccess(requestingUserId, organizationId);
       }
 
-      const organization = await this.storage.getOrganization(organizationId);
-      if (!organization) {
-        throw new Error("Organization not found");
-      }
+      const organization = await this.getOneOrFail(
+        () => this.storage.getOrganization(organizationId),
+        'Organization'
+      );
 
       // Get organization users and invitations
-      const users = await this.storage.getOrganizationUsers(organizationId);
-      const invitations = await this.storage.getOrganizationInvitations(organizationId);
+      const [users, invitations] = await Promise.all([
+        this.executeQuery(
+          'getOrganizationUsers',
+          () => this.storage.getOrganizationUsers(organizationId),
+          { userId: requestingUserId, organizationId }
+        ),
+        this.executeQuery(
+          'getOrganizationInvitations',
+          () => this.storage.getOrganizationInvitations(organizationId),
+          { userId: requestingUserId, organizationId }
+        ),
+      ]);
 
       return {
         organization,
@@ -138,8 +203,7 @@ export class OrganizationService extends BaseService {
         invitations
       };
     } catch (error) {
-      console.error("OrganizationService.getOrganizationProfile:", error);
-      throw error;
+      this.handleError(error, 'getOrganizationProfile');
     }
   }
 
@@ -152,10 +216,15 @@ export class OrganizationService extends BaseService {
     requestingUserId: string
   ): Promise<void> {
     try {
+      this.logger.info('Removing user from organization', {
+        userId: requestingUserId,
+        organizationId,
+        targetUserId: userId,
+      });
+
       // Validate access
-      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
-      if (!hasAccess) {
-        throw new Error("Unauthorized: Access denied to this organization");
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        await this.requireOrganizationAccess(requestingUserId, organizationId);
       }
 
       // Prevent removing self if it's the last admin
@@ -163,14 +232,23 @@ export class OrganizationService extends BaseService {
         const orgUsers = await this.storage.getOrganizationUsers(organizationId);
         const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
         if (adminCount <= 1) {
-          throw new Error("Cannot remove the last organization administrator");
+          throw new ValidationError("Cannot remove the last organization administrator");
         }
       }
 
-      await this.storage.removeUserFromOrganization(organizationId, userId);
+      await this.executeQuery(
+        'removeUserFromOrganization',
+        () => this.storage.removeUserFromOrganization(organizationId, userId),
+        { userId: requestingUserId, organizationId, targetUserId: userId }
+      );
+
+      this.logger.audit('User removed from organization', {
+        userId: requestingUserId,
+        organizationId,
+        targetUserId: userId,
+      });
     } catch (error) {
-      console.error("OrganizationService.removeUserFromOrganization:", error);
-      throw error;
+      this.handleError(error, 'removeUserFromOrganization');
     }
   }
 
@@ -183,20 +261,40 @@ export class OrganizationService extends BaseService {
     requestingUserId: string
   ): Promise<User> {
     try {
+      this.logger.info('Adding user to organization', {
+        userId: requestingUserId,
+        organizationId,
+        role: userData.role || 'athlete',
+      });
+
       // Validate access
-      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
-      if (!hasAccess) {
-        throw new Error("Unauthorized: Access denied to this organization");
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        await this.requireOrganizationAccess(requestingUserId, organizationId);
       }
 
       // Create user and add to organization
-      const user = await this.storage.createUser(userData);
-      await this.storage.addUserToOrganization(user.id, organizationId, userData.role || 'athlete');
+      const user = await this.executeQuery(
+        'createUser',
+        () => this.storage.createUser(userData),
+        { userId: requestingUserId, organizationId }
+      );
+
+      await this.executeQuery(
+        'addUserToOrganization',
+        () => this.storage.addUserToOrganization(user.id, organizationId, userData.role || 'athlete'),
+        { userId: requestingUserId, organizationId, targetUserId: user.id }
+      );
+
+      this.logger.audit('User added to organization', {
+        userId: requestingUserId,
+        organizationId,
+        targetUserId: user.id,
+        role: userData.role || 'athlete',
+      });
 
       return user;
     } catch (error) {
-      console.error("OrganizationService.addUserToOrganization:", error);
-      throw error;
+      this.handleError(error, 'addUserToOrganization');
     }
   }
 
@@ -208,27 +306,42 @@ export class OrganizationService extends BaseService {
     requestingUserId: string
   ): Promise<Map<string, any>> {
     try {
+      this.logger.info('Getting organization profiles in batch', {
+        userId: requestingUserId,
+        organizationCount: organizationIds.length,
+      });
+
       const profilesMap = new Map<string, any>();
 
-      // Fetch all organizations in parallel
-      const orgsPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganization(id))
-      );
-
-      // Fetch all users for all organizations in parallel
-      const usersPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganizationUsers(id))
-      );
-
-      // Fetch all invitations for all organizations in parallel
-      const invitationsPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganizationInvitations(id))
-      );
-
+      // Fetch all organizations, users, and invitations in parallel
       const [orgs, usersArrays, invitationsArrays] = await Promise.all([
-        orgsPromise,
-        usersPromise,
-        invitationsPromise
+        Promise.all(
+          organizationIds.map(id =>
+            this.executeQuery(
+              'getOrganization',
+              () => this.storage.getOrganization(id),
+              { userId: requestingUserId, organizationId: id }
+            )
+          )
+        ),
+        Promise.all(
+          organizationIds.map(id =>
+            this.executeQuery(
+              'getOrganizationUsers',
+              () => this.storage.getOrganizationUsers(id),
+              { userId: requestingUserId, organizationId: id }
+            )
+          )
+        ),
+        Promise.all(
+          organizationIds.map(id =>
+            this.executeQuery(
+              'getOrganizationInvitations',
+              () => this.storage.getOrganizationInvitations(id),
+              { userId: requestingUserId, organizationId: id }
+            )
+          )
+        ),
       ]);
 
       // Build the profiles map
@@ -242,8 +355,7 @@ export class OrganizationService extends BaseService {
 
       return profilesMap;
     } catch (error) {
-      console.error("OrganizationService.getOrganizationProfilesBatch:", error);
-      throw error;
+      this.handleError(error, 'getOrganizationProfilesBatch');
     }
   }
 }
