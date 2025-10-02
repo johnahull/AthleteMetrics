@@ -25,7 +25,10 @@ export const teams = pgTable("teams", {
   season: text("season"), // "2024-Fall", "2025-Spring"
   isArchived: boolean("is_archived").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Index for organization team queries
+  orgTeamsIdx: sql`CREATE INDEX IF NOT EXISTS teams_organization_idx ON ${table} (${table.organizationId}, ${table.isArchived})`,
+}));
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -82,7 +85,12 @@ export const userTeams = pgTable("user_teams", {
   season: text("season"), // "2024-Fall", "2025-Spring"
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Index for user team membership queries
+  userTeamsIdx: sql`CREATE INDEX IF NOT EXISTS user_teams_user_idx ON ${table} (${table.userId}, ${table.isActive})`,
+  // Index for team roster queries
+  teamUsersIdx: sql`CREATE INDEX IF NOT EXISTS user_teams_team_idx ON ${table} (${table.teamId}, ${table.isActive})`,
+}));
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -102,7 +110,14 @@ export const measurements = pgTable("measurements", {
   season: text("season"), // Season designation (e.g., "2024-Fall")
   teamContextAuto: boolean("team_context_auto").default(true), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Index for analytics queries by athlete and date
+  userDateIdx: sql`CREATE INDEX IF NOT EXISTS measurements_user_date_idx ON ${table} (${table.userId}, ${table.date} DESC)`,
+  // Index for metric-specific queries
+  userMetricIdx: sql`CREATE INDEX IF NOT EXISTS measurements_user_metric_idx ON ${table} (${table.userId}, ${table.metric})`,
+  // Index for team-based queries
+  teamDateIdx: sql`CREATE INDEX IF NOT EXISTS measurements_team_date_idx ON ${table} (${table.teamId}, ${table.date} DESC)`,
+}));
 
 export const userOrganizations = pgTable("user_organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -112,7 +127,11 @@ export const userOrganizations = pgTable("user_organizations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Enforce exactly one role per user per organization
-  uniqueUserOrgRole: sql`UNIQUE(${table.userId}, ${table.organizationId})`
+  uniqueUserOrgRole: sql`UNIQUE(${table.userId}, ${table.organizationId})`,
+  // Index for user permission lookups
+  userOrgIdx: sql`CREATE INDEX IF NOT EXISTS user_organizations_user_idx ON ${table} (${table.userId})`,
+  // Index for organization member queries
+  orgUserIdx: sql`CREATE INDEX IF NOT EXISTS user_organizations_org_idx ON ${table} (${table.organizationId})`,
 }));
 
 export const invitations = pgTable("invitations", {
@@ -129,7 +148,12 @@ export const invitations = pgTable("invitations", {
   isUsed: boolean("is_used").default(false).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Index for email lookup (checking existing invitations)
+  emailIdx: sql`CREATE INDEX IF NOT EXISTS invitations_email_idx ON ${table} (${table.email}, ${table.isUsed})`,
+  // Index for organization invitation queries
+  orgInvitationsIdx: sql`CREATE INDEX IF NOT EXISTS invitations_org_idx ON ${table} (${table.organizationId}, ${table.isUsed})`,
+}));
 
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
