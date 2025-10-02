@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { createServer } from "http";
 import { env, isDevelopment } from "./config/env"; // Validate environment variables first
-import { registerRoutes } from "./routes";
+import { setupSessions } from "./setup-sessions";
+import { registerAllRoutes } from "./routes/index";
 import { setupVite, serveStatic } from "./vite";
 import { logger } from "./utils/logger";
 import { errorMiddleware } from "./utils/errors";
@@ -22,8 +24,14 @@ app.use(sanitizeRequest);
 app.use(requestContext);
 
 (async () => {
+  // Create HTTP server
+  const server = createServer(app);
+
+  // Setup sessions (MUST BE BEFORE ROUTES)
+  await setupSessions(app);
+
   // Register application routes
-  const server = await registerRoutes(app);
+  registerAllRoutes(app);
 
   // Global error handling middleware (must be last)
   app.use(errorMiddleware);
