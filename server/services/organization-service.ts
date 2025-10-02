@@ -121,12 +121,14 @@ export class OrganizationService extends BaseService {
         throw new Error("Organization not found");
       }
 
-      // Get organization users
+      // Get organization users and invitations
       const users = await this.storage.getOrganizationUsers(organizationId);
+      const invitations = await this.storage.getOrganizationInvitations(organizationId);
 
       return {
         organization,
-        users
+        users,
+        invitations
       };
     } catch (error) {
       console.error("OrganizationService.getOrganizationProfile:", error);

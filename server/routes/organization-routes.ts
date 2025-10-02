@@ -173,13 +173,15 @@ export function registerOrganizationRoutes(app: Express) {
               const profile = await organizationService.getOrganizationProfile(org.id, currentUser.id);
               return {
                 ...org,
-                users: profile.users
+                users: profile.users,
+                invitations: profile.invitations || []
               };
             } catch (error) {
               console.error(`Error fetching profile for org ${org.id}:`, error);
               return {
                 ...org,
-                users: []
+                users: [],
+                invitations: []
               };
             }
           })
@@ -197,14 +199,16 @@ export function registerOrganizationRoutes(app: Express) {
               );
               return {
                 ...profile.organization,
-                users: profile.users
+                users: profile.users,
+                invitations: profile.invitations || []
               };
             } catch (error) {
               console.error(`Error fetching profile for org ${userOrg.organizationId}:`, error);
               return {
                 id: userOrg.organizationId,
                 name: userOrg.organizationName || 'Unknown Organization',
-                users: []
+                users: [],
+                invitations: []
               };
             }
           })
