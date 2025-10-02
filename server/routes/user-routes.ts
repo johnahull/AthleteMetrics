@@ -306,19 +306,6 @@ export function registerUserRoutes(app: Express) {
   });
 
   /**
-   * Get site administrators
-   */
-  app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
-    try {
-      const admins = await userService.getUsers({ role: 'site_admin' });
-      res.json(admins);
-    } catch (error) {
-      console.error("Get site admins error:", error);
-      res.status(500).json({ message: "Failed to fetch site administrators" });
-    }
-  });
-
-  /**
    * Check username availability
    */
   app.get("/api/users/check-username", async (req, res) => {
