@@ -389,8 +389,10 @@ export function ViolinChart({
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
+    // Ensure positive value before modulo to avoid bias
+    const positiveHash = Math.abs(hash);
     // Convert to range [-range/2, range/2]
-    return ((hash % 1000) / 1000 - 0.5) * range;
+    return ((positiveHash % 1000) / 1000 - 0.5) * range;
   }
 
   // Custom drawing logic for violin chart
