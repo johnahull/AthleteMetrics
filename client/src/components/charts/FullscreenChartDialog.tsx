@@ -279,12 +279,12 @@ export function FullscreenChartDialog({
         );
 
       case 'radar_chart':
-        if ((!multiMetric || multiMetric.length === 0) && (!data || data.length === 0)) {
-          return <div className="flex items-center justify-center h-full text-muted-foreground">No data available for radar chart</div>;
+        if (!multiMetric || multiMetric.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No multi-metric data available for radar chart</div>;
         }
         return (
           <RadarChart
-            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as unknown as MultiMetricData[])}
+            data={multiMetric}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
