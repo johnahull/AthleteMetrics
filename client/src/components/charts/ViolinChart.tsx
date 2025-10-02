@@ -46,13 +46,25 @@ export function ViolinChart({
 
   // Process data by groups - use rawData for individual athletes like BoxPlotChart
   const processedData = useMemo(() => {
+    devLog.log('ViolinChart: Starting data processing', {
+      hasData: !!data,
+      dataLength: data?.length || 0,
+      hasRawData: !!rawData,
+      rawDataLength: rawData?.length || 0,
+      hasSelectedGroups: !!selectedGroups,
+      selectedGroupsCount: selectedGroups?.length || 0
+    });
+
     // Check if this is multi-group analysis with pre-aggregated data
     const isPreAggregated = data && data.length > 0 && data[0].athleteId?.startsWith?.('group-');
 
     // Use rawData for individual athlete points if available, otherwise fall back to data
     const sourceData = rawData && rawData.length > 0 ? rawData : data;
 
-    if (!sourceData || sourceData.length === 0) return [];
+    if (!sourceData || sourceData.length === 0) {
+      devLog.warn('ViolinChart: No source data available');
+      return [];
+    }
 
     devLog.log('ViolinChart data processing', {
       isPreAggregated,
