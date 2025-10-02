@@ -6,7 +6,7 @@
 import React from 'react';
 import { BaseAnalyticsView } from '@/components/analytics/BaseAnalyticsView';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download, Users, BarChart3, Trophy } from 'lucide-react';
+import { Users, BarChart3, Trophy } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
 import { devLog } from '@/utils/dev-logger';
@@ -24,7 +24,8 @@ export function CoachAnalytics() {
     });
   }, [user]);
 
-  // Header actions for coach-specific view
+  // Header actions for coach-specific navigation
+  // Note: Refresh and Export buttons are provided by AnalyticsToolbar
   const headerActions = (
     <div className="flex items-center gap-2">
       <Button
@@ -49,22 +50,6 @@ export function CoachAnalytics() {
       >
         <BarChart3 className="h-4 w-4 mr-2" />
         Reports
-      </Button>
-
-      <Button
-        variant="outline"
-        size="sm"
-      >
-        <RefreshCw className="h-4 w-4 mr-2" />
-        Refresh
-      </Button>
-
-      <Button
-        variant="outline"
-        size="sm"
-      >
-        <Download className="h-4 w-4 mr-2" />
-        Export
       </Button>
     </div>
   );
