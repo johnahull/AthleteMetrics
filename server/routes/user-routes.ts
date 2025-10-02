@@ -13,6 +13,16 @@ import { storage } from "../storage";
 
 const userService = new UserService();
 
+// Type for user objects returned by getUsersByOrganization
+interface OrganizationUser {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  emails: string[] | null;
+  role: string;
+}
+
 // Rate limiting for user creation
 const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -111,7 +121,7 @@ export function registerUserRoutes(app: Express) {
 
       // Filter by role if specified (e.g., role=athlete for players only)
       if (role) {
-        orgUsers = orgUsers.filter((user: any) => user.role === role);
+        orgUsers = orgUsers.filter((user: OrganizationUser) => user.role === role);
       }
 
       // Filter by search term if specified with sanitization
@@ -125,10 +135,9 @@ export function registerUserRoutes(app: Express) {
 
         if (sanitizedSearch) {
           const searchLower = sanitizedSearch.toLowerCase();
-          orgUsers = orgUsers.filter((user: any) =>
+          orgUsers = orgUsers.filter((user: OrganizationUser) =>
             user.firstName?.toLowerCase().includes(searchLower) ||
-            user.lastName?.toLowerCase().includes(searchLower) ||
-            user.fullName?.toLowerCase().includes(searchLower)
+            user.lastName?.toLowerCase().includes(searchLower)
           );
         }
       }

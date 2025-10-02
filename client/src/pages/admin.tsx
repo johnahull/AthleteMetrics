@@ -508,18 +508,24 @@ export default function AdminPage() {
                                 </p>
                               </div>
                               <div className="ml-4">
-                                <select
-                                  value={userOrg.role}
-                                  onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
-                                  disabled={userOrg.user.id === currentUser?.id}
-                                  className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  data-testid={`user-role-select-${userOrg.user.id}`}
-                                  title={userOrg.user.id === currentUser?.id ? "Cannot change your own role" : ""}
-                                >
-                                  <option value="athlete">Athlete</option>
-                                  <option value="coach">Coach</option>
-                                  <option value="org_admin">Org Admin</option>
-                                </select>
+                                {userOrg.user.isSiteAdmin === "true" ? (
+                                  <span className="text-sm px-3 py-1 bg-purple-100 text-purple-800 rounded border border-purple-300 font-medium">
+                                    Site Admin
+                                  </span>
+                                ) : (
+                                  <select
+                                    value={userOrg.role}
+                                    onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
+                                    disabled={userOrg.user.id === currentUser?.id}
+                                    className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    data-testid={`user-role-select-${userOrg.user.id}`}
+                                    title={userOrg.user.id === currentUser?.id ? "Cannot change your own role" : ""}
+                                  >
+                                    <option value="athlete">Athlete</option>
+                                    <option value="coach">Coach</option>
+                                    <option value="org_admin">Org Admin</option>
+                                  </select>
+                                )}
                               </div>
                             </div>
                           </div>
