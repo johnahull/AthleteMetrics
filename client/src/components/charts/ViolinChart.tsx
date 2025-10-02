@@ -71,8 +71,10 @@ export function ViolinChart({
         devLog.log('Processing with selectedGroups', {
           groupCount: selectedGroups.length,
           groups: selectedGroups.map(g => ({ name: g.name, memberCount: g.memberIds?.length || 0 })),
-          sampleMemberIds: selectedGroups[0]?.memberIds?.slice(0, 3),
-          sampleAthleteIds: sourceData.slice(0, 3).map(d => d.athleteId)
+          sampleMemberIds: selectedGroups[0]?.memberIds?.slice(0, 5),
+          sampleAthleteIds: sourceData.slice(0, 5).map(d => d.athleteId),
+          allMemberIds: selectedGroups.flatMap(g => g.memberIds || []).slice(0, 10),
+          allAthleteIds: sourceData.map(d => d.athleteId).slice(0, 10)
         });
 
         const processedGroups = selectedGroups.map((group, index) => {
@@ -151,15 +153,23 @@ export function ViolinChart({
 
         // If all groups filtered to null, throw specific error
         if (processedGroups.length === 0) {
+          const allMemberIds = selectedGroups.flatMap(g => g.memberIds || []);
+          const allAthleteIds = sourceData.map(d => d.athleteId);
+          const intersection = allMemberIds.filter(id => allAthleteIds.includes(id));
+
           devLog.error('ViolinChart: All groups are empty after filtering', {
             totalGroups: selectedGroups.length,
             sourceDataLength: sourceData.length,
             groupsInfo: selectedGroups.map(g => ({
               name: g.name,
-              memberIds: g.memberIds?.length || 0
-            }))
+              memberIdsCount: g.memberIds?.length || 0,
+              sampleMemberIds: g.memberIds?.slice(0, 3)
+            })),
+            sampleAthleteIds: allAthleteIds.slice(0, 10),
+            matchingIds: intersection.slice(0, 5),
+            totalMatchingIds: intersection.length
           });
-          throw new Error('No data found for any of the selected groups. Groups may be empty or athlete IDs may not match.');
+          throw new Error(`No data found for any of the selected groups. ${intersection.length === 0 ? 'No athlete IDs match between groups and data.' : 'Groups may be empty.'}`);
         }
 
         return processedGroups;
