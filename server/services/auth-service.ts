@@ -41,7 +41,7 @@ export class AuthService extends BaseService {
       }
 
       // Check if user is active
-      if (user.isActive === "false") {
+      if (user.isActive === false) {
         return { success: false, error: "Account is deactivated" };
       }
 
@@ -131,7 +131,7 @@ export class AuthService extends BaseService {
         throw new Error("Target user not found");
       }
 
-      if (targetUser.isActive === "false") {
+      if (targetUser.isActive === false) {
         throw new Error("Cannot impersonate inactive user");
       }
 
@@ -148,7 +148,7 @@ export class AuthService extends BaseService {
   async validateSessionUser(userId: string): Promise<User | null> {
     try {
       const user = await this.storage.getUser(userId);
-      if (!user || user.isActive === "false") {
+      if (!user || user.isActive === false) {
         return null;
       }
       return user;

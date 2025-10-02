@@ -382,7 +382,7 @@ export default function Athletes() {
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
                   <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
-                  {teams?.filter((team: Team) => team.isArchived !== "true").map((team: Team) => (
+                  {teams?.filter((team: Team) => team.isArchived !== true).map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>

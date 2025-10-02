@@ -466,7 +466,7 @@ export class DatabaseStorage implements IStorage {
         .from(invitations)
         .where(and(
           eq(invitations.organizationId, organizationId),
-          eq(invitations.isUsed, "false"),
+          eq(invitations.isUsed, false),
           gte(invitations.expiresAt, new Date())
         ));
     } catch (error) {
@@ -594,13 +594,13 @@ export class DatabaseStorage implements IStorage {
 
     // Build conditions array to exclude archived teams
     const conditions = [];
-    
+
     if (organizationId) {
       conditions.push(eq(teams.organizationId, organizationId));
     }
-    
+
     // Always exclude archived teams
-    conditions.push(ne(teams.isArchived, "true"));
+    conditions.push(ne(teams.isArchived, true));
     
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as any;
@@ -657,23 +657,23 @@ export class DatabaseStorage implements IStorage {
     return await db.transaction(async (tx: any) => {
       const [archived] = await tx.update(teams)
         .set({
-          isArchived: "true",
+          isArchived: true,
           archivedAt: archiveDate,
           season: season
         })
         .where(eq(teams.id, id))
         .returning();
-      
+
       // Mark all current team memberships as inactive
       await tx.update(userTeams)
         .set({
-          isActive: "false",
+          isActive: false,
           leftAt: archiveDate,
           season: season
         })
         .where(and(
           eq(userTeams.teamId, id),
-          eq(userTeams.isActive, "true")
+          eq(userTeams.isActive, true)
         ));
       
       return archived;
@@ -692,7 +692,7 @@ export class DatabaseStorage implements IStorage {
   async unarchiveTeam(id: string): Promise<Team> {
     const [unarchived] = await db.update(teams)
       .set({
-        isArchived: "false",
+        isArchived: false,
         archivedAt: null
       })
       .where(eq(teams.id, id))
@@ -710,7 +710,7 @@ export class DatabaseStorage implements IStorage {
       .set({
         leftAt: membershipData.leftAt,
         season: membershipData.season,
-        isActive: membershipData.leftAt ? "false" : "true"
+        isActive: membershipData.leftAt ? false : true
       })
       .where(and(
         eq(userTeams.teamId, teamId),
@@ -753,7 +753,7 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(userTeams.userId, userId),
           eq(userTeams.teamId, teamId),
-          eq(userTeams.isActive, "true")
+          eq(userTeams.isActive, true)
         ));
 
       if (existingActiveAssignment.length > 0) {
@@ -767,14 +767,14 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(userTeams.userId, userId),
           eq(userTeams.teamId, teamId),
-          eq(userTeams.isActive, "false")
+          eq(userTeams.isActive, false)
         ));
 
       if (existingInactiveAssignment.length > 0) {
         // Reactivate the membership
         const [reactivated] = await db.update(userTeams)
           .set({
-            isActive: "true",
+            isActive: true,
             leftAt: null,
             joinedAt: new Date() // New join date
           })
@@ -790,7 +790,7 @@ export class DatabaseStorage implements IStorage {
         userId,
         teamId,
         joinedAt: new Date(),
-        isActive: "true"
+        isActive: true
       }).returning();
 
       console.log('User added to team successfully');
@@ -856,13 +856,13 @@ export class DatabaseStorage implements IStorage {
     // Mark membership as inactive instead of deleting (temporal approach)
     await db.update(userTeams)
       .set({
-        isActive: "false",
+        isActive: false,
         leftAt: new Date()
       })
       .where(and(
         eq(userTeams.userId, userId),
         eq(userTeams.teamId, teamId),
-        eq(userTeams.isActive, "true")
+        eq(userTeams.isActive, true)
       ));
   }
 
@@ -903,7 +903,7 @@ export class DatabaseStorage implements IStorage {
     const [invitation] = await db.select().from(invitations)
       .where(and(
         eq(invitations.token, token),
-        eq(invitations.isUsed, "false"),
+        eq(invitations.isUsed, false),
         gte(invitations.expiresAt, new Date())
       ));
     return invitation || undefined;
@@ -914,13 +914,14 @@ export class DatabaseStorage implements IStorage {
     if (!invitation) throw new Error("Invalid or expired invitation");
 
     // Always create a new user - email addresses are not unique identifiers for athletes
-    // Note: role is not stored in users table - it's stored in user_organizations
+    // Note: role is also stored in user_organizations for organization-specific roles
     const createUserData = {
       username: userInfo.username,
       emails: [invitation.email],
       password: userInfo.password,
       firstName: userInfo.firstName,
-      lastName: userInfo.lastName
+      lastName: userInfo.lastName,
+      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
     };
 
     console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
@@ -959,7 +960,7 @@ export class DatabaseStorage implements IStorage {
 
     // Mark the invitation as used
     await db.update(invitations)
-      .set({ isUsed: "true" })
+      .set({ isUsed: true })
       .where(eq(invitations.token, token));
 
     return { user };
@@ -1067,9 +1068,9 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
       .where(and(
         inArray(userTeams.userId, athleteIds),
-        eq(userTeams.isActive, "true"),
+        eq(userTeams.isActive, true),
         or(isNull(userTeams.leftAt), gte(userTeams.leftAt, new Date())),
-        eq(teams.isArchived, "false")
+        eq(teams.isArchived, false)
       ));
 
     // Build a map of user ID to teams array
@@ -1154,7 +1155,7 @@ export class DatabaseStorage implements IStorage {
       fullName: `${athlete.firstName} ${athlete.lastName}`,
       birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: athlete.isActive ?? "true" // Use provided value or default to active
+      isActive: athlete.isActive ?? true // Use provided value or default to active
     }).returning();
 
     // Determine organization for athlete association
@@ -1405,7 +1406,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(lte(measurements.age, filters.ageTo));
     }
     if (!filters?.includeUnverified) {
-      conditions.push(eq(measurements.isVerified, "true"));
+      conditions.push(eq(measurements.isVerified, true));
     }
     
     // Team filtering - filter by athlete's CURRENT team membership (not historical)
@@ -1418,7 +1419,7 @@ export class DatabaseStorage implements IStorage {
             .where(and(
               eq(userTeams.userId, users.id),
               inArray(userTeams.teamId, filters.teamIds),
-              eq(userTeams.isActive, "true"),
+              eq(userTeams.isActive, true),
               or(
                 isNull(userTeams.leftAt),
                 gte(userTeams.leftAt, new Date())
@@ -1493,8 +1494,8 @@ export class DatabaseStorage implements IStorage {
         .innerJoin(organizations, eq(teams.organizationId, organizations.id))
         .where(and(
           inArray(userTeams.userId, uniqueUserIds),
-          eq(userTeams.isActive, "true"),
-          eq(teams.isArchived, "false")
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
         ));
     }
 
@@ -1597,8 +1598,8 @@ export class DatabaseStorage implements IStorage {
         isNull(userTeams.leftAt),
         gte(userTeams.leftAt, measurementDate)
       ),
-      eq(userTeams.isActive, "true"),
-      eq(teams.isArchived, "false") // Only include non-archived teams
+      eq(userTeams.isActive, true),
+      eq(teams.isArchived, false) // Only include non-archived teams
     ));
 
     return activeTeams;
@@ -1632,7 +1633,7 @@ export class DatabaseStorage implements IStorage {
     if (!teamId || teamId.trim() === "") {
       // Get athlete's active teams at measurement date
       const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
-      
+
       if (activeTeams.length === 1) {
         // Single team - auto-assign
         teamId = activeTeams[0].teamId;
@@ -1673,7 +1674,7 @@ export class DatabaseStorage implements IStorage {
       flyInDistance: measurement.flyInDistance?.toString(),
       age,
       units,
-      isVerified: isCoach ? "true" : "false",
+      isVerified: isCoach ? true : false,
       verifiedBy: isCoach ? submittedBy : undefined,
       teamId: teamId || null,
       season: season || null,
@@ -1704,7 +1705,7 @@ export class DatabaseStorage implements IStorage {
   async verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement> {
     const [updated] = await db.update(measurements)
       .set({
-        isVerified: "true",
+        isVerified: true,
         verifiedBy
       })
       .where(eq(measurements.id, id))
@@ -1811,8 +1812,8 @@ export class DatabaseStorage implements IStorage {
     const totalAthletes = athletes.length;
 
     // Active athletes are those with active user accounts (not just invitation pending)
-    const activeAthletes = athletes.filter(athlete => 
-      athlete.isActive === "true" && athlete.password !== "INVITATION_PENDING"
+    const activeAthletes = athletes.filter(athlete =>
+      athlete.isActive === true && athlete.password !== "INVITATION_PENDING"
     ).length;
 
     // Get measurements from last 30 days instead of just today
@@ -1837,7 +1838,7 @@ export class DatabaseStorage implements IStorage {
     ];
 
     // Count only active (non-archived) teams
-    const activeTeams = teams.filter(team => team.isArchived !== "true");
+    const activeTeams = teams.filter(team => team.isArchived !== true);
 
     // Calculate best for each metric
     const bestMetrics: any = {
@@ -1989,7 +1990,7 @@ export class DatabaseStorage implements IStorage {
 
   async markEmailAsVerified(userId: string, email: string): Promise<void> {
     await db.update(users)
-      .set({ isEmailVerified: 'true' })
+      .set({ isEmailVerified: true })
       .where(eq(users.id, userId));
   }
 
@@ -2103,8 +2104,8 @@ export class DatabaseStorage implements IStorage {
     // Step 2: Get all team memberships for these users in a single query
     const teamMembershipConditions = [
       inArray(userTeams.userId, userIds),
-      eq(userTeams.isActive, "true"),
-      eq(teams.isArchived, "false")
+      eq(userTeams.isActive, true),
+      eq(teams.isArchived, false)
     ];
 
     if (filters?.excludeTeam) {
@@ -2158,7 +2159,7 @@ export class DatabaseStorage implements IStorage {
       filteredResult = result.filter((user: any) => {
         // Exclude users who are active members of the excluded team
         const isOnExcludedTeam = user.teamMemberships.some((membership: any) =>
-          membership.teamId === filters.excludeTeam && membership.isActive === "true"
+          membership.teamId === filters.excludeTeam && membership.isActive === true
         );
         return !isOnExcludedTeam;
       });

@@ -153,10 +153,10 @@ export default function Teams() {
     if (showArchived) {
       return true; // Show all teams
     }
-    return team.isArchived !== "true"; // Only show non-archived teams
+    return team.isArchived !== true; // Only show non-archived teams
   });
 
-  const archivedTeamsCount = safeTeams.filter((team: Team) => team?.isArchived === "true").length;
+  const archivedTeamsCount = safeTeams.filter((team: Team) => team?.isArchived === true).length;
 
   if (isLoading) {
     return (
@@ -211,7 +211,7 @@ export default function Teams() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTeams.map((team: Team) => {
           const stats = getTeamStats(team.id);
-          const isArchived = team.isArchived === "true";
+          const isArchived = team.isArchived === true;
           return (
             <Card key={team.id} className={`bg-white hover:shadow-md transition-shadow ${isArchived ? 'opacity-60 border-amber-200' : ''}`}>
               <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">

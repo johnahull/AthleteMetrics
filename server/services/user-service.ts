@@ -194,7 +194,7 @@ export class UserService extends BaseService {
         throw new Error("Cannot deactivate your own account");
       }
 
-      return await this.storage.updateUser(userId, { isActive: isActive ? "true" : "false" });
+      return await this.storage.updateUser(userId, { isActive: isActive ? true : false });
     } catch (error) {
       console.error("UserService.updateUserStatus:", error);
       throw error;
@@ -260,8 +260,9 @@ export class UserService extends BaseService {
         lastName: validatedData.lastName,
         emails: [`${validatedData.username}@admin.local`], // Temporary email based on username
         password: hashedPassword,
+        role: "site_admin",
         isSiteAdmin: true,
-        isActive: "true"
+        isActive: true
       };
 
       return await this.storage.createUser(userData);

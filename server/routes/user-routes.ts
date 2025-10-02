@@ -409,7 +409,7 @@ export function registerUserRoutes(app: Express) {
         orgAdmins: 0, // Role information is now organization-specific
         coaches: 0, // Role information is now organization-specific
         athletes: 0, // Role information is now organization-specific
-        activeUsers: users.filter(u => u.isActive === "true").length
+        activeUsers: users.filter(u => u.isActive === true).length
       };
 
       res.json({

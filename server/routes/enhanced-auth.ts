@@ -54,7 +54,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Check if email verification is required
-    if (user.isEmailVerified === 'false') {
+    if (user.isEmailVerified === false) {
       return res.status(403).json({
         success: false,
         requiresEmailVerification: true,
@@ -63,7 +63,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Check for MFA requirement
-    if (user.mfaEnabled === 'true') {
+    if (user.mfaEnabled === true) {
       if (!mfaToken) {
         return res.status(200).json({
           requiresMFA: true,
@@ -114,7 +114,7 @@ router.post('/login', async (req: Request, res: Response) => {
       firstName: user.firstName,
       lastName: user.lastName,
       role: userRole,
-      emailVerified: user.isEmailVerified === 'true',
+      emailVerified: user.isEmailVerified === true,
       isSiteAdmin: user.isSiteAdmin === true,
       primaryOrganizationId: primaryOrganizationId,
       athleteId: userRole === 'athlete' ? user.id : undefined

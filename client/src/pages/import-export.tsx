@@ -265,7 +265,7 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                           <SelectValue placeholder="Select team..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {teams?.filter((team) => team.isArchived !== "true").map((team) => (
+                          {teams?.filter((team) => team.isArchived !== true).map((team) => (
                             <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                           ))}
                         </SelectContent>
