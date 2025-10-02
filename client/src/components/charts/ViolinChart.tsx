@@ -379,7 +379,7 @@ export function ViolinChart({
       setError('Unable to process data for visualization. Please check your data selection and ensure groups have members.');
       return [];
     }
-  }, [data, rawData, selectedGroups, calculateKDE]);
+  }, [data, rawData, selectedGroups]);
 
   // Generate deterministic jitter for consistent positioning
   function generateJitter(athleteId: string, range: number): number {
