@@ -11,10 +11,10 @@ import { registerAthleteRoutes } from "./athlete-routes";
 import { registerHealthRoutes } from "./health-routes";
 import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAdminRoutes } from "./admin-routes";
-// import { registerAnalyticsRoutes } from "./analytics-routes";
-// import { registerImportRoutes } from "./import-routes";
-// import { registerExportRoutes } from "./export-routes";
-// import { registerInvitationRoutes } from "./invitation-routes";
+import { registerAnalyticsRoutes } from "./analytics-routes";
+import { registerImportRoutes } from "./import-routes";
+import { registerExportRoutes } from "./export-routes";
+import { registerInvitationRoutes } from "./invitation-routes";
 
 /**
  * Register all application routes
@@ -44,11 +44,17 @@ export function registerAllRoutes(app: Express) {
   // Admin routes (impersonation, etc.)
   registerAdminRoutes(app);
 
-  // TODO: Add remaining route modules
-  // registerAnalyticsRoutes(app);
-  // registerImportRoutes(app);
-  // registerExportRoutes(app);
-  // registerInvitationRoutes(app);
+  // Analytics routes
+  registerAnalyticsRoutes(app);
+
+  // Import routes (CSV, photos, review queue)
+  registerImportRoutes(app);
+
+  // Export routes (CSV exports)
+  registerExportRoutes(app);
+
+  // Invitation routes
+  registerInvitationRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }
@@ -66,11 +72,11 @@ export function getRouteStats() {
       athletes: "✅ Registered",
       measurements: "✅ Registered",
       admin: "✅ Registered",
-      analytics: "🚧 Pending migration",
-      imports: "🚧 Pending migration",
-      exports: "🚧 Pending migration",
-      invitations: "🚧 Pending migration"
+      analytics: "✅ Registered",
+      imports: "✅ Registered",
+      exports: "✅ Registered",
+      invitations: "✅ Registered"
     },
-    status: "Partial migration complete - 7/11 modules refactored"
+    status: "✅ Complete migration - 11/11 modules refactored"
   };
 }
