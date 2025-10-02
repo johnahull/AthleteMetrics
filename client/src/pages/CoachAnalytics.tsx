@@ -6,7 +6,7 @@
 import React from 'react';
 import { BaseAnalyticsView } from '@/components/analytics/BaseAnalyticsView';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download, Users, BarChart3, Trophy } from 'lucide-react';
+import { Users, BarChart3, Trophy } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth';
 import { devLog } from '@/utils/dev-logger';
@@ -24,7 +24,8 @@ export function CoachAnalytics() {
     });
   }, [user]);
 
-  // Header actions for coach-specific view
+  // Header actions for coach-specific navigation
+  // Note: Refresh and Export buttons are provided by AnalyticsToolbar
   const headerActions = (
     <div className="flex items-center gap-2">
       <Button
@@ -50,22 +51,6 @@ export function CoachAnalytics() {
         <BarChart3 className="h-4 w-4 mr-2" />
         Reports
       </Button>
-
-      <Button
-        variant="outline"
-        size="sm"
-      >
-        <RefreshCw className="h-4 w-4 mr-2" />
-        Refresh
-      </Button>
-
-      <Button
-        variant="outline"
-        size="sm"
-      >
-        <Download className="h-4 w-4 mr-2" />
-        Export
-      </Button>
     </div>
   );
 
@@ -81,11 +66,22 @@ export function CoachAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
+  // Wait for organization context to be available before rendering analytics
+  if (!organizationContext) {
+    return (
+      <div className="p-6">
+        <div className="text-center text-gray-600">
+          Loading organization context...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <BaseAnalyticsView
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
-      organizationId={organizationContext || undefined}
+      organizationId={organizationContext}
       defaultAnalysisType="multi_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}

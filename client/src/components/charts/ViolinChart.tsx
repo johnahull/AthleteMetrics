@@ -3,7 +3,7 @@
  * Combines box plot statistics with kernel density estimation
  */
 
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
@@ -11,6 +11,48 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { getDateKey } from '@/utils/date-utils';
 
 ChartJS.register(CategoryScale, LinearScale, Title, Tooltip, Legend);
+
+// Chart configuration constants
+const VIOLIN_CHART_CONFIG = {
+  // KDE Calculation
+  ARTIFICIAL_BANDWIDTH_FACTOR: 0.1, // Bandwidth as % of range when all values are identical
+  MIN_BANDWIDTH_FACTOR: 0.05, // Minimum bandwidth as % of range
+  MAX_SAMPLE_SIZE: 1000, // Maximum points to sample for KDE calculation
+  KDE_POINTS: 200, // Number of points in KDE curve for smoothness
+
+  // Chart Layout
+  Y_AXIS_PADDING_PERCENT: 0.05, // Padding added to Y-axis range (5%)
+  VIOLIN_WIDTH_FACTOR: 0.3, // Violin width as % of group width
+  JITTER_RANGE_FACTOR: 0.25, // Jitter range as % of group width
+
+  // Visual Styling
+  CHART_PADDING: 60, // Padding around chart area in pixels
+  CANVAS_HEIGHT: 400, // Default canvas height in pixels
+  POINT_RADIUS: 5, // Radius for athlete data points
+  POINT_RADIUS_HIGHLIGHTED: 6, // Radius for highlighted athlete points
+  POINT_BORDER_WIDTH: 2, // Border width for athlete points
+
+  // Interaction
+  HOVER_THRESHOLD: 8, // Pixel distance for hover detection
+  RESIZE_DEBOUNCE: 150, // Milliseconds to debounce resize events
+} as const;
+
+// Helper functions defined outside component to avoid re-creation
+function percentile(arr: number[], p: number): number {
+  const index = (p / 100) * (arr.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+
+  if (upper >= arr.length) return arr[arr.length - 1];
+  if (lower === upper) return arr[lower];
+
+  return arr[lower] * (upper - index) + arr[upper] * (index - lower);
+}
+
+function getGroupColor(index: number): string {
+  const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+  return colors[index % colors.length];
+}
 
 interface ViolinChartProps {
   data: ChartDataPoint[];
@@ -34,6 +76,7 @@ export function ViolinChart({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [resizeKey, setResizeKey] = React.useState(0); // Used to trigger re-render on resize
   const [tooltip, setTooltip] = React.useState<{
     visible: boolean;
     x: number;
@@ -44,15 +87,156 @@ export function ViolinChart({
     metric?: string;
   } | null>(null);
 
+  // Kernel Density Estimation for violin shape - Now uses stable helper functions
+  const calculateKDE = useCallback((values: number[]): Array<{ x: number; y: number }> => {
+      if (values.length === 0) return [];
+
+      // Handle single-value dataset explicitly
+      if (values.length === 1) {
+        const singleValue = values[0];
+        const bandwidth = Math.abs(singleValue) * VIOLIN_CHART_CONFIG.ARTIFICIAL_BANDWIDTH_FACTOR || 1;
+        const kde: Array<{ x: number; y: number }> = [];
+        // Create narrow bell curve centered at single value
+        for (let i = -50; i <= 50; i++) {
+          const x = singleValue + (i / 50) * bandwidth;
+          const u = i / 50;
+          const gaussianValue = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+          kde.push({ x, y: gaussianValue });
+        }
+        return kde;
+      }
+
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min;
+
+      // Handle edge case where all values are the same
+      if (range === 0) {
+        // Create a narrow bell curve centered at the single value
+        const center = min;
+        const artificialBandwidth = Math.abs(min) * VIOLIN_CHART_CONFIG.ARTIFICIAL_BANDWIDTH_FACTOR || 1;
+        const kde: Array<{ x: number; y: number }> = [];
+        for (let i = -50; i <= 50; i++) {
+          const x = center + (i / 50) * artificialBandwidth;
+          const u = i / 50;
+          const density = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+          kde.push({ x, y: density });
+        }
+        return kde;
+      }
+
+      // For large datasets, sample to improve performance
+      const MAX_SAMPLE_SIZE = VIOLIN_CHART_CONFIG.MAX_SAMPLE_SIZE;
+      let sampledValues = values;
+      if (values.length > MAX_SAMPLE_SIZE) {
+        // Stratified sampling to preserve distribution
+        const step = Math.floor(values.length / MAX_SAMPLE_SIZE);
+        sampledValues = values.filter((_, i) => i % step === 0).slice(0, MAX_SAMPLE_SIZE);
+        devLog.log('KDE: Using sampling for large dataset', {
+          original: values.length,
+          sampled: sampledValues.length
+        });
+      }
+
+      // Use Silverman's rule of thumb for bandwidth selection
+      const n = sampledValues.length;
+      const mean = sampledValues.reduce((a, b) => a + b, 0) / n;
+      const std = Math.sqrt(sampledValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n);
+      const sortedValues = [...sampledValues].sort((a, b) => a - b);
+      const iqr = percentile(sortedValues, 75) - percentile(sortedValues, 25);
+
+      // Calculate bandwidth using Silverman's rule, with fallbacks
+      let bandwidth = 0.9 * Math.min(std, iqr / 1.34) * Math.pow(n, -0.2);
+
+      // Ensure bandwidth is valid and reasonable
+      if (!isFinite(bandwidth) || bandwidth <= 0) {
+        bandwidth = range * VIOLIN_CHART_CONFIG.ARTIFICIAL_BANDWIDTH_FACTOR; // Fallback bandwidth
+      }
+
+      // Make sure bandwidth is not too small
+      bandwidth = Math.max(bandwidth, range * VIOLIN_CHART_CONFIG.MIN_BANDWIDTH_FACTOR);
+
+      // Final validation: if bandwidth is still invalid, return simple fallback
+      if (bandwidth <= 0 || !isFinite(bandwidth)) {
+        devLog.warn('KDE: Invalid bandwidth after all guards, returning fallback', { bandwidth, range });
+        return [{ x: min, y: 1 }];
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        devLog.log('KDE calculation', {
+          valuesCount: sampledValues.length,
+          min, max, range,
+          std, iqr, bandwidth
+        });
+      }
+
+      const kde: Array<{ x: number; y: number }> = [];
+
+      // Extend range by 2 * bandwidth for better visualization
+      const extendedMin = min - bandwidth * 2;
+      const extendedMax = max + bandwidth * 2;
+      const extendedRange = extendedMax - extendedMin;
+      const adjustedStep = extendedRange / VIOLIN_CHART_CONFIG.KDE_POINTS; // More points for smoother curve
+
+      // Pre-calculate constants
+      const gaussianNorm = 1 / Math.sqrt(2 * Math.PI);
+      const denominator = sampledValues.length * bandwidth;
+
+      // Safety check: avoid division by zero
+      if (denominator <= 0 || !isFinite(denominator)) {
+        devLog.warn('KDE: Invalid denominator, returning fallback', { denominator, sampledValuesLength: sampledValues.length, bandwidth });
+        return [{ x: min, y: 1 }];
+      }
+
+      for (let x = extendedMin; x <= extendedMax; x += adjustedStep) {
+        let density = 0;
+        // Optimized: only calculate for sampled values
+        for (const value of sampledValues) {
+          // Gaussian kernel
+          const u = (x - value) / bandwidth;
+          // Optimized: skip values that contribute negligibly (>3 standard deviations)
+          if (Math.abs(u) > 3) continue;
+          density += Math.exp(-0.5 * u * u) * gaussianNorm;
+        }
+        density = density / denominator;
+
+        // Ensure density is a valid number
+        if (isFinite(density)) {
+          kde.push({ x, y: density });
+        }
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        devLog.log('KDE results', {
+          kdePoints: kde.length,
+          densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
+        });
+      }
+
+      return kde.length > 0 ? kde : [{ x: min, y: 1 }];
+  }, []); // Empty deps - uses stable external helper functions
+
   // Process data by groups - use rawData for individual athletes like BoxPlotChart
   const processedData = useMemo(() => {
+    devLog.log('ViolinChart: Starting data processing', {
+      hasData: !!data,
+      dataLength: data?.length || 0,
+      hasRawData: !!rawData,
+      rawDataLength: rawData?.length || 0,
+      hasSelectedGroups: !!selectedGroups,
+      selectedGroupsCount: selectedGroups?.length || 0
+    });
+
     // Check if this is multi-group analysis with pre-aggregated data
     const isPreAggregated = data && data.length > 0 && data[0].athleteId?.startsWith?.('group-');
 
     // Use rawData for individual athlete points if available, otherwise fall back to data
     const sourceData = rawData && rawData.length > 0 ? rawData : data;
 
-    if (!sourceData || sourceData.length === 0) return [];
+    if (!sourceData || sourceData.length === 0) {
+      devLog.warn('ViolinChart: No source data available');
+      return [];
+    }
 
     devLog.log('ViolinChart data processing', {
       isPreAggregated,
@@ -68,7 +252,16 @@ export function ViolinChart({
     try {
       // If selectedGroups is provided, use it to filter data (multi-group analysis)
       if (selectedGroups && selectedGroups.length > 0) {
-        return selectedGroups.map((group, index) => {
+        devLog.log('Processing with selectedGroups', {
+          groupCount: selectedGroups.length,
+          groups: selectedGroups.map(g => ({ name: g.name, memberCount: g.memberIds?.length || 0 })),
+          sampleMemberIds: selectedGroups[0]?.memberIds?.slice(0, 5),
+          sampleAthleteIds: sourceData.slice(0, 5).map(d => d.athleteId),
+          allMemberIds: selectedGroups.flatMap(g => g.memberIds || []).slice(0, 10),
+          allAthleteIds: sourceData.map(d => d.athleteId).slice(0, 10)
+        });
+
+        const processedGroups = selectedGroups.map((group, index) => {
           // Filter data for this group by memberIds
           const groupData = sourceData.filter(point =>
             point &&
@@ -78,7 +271,11 @@ export function ViolinChart({
           );
 
           if (groupData.length === 0) {
-            devLog.warn('ViolinChart: No data points for group', group.name);
+            devLog.warn('ViolinChart: No data points for group', {
+              groupName: group.name,
+              memberIdsCount: group.memberIds?.length || 0,
+              sourceDataSample: sourceData.slice(0, 5).map(d => ({ athleteId: d.athleteId, athleteName: d.athleteName }))
+            });
             return null;
           }
 
@@ -137,6 +334,29 @@ export function ViolinChart({
             color: getGroupColor(index)
           };
         }).filter((group): group is NonNullable<typeof group> => group !== null);
+
+        // If all groups filtered to null, throw specific error
+        if (processedGroups.length === 0) {
+          const allMemberIds = selectedGroups.flatMap(g => g.memberIds || []);
+          const allAthleteIds = sourceData.map(d => d.athleteId);
+          const intersection = allMemberIds.filter(id => allAthleteIds.includes(id));
+
+          devLog.error('ViolinChart: All groups are empty after filtering', {
+            totalGroups: selectedGroups.length,
+            sourceDataLength: sourceData.length,
+            groupsInfo: selectedGroups.map(g => ({
+              name: g.name,
+              memberIdsCount: g.memberIds?.length || 0,
+              sampleMemberIds: g.memberIds?.slice(0, 3)
+            })),
+            sampleAthleteIds: allAthleteIds.slice(0, 10),
+            matchingIds: intersection.slice(0, 5),
+            totalMatchingIds: intersection.length
+          });
+          throw new Error(`No data found for any of the selected groups. ${intersection.length === 0 ? 'No athlete IDs match between groups and data.' : 'Groups may be empty.'}`);
+        }
+
+        return processedGroups;
       }
 
       // Fallback: Group data by grouping field (for non-multi-group analysis)
@@ -201,128 +421,20 @@ export function ViolinChart({
         };
       }).filter((group): group is NonNullable<typeof group> => group !== null);
     } catch (error) {
-      devLog.error('ViolinChart: Error processing data', error);
-      setError('Unable to process data for visualization. Please check your data selection.');
+      devLog.error('ViolinChart: Error processing data', {
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        hasData: !!data,
+        dataLength: data?.length || 0,
+        hasRawData: !!rawData,
+        rawDataLength: rawData?.length || 0,
+        hasSelectedGroups: !!selectedGroups,
+        selectedGroupsLength: selectedGroups?.length || 0
+      });
+      setError('Unable to process data for visualization. Please check your data selection and ensure groups have members.');
       return [];
     }
-  }, [data, rawData, selectedGroups]);
-
-
-  // Kernel Density Estimation for violin shape - Memoized for performance
-  const calculateKDE = useMemo(() => {
-    return (values: number[]): Array<{ x: number; y: number }> => {
-      if (values.length === 0) return [];
-
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const range = max - min;
-
-      // Handle edge case where all values are the same
-      if (range === 0) {
-        // Create a narrow bell curve centered at the single value
-        const center = min;
-        const artificialBandwidth = Math.abs(min) * 0.1 || 1;
-        const kde: Array<{ x: number; y: number }> = [];
-        for (let i = -50; i <= 50; i++) {
-          const x = center + (i / 50) * artificialBandwidth;
-          const u = i / 50;
-          const density = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
-          kde.push({ x, y: density });
-        }
-        return kde;
-      }
-
-      // For large datasets (>1000 points), sample to improve performance
-      const MAX_SAMPLE_SIZE = 1000;
-      let sampledValues = values;
-      if (values.length > MAX_SAMPLE_SIZE) {
-        // Stratified sampling to preserve distribution
-        const step = Math.floor(values.length / MAX_SAMPLE_SIZE);
-        sampledValues = values.filter((_, i) => i % step === 0).slice(0, MAX_SAMPLE_SIZE);
-        devLog.log('KDE: Using sampling for large dataset', {
-          original: values.length,
-          sampled: sampledValues.length
-        });
-      }
-
-      // Use Silverman's rule of thumb for bandwidth selection
-      const n = sampledValues.length;
-      const mean = sampledValues.reduce((a, b) => a + b, 0) / n;
-      const std = Math.sqrt(sampledValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n);
-      const sortedValues = [...sampledValues].sort((a, b) => a - b);
-      const iqr = percentile(sortedValues, 75) - percentile(sortedValues, 25);
-
-      // Calculate bandwidth using Silverman's rule, with fallbacks
-      let bandwidth = 0.9 * Math.min(std, iqr / 1.34) * Math.pow(n, -0.2);
-
-      // Ensure bandwidth is valid and reasonable
-      if (!isFinite(bandwidth) || bandwidth <= 0) {
-        bandwidth = range * 0.1; // Fallback to 10% of range
-      }
-
-      // Make sure bandwidth is not too small
-      bandwidth = Math.max(bandwidth, range * 0.05);
-
-      devLog.log('KDE calculation', {
-        valuesCount: sampledValues.length,
-        min, max, range,
-        std, iqr, bandwidth
-      });
-
-      const kde: Array<{ x: number; y: number }> = [];
-
-      // Extend range by 2 * bandwidth for better visualization
-      const extendedMin = min - bandwidth * 2;
-      const extendedMax = max + bandwidth * 2;
-      const extendedRange = extendedMax - extendedMin;
-      const adjustedStep = extendedRange / 200; // More points for smoother curve
-
-      // Pre-calculate constants
-      const gaussianNorm = 1 / Math.sqrt(2 * Math.PI);
-      const denominator = sampledValues.length * bandwidth;
-
-      for (let x = extendedMin; x <= extendedMax; x += adjustedStep) {
-        let density = 0;
-        // Optimized: only calculate for sampled values
-        for (const value of sampledValues) {
-          // Gaussian kernel
-          const u = (x - value) / bandwidth;
-          // Optimized: skip values that contribute negligibly (>3 standard deviations)
-          if (Math.abs(u) > 3) continue;
-          density += Math.exp(-0.5 * u * u) * gaussianNorm;
-        }
-        density = density / denominator;
-
-        // Ensure density is a valid number
-        if (isFinite(density)) {
-          kde.push({ x, y: density });
-        }
-      }
-
-      devLog.log('KDE results', {
-        kdePoints: kde.length,
-        densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
-      });
-
-      return kde.length > 0 ? kde : [{ x: min, y: 1 }];
-    };
-  }, []); // Empty deps - function itself doesn't change
-
-  function percentile(arr: number[], p: number): number {
-    const index = (p / 100) * (arr.length - 1);
-    const lower = Math.floor(index);
-    const upper = Math.ceil(index);
-
-    if (upper >= arr.length) return arr[arr.length - 1];
-    if (lower === upper) return arr[lower];
-
-    return arr[lower] * (upper - index) + arr[upper] * (index - lower);
-  }
-
-  function getGroupColor(index: number): string {
-    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
-    return colors[index % colors.length];
-  }
+  }, [data, rawData, selectedGroups, calculateKDE]);
 
   // Generate deterministic jitter for consistent positioning
   function generateJitter(athleteId: string, range: number): number {
@@ -332,8 +444,11 @@ export function ViolinChart({
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
+    // Use unsigned right shift to ensure positive value without collision
+    // This preserves full entropy unlike Math.abs() which causes collisions
+    const unsignedHash = hash >>> 0;
     // Convert to range [-range/2, range/2]
-    return ((hash % 1000) / 1000 - 0.5) * range;
+    return ((unsignedHash % 1000) / 1000 - 0.5) * range;
   }
 
   // Custom drawing logic for violin chart
@@ -355,11 +470,11 @@ export function ViolinChart({
 
       // Set actual canvas size for high DPI displays
       canvas.width = containerWidth * dpr;
-      canvas.height = 400 * dpr;
+      canvas.height = VIOLIN_CHART_CONFIG.CANVAS_HEIGHT * dpr;
 
       // Scale canvas back down using CSS
       canvas.style.width = containerWidth + 'px';
-      canvas.style.height = '400px';
+      canvas.style.height = `${VIOLIN_CHART_CONFIG.CANVAS_HEIGHT}px`;
 
       // Scale the drawing context
       ctx.scale(dpr, dpr);
@@ -370,9 +485,9 @@ export function ViolinChart({
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
 
-    const padding = 60;
+    const padding = VIOLIN_CHART_CONFIG.CHART_PADDING;
     const displayWidth = container?.clientWidth || 600;
-    const displayHeight = 400;
+    const displayHeight = VIOLIN_CHART_CONFIG.CANVAS_HEIGHT;
     const chartWidth = displayWidth - 2 * padding;
     const chartHeight = displayHeight - 2 * padding;
     const groupWidth = chartWidth / processedData.length;
@@ -383,9 +498,8 @@ export function ViolinChart({
     const dataMax = allValues.length > 0 ? Math.max(...allValues) : 100;
     const dataRange = dataMax - dataMin || 1;
 
-    // Add 5% padding to the data range to ensure full utilization of chart height
-    const padding_percent = 0.05;
-    const rangePadding = dataRange * padding_percent;
+    // Add padding to the data range to ensure full utilization of chart height
+    const rangePadding = dataRange * VIOLIN_CHART_CONFIG.Y_AXIS_PADDING_PERCENT;
     const globalMin = dataMin - rangePadding;
     const globalMax = dataMax + rangePadding;
     const valueRange = globalMax - globalMin;
@@ -431,7 +545,7 @@ export function ViolinChart({
       group.density.forEach((point, i) => {
         if (!point || !isFinite(point.x) || !isFinite(point.y)) return;
 
-        const x = centerX + (point.y / maxDensity) * (groupWidth * 0.3);
+        const x = centerX + (point.y / maxDensity) * (groupWidth * VIOLIN_CHART_CONFIG.VIOLIN_WIDTH_FACTOR);
         const y = valueToY(point.x);
 
         if (!isFinite(x) || !isFinite(y)) return;
@@ -448,7 +562,7 @@ export function ViolinChart({
         const point = group.density[i];
         if (!point || !isFinite(point.x) || !isFinite(point.y)) continue;
 
-        const x = centerX - (point.y / maxDensity) * (groupWidth * 0.3);
+        const x = centerX - (point.y / maxDensity) * (groupWidth * VIOLIN_CHART_CONFIG.VIOLIN_WIDTH_FACTOR);
         const y = valueToY(point.x);
 
         if (!isFinite(x) || !isFinite(y)) continue;
@@ -472,7 +586,7 @@ export function ViolinChart({
 
       if (group.athletes && group.athletes.length > 0) {
         group.athletes.forEach((athlete) => {
-          const jitterRange = groupWidth * 0.25; // 25% of group width for jitter
+          const jitterRange = groupWidth * VIOLIN_CHART_CONFIG.JITTER_RANGE_FACTOR;
           const jitter = generateJitter(athlete.athleteId, jitterRange);
           const x = centerX + jitter;
           const y = valueToY(athlete.value);
@@ -487,12 +601,12 @@ export function ViolinChart({
               : '#000000'; // Black for debugging visibility
 
             ctx.beginPath();
-            ctx.arc(x, y, isHighlighted ? 6 : 5, 0, 2 * Math.PI); // Larger for visibility
+            ctx.arc(x, y, isHighlighted ? VIOLIN_CHART_CONFIG.POINT_RADIUS_HIGHLIGHTED : VIOLIN_CHART_CONFIG.POINT_RADIUS, 0, 2 * Math.PI);
             ctx.fill();
 
             // Add border for all points to make them more visible
             ctx.strokeStyle = isHighlighted ? '#10B981' : '#ffffff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = VIOLIN_CHART_CONFIG.POINT_BORDER_WIDTH;
             ctx.stroke();
 
             ctx.restore(); // Restore context state
@@ -532,7 +646,7 @@ export function ViolinChart({
       }
 
       // Calculate violin width at different heights for full-width lines
-      const violinWidth = groupWidth * 0.3;
+      const violinWidth = groupWidth * VIOLIN_CHART_CONFIG.VIOLIN_WIDTH_FACTOR;
 
       const q1Y = valueToY(stats.q1);
       const q3Y = valueToY(stats.q3);
@@ -690,25 +804,27 @@ export function ViolinChart({
         ctx.fillText('Unable to render chart. Please check your data.', canvas.width / 2, canvas.height / 2);
       }
     }
-  }, [processedData]);
+  }, [processedData, resizeKey]);
 
-  // Handle window resize
+  // Handle window resize with debounce to prevent performance issues
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
     const handleResize = () => {
-      // Trigger a redraw when window resizes
-      const canvas = canvasRef.current;
-      if (canvas && processedData.length > 0) {
-        // Small delay to ensure container has updated its size
-        setTimeout(() => {
-          const event = new Event('resize');
-          window.dispatchEvent(event);
-        }, 100);
-      }
+      // Debounce: clear previous timeout and set new one
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        // Trigger re-render by updating resize key
+        setResizeKey(prev => prev + 1);
+      }, VIOLIN_CHART_CONFIG.RESIZE_DEBOUNCE);
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [processedData]);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timeoutId);
+    };
+  }, []); // Empty deps - handler is stable
 
   // Handle mouse hover for tooltips
   useEffect(() => {
@@ -721,9 +837,9 @@ export function ViolinChart({
       const mouseY = e.clientY - rect.top;
 
       // Calculate chart dimensions (matching the drawing logic)
-      const padding = 60;
+      const padding = VIOLIN_CHART_CONFIG.CHART_PADDING;
       const displayWidth = canvas.clientWidth;
-      const displayHeight = 400;
+      const displayHeight = VIOLIN_CHART_CONFIG.CANVAS_HEIGHT;
       const chartWidth = displayWidth - 2 * padding;
       const chartHeight = displayHeight - 2 * padding;
       const groupWidth = chartWidth / processedData.length;
@@ -734,8 +850,7 @@ export function ViolinChart({
       const dataMax = allValues.length > 0 ? Math.max(...allValues) : 100;
       const dataRange = dataMax - dataMin || 1;
 
-      const padding_percent = 0.05;
-      const rangePadding = dataRange * padding_percent;
+      const rangePadding = dataRange * VIOLIN_CHART_CONFIG.Y_AXIS_PADDING_PERCENT;
       const globalMin = dataMin - rangePadding;
       const globalMax = dataMax + rangePadding;
       const valueRange = globalMax - globalMin;
@@ -746,7 +861,7 @@ export function ViolinChart({
 
       // Check if mouse is near any athlete point
       let foundAthlete: typeof tooltip = null;
-      const hoverThreshold = 8; // pixels
+      const hoverThreshold = VIOLIN_CHART_CONFIG.HOVER_THRESHOLD;
 
       for (const [groupIndex, group] of processedData.entries()) {
         if (!group.athletes) continue;
@@ -754,7 +869,7 @@ export function ViolinChart({
         const centerX = padding + groupIndex * groupWidth + groupWidth / 2;
 
         for (const athlete of group.athletes) {
-          const jitterRange = groupWidth * 0.25;
+          const jitterRange = groupWidth * VIOLIN_CHART_CONFIG.JITTER_RANGE_FACTOR;
           const jitter = generateJitter(athlete.athleteId, jitterRange);
           const x = centerX + jitter;
           const y = valueToY(athlete.value);
@@ -883,7 +998,7 @@ export function ViolinChart({
         <canvas
           ref={canvasRef}
           className="w-full h-auto border rounded"
-          style={{ height: '400px' }}
+          style={{ height: `${VIOLIN_CHART_CONFIG.CANVAS_HEIGHT}px` }}
         />
 
         {/* Tooltip */}
