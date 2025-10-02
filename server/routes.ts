@@ -371,8 +371,9 @@ export async function registerRoutes(app: Express) {
     // Note: req.path is relative to the mount point, so '/api' prefix is not included
     // - /login and /register: Pre-authentication endpoints
     // - /invitations/:token/accept: Public endpoint for new users without sessions
+    //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
     const skipCsrfPaths = ['/login', '/register'];
-    const skipCsrfPatterns = [/^\/invitations\/[^\/]+\/accept$/];
+    const skipCsrfPatterns = [/^\/invitations\/[a-zA-Z0-9_-]+\/accept$/];
 
     if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
         skipCsrfPatterns.some(pattern => pattern.test(req.path))) {

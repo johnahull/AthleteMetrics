@@ -8,6 +8,7 @@ import { body } from "express-validator";
 import { UserService } from "../services/user-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
+import { storage } from "../storage";
 // Session types are loaded globally
 
 const userService = new UserService();
@@ -249,6 +250,18 @@ export function registerUserRoutes(app: Express) {
       if (userId === req.session.user!.id) {
         return res.status(403).json({
           message: "Cannot change your own role"
+        });
+      }
+
+      // Check if target user is a site admin - prevent demotion
+      const targetUser = await userService.getUserById(userId, req.session.user!.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (targetUser.isSiteAdmin === "true" || targetUser.isSiteAdmin === true) {
+        return res.status(403).json({
+          message: "Cannot modify role of site administrators. Site admin status must be changed first."
         });
       }
 

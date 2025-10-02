@@ -934,6 +934,7 @@ export default function UserManagement() {
                   )}
                 </div>
               </div>
+              )}
 
               {/* Users by Organization */}
               {organizations?.map((org: Organization) => {
