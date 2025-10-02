@@ -4,6 +4,7 @@
 
 // Reserved usernames that cannot be used
 const RESERVED_USERNAMES = [
+  // System/Admin
   'admin',
   'administrator',
   'root',
@@ -19,15 +20,49 @@ const RESERVED_USERNAMES = [
   'hostmaster',
   'noreply',
   'no-reply',
+  // Authentication
+  'oauth',
+  'auth',
+  'login',
+  'logout',
+  'signup',
+  'signin',
+  'register',
+  'password',
+  'forgot',
+  'reset',
+  // API/Technical
   'api',
+  'api-docs',
+  'swagger',
+  'graphql',
+  'docs',
+  'documentation',
   'www',
   'mail',
   'ftp',
   'localhost',
+  // Application Routes
+  'team',
+  'teams',
+  'athlete',
+  'athletes',
+  'coach',
+  'coaches',
+  'organization',
+  'organizations',
+  'user',
+  'users',
+  'profile',
+  'dashboard',
+  'settings',
+  // Programming Keywords
   'undefined',
   'null',
   'true',
-  'false'
+  'false',
+  'void',
+  'delete'
 ];
 
 // Username must:

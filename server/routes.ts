@@ -2756,9 +2756,10 @@ export async function registerRoutes(app: Express) {
       }
 
       // Check if username already exists
+      // Use generic message to prevent username enumeration
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
-        return res.status(400).json({ message: "Username already taken. Please choose a different username." });
+        return res.status(400).json({ message: "Username unavailable. Please choose a different username." });
       }
 
       const invitation = await storage.getInvitation(token);

@@ -84,11 +84,17 @@ export class OrganizationService extends BaseService {
   /**
    * Get user's accessible organizations
    * Site admins get all organizations, regular users get only their assigned organizations
+   * @param userId - User ID to get organizations for
+   * @param cachedIsSiteAdmin - Optional cached site admin status to avoid DB query
    */
-  async getUserOrganizations(userId: string): Promise<Organization[]> {
+  async getUserOrganizations(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
     try {
+      // Use cached value if provided, otherwise query database
+      // This prevents N+1 queries when called multiple times with session data
+      const userIsSiteAdmin = cachedIsSiteAdmin ?? await this.isSiteAdmin(userId);
+
       // Site admins can access all organizations
-      if (await this.isSiteAdmin(userId)) {
+      if (userIsSiteAdmin) {
         return await this.storage.getOrganizations();
       }
 
