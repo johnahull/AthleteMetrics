@@ -3,7 +3,7 @@
  * Combines box plot statistics with kernel density estimation
  */
 
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
