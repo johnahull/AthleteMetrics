@@ -13,12 +13,26 @@ export abstract class BaseService {
   }
 
   /**
+   * Check if user is a site administrator
+   * Handles both string "true" and boolean true for compatibility
+   */
+  protected async isSiteAdmin(userId: string): Promise<boolean> {
+    const user = await this.storage.getUser(userId);
+    return user?.isSiteAdmin === "true" || user?.isSiteAdmin === true;
+  }
+
+  /**
    * Validate organization access for the current user
    */
   protected async validateOrganizationAccess(
-    userId: string, 
+    userId: string,
     organizationId: string
   ): Promise<boolean> {
+    // Site admins have access to all organizations
+    if (await this.isSiteAdmin(userId)) {
+      return true;
+    }
+
     const userOrgs = await this.storage.getUserOrganizations(userId);
     return userOrgs.some(org => org.organizationId === organizationId);
   }

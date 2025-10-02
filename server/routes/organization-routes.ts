@@ -59,6 +59,7 @@ export function registerOrganizationRoutes(app: Express) {
 
   /**
    * Get user's organizations
+   * Returns all organizations for site admins, assigned organizations for regular users
    */
   app.get("/api/my-organizations", requireAuth, async (req, res) => {
     try {

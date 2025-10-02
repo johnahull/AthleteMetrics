@@ -82,9 +82,16 @@ export class OrganizationService extends BaseService {
 
   /**
    * Get user's accessible organizations
+   * Site admins get all organizations, regular users get only their assigned organizations
    */
   async getUserOrganizations(userId: string): Promise<any[]> {
     try {
+      // Site admins can access all organizations
+      if (await this.isSiteAdmin(userId)) {
+        return await this.storage.getOrganizations();
+      }
+
+      // Regular users get only their assigned organizations
       return await this.storage.getUserOrganizations(userId);
     } catch (error) {
       console.error("OrganizationService.getUserOrganizations:", error);
