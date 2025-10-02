@@ -87,14 +87,21 @@ export class OrganizationService extends BaseService {
   async getUserOrganizations(userId: string): Promise<any[]> {
     try {
       // Site admins can access all organizations
-      if (await this.isSiteAdmin(userId)) {
-        return await this.storage.getOrganizations();
+      const isSiteAdmin = await this.isSiteAdmin(userId);
+      console.log(`[OrganizationService] getUserOrganizations for userId=${userId}, isSiteAdmin=${isSiteAdmin}`);
+
+      if (isSiteAdmin) {
+        const allOrgs = await this.storage.getOrganizations();
+        console.log(`[OrganizationService] Returning ${allOrgs.length} organizations for site admin`);
+        return allOrgs;
       }
 
       // Regular users get only their assigned organizations
       // Extract the organization object from the nested structure
       const userOrgs = await this.storage.getUserOrganizations(userId);
-      return userOrgs.map((userOrg: any) => userOrg.organization);
+      const organizations = userOrgs.map((userOrg: any) => userOrg.organization);
+      console.log(`[OrganizationService] Returning ${organizations.length} organizations for regular user`);
+      return organizations;
     } catch (error) {
       console.error("OrganizationService.getUserOrganizations:", error);
       return [];
