@@ -3705,7 +3705,7 @@ export async function registerRoutes(app: Express) {
               school: school || undefined,
               gender: validatedGender,
               password: 'INVITATION_PENDING', // Inactive until invited
-              isActive: "false",
+              isActive: false,
               role: "athlete"
             };
 
