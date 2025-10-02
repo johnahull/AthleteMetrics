@@ -96,6 +96,7 @@ export default function UserManagement() {
   const [siteAdminDialogOpen, setSiteAdminDialogOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
+  const [roleFilter, setRoleFilter] = useState<string>("all");
 
   // Get user's primary role to check access
   const { data: userOrganizations } = useQuery({
@@ -536,6 +537,35 @@ export default function UserManagement() {
         </div>
       </div>
 
+      {/* Role Filter */}
+      <div className="flex items-center gap-3 bg-white p-4 rounded-lg border">
+        <label htmlFor="role-filter" className="text-sm font-medium text-gray-700">
+          Filter by Role:
+        </label>
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-48" id="role-filter">
+            <SelectValue placeholder="All Users" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Users</SelectItem>
+            <SelectItem value="site_admin">Site Admins</SelectItem>
+            <SelectItem value="org_admin">Org Admins</SelectItem>
+            <SelectItem value="coach">Coaches</SelectItem>
+            <SelectItem value="athlete">Athletes</SelectItem>
+          </SelectContent>
+        </Select>
+        {roleFilter !== "all" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRoleFilter("all")}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Clear Filter
+          </Button>
+        )}
+      </div>
+
       <div className="space-y-6">
         {/* Add New User */}
         <Card>
@@ -717,15 +747,16 @@ export default function UserManagement() {
           <CardContent>
             <div className="space-y-6">
               {/* Site Administrators Section */}
+              {(roleFilter === "all" || roleFilter === "site_admin") && (
               <div className="space-y-3 border-b pb-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                     <User className="h-5 w-5" />
-                    Site
+                    Site Administrators
                   </h3>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-500">
-                      {siteAdmins.length} site admins
+                      {siteAdmins.length} site admin{siteAdmins.length !== 1 ? 's' : ''}
                     </span>
                     <Dialog open={siteAdminDialogOpen} onOpenChange={setSiteAdminDialogOpen}>
                       <DialogTrigger asChild>
@@ -907,7 +938,14 @@ export default function UserManagement() {
               {/* Users by Organization */}
               {organizations?.map((org: Organization) => {
                 const isExpanded = expandedOrgs.has(org.id);
+                const filteredUsers = org.users?.filter((userOrg) => roleFilter === "all" || userOrg.role === roleFilter) || [];
                 const totalUsers = (org.users?.length || 0) + (org.invitations?.filter(inv => inv.isUsed === "false").length || 0);
+                const filteredCount = filteredUsers.length;
+
+                // Skip organization if no users match the filter
+                if (roleFilter !== "all" && filteredCount === 0) {
+                  return null;
+                }
 
                 return (
                   <div key={org.id} className="space-y-3 border-b pb-6">
@@ -934,14 +972,22 @@ export default function UserManagement() {
                         <h3 className="text-lg font-semibold text-gray-900">{org.name}</h3>
                       </div>
                       <span className="text-sm text-gray-500">
-                        {totalUsers} {totalUsers === 1 ? 'user' : 'users'}
+                        {roleFilter !== "all" ? (
+                          <>
+                            {filteredCount} of {totalUsers} {totalUsers === 1 ? 'user' : 'users'}
+                          </>
+                        ) : (
+                          <>
+                            {totalUsers} {totalUsers === 1 ? 'user' : 'users'}
+                          </>
+                        )}
                       </span>
                     </div>
 
                     {isExpanded && (
                       <div className="space-y-2 ml-7">
                     {/* Active Users */}
-                    {org.users?.map((userOrg) => (
+                    {filteredUsers.map((userOrg) => (
                       <div
                         key={userOrg.id}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border"
