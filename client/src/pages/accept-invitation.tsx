@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
+import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 
 interface InvitationData {
   email: string;
@@ -94,34 +96,33 @@ export default function AcceptInvitation() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.username.trim()) {
       setError('Username is required');
       return;
     }
-    
-    if (formData.username.length < 3) {
-      setError('Username must be at least 3 characters long');
+
+    // Validate username using shared validation
+    const usernameValidation = validateUsername(formData.username);
+    if (!usernameValidation.valid) {
+      setError(usernameValidation.errors[0]);
       return;
     }
-    
-    if (!/^[a-zA-Z0-9._-]+$/.test(formData.username)) {
-      setError('Username can only contain letters, numbers, periods, hyphens, and underscores');
-      return;
-    }
-    
+
     if (usernameError) {
       setError(usernameError);
       return;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
+
+    // Validate password against shared requirements
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.errors[0]);
       return;
     }
 
@@ -367,7 +368,7 @@ export default function AcceptInvitation() {
                   value={formData.password}
                   onChange={handleInputChange('password')}
                   required
-                  minLength={6}
+                  minLength={PASSWORD_REQUIREMENTS.minLength}
                   data-testid="input-password"
                   className="pr-10"
                 />
@@ -385,6 +386,9 @@ export default function AcceptInvitation() {
                   )}
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {getPasswordRequirementsText()}
+              </p>
             </div>
 
             <div>
@@ -396,7 +400,7 @@ export default function AcceptInvitation() {
                   value={formData.confirmPassword}
                   onChange={handleInputChange('confirmPassword')}
                   required
-                  minLength={6}
+                  minLength={PASSWORD_REQUIREMENTS.minLength}
                   data-testid="input-confirm-password"
                   className="pr-10"
                 />

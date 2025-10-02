@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
 // Extended request type with user info
@@ -13,11 +14,6 @@ interface AuthenticatedRequest extends Request {
     primaryOrganizationId?: string;
   };
 }
-
-// Helper functions
-const isSiteAdmin = (user: any): boolean => {
-  return user?.isSiteAdmin === true || user?.isSiteAdmin === 'true' || user?.role === "site_admin" || user?.admin === true;
-};
 
 const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
   if (!user?.id || !organizationId) return false;

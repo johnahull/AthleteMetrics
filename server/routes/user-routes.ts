@@ -8,15 +8,44 @@ import { body } from "express-validator";
 import { UserService } from "../services/user-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
+import { storage } from "../storage";
 // Session types are loaded globally
 
 const userService = new UserService();
+
+// Type for user objects returned by getUsersByOrganization
+interface OrganizationUser {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  emails: string[] | null;
+  role: string;
+}
 
 // Rate limiting for user creation
 const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 10, // Limit each IP to 10 user creation requests per windowMs
   message: { message: "Too many account creation attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+// Rate limiting for site admin creation (more restrictive)
+const siteAdminCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 3, // Limit each IP to 3 site admin creation requests per hour
+  message: { message: "Too many site admin creation attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+// Rate limiting for username enumeration prevention
+const usernameCheckLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 20, // Limit each IP to 20 username checks per minute
+  message: { message: "Too many username checks, please slow down." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });
@@ -83,8 +112,7 @@ export function registerUserRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // For now, use the basic getUsersByOrganization from storage directly
-      // since UserService doesn't have this method yet
+      // Use UserService method for organization-based user retrieval
       const userIsSiteAdmin = currentUser.isSiteAdmin === true;
 
       if (userIsSiteAdmin) {
@@ -92,20 +120,17 @@ export function registerUserRoutes(app: Express) {
         return res.json(users);
       }
 
-      // Use the storage layer directly for organization-based user retrieval
-      const storage = (userService as any).storage;
-
-      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      const userOrgs = await userService.getUserOrganizations(currentUser.id);
       if (userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization access" });
       }
 
       const targetOrgId = organizationId || userOrgs[0].organizationId;
-      let orgUsers = await storage.getUsersByOrganization(targetOrgId);
+      let orgUsers = await userService.getUsersByOrganization(targetOrgId, currentUser.id);
 
       // Filter by role if specified (e.g., role=athlete for players only)
       if (role) {
-        orgUsers = orgUsers.filter((user: any) => user.role === role);
+        orgUsers = orgUsers.filter((user: OrganizationUser) => user.role === role);
       }
 
       // Filter by search term if specified with sanitization
@@ -119,10 +144,9 @@ export function registerUserRoutes(app: Express) {
 
         if (sanitizedSearch) {
           const searchLower = sanitizedSearch.toLowerCase();
-          orgUsers = orgUsers.filter((user: any) =>
+          orgUsers = orgUsers.filter((user: OrganizationUser) =>
             user.firstName?.toLowerCase().includes(searchLower) ||
-            user.lastName?.toLowerCase().includes(searchLower) ||
-            user.fullName?.toLowerCase().includes(searchLower)
+            user.lastName?.toLowerCase().includes(searchLower)
           );
         }
       }
@@ -234,13 +258,45 @@ export function registerUserRoutes(app: Express) {
     try {
       const userId = req.params.id;
       const { role } = req.body;
-      
+
+      // Validate role is a string
+      if (typeof role !== 'string') {
+        return res.status(400).json({ message: "Role must be a string" });
+      }
+
+      // Prevent users from changing their own role
+      if (userId === req.session.user!.id) {
+        return res.status(403).json({
+          message: "Cannot change your own role"
+        });
+      }
+
+      // Check if target user is a site admin - prevent demotion
+      const targetUser = await userService.getUserById(userId, req.session.user!.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (targetUser.isSiteAdmin === "true" || targetUser.isSiteAdmin === true) {
+        return res.status(403).json({
+          message: "Cannot modify role of site administrators. Site admin status must be changed first."
+        });
+      }
+
+      // Validate role - prevent site_admin assignment through this endpoint
+      const validOrgRoles = ["athlete", "coach", "org_admin"] as const;
+      if (!validOrgRoles.includes(role as any)) {
+        return res.status(400).json({
+          message: "Invalid role. Site admin status must be managed separately."
+        });
+      }
+
       const updatedUser = await userService.updateUserRole(
-        userId, 
-        role, 
+        userId,
+        role,
         req.session.user!.id
       );
-      
+
       res.json(updatedUser);
     } catch (error) {
       console.error("Update user role error:", error);
@@ -292,9 +348,23 @@ export function registerUserRoutes(app: Express) {
   });
 
   /**
+   * Get all site administrators
+   */
+  app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
+    try {
+      const admins = await userService.getSiteAdmins();
+      res.json(admins);
+    } catch (error) {
+      console.error("Get site admins error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch site administrators";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
    * Create site administrator
    */
-  app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
+  app.post("/api/site-admins", siteAdminCreateLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const admin = await userService.createSiteAdmin(req.body, req.session.user!.id);
       res.status(201).json(admin);
@@ -306,22 +376,9 @@ export function registerUserRoutes(app: Express) {
   });
 
   /**
-   * Get site administrators
-   */
-  app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
-    try {
-      const admins = await userService.getUsers({ role: 'site_admin' });
-      res.json(admins);
-    } catch (error) {
-      console.error("Get site admins error:", error);
-      res.status(500).json({ message: "Failed to fetch site administrators" });
-    }
-  });
-
-  /**
    * Check username availability
    */
-  app.get("/api/users/check-username", async (req, res) => {
+  app.get("/api/users/check-username", usernameCheckLimiter, async (req, res) => {
     try {
       const { username } = req.query;
       

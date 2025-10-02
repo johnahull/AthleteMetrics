@@ -23,9 +23,28 @@ ChartJS.register(
   Legend
 );
 
-export default function PerformanceChart() {
-  const { data: measurements } = useQuery({
-    queryKey: ["/api/measurements"],
+interface PerformanceChartProps {
+  organizationId?: string;
+}
+
+export default function PerformanceChart({ organizationId }: PerformanceChartProps) {
+  const { data: measurements, isError, error } = useQuery({
+    queryKey: ["/api/measurements", organizationId],
+    enabled: !!organizationId, // Only run query if organizationId is provided
+    queryFn: async () => {
+      if (!organizationId) {
+        throw new Error("Organization ID is required to fetch performance data");
+      }
+
+      const url = `/api/measurements?organizationId=${organizationId}`;
+      const response = await fetch(url, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return response.json();
+    },
   });
 
   // Process data for weekly trends
@@ -137,6 +156,24 @@ export default function PerformanceChart() {
       },
     },
   };
+
+  if (isError) {
+    return (
+      <Card className="bg-white">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Performance Trends</h3>
+          </div>
+          <div className="h-64 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-red-600 font-medium">Error loading performance data</p>
+              <p className="text-sm text-gray-500 mt-2">{error instanceof Error ? error.message : 'Unknown error'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="bg-white">

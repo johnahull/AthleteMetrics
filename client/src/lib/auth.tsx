@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         setUser(data.user);
         
-        // Auto-set organization context for non-site-admin users
+        // Auto-set organization context for non-site-admin users with exactly one organization
         if (data.user && !data.user.isSiteAdmin) {
           try {
             const orgResponse = await fetch('/api/auth/me/organizations', {
@@ -73,8 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             if (orgResponse.ok) {
               const organizations = await orgResponse.json();
-              if (organizations && organizations.length > 0) {
-                // Set the first organization as the default context
+              // Only auto-select if user has exactly one organization to avoid confusion
+              if (organizations && organizations.length === 1) {
                 setOrganizationContext(organizations[0].organizationId);
               }
             }

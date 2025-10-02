@@ -225,6 +225,19 @@ export class UserService extends BaseService {
   }
 
   /**
+   * Get all site administrators
+   */
+  async getSiteAdmins(): Promise<User[]> {
+    try {
+      const allUsers = await this.storage.getUsers();
+      return allUsers.filter(user => user.isSiteAdmin === "true");
+    } catch (error) {
+      console.error("UserService.getSiteAdmins:", error);
+      return [];
+    }
+  }
+
+  /**
    * Create site administrator
    */
   async createSiteAdmin(adminData: any, requestingUserId: string): Promise<User> {
@@ -247,7 +260,6 @@ export class UserService extends BaseService {
         lastName: validatedData.lastName,
         emails: [`${validatedData.username}@admin.local`], // Temporary email based on username
         password: hashedPassword,
-        role: "site_admin",
         isSiteAdmin: "true",
         isActive: "true"
       };
@@ -269,6 +281,34 @@ export class UserService extends BaseService {
     } catch (error) {
       console.error("UserService.checkUsernameAvailability:", error);
       return false;
+    }
+  }
+
+  /**
+   * Get users by organization
+   */
+  async getUsersByOrganization(organizationId: string, requestingUserId: string): Promise<any[]> {
+    try {
+      // Verify requesting user has access to this organization
+      const requestingUser = await this.storage.getUser(requestingUserId);
+
+      // Site admins can access any organization
+      if (requestingUser?.isSiteAdmin === "true") {
+        return await this.storage.getUsersByOrganization(organizationId);
+      }
+
+      // Check if user has access to this organization
+      const userOrgs = await this.getUserOrganizations(requestingUserId);
+      const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
+
+      if (!hasAccess) {
+        throw new Error("Unauthorized: Access denied to this organization");
+      }
+
+      return await this.storage.getUsersByOrganization(organizationId);
+    } catch (error) {
+      console.error("UserService.getUsersByOrganization:", error);
+      throw error;
     }
   }
 }

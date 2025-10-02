@@ -1,7 +1,8 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations,
-  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
-  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs,
+  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog,
+  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
+  insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne } from "drizzle-orm";
@@ -171,6 +172,10 @@ export interface IStorage {
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
   getUsersByOrganization(organizationId: string): Promise<any[]>;
   getUserActivityStats(userId: string, organizationId: string): Promise<any>;
+
+  // Audit Logging
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -909,16 +914,33 @@ export class DatabaseStorage implements IStorage {
     if (!invitation) throw new Error("Invalid or expired invitation");
 
     // Always create a new user - email addresses are not unique identifiers for athletes
+    // Note: role is not stored in users table - it's stored in user_organizations
     const createUserData = {
       username: userInfo.username,
       emails: [invitation.email],
       password: userInfo.password,
       firstName: userInfo.firstName,
-      lastName: userInfo.lastName,
-      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" // Use the role from the invitation
+      lastName: userInfo.lastName
     };
 
-    const user = await this.createUser(createUserData);
+    console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+
+    // Validate user data against schema before creating user
+    try {
+      insertUserSchema.parse(createUserData);
+    } catch (error) {
+      console.error("User data validation failed:", error);
+      throw error;
+    }
+
+    let user;
+    try {
+      user = await this.createUser(createUserData);
+      console.log("User created successfully:", user.id);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw error;
+    }
 
     // Add user to organization with the invitation role (this will remove any existing roles first)
     await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
@@ -2157,6 +2179,37 @@ export class DatabaseStorage implements IStorage {
 
     console.log(`Optimized query returned ${filteredResult.length} users with team memberships`);
     return filteredResult;
+  }
+
+  // Audit Logging
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [auditLog] = await db.insert(auditLogs).values(log).returning();
+    return auditLog;
+  }
+
+  async getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]> {
+    const limit = filters?.limit || 100;
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+
+    if (filters?.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+
+    const query = db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+
+    if (conditions.length > 0) {
+      return await query.where(and(...conditions));
+    }
+
+    return await query;
   }
 
 }

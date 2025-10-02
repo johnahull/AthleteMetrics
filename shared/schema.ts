@@ -3,6 +3,8 @@ import { pgTable, text, varchar, integer, decimal, timestamp, date } from "drizz
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
+import { validateUsername } from "./username-validation";
 
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -129,6 +131,24 @@ export const invitations = pgTable("invitations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Audit log for security-sensitive operations
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  action: text("action").notNull(), // e.g., "site_admin_access", "role_change", "user_create"
+  resourceType: text("resource_type"), // e.g., "organization", "user", "team"
+  resourceId: varchar("resource_id"), // ID of the affected resource
+  details: text("details"), // JSON string with additional context
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Index for efficient querying by user and time
+  userTimeIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_user_time_idx ON ${table} (${table.userId}, ${table.createdAt} DESC)`,
+  // Index for querying by action type
+  actionIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON ${table} (${table.action}, ${table.createdAt} DESC)`,
+}));
+
 // Relations
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   teams: many(teams),
@@ -242,16 +262,22 @@ export const insertUserSchema = createInsertSchema(users).omit({
   fullName: true,
   birthYear: true, // birthYear is computed from birthDate, so exclude from input
 }).extend({
+  username: z.string().refine((username) => {
+    const result = validateUsername(username);
+    return result.valid;
+  }, (username) => {
+    const result = validateUsername(username);
+    return { message: result.errors[0] || "Invalid username" };
+  }),
   emails: z.array(z.string().email("Invalid email format")).min(1, "At least one email is required"),
   password: z.string()
-    .min(12, "Password must be at least 12 characters")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
+    .min(PASSWORD_REQUIREMENTS.minLength, `Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
+    .regex(PASSWORD_REGEX.lowercase, "Password must contain at least one lowercase letter")
+    .regex(PASSWORD_REGEX.uppercase, "Password must contain at least one uppercase letter")
+    .regex(PASSWORD_REGEX.number, "Password must contain at least one number")
+    .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]).default("athlete"),
   isSiteAdmin: z.string().default("false").optional(),
   birthDate: z.string().optional().refine((date) => {
     if (!date) return true;
@@ -279,12 +305,12 @@ export const updateProfileSchema = z.object({
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: z.string()
-    .min(12, "New password must be at least 12 characters")
-    .regex(/[a-z]/, "New password must contain at least one lowercase letter")
-    .regex(/[A-Z]/, "New password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "New password must contain at least one number")
-    .regex(/[^a-zA-Z0-9]/, "New password must contain at least one special character"),
-  confirmPassword: z.string().min(12, "Confirm password must be at least 12 characters"),
+    .min(PASSWORD_REQUIREMENTS.minLength, `New password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
+    .regex(PASSWORD_REGEX.lowercase, "New password must contain at least one lowercase letter")
+    .regex(PASSWORD_REGEX.uppercase, "New password must contain at least one uppercase letter")
+    .regex(PASSWORD_REGEX.number, "New password must contain at least one number")
+    .regex(PASSWORD_REGEX.specialChar, "New password must contain at least one special character"),
+  confirmPassword: z.string().min(PASSWORD_REQUIREMENTS.minLength, `Confirm password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -396,15 +422,21 @@ export type AthleteProfile = typeof athleteProfiles.$inferSelect;
 
 // Schema for creating site admin users
 export const createSiteAdminSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  username: z.string().refine((username) => {
+    const result = validateUsername(username);
+    return result.valid;
+  }, (username) => {
+    const result = validateUsername(username);
+    return { message: result.errors[0] || "Invalid username" };
+  }),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   password: z.string()
-    .min(12, "Password must be at least 12 characters")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
+    .min(PASSWORD_REQUIREMENTS.minLength, `Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
+    .regex(PASSWORD_REGEX.lowercase, "Password must contain at least one lowercase letter")
+    .regex(PASSWORD_REGEX.uppercase, "Password must contain at least one uppercase letter")
+    .regex(PASSWORD_REGEX.number, "Password must contain at least one number")
+    .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
 });
 
 export type CreateSiteAdmin = z.infer<typeof createSiteAdminSchema>;
@@ -417,6 +449,9 @@ export type UserTeam = typeof userTeams.$inferSelect;
 
 export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 export type Invitation = typeof invitations.$inferSelect;
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;

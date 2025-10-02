@@ -36,3 +36,15 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
+
+# Port 5000: Application HTTP server (both API and client)
+# This is the main port specified by PORT env variable
+[[ports]]
+localPort = 5000
+externalPort = 5000
+
+# Port 43479: Replit development proxy
+# Used by Replit for external HTTP access (port 80)
+[[ports]]
+localPort = 43479
+externalPort = 80

@@ -31,14 +31,12 @@ export default function Dashboard() {
   const { data: dashboardStats, isLoading, error } = useQuery({
     queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, user?.isSiteAdmin],
     queryFn: async () => {
-      // For site admins, always require an organizationId parameter
-      if (isSiteAdmin && !effectiveOrganizationId) {
-        throw new Error("Please select an organization to view dashboard statistics");
+      // Organization selection is required for all users
+      if (!effectiveOrganizationId) {
+        throw new Error("Please select an organization to view dashboard");
       }
-      
-      const url = effectiveOrganizationId
-        ? `/api/analytics/dashboard?organizationId=${effectiveOrganizationId}`
-        : `/api/analytics/dashboard`;
+
+      const url = `/api/analytics/dashboard?organizationId=${effectiveOrganizationId}`;
       const response = await fetch(url, {
         credentials: 'include' // Ensure cookies are sent for authentication
       });
@@ -48,10 +46,7 @@ export default function Dashboard() {
       }
       return response.json();
     },
-    enabled: !!user && (
-      // For site admins: require organization context
-      isSiteAdmin ? !!effectiveOrganizationId : true
-    )
+    enabled: !!user && !!effectiveOrganizationId // Require organization for all users
   });
 
   const { data: recentMeasurements } = useQuery({
@@ -69,10 +64,7 @@ export default function Dashboard() {
       }
       return response.json();
     },
-    enabled: !!user && (
-      // For site admins: require organization context
-      isSiteAdmin ? !!effectiveOrganizationId : true
-    )
+    enabled: !!user && !!effectiveOrganizationId // Only fetch measurements when org is selected
   });
 
   // Get organization name for context indicator
@@ -84,7 +76,8 @@ export default function Dashboard() {
         credentials: 'include'
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
       return response.json();
     }
@@ -105,10 +98,7 @@ export default function Dashboard() {
       }
       return response.json();
     },
-    enabled: !!user && (
-      // For site admins: require organization context
-      isSiteAdmin ? !!effectiveOrganizationId : true
-    )
+    enabled: !!user && !!effectiveOrganizationId // Only fetch team stats when org is selected
   });
 
   // Debug logging (MUST be before any early returns)
@@ -165,8 +155,8 @@ export default function Dashboard() {
 
   return (
     <div className="p-6">
-      {/* Site Admin Organization Selection Required */}
-      {isSiteAdmin && !effectiveOrganizationId && (
+      {/* Organization Selection Required */}
+      {!effectiveOrganizationId && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -175,9 +165,9 @@ export default function Dashboard() {
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">Organization Required</h3>
+              <h3 className="text-sm font-medium text-blue-800">Organization Selection Required</h3>
               <p className="mt-1 text-sm text-blue-700">
-                Please select an organization from the top navigation to view dashboard statistics.
+                Please select an organization from the top navigation to view dashboard statistics and performance data.
               </p>
             </div>
           </div>
@@ -211,7 +201,7 @@ export default function Dashboard() {
             <p className="text-gray-600 mt-1">
               {effectiveOrganizationId && currentOrganization
                 ? `${currentOrganization.name} - Performance overview`
-                : "Track athlete performance and team analytics"
+                : "Select an organization to view performance and analytics"
               }
             </p>
           </div>
@@ -263,7 +253,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Performance Metrics Cards - Best from Last 30 Days */}
+      {/* Performance Metrics Cards - Best from Last 30 Days - Only show when org is selected */}
+      {effectiveOrganizationId && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
         {/* Dynamic metric cards for all 7 test types */}
         {['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'].map((metric) => {
@@ -295,10 +286,12 @@ export default function Dashboard() {
           );
         })}
       </div>
+      )}
 
-      {/* Charts Section */}
+      {/* Charts Section - Only show when org is selected */}
+      {effectiveOrganizationId && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <PerformanceChart />
+        <PerformanceChart organizationId={effectiveOrganizationId} />
 
         <Card className="bg-white">
           <CardContent className="p-6">
@@ -329,8 +322,10 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+      )}
 
-      {/* Recent Activity */}
+      {/* Recent Activity - Only show when org is selected */}
+      {effectiveOrganizationId && (
       <Card className="bg-white">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-6">
@@ -399,6 +394,7 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

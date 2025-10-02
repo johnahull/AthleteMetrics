@@ -24,7 +24,6 @@ const NAVIGATION_CONFIGS = {
   site_admin: {
     default: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Analytics", href: "/analytics", icon: BarChart3 },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog }
     ],
@@ -117,7 +116,7 @@ export default function Sidebar() {
 
   // Use the role from user session data
   const userRole = userData?.role || 'athlete';
-  const isSiteAdmin = userData?.isSiteAdmin || userData?.role === "site_admin";
+  const isSiteAdmin = userData?.isSiteAdmin === true || userData?.role === "site_admin";
 
   // Extract organization ID from URL - check both organization profile and context switching
   const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];

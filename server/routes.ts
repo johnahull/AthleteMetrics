@@ -10,7 +10,8 @@ import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
-import { z } from "zod";
+import { isSiteAdmin } from "@shared/auth-utils";
+import { z, ZodError } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
 import { db } from "./db";
@@ -136,10 +137,6 @@ interface MeasurementFilters {
 }
 
 // Legacy helper functions (to be removed gradually)
-const isSiteAdmin = (user: SessionUser | null | undefined): boolean => {
-  return user?.isSiteAdmin === true || user?.isSiteAdmin === 'true' || user?.role === "site_admin" || user?.admin === true;
-};
-
 const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
   return await accessController.canManageOrganization(userId, organizationId);
 };
@@ -226,13 +223,15 @@ async function initializeDefaultUser() {
     const existingUserByUsername = await storage.getUserByUsername("admin");
 
     if (!existingUserByEmail && !existingUserByUsername) {
+      // Note: Site admins don't have a role field - they are identified by isSiteAdmin flag
+      // This is intentional: role is for organization-level permissions (athlete, coach, org_admin)
+      // while isSiteAdmin grants platform-wide access independent of organizations
       await storage.createUser({
         username: "admin",
         emails: [adminEmail],
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
-        role: "site_admin",
         isSiteAdmin: "true"
       });
       console.log("Site administrator account created successfully");
@@ -369,8 +368,15 @@ export async function registerRoutes(app: Express) {
     }
 
     // Skip CSRF for certain API endpoints that use other authentication
-    const skipCsrfPaths = ['/api/login', '/api/register'];
-    if (skipCsrfPaths.some(path => req.path.startsWith(path))) {
+    // Note: req.path is relative to the mount point, so '/api' prefix is not included
+    // - /login and /register: Pre-authentication endpoints
+    // - /invitations/:token/accept: Public endpoint for new users without sessions
+    //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
+    const skipCsrfPaths = ['/login', '/register'];
+    const skipCsrfPatterns = [/^\/invitations\/[a-zA-Z0-9_-]+\/accept$/];
+
+    if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
+        skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
       return next();
     }
 
@@ -2327,7 +2333,8 @@ export async function registerRoutes(app: Express) {
 
       // Skip rate limiting only if explicitly enabled via environment flag in non-production
       // This prevents accidental bypass in production
-      return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && req.session.user?.role === 'site_admin';
+      const userIsSiteAdmin = isSiteAdmin(req.session.user);
+      return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && userIsSiteAdmin;
     }
   });
 
@@ -2347,12 +2354,13 @@ export async function registerRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (userIsSiteAdmin) {
-        // Site admin can request specific org stats
-        organizationId = requestedOrgId;
-        // For site admins, if no organization specified, require it to prevent accidental data exposure
-        if (!organizationId) {
-          return res.status(400).json({ message: "Organization ID required for dashboard statistics" });
+        // Site admin must select an organization - no site-wide access
+        if (!requestedOrgId) {
+          return res.status(400).json({
+            message: "Organization ID required. Please select an organization to view dashboard."
+          });
         }
+        organizationId = requestedOrgId;
       } else {
         // Org admins and coaches see their organization stats only
         organizationId = currentUser.primaryOrganizationId;
@@ -2730,24 +2738,40 @@ export async function registerRoutes(app: Express) {
       const { token } = req.params;
       const { password, firstName, lastName, username } = req.body;
 
-      if (!username || typeof username !== 'string' || username.trim().length < 3) {
-        return res.status(400).json({ message: "Username must be at least 3 characters long" });
+      // Validate username using shared validation
+      const { validateUsername } = await import('@shared/username-validation');
+      const usernameValidation = validateUsername(username);
+      if (!usernameValidation.valid) {
+        return res.status(400).json({ message: usernameValidation.errors[0] });
       }
 
-      if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
-        return res.status(400).json({ message: "Username can only contain letters, numbers, periods, hyphens, and underscores" });
+      // Validate password using shared validation
+      const { validatePassword } = await import('@shared/password-requirements');
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.errors[0] });
       }
 
       // Check if username already exists
+      // Use generic message to prevent username enumeration
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
-        return res.status(400).json({ message: "Username already taken. Please choose a different username." });
+        return res.status(400).json({ message: "Username unavailable. Please choose a different username." });
       }
 
       const invitation = await storage.getInvitation(token);
       if (!invitation) {
+        console.error("Invitation not found for token:", token);
         return res.status(404).json({ message: "Invitation not found" });
       }
+
+      console.log("Accepting invitation:", { 
+        invitationId: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        organizationId: invitation.organizationId,
+        username 
+      });
 
       const result = await storage.acceptInvitation(token, {
         email: invitation.email,
@@ -2756,6 +2780,8 @@ export async function registerRoutes(app: Express) {
         firstName,
         lastName
       });
+
+      console.log("Invitation accepted successfully, user created:", result.user.id);
 
       // Use the role from the invitation
       let userRole = invitation.role;
@@ -2803,7 +2829,23 @@ export async function registerRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);
-      res.status(500).json({ message: "Failed to accept invitation" });
+
+      // Handle Zod validation errors with user-friendly messages
+      if (error instanceof ZodError) {
+        const firstError = error.errors[0];
+        const field = firstError.path.join('.');
+        const message = firstError.message;
+
+        return res.status(400).json({
+          message: `${field ? field + ': ' : ''}${message}`
+        });
+      }
+
+      // Handle other known errors
+      const errorMessage = error instanceof Error ? error.message : "Failed to accept invitation";
+      const statusCode = errorMessage.includes("not found") || errorMessage.includes("Invalid") ? 404 : 500;
+
+      res.status(statusCode).json({ message: errorMessage });
     }
   });
 
@@ -3015,7 +3057,7 @@ export async function registerRoutes(app: Express) {
 
       const { role, ...userData } = req.body;
       const { emails, ...otherUserData } = req.body;
-      const parsedUserData = insertUserSchema.omit({ role: true }).parse({
+      const parsedUserData = insertUserSchema.parse({
         ...otherUserData,
         emails: emails || [otherUserData.email || `${otherUserData.username}@temp.local`]
       });
@@ -3038,8 +3080,7 @@ export async function registerRoutes(app: Express) {
 
       // Always create new user - email addresses are not unique identifiers for athletes
       const user = await storage.createUser({
-        ...parsedUserData,
-        role: "athlete" // Default role, will be overridden by organization role
+        ...parsedUserData
       });
 
       // Add user to organization with the specified role (removes any existing roles first)
@@ -3146,171 +3187,12 @@ export async function registerRoutes(app: Express) {
     }
   });
 
-  // Get all users - REMOVED: Duplicate route now handled by ./routes/user-routes.ts
-  // This route was causing conflicts with the refactored user management routes
-
-  app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
-    try {
-      const adminData = createSiteAdminSchema.parse(req.body);
-
-      const newUser = await storage.createUser({
-        username: adminData.username,
-        emails: [adminData.username + "@admin.local"], // Use username as email with dummy domain
-        firstName: adminData.firstName,
-        lastName: adminData.lastName,
-        password: adminData.password,
-        role: "site_admin",
-        isSiteAdmin: "true"
-      });
-
-      res.json({
-        user: {
-          id: newUser.id,
-          email: newUser.emails?.[0] || `${newUser.username}@admin.local`,
-          firstName: newUser.firstName,
-          lastName: newUser.lastName,
-          role: "site_admin",
-        },
-        message: "Site admin created successfully"
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Validation error", errors: error.errors });
-      } else {
-        console.error("Error creating site admin:", error);
-        res.status(500).json({ message: "Failed to create site admin" });
-      }
-    }
-  });
+  // REMOVED: Duplicate site admin creation route now handled by ./routes/user-routes.ts
+  // The user-routes.ts version includes proper rate limiting and uses UserService
 
 
-  app.put("/api/users/:id/role", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { role, organizationId } = req.body;
-      const currentUser = req.session.user;
-
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Get the user to check current role and organization membership
-      const user = await storage.getUser(id);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Check if user belongs to any organization
-      const userOrgs = await storage.getUserOrganizations(id);
-      const isOrgUser = userOrgs && userOrgs.length > 0;
-
-      // Authorization checks
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      if (!userIsSiteAdmin) {
-        // For non-site admins, check org admin permissions
-        if (!organizationId) {
-          return res.status(400).json({ message: "Organization ID required for role changes" });
-        }
-
-        // Validate organizationId is a valid string format
-        if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
-          return res.status(400).json({ message: "Organization ID must be a valid string" });
-        }
-
-        // Validate organization exists
-        const org = await storage.getOrganization(organizationId);
-        if (!org) {
-          return res.status(400).json({ message: "Invalid organization ID" });
-        }
-
-        if (!await canManageUsers(currentUser.id, organizationId)) {
-          return res.status(403).json({ message: "Access denied. Only organization admins can change user roles." });
-        }
-
-        // Check if target user is in the same organization
-        const targetUserRoles = await storage.getUserRoles(id, organizationId);
-        if (targetUserRoles.length === 0) {
-          return res.status(403).json({ message: "User not found in this organization" });
-        }
-
-        // Prevent org admins from modifying themselves
-        if (currentUser.id === id) {
-          return res.status(403).json({ message: "You cannot change your own role" });
-        }
-
-        // Org admins can only change roles of coaches and other org admins (not athletes)
-        const canChangeRole = targetUserRoles.some(userRole => ["org_admin", "coach"].includes(userRole));
-        if (!canChangeRole) {
-          return res.status(403).json({ message: "You can only change roles of coaches and organization admins" });
-        }
-
-        // Org admins cannot promote users to site admin
-        if (role === "site_admin") {
-          return res.status(403).json({ message: "Cannot promote users to site administrator" });
-        }
-      }
-
-      // Role validation rules
-      if (isOrgUser && role === "site_admin") {
-        return res.status(400).json({ 
-          message: "Users from organizations cannot be made site admins" 
-        });
-      }
-
-      // Prevent conflicting role combinations: athlete vs coach/org_admin
-      // Note: Since roles are stored in userOrganizations, we'll get current roles from the organization context
-      const currentUserRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
-      const hasAthleteRole = currentUserRoles.includes('athlete');
-      const hasCoachOrAdminRole = currentUserRoles.some(r => ['coach', 'org_admin'].includes(r));
-      
-      if ((hasAthleteRole && (role === 'coach' || role === 'org_admin')) ||
-          (hasCoachOrAdminRole && role === 'athlete')) {
-        return res.status(400).json({ 
-          message: "Athletes cannot be coaches or admins, and coaches/admins cannot be athletes" 
-        });
-      }
-
-      // Valid roles for organization users
-      if (isOrgUser && !['athlete', 'coach', 'org_admin'].includes(role)) {
-        return res.status(400).json({ 
-          message: "Invalid role for organization user" 
-        });
-      }
-
-      // Athletes cannot have their roles changed by org admins
-      if (!userIsSiteAdmin) {
-        const targetUserCurrentRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
-        if (targetUserCurrentRoles.includes("athlete")) {
-          return res.status(403).json({ message: "Athlete roles cannot be changed by organization admins" });
-        }
-      }
-
-      // Update user role differently based on who is making the change
-      if (userIsSiteAdmin) {
-        // Site admins can update roles in all organizations the user belongs to
-        if (isOrgUser) {
-          for (const userOrg of userOrgs) {
-            // Use addUserToOrganization to ensure single role per org
-            await storage.addUserToOrganization(id, userOrg.organizationId, role);
-          }
-        }
-        const updatedUser = await storage.getUser(id);
-        res.json(updatedUser);
-      } else {
-        // Org admins can only update role in their specific organization
-        // Use addUserToOrganization to ensure single role per org
-        await storage.addUserToOrganization(id, organizationId!, role);
-
-        // Get updated user info to return
-        const updatedUser = await storage.getUser(id);
-        res.json(updatedUser);
-      }
-    } catch (error) {
-      console.error("Error updating user role:", error);
-      res.status(500).json({ message: "Failed to update user role" });
-    }
-  });
+  // Note: Role update endpoint moved to user-routes.ts for better organization and security
+  // The implementation there properly prevents site admin role modification
 
   // PUT /api/users/:id/status - Toggle user active/inactive status (site admin only)
   app.put("/api/users/:id/status", requireAuth, async (req, res) => {

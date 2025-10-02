@@ -37,7 +37,7 @@ export function registerAuthRoutes(app: Express) {
 
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
-      
+
       // Set session
       req.session.user = {
         id: user.id,
