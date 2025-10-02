@@ -368,7 +368,8 @@ export async function registerRoutes(app: Express) {
     }
 
     // Skip CSRF for certain API endpoints that use other authentication
-    const skipCsrfPaths = ['/api/login', '/api/register', '/api/invitations'];
+    // Note: req.path is relative to the mount point, so '/api' prefix is not included
+    const skipCsrfPaths = ['/login', '/register', '/invitations'];
     if (skipCsrfPaths.some(path => req.path.startsWith(path))) {
       return next();
     }
