@@ -153,6 +153,12 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
     selectedAthleteId: '',
     selectedAthlete: null,
     selectedAthleteIds: [],
+    // Clear teamIds from filters - multi-group uses GroupDefinitions instead
+    filters: {
+      ...state.filters,
+      teamIds: undefined,
+      athleteIds: undefined
+    },
     // Store current state for restoration later (only if there's something to preserve)
     previousMetrics: preservedMetrics,
     previousTimeframe: preservedTimeframe,
