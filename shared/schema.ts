@@ -251,7 +251,6 @@ export const insertUserSchema = createInsertSchema(users).omit({
     .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]).default("athlete"),
   isSiteAdmin: z.string().default("false").optional(),
   birthDate: z.string().optional().refine((date) => {
     if (!date) return true;

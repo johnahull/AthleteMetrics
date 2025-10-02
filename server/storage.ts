@@ -909,13 +909,13 @@ export class DatabaseStorage implements IStorage {
     if (!invitation) throw new Error("Invalid or expired invitation");
 
     // Always create a new user - email addresses are not unique identifiers for athletes
+    // Note: role is not stored in users table - it's stored in user_organizations
     const createUserData = {
       username: userInfo.username,
       emails: [invitation.email],
       password: userInfo.password,
       firstName: userInfo.firstName,
-      lastName: userInfo.lastName,
-      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" // Use the role from the invitation
+      lastName: userInfo.lastName
     };
 
     const user = await this.createUser(createUserData);
