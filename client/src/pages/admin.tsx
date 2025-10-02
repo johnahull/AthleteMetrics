@@ -44,7 +44,7 @@ type Organization = {
       firstName: string;
       lastName: string;
       role: string;
-      isActive: string;
+      isActive: boolean;
       isSiteAdmin: boolean;
       createdAt: string;
     };

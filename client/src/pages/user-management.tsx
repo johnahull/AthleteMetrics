@@ -36,7 +36,7 @@ type Organization = {
       firstName: string;
       lastName: string;
       role: string;
-      isActive: string;
+      isActive: boolean;
       createdAt: string;
     };
   }[];
@@ -47,7 +47,7 @@ type Organization = {
     lastName: string;
     role: string;
     organizationId: string;
-    isUsed: string;
+    isUsed: boolean;
     expiresAt: string;
     createdAt: string;
     token: string;
@@ -81,7 +81,7 @@ type SiteAdmin = {
   firstName: string;
   lastName: string;
   role: string;
-  isActive: string;
+  isActive: boolean;
   createdAt: string;
 };
 
@@ -376,8 +376,8 @@ export default function UserManagement() {
     });
   };
 
-  const handleToggleUserStatus = (userId: string, userName: string, currentStatus: string) => {
-    const isCurrentlyActive = currentStatus === "true";
+  const handleToggleUserStatus = (userId: string, userName: string, currentStatus: boolean) => {
+    const isCurrentlyActive = currentStatus === true;
     const action = isCurrentlyActive ? "deactivate" : "activate";
 
     confirm({
@@ -940,7 +940,7 @@ export default function UserManagement() {
               {organizations?.map((org: Organization) => {
                 const isExpanded = expandedOrgs.has(org.id);
                 const filteredUsers = org.users?.filter((userOrg) => roleFilter === "all" || userOrg.role === roleFilter) || [];
-                const totalUsers = (org.users?.length || 0) + (org.invitations?.filter(inv => inv.isUsed === "false").length || 0);
+                const totalUsers = (org.users?.length || 0) + (org.invitations?.filter(inv => inv.isUsed === false).length || 0);
                 const filteredCount = filteredUsers.length;
 
                 // Skip organization if no users match the filter
@@ -1001,7 +1001,7 @@ export default function UserManagement() {
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
-                            {userOrg.user.isActive === "true" ? (
+                            {userOrg.user.isActive === true ? (
                               <CheckCircle className="h-4 w-4 text-green-600" />
                             ) : (
                               <XCircle className="h-4 w-4 text-red-600" />
@@ -1011,8 +1011,8 @@ export default function UserManagement() {
                                 {userOrg.user.firstName} {userOrg.user.lastName}
                               </p>
                               <p className="text-sm text-gray-600" data-testid={`user-username-${userOrg.user.id}`}>
-                                @{userOrg.user.username} • <span className={userOrg.user.isActive === "true" ? "text-green-600" : "text-red-600"}>
-                                  {userOrg.user.isActive === "true" ? "Active" : "Inactive"}
+                                @{userOrg.user.username} • <span className={userOrg.user.isActive === true ? "text-green-600" : "text-red-600"}>
+                                  {userOrg.user.isActive === true ? "Active" : "Inactive"}
                                 </span>
                               </p>
                             </div>
@@ -1064,7 +1064,7 @@ export default function UserManagement() {
                           )}
 
                           {/* Generate new invitation link button - only show for inactive users */}
-                          {userOrg.user.isActive !== "true" && (
+                          {userOrg.user.isActive !== true && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -1089,10 +1089,10 @@ export default function UserManagement() {
                               `${userOrg.user.firstName} ${userOrg.user.lastName}`,
                               userOrg.user.isActive
                             )}
-                            className={userOrg.user.isActive === "true" ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
+                            className={userOrg.user.isActive === true ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
                             data-testid={`user-toggle-status-${userOrg.user.id}`}
                           >
-                            {userOrg.user.isActive === "true" ? (
+                            {userOrg.user.isActive === true ? (
                               <XCircle className="h-4 w-4" />
                             ) : (
                               <CheckCircle className="h-4 w-4" />
@@ -1115,11 +1115,11 @@ export default function UserManagement() {
 
                     {/* Pending Invitations - only show unused invitations matching role filter */}
                     {org.invitations?.filter(invitation =>
-                      invitation.isUsed === "false" &&
+                      invitation.isUsed === false &&
                       (roleFilter === "all" || invitation.role === roleFilter)
                     ).map((invitation) => {
                       const isExpired = new Date() > new Date(invitation.expiresAt);
-                      const isUsed = invitation.isUsed === "true";
+                      const isUsed = invitation.isUsed === true;
 
                       return (
                         <div
