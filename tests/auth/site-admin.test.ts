@@ -4,18 +4,13 @@ import { isSiteAdmin } from '../../shared/auth-utils';
 /**
  * Tests for site admin detection logic
  *
- * Note: isSiteAdmin is stored as a string ("true"/"false") in the database
- * for legacy compatibility. These tests ensure the detection works correctly
- * with both string and boolean values.
+ * Note: isSiteAdmin is now stored as a boolean in the database.
+ * These tests ensure the detection works correctly with boolean values
+ * and legacy role/admin fields.
  */
 describe('Site Admin Detection', () => {
 
   describe('isSiteAdmin helper', () => {
-    it('should detect site admin from string "true"', () => {
-      const user = { id: '1', isSiteAdmin: 'true' };
-      expect(isSiteAdmin(user)).toBe(true);
-    });
-
     it('should detect site admin from boolean true', () => {
       const user = { id: '1', isSiteAdmin: true };
       expect(isSiteAdmin(user)).toBe(true);
@@ -29,11 +24,6 @@ describe('Site Admin Detection', () => {
     it('should detect site admin from admin flag (legacy)', () => {
       const user = { id: '1', admin: true };
       expect(isSiteAdmin(user)).toBe(true);
-    });
-
-    it('should reject string "false"', () => {
-      const user = { id: '1', isSiteAdmin: 'false' };
-      expect(isSiteAdmin(user)).toBe(false);
     });
 
     it('should reject boolean false', () => {
@@ -70,17 +60,17 @@ describe('Site Admin Detection', () => {
     it('should prioritize isSiteAdmin over role field', () => {
       const user = {
         id: '1',
-        isSiteAdmin: 'true',
+        isSiteAdmin: true,
         role: 'athlete' // Conflicting role
       };
       expect(isSiteAdmin(user)).toBe(true);
     });
 
-    it('should handle numeric string values (edge case)', () => {
-      const user1 = { id: '1', isSiteAdmin: '1' };
-      const user2 = { id: '1', isSiteAdmin: '0' };
+    it('should reject numeric values (edge case)', () => {
+      const user1 = { id: '1', isSiteAdmin: 1 as any };
+      const user2 = { id: '1', isSiteAdmin: 0 as any };
 
-      // These should be false because they don't exactly match "true"
+      // These should be false because they aren't boolean true
       expect(isSiteAdmin(user1)).toBe(false);
       expect(isSiteAdmin(user2)).toBe(false);
     });
@@ -128,12 +118,12 @@ describe('Site Admin Detection', () => {
       expect(isSiteAdmin(sessionUser)).toBe(false);
     });
 
-    it('should handle session user with string isSiteAdmin', () => {
+    it('should handle session user with legacy role field', () => {
       const sessionUser = {
         id: 'user-789',
         username: 'admin2',
-        isSiteAdmin: 'true', // String from database
-        role: 'org_admin'
+        isSiteAdmin: false,
+        role: 'site_admin' // Legacy role-based detection
       };
 
       expect(isSiteAdmin(sessionUser)).toBe(true);
@@ -141,22 +131,22 @@ describe('Site Admin Detection', () => {
   });
 
   describe('Edge cases and security', () => {
-    it('should not be fooled by string manipulation attempts', () => {
+    it('should not be fooled by manipulation attempts', () => {
       const maliciousAttempts = [
-        { isSiteAdmin: 'TRUE' },
-        { isSiteAdmin: 'True' },
-        { isSiteAdmin: ' true' },
-        { isSiteAdmin: 'true ' },
-        { isSiteAdmin: 'yes' },
-        { isSiteAdmin: 1 },
+        { isSiteAdmin: 'true' as any }, // String instead of boolean
+        { isSiteAdmin: 'TRUE' as any },
+        { isSiteAdmin: 'True' as any },
+        { isSiteAdmin: 'yes' as any },
+        { isSiteAdmin: 1 as any },
         { role: 'site_admin ' },
-        { role: ' site_admin' }
+        { role: ' site_admin' },
+        { role: 'SITE_ADMIN' }
       ];
 
       maliciousAttempts.forEach((user, index) => {
         const result = isSiteAdmin(user);
-        // Only exact matches should work
-        if (user.isSiteAdmin === 'true' || user.role === 'site_admin') {
+        // Only exact matches should work (role === 'site_admin')
+        if (user.role === 'site_admin') {
           expect(result).toBe(true);
         } else {
           expect(result).toBe(false);
@@ -165,7 +155,7 @@ describe('Site Admin Detection', () => {
     });
 
     it('should handle prototype pollution attempts', () => {
-      const user = Object.create({ isSiteAdmin: 'true' });
+      const user = Object.create({ isSiteAdmin: true });
       user.id = '1';
 
       // Should still detect site admin from prototype

@@ -93,8 +93,8 @@ router.post('/login', async (req: Request, res: Response) => {
     // Get user's organization data first for session setup
     let userRole = 'guest';
     let primaryOrganizationId: string | undefined;
-    
-    if (user.isSiteAdmin === 'true') {
+
+    if (user.isSiteAdmin === true) {
       userRole = 'site_admin';
     } else {
       // Try to get organization role and primary org
@@ -115,7 +115,7 @@ router.post('/login', async (req: Request, res: Response) => {
       lastName: user.lastName,
       role: userRole,
       emailVerified: user.isEmailVerified === 'true',
-      isSiteAdmin: user.isSiteAdmin === 'true',
+      isSiteAdmin: user.isSiteAdmin === true,
       primaryOrganizationId: primaryOrganizationId,
       athleteId: userRole === 'athlete' ? user.id : undefined
     };

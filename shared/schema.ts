@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -57,7 +57,7 @@ export const users = pgTable("users", {
   requiresPasswordChange: text("requires_password_change").default("false").notNull(),
   passwordChangedAt: timestamp("password_changed_at"),
   // System fields
-  isSiteAdmin: text("is_site_admin").default("false").notNull(),
+  isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: text("is_active").default("true").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -278,7 +278,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
     .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  isSiteAdmin: z.string().default("false").optional(),
+  isSiteAdmin: z.boolean().default(false).optional(),
   birthDate: z.string().optional().refine((date) => {
     if (!date) return true;
     const d = new Date(date);

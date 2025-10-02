@@ -46,7 +46,7 @@ export function registerAuthRoutes(app: Express) {
         lastName: user.lastName,
         email: user.emails?.[0] || user.username + '@temp.local',
         role: roleContext.role,
-        isSiteAdmin: user.isSiteAdmin === "true",
+        isSiteAdmin: user.isSiteAdmin === true,
         primaryOrganizationId: roleContext.primaryOrganizationId,
         athleteId: roleContext.role === 'athlete' ? user.id : undefined
       };
@@ -143,7 +143,7 @@ export function registerAuthRoutes(app: Express) {
         lastName: targetUser.lastName,
         email: targetUser.emails?.[0] || targetUser.username + '@temp.local',
         role: targetRoleContext.role,
-        isSiteAdmin: targetUser.isSiteAdmin === "true",
+        isSiteAdmin: targetUser.isSiteAdmin === true,
         primaryOrganizationId: targetRoleContext.primaryOrganizationId,
         athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined
       };

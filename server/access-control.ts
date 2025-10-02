@@ -15,7 +15,7 @@ export class AccessController {
 
   async isSiteAdmin(userId: string): Promise<boolean> {
     const user = await this.storage.getUser(userId);
-    return user?.isSiteAdmin === "true";
+    return user?.isSiteAdmin === true;
   }
 
   async canAccessOrganization(userId: string, organizationId: string): Promise<boolean> {

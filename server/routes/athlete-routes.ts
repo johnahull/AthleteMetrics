@@ -11,7 +11,7 @@ import { insertUserSchema, insertAthleteSchema } from "@shared/schema";
 
 // Helper function to check if user is site admin
 function isSiteAdmin(user: any): boolean {
-  return user?.isSiteAdmin === true || user?.isSiteAdmin === "true";
+  return user?.isSiteAdmin === true || user?.isSiteAdmin === true;
 }
 
 // Rate limiting for athlete endpoints

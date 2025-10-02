@@ -27,7 +27,7 @@ export type Action =
 class UnifiedPermissionService {
   private async isSiteAdmin(userId: string): Promise<boolean> {
     const user = await storage.getUser(userId);
-    return user?.isSiteAdmin === "true";
+    return user?.isSiteAdmin === true;
   }
 
   private async getUserRolesInOrg(userId: string, organizationId: string): Promise<string[]> {

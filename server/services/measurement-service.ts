@@ -45,7 +45,7 @@ export class MeasurementService extends BaseService {
       const requestingUser = await this.storage.getUser(requestingUserId);
       
       // Site admins can see all measurements
-      if (requestingUser?.isSiteAdmin === "true") {
+      if (requestingUser?.isSiteAdmin === true) {
         return await this.storage.getMeasurements(filters);
       }
 
@@ -101,7 +101,7 @@ export class MeasurementService extends BaseService {
       );
 
       const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== "true") {
+      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== true) {
         throw new Error("Unauthorized: Cannot create measurements for athletes outside your organizations");
       }
 
@@ -338,7 +338,7 @@ export class MeasurementService extends BaseService {
       );
 
       const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== "true") {
+      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== true) {
         throw new Error("Unauthorized: Cannot update measurements for athletes outside your organizations");
       }
 
@@ -368,7 +368,7 @@ export class MeasurementService extends BaseService {
       );
 
       const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== "true") {
+      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== true) {
         throw new Error("Unauthorized: Cannot delete measurements for athletes outside your organizations");
       }
 
@@ -404,7 +404,7 @@ export class MeasurementService extends BaseService {
         org.role === 'coach' || org.role === 'org_admin'
       );
 
-      const canVerify = requestingUser.isSiteAdmin === "true" || hasCoachOrAdminRole;
+      const canVerify = requestingUser.isSiteAdmin === true || hasCoachOrAdminRole;
 
       if (!canVerify) {
         throw new Error("Unauthorized: Only coaches and administrators can verify measurements");
