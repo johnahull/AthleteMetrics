@@ -537,19 +537,19 @@ export default function UserManagement() {
       </div>
 
       <div className="space-y-6">
-        {/* Send Invitation */}
+        {/* Add New User */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <UserPlus className="h-5 w-5 text-primary" />
-                <CardTitle>Send Invitation</CardTitle>
+                <CardTitle>Add New User</CardTitle>
               </div>
               <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" data-testid="send-invitation-button">
                     <UserPlus className="h-4 w-4 mr-2" />
-                    Send Invitation
+                    Add New User
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
