@@ -92,7 +92,9 @@ export class OrganizationService extends BaseService {
       }
 
       // Regular users get only their assigned organizations
-      return await this.storage.getUserOrganizations(userId);
+      // Extract the organization object from the nested structure
+      const userOrgs = await this.storage.getUserOrganizations(userId);
+      return userOrgs.map((userOrg: any) => userOrg.organization);
     } catch (error) {
       console.error("OrganizationService.getUserOrganizations:", error);
       return [];
