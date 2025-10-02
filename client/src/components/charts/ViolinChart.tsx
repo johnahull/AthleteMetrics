@@ -68,7 +68,14 @@ export function ViolinChart({
     try {
       // If selectedGroups is provided, use it to filter data (multi-group analysis)
       if (selectedGroups && selectedGroups.length > 0) {
-        return selectedGroups.map((group, index) => {
+        devLog.log('Processing with selectedGroups', {
+          groupCount: selectedGroups.length,
+          groups: selectedGroups.map(g => ({ name: g.name, memberCount: g.memberIds?.length || 0 })),
+          sampleMemberIds: selectedGroups[0]?.memberIds?.slice(0, 3),
+          sampleAthleteIds: sourceData.slice(0, 3).map(d => d.athleteId)
+        });
+
+        const processedGroups = selectedGroups.map((group, index) => {
           // Filter data for this group by memberIds
           const groupData = sourceData.filter(point =>
             point &&
@@ -78,7 +85,11 @@ export function ViolinChart({
           );
 
           if (groupData.length === 0) {
-            devLog.warn('ViolinChart: No data points for group', group.name);
+            devLog.warn('ViolinChart: No data points for group', {
+              groupName: group.name,
+              memberIdsCount: group.memberIds?.length || 0,
+              sourceDataSample: sourceData.slice(0, 5).map(d => ({ athleteId: d.athleteId, athleteName: d.athleteName }))
+            });
             return null;
           }
 
@@ -137,6 +148,21 @@ export function ViolinChart({
             color: getGroupColor(index)
           };
         }).filter((group): group is NonNullable<typeof group> => group !== null);
+
+        // If all groups filtered to null, throw specific error
+        if (processedGroups.length === 0) {
+          devLog.error('ViolinChart: All groups are empty after filtering', {
+            totalGroups: selectedGroups.length,
+            sourceDataLength: sourceData.length,
+            groupsInfo: selectedGroups.map(g => ({
+              name: g.name,
+              memberIds: g.memberIds?.length || 0
+            }))
+          });
+          throw new Error('No data found for any of the selected groups. Groups may be empty or athlete IDs may not match.');
+        }
+
+        return processedGroups;
       }
 
       // Fallback: Group data by grouping field (for non-multi-group analysis)
@@ -201,8 +227,17 @@ export function ViolinChart({
         };
       }).filter((group): group is NonNullable<typeof group> => group !== null);
     } catch (error) {
-      devLog.error('ViolinChart: Error processing data', error);
-      setError('Unable to process data for visualization. Please check your data selection.');
+      devLog.error('ViolinChart: Error processing data', {
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        hasData: !!data,
+        dataLength: data?.length || 0,
+        hasRawData: !!rawData,
+        rawDataLength: rawData?.length || 0,
+        hasSelectedGroups: !!selectedGroups,
+        selectedGroupsLength: selectedGroups?.length || 0
+      });
+      setError('Unable to process data for visualization. Please check your data selection and ensure groups have members.');
       return [];
     }
   }, [data, rawData, selectedGroups]);
