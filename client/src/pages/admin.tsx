@@ -507,7 +507,7 @@ export default function AdminPage() {
                               </div>
                               <div className="ml-4">
                                 <select
-                                  value={userOrg.user.role}
+                                  value={userOrg.role}
                                   onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
                                   className="text-sm border border-gray-300 rounded px-2 py-1"
                                   data-testid={`user-role-select-${userOrg.user.id}`}
@@ -515,7 +515,6 @@ export default function AdminPage() {
                                   <option value="athlete">Athlete</option>
                                   <option value="coach">Coach</option>
                                   <option value="org_admin">Org Admin</option>
-                                  <option value="site_admin">Site Admin</option>
                                 </select>
                               </div>
                             </div>
