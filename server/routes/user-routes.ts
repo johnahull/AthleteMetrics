@@ -235,9 +235,21 @@ export function registerUserRoutes(app: Express) {
       const userId = req.params.id;
       const { role } = req.body;
 
+      // Validate role is a string
+      if (typeof role !== 'string') {
+        return res.status(400).json({ message: "Role must be a string" });
+      }
+
+      // Prevent users from changing their own role
+      if (userId === req.session.user!.id) {
+        return res.status(403).json({
+          message: "Cannot change your own role"
+        });
+      }
+
       // Validate role - prevent site_admin assignment through this endpoint
-      const validOrgRoles = ["athlete", "coach", "org_admin"];
-      if (!validOrgRoles.includes(role)) {
+      const validOrgRoles = ["athlete", "coach", "org_admin"] as const;
+      if (!validOrgRoles.includes(role as any)) {
         return res.status(400).json({
           message: "Invalid role. Site admin status must be managed separately."
         });

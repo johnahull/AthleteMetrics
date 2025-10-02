@@ -22,14 +22,26 @@ export abstract class BaseService {
   }
 
   /**
+   * Check if a user object represents a site administrator
+   * Use this when you already have the user object to avoid duplicate queries
+   */
+  protected isSiteAdminFromUser(user: any): boolean {
+    return user?.isSiteAdmin === "true" || user?.isSiteAdmin === true;
+  }
+
+  /**
    * Validate organization access for the current user
    */
   protected async validateOrganizationAccess(
     userId: string,
-    organizationId: string
+    organizationId: string,
+    userIsSiteAdmin?: boolean
   ): Promise<boolean> {
+    // Use provided isSiteAdmin flag if available to avoid duplicate query
+    const isAdmin = userIsSiteAdmin ?? await this.isSiteAdmin(userId);
+
     // Site admins have access to all organizations
-    if (await this.isSiteAdmin(userId)) {
+    if (isAdmin) {
       // Audit log for site admin access
       console.log(`[AUDIT] Site admin ${userId} accessed organization ${organizationId}`, {
         timestamp: new Date().toISOString(),

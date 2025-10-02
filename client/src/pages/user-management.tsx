@@ -912,14 +912,24 @@ export default function UserManagement() {
                 return (
                   <div key={org.id} className="space-y-3 border-b pb-6">
                     <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -m-2"
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -m-2 transition-colors select-none"
                       onClick={() => toggleOrgExpansion(org.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleOrgExpansion(org.id);
+                        }
+                      }}
+                      aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${org.name} users`}
                     >
                       <div className="flex items-center gap-2">
                         {isExpanded ? (
-                          <ChevronDown className="h-5 w-5 text-gray-600" />
+                          <ChevronDown className="h-5 w-5 text-gray-600 transition-transform" />
                         ) : (
-                          <ChevronRight className="h-5 w-5 text-gray-600" />
+                          <ChevronRight className="h-5 w-5 text-gray-600 transition-transform" />
                         )}
                         <h3 className="text-lg font-semibold text-gray-900">{org.name}</h3>
                       </div>

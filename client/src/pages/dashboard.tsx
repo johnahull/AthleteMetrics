@@ -76,7 +76,8 @@ export default function Dashboard() {
         credentials: 'include'
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
       return response.json();
     }
@@ -93,7 +94,7 @@ export default function Dashboard() {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.statusText}`);
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
       return response.json();
     },
