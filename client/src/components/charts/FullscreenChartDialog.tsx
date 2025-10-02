@@ -284,7 +284,7 @@ export function FullscreenChartDialog({
         }
         return (
           <RadarChart
-            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as MultiMetricData[])}
+            data={multiMetric && multiMetric.length > 0 ? multiMetric : (data as unknown as MultiMetricData[])}
             config={fullscreenConfig}
             statistics={statistics}
             highlightAthlete={highlightAthlete}
