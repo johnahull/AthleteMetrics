@@ -232,7 +232,6 @@ async function initializeDefaultUser() {
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
-        role: "site_admin",
         isSiteAdmin: "true"
       });
       console.log("Site administrator account created successfully");
@@ -3027,7 +3026,7 @@ export async function registerRoutes(app: Express) {
 
       const { role, ...userData } = req.body;
       const { emails, ...otherUserData } = req.body;
-      const parsedUserData = insertUserSchema.omit({ role: true }).parse({
+      const parsedUserData = insertUserSchema.parse({
         ...otherUserData,
         emails: emails || [otherUserData.email || `${otherUserData.username}@temp.local`]
       });
@@ -3050,8 +3049,7 @@ export async function registerRoutes(app: Express) {
 
       // Always create new user - email addresses are not unique identifiers for athletes
       const user = await storage.createUser({
-        ...parsedUserData,
-        role: "athlete" // Default role, will be overridden by organization role
+        ...parsedUserData
       });
 
       // Add user to organization with the specified role (removes any existing roles first)
@@ -3171,7 +3169,6 @@ export async function registerRoutes(app: Express) {
         firstName: adminData.firstName,
         lastName: adminData.lastName,
         password: adminData.password,
-        role: "site_admin",
         isSiteAdmin: "true"
       });
 

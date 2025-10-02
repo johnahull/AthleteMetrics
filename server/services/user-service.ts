@@ -260,7 +260,6 @@ export class UserService extends BaseService {
         lastName: validatedData.lastName,
         emails: [`${validatedData.username}@admin.local`], // Temporary email based on username
         password: hashedPassword,
-        role: "site_admin",
         isSiteAdmin: "true",
         isActive: "true"
       };
