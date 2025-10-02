@@ -13,6 +13,7 @@ interface UserProfile {
   username: string;
   email: string;
   role: string;
+  isSiteAdmin?: boolean;
   organizations: Array<{
     id: string;
     name: string;

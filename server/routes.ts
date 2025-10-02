@@ -2740,12 +2740,11 @@ export async function registerRoutes(app: Express) {
       const { token } = req.params;
       const { password, firstName, lastName, username } = req.body;
 
-      if (!username || typeof username !== 'string' || username.trim().length < 3) {
-        return res.status(400).json({ message: "Username must be at least 3 characters long" });
-      }
-
-      if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
-        return res.status(400).json({ message: "Username can only contain letters, numbers, periods, hyphens, and underscores" });
+      // Validate username using shared validation
+      const { validateUsername } = await import('@shared/username-validation');
+      const usernameValidation = validateUsername(username);
+      if (!usernameValidation.valid) {
+        return res.status(400).json({ message: usernameValidation.errors[0] });
       }
 
       // Validate password using shared validation
@@ -3193,133 +3192,8 @@ export async function registerRoutes(app: Express) {
   // The user-routes.ts version includes proper rate limiting and uses UserService
 
 
-  app.put("/api/users/:id/role", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { role, organizationId } = req.body;
-      const currentUser = req.session.user;
-
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Get the user to check current role and organization membership
-      const user = await storage.getUser(id);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Check if user belongs to any organization
-      const userOrgs = await storage.getUserOrganizations(id);
-      const isOrgUser = userOrgs && userOrgs.length > 0;
-
-      // Authorization checks
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-
-      if (!userIsSiteAdmin) {
-        // For non-site admins, check org admin permissions
-        if (!organizationId) {
-          return res.status(400).json({ message: "Organization ID required for role changes" });
-        }
-
-        // Validate organizationId is a valid string format
-        if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
-          return res.status(400).json({ message: "Organization ID must be a valid string" });
-        }
-
-        // Validate organization exists
-        const org = await storage.getOrganization(organizationId);
-        if (!org) {
-          return res.status(400).json({ message: "Invalid organization ID" });
-        }
-
-        if (!await canManageUsers(currentUser.id, organizationId)) {
-          return res.status(403).json({ message: "Access denied. Only organization admins can change user roles." });
-        }
-
-        // Check if target user is in the same organization
-        const targetUserRoles = await storage.getUserRoles(id, organizationId);
-        if (targetUserRoles.length === 0) {
-          return res.status(403).json({ message: "User not found in this organization" });
-        }
-
-        // Prevent org admins from modifying themselves
-        if (currentUser.id === id) {
-          return res.status(403).json({ message: "You cannot change your own role" });
-        }
-
-        // Org admins can only change roles of coaches and other org admins (not athletes)
-        const canChangeRole = targetUserRoles.some(userRole => ["org_admin", "coach"].includes(userRole));
-        if (!canChangeRole) {
-          return res.status(403).json({ message: "You can only change roles of coaches and organization admins" });
-        }
-
-        // Org admins cannot promote users to site admin
-        if (role === "site_admin") {
-          return res.status(403).json({ message: "Cannot promote users to site administrator" });
-        }
-      }
-
-      // Role validation rules
-      if (isOrgUser && role === "site_admin") {
-        return res.status(400).json({ 
-          message: "Users from organizations cannot be made site admins" 
-        });
-      }
-
-      // Prevent conflicting role combinations: athlete vs coach/org_admin
-      // Note: Since roles are stored in userOrganizations, we'll get current roles from the organization context
-      const currentUserRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
-      const hasAthleteRole = currentUserRoles.includes('athlete');
-      const hasCoachOrAdminRole = currentUserRoles.some(r => ['coach', 'org_admin'].includes(r));
-      
-      if ((hasAthleteRole && (role === 'coach' || role === 'org_admin')) ||
-          (hasCoachOrAdminRole && role === 'athlete')) {
-        return res.status(400).json({ 
-          message: "Athletes cannot be coaches or admins, and coaches/admins cannot be athletes" 
-        });
-      }
-
-      // Valid roles for organization users
-      if (isOrgUser && !['athlete', 'coach', 'org_admin'].includes(role)) {
-        return res.status(400).json({ 
-          message: "Invalid role for organization user" 
-        });
-      }
-
-      // Athletes cannot have their roles changed by org admins
-      if (!userIsSiteAdmin) {
-        const targetUserCurrentRoles = await storage.getUserRoles(id, organizationId || userOrgs[0]?.organizationId);
-        if (targetUserCurrentRoles.includes("athlete")) {
-          return res.status(403).json({ message: "Athlete roles cannot be changed by organization admins" });
-        }
-      }
-
-      // Update user role differently based on who is making the change
-      if (userIsSiteAdmin) {
-        // Site admins can update roles in all organizations the user belongs to
-        if (isOrgUser) {
-          for (const userOrg of userOrgs) {
-            // Use addUserToOrganization to ensure single role per org
-            await storage.addUserToOrganization(id, userOrg.organizationId, role);
-          }
-        }
-        const updatedUser = await storage.getUser(id);
-        res.json(updatedUser);
-      } else {
-        // Org admins can only update role in their specific organization
-        // Use addUserToOrganization to ensure single role per org
-        await storage.addUserToOrganization(id, organizationId!, role);
-
-        // Get updated user info to return
-        const updatedUser = await storage.getUser(id);
-        res.json(updatedUser);
-      }
-    } catch (error) {
-      console.error("Error updating user role:", error);
-      res.status(500).json({ message: "Failed to update user role" });
-    }
-  });
+  // Note: Role update endpoint moved to user-routes.ts for better organization and security
+  // The implementation there properly prevents site admin role modification
 
   // PUT /api/users/:id/status - Toggle user active/inactive status (site admin only)
   app.put("/api/users/:id/status", requireAuth, async (req, res) => {

@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
+import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 
 interface InvitationData {
   email: string;
@@ -101,13 +102,10 @@ export default function AcceptInvitation() {
       return;
     }
 
-    if (formData.username.length < 3) {
-      setError('Username must be at least 3 characters long');
-      return;
-    }
-
-    if (!/^[a-zA-Z0-9._-]+$/.test(formData.username)) {
-      setError('Username can only contain letters, numbers, periods, hyphens, and underscores');
+    // Validate username using shared validation
+    const usernameValidation = validateUsername(formData.username);
+    if (!usernameValidation.valid) {
+      setError(usernameValidation.errors[0]);
       return;
     }
 
