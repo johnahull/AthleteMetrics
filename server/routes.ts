@@ -10,7 +10,7 @@ import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
 import { db } from "./db";
@@ -2814,7 +2814,23 @@ export async function registerRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);
-      res.status(500).json({ message: "Failed to accept invitation" });
+
+      // Handle Zod validation errors with user-friendly messages
+      if (error instanceof ZodError) {
+        const firstError = error.errors[0];
+        const field = firstError.path.join('.');
+        const message = firstError.message;
+
+        return res.status(400).json({
+          message: `${field ? field + ': ' : ''}${message}`
+        });
+      }
+
+      // Handle other known errors
+      const errorMessage = error instanceof Error ? error.message : "Failed to accept invitation";
+      const statusCode = errorMessage.includes("not found") || errorMessage.includes("Invalid") ? 404 : 500;
+
+      res.status(statusCode).json({ message: errorMessage });
     }
   });
 

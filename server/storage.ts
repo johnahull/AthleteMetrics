@@ -1,7 +1,8 @@
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
-  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation
+  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation,
+  insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne } from "drizzle-orm";
@@ -919,7 +920,15 @@ export class DatabaseStorage implements IStorage {
     };
 
     console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
-    
+
+    // Validate user data against schema before creating user
+    try {
+      insertUserSchema.parse(createUserData);
+    } catch (error) {
+      console.error("User data validation failed:", error);
+      throw error;
+    }
+
     let user;
     try {
       user = await this.createUser(createUserData);

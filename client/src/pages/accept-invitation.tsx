@@ -94,34 +94,55 @@ export default function AcceptInvitation() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.username.trim()) {
       setError('Username is required');
       return;
     }
-    
+
     if (formData.username.length < 3) {
       setError('Username must be at least 3 characters long');
       return;
     }
-    
+
     if (!/^[a-zA-Z0-9._-]+$/.test(formData.username)) {
       setError('Username can only contain letters, numbers, periods, hyphens, and underscores');
       return;
     }
-    
+
     if (usernameError) {
       setError(usernameError);
       return;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
+
+    // Validate password against backend requirements
+    if (formData.password.length < 12) {
+      setError('Password must be at least 12 characters long');
+      return;
+    }
+
+    if (!/[a-z]/.test(formData.password)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+
+    if (!/[A-Z]/.test(formData.password)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+
+    if (!/[0-9]/.test(formData.password)) {
+      setError('Password must contain at least one number');
+      return;
+    }
+
+    if (!/[^a-zA-Z0-9]/.test(formData.password)) {
+      setError('Password must contain at least one special character');
       return;
     }
 
@@ -367,7 +388,7 @@ export default function AcceptInvitation() {
                   value={formData.password}
                   onChange={handleInputChange('password')}
                   required
-                  minLength={6}
+                  minLength={12}
                   data-testid="input-password"
                   className="pr-10"
                 />
@@ -385,6 +406,9 @@ export default function AcceptInvitation() {
                   )}
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Must be at least 12 characters with uppercase, lowercase, number, and special character
+              </p>
             </div>
 
             <div>
@@ -396,7 +420,7 @@ export default function AcceptInvitation() {
                   value={formData.confirmPassword}
                   onChange={handleInputChange('confirmPassword')}
                   required
-                  minLength={6}
+                  minLength={12}
                   data-testid="input-confirm-password"
                   className="pr-10"
                 />
