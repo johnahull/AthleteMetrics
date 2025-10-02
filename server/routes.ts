@@ -2747,8 +2747,17 @@ export async function registerRoutes(app: Express) {
 
       const invitation = await storage.getInvitation(token);
       if (!invitation) {
+        console.error("Invitation not found for token:", token);
         return res.status(404).json({ message: "Invitation not found" });
       }
+
+      console.log("Accepting invitation:", { 
+        invitationId: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        organizationId: invitation.organizationId,
+        username 
+      });
 
       const result = await storage.acceptInvitation(token, {
         email: invitation.email,
@@ -2757,6 +2766,8 @@ export async function registerRoutes(app: Express) {
         firstName,
         lastName
       });
+
+      console.log("Invitation accepted successfully, user created:", result.user.id);
 
       // Use the role from the invitation
       let userRole = invitation.role;

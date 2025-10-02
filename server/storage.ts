@@ -918,7 +918,16 @@ export class DatabaseStorage implements IStorage {
       lastName: userInfo.lastName
     };
 
-    const user = await this.createUser(createUserData);
+    console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+    
+    let user;
+    try {
+      user = await this.createUser(createUserData);
+      console.log("User created successfully:", user.id);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw error;
+    }
 
     // Add user to organization with the invitation role (this will remove any existing roles first)
     await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
