@@ -10,7 +10,7 @@ export function registerExportRoutes(app: Express) {
   /**
    * Export athletes to CSV
    */
-  app.get("/api/export/athletes", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/export/athletes", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
     const filters = { organizationId: organizationId as string | undefined };
@@ -31,7 +31,7 @@ export function registerExportRoutes(app: Express) {
   /**
    * Export measurements to CSV
    */
-  app.get("/api/export/measurements", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/export/measurements", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId, athleteId, metric } = req.query;
 
     const filters = {
@@ -56,7 +56,7 @@ export function registerExportRoutes(app: Express) {
   /**
    * Export teams to CSV
    */
-  app.get("/api/export/teams", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/export/teams", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
     const teams = await storage.getTeams(organizationId as string | undefined);

@@ -31,7 +31,7 @@ export function registerMeasurementRoutes(app: Express) {
    * @access All authenticated users (filtered by organization access)
    * @returns {Object[]} measurements - Array of measurement objects
    */
-  app.get("/api/measurements", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/measurements", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { athleteId, metric, startDate, endDate, organizationId, teamId } = req.query;
 
     const filters = {
@@ -62,7 +62,7 @@ export function registerMeasurementRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins, Athletes (own measurements)
    * @returns {Object} measurement - Created measurement object
    */
-  app.post("/api/measurements", createLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/measurements", createLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const measurement = await measurementService.createMeasurement(
       req.body,
       req.session.user!.id
@@ -78,7 +78,7 @@ export function registerMeasurementRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} measurement - Verified measurement object
    */
-  app.put("/api/measurements/:id/verify", requireAuth, asyncHandler(async (req, res) => {
+  app.put("/api/measurements/:id/verify", requireAuth, asyncHandler(async (req: any, res: any) => {
     const measurement = await measurementService.verifyMeasurement(
       req.params.id,
       req.session.user!.id
@@ -95,7 +95,7 @@ export function registerMeasurementRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} measurement - Updated measurement object
    */
-  app.patch("/api/measurements/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/measurements/:id", requireAuth, asyncHandler(async (req: any, res: any) => {
     const measurement = await measurementService.updateMeasurement(
       req.params.id,
       req.body,
@@ -112,7 +112,7 @@ export function registerMeasurementRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.delete("/api/measurements/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/measurements/:id", requireAuth, asyncHandler(async (req: any, res: any) => {
     await measurementService.deleteMeasurement(req.params.id, req.session.user!.id);
 
     res.json({ message: "Measurement deleted successfully" });

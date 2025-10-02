@@ -16,7 +16,7 @@ export function registerAdminRoutes(app: Express) {
    * @access Site Admins only
    * @returns {Object} impersonation status and user data
    */
-  app.post("/api/admin/impersonate/:userId", requireSiteAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/admin/impersonate/:userId", requireSiteAdmin, asyncHandler(async (req: any, res: any) => {
     const { userId } = req.params;
     const currentUser = req.session.user!;
 
@@ -34,7 +34,7 @@ export function registerAdminRoutes(app: Express) {
     }
 
     // Don't allow impersonating other site admins
-    if (targetUser.isSiteAdmin === true) {
+    if (targetUser.isSiteAdmin) {
       return res.status(400).json({ message: "Cannot impersonate other site administrators" });
     }
 
@@ -81,7 +81,7 @@ export function registerAdminRoutes(app: Express) {
    * @access Authenticated users (must be impersonating)
    * @returns {Object} success status and restored user data
    */
-  app.post("/api/admin/stop-impersonation", requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/admin/stop-impersonation", requireAuth, asyncHandler(async (req: any, res: any) => {
     if (!req.session.isImpersonating || !req.session.originalUser) {
       return res.status(400).json({ message: "Not currently impersonating" });
     }

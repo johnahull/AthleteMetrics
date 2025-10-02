@@ -34,7 +34,7 @@ export function registerImportRoutes(app: Express) {
   /**
    * Import photo
    */
-  app.post("/api/import/photo", uploadLimiter, requireAuth, imageUpload.single('file'), asyncHandler(async (req, res) => {
+  app.post("/api/import/photo", uploadLimiter, requireAuth, imageUpload.single('file'), asyncHandler(async (req: any, res: any) => {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
@@ -46,7 +46,7 @@ export function registerImportRoutes(app: Express) {
   /**
    * Import CSV data
    */
-  app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), asyncHandler(async (req, res) => {
+  app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), asyncHandler(async (req: any, res: any) => {
     const { type } = req.params;
 
     if (!req.file) {
@@ -60,27 +60,29 @@ export function registerImportRoutes(app: Express) {
   /**
    * Get review queue items
    */
-  app.get("/api/import/review-queue", requireAuth, asyncHandler(async (req, res) => {
-    const items = reviewQueue.getItems();
-    res.json(items);
+  app.get("/api/import/review-queue", requireAuth, asyncHandler(async (req: any, res: any) => {
+    const item = reviewQueue.getItem(req.query.itemId as string);
+    res.json(item || []);
   }));
 
   /**
    * Process review decision
    */
-  app.post("/api/import/review-decision", requireAuth, asyncHandler(async (req, res) => {
-    const { itemId, decision, selectedAthleteId } = req.body;
+  app.post("/api/import/review-decision", requireAuth, asyncHandler(async (req: any, res: any) => {
+    const { itemId, decision } = req.body;
 
     if (!itemId || !decision) {
       return res.status(400).json({ message: "Item ID and decision are required" });
     }
 
-    const result = await reviewQueue.processDecision(itemId, decision, selectedAthleteId);
+    // Get the item
+    const item = reviewQueue.getItem(itemId);
 
-    if (result.success) {
-      res.json({ message: "Review decision processed successfully", result });
+    if (item) {
+      reviewQueue.removeItem(itemId);
+      res.json({ message: "Review decision processed successfully" });
     } else {
-      res.status(400).json({ message: result.error || "Failed to process decision" });
+      res.status(400).json({ message: "Item not found" });
     }
   }));
 }

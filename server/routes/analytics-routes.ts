@@ -19,7 +19,7 @@ export function registerAnalyticsRoutes(app: Express) {
   /**
    * Get dashboard analytics (GET)
    */
-  app.get("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
     const filters = { organizationId: organizationId as string | undefined };
@@ -41,7 +41,7 @@ export function registerAnalyticsRoutes(app: Express) {
   /**
    * Get dashboard analytics (POST for complex queries)
    */
-  app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId, metrics, dateRange } = req.body;
 
     const filters = {
@@ -65,7 +65,7 @@ export function registerAnalyticsRoutes(app: Express) {
   /**
    * Get team analytics
    */
-  app.get("/api/analytics/teams", analyticsLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/analytics/teams", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
     const teams = await storage.getTeams(organizationId as string | undefined);
