@@ -225,6 +225,19 @@ export class UserService extends BaseService {
   }
 
   /**
+   * Get all site administrators
+   */
+  async getSiteAdmins(): Promise<User[]> {
+    try {
+      const allUsers = await this.storage.getUsers();
+      return allUsers.filter(user => user.isSiteAdmin === "true");
+    } catch (error) {
+      console.error("UserService.getSiteAdmins:", error);
+      return [];
+    }
+  }
+
+  /**
    * Create site administrator
    */
   async createSiteAdmin(adminData: any, requestingUserId: string): Promise<User> {

@@ -38,14 +38,6 @@ export function registerAuthRoutes(app: Express) {
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
 
-      console.log('[AUTH DEBUG]', {
-        userId: user.id,
-        username: user.username,
-        dbIsSiteAdmin: user.isSiteAdmin,
-        roleContextRole: roleContext.role,
-        sessionIsSiteAdmin: user.isSiteAdmin === "true"
-      });
-
       // Set session
       req.session.user = {
         id: user.id,
