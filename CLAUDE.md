@@ -190,6 +190,23 @@ Key schema features:
 - Multer for file uploads
 - CSV parsing for bulk imports
 
+### Server Architecture
+The application runs as a **single-process Node.js server** without clustering:
+
+- **No Socket Reuse**: The `reusePort` option is intentionally not used because this application runs as a single process. The `reusePort` option is only beneficial when running multiple Node.js processes that need to bind to the same port (Linux-only feature).
+
+- **Load Balancing Strategy**: For production deployments requiring horizontal scaling, use **external load balancers** rather than Node.js clustering:
+  - **Cloud Load Balancers**: AWS ALB/NLB, Google Cloud Load Balancing, Azure Load Balancer
+  - **Reverse Proxies**: Nginx, HAProxy, Traefik
+  - **Container Orchestration**: Kubernetes Services (automatic load balancing across pods)
+  - **Platform Services**: Replit's autoscale deployment handles load balancing automatically
+
+- **Port Configuration**: The application uses two ports:
+  - **Port 5000**: Main HTTP server (API + client), configured via `PORT` environment variable
+  - **Port 43479**: Replit development proxy for external access (port 80), automatically configured by Replit platform
+
+- **Why Single Process Works**: Node.js's event loop efficiently handles concurrent connections without multi-process clustering. Most I/O operations (database queries, API calls) are non-blocking, allowing thousands of concurrent connections on a single process.
+
 ### Development Notes
 - All database operations use Drizzle ORM - no raw SQL
 - Forms use React Hook Form with Zod schemas from `shared/schema.ts`

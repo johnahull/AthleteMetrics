@@ -4,6 +4,7 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
+import { validateUsername } from "./username-validation";
 
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -261,6 +262,13 @@ export const insertUserSchema = createInsertSchema(users).omit({
   fullName: true,
   birthYear: true, // birthYear is computed from birthDate, so exclude from input
 }).extend({
+  username: z.string().refine((username) => {
+    const result = validateUsername(username);
+    return result.valid;
+  }, (username) => {
+    const result = validateUsername(username);
+    return { message: result.errors[0] || "Invalid username" };
+  }),
   emails: z.array(z.string().email("Invalid email format")).min(1, "At least one email is required"),
   password: z.string()
     .min(PASSWORD_REQUIREMENTS.minLength, `Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
@@ -414,15 +422,21 @@ export type AthleteProfile = typeof athleteProfiles.$inferSelect;
 
 // Schema for creating site admin users
 export const createSiteAdminSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  username: z.string().refine((username) => {
+    const result = validateUsername(username);
+    return result.valid;
+  }, (username) => {
+    const result = validateUsername(username);
+    return { message: result.errors[0] || "Invalid username" };
+  }),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   password: z.string()
-    .min(12, "Password must be at least 12 characters")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
+    .min(PASSWORD_REQUIREMENTS.minLength, `Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
+    .regex(PASSWORD_REGEX.lowercase, "Password must contain at least one lowercase letter")
+    .regex(PASSWORD_REGEX.uppercase, "Password must contain at least one uppercase letter")
+    .regex(PASSWORD_REGEX.number, "Password must contain at least one number")
+    .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
 });
 
 export type CreateSiteAdmin = z.infer<typeof createSiteAdminSchema>;
