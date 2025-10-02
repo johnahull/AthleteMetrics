@@ -1,60 +1,38 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { env, isDevelopment } from "./config/env"; // Validate environment variables first
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { setupVite, serveStatic } from "./vite";
+import { logger } from "./utils/logger";
+import { errorMiddleware } from "./utils/errors";
+import { requestContext, sanitizeRequest } from "./middleware/index";
 
 const app = express();
 
 // Trust proxy when running behind a proxy (like in Replit environment)
 app.set('trust proxy', 1);
 
+// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+// Request sanitization
+app.use(sanitizeRequest);
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
+// Request context and logging middleware
+app.use(requestContext);
 
 (async () => {
+  // Register application routes
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+  // Global error handling middleware (must be last)
+  app.use(errorMiddleware);
 
-    res.status(status).json({ message });
-    throw err;
-  });
-
+  // Setup Vite in development or serve static files in production
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  if (isDevelopment) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
@@ -69,8 +47,40 @@ app.use((req, res, next) => {
   // For load balancing, use external load balancers (Nginx, cloud ALB/NLB, K8s services)
   // rather than Node.js clustering. reusePort is only useful for multiple processes
   // binding to the same port on the same machine (Linux only).
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = env.PORT;
   server.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
+    logger.info(`Server started on port ${port}`, {
+      environment: env.NODE_ENV,
+      port,
+    });
+  });
+
+  // Graceful shutdown
+  const shutdown = (signal: string) => {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+
+    server.close(() => {
+      logger.info('Server closed successfully');
+      process.exit(0);
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  // Log unhandled errors
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection', { reason, promise: promise.toString() });
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught Exception', {}, error);
+    process.exit(1);
   });
 })();
