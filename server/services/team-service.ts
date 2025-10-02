@@ -24,7 +24,7 @@ export class TeamService extends BaseService {
       const requestingUser = await this.storage.getUser(requestingUserId);
       
       // Site admins can see all teams
-      if (requestingUser?.isSiteAdmin === "true") {
+      if (requestingUser?.isSiteAdmin === true) {
         return await this.storage.getTeams(filters.organizationId);
       }
 

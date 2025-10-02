@@ -237,7 +237,7 @@ export class DatabaseStorage implements IStorage {
 
   async getSiteAdminUsers(): Promise<User[]> {
     return await db.select().from(users)
-      .where(eq(users.isSiteAdmin, "true"))
+      .where(eq(users.isSiteAdmin, true))
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
@@ -332,7 +332,7 @@ export class DatabaseStorage implements IStorage {
   async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
     // Check if user is site admin first
     const user = await this.getUser(userId);
-    if (user?.isSiteAdmin === "true") {
+    if (user?.isSiteAdmin === true) {
       return ["site_admin"];
     }
 
@@ -1657,7 +1657,7 @@ export class DatabaseStorage implements IStorage {
     const [submitter] = await db.select().from(users).where(eq(users.id, submittedBy));
 
     // Check if submitter is site admin or has coach/org_admin role in any organization
-    let isCoach = submitter?.isSiteAdmin === "true";
+    let isCoach = submitter?.isSiteAdmin === true;
     if (!isCoach && submitter) {
       const submitterRoles = await this.getUserRoles(submitter.id);
       isCoach = submitterRoles.includes("coach") || submitterRoles.includes("org_admin");

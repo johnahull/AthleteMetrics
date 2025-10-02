@@ -232,7 +232,7 @@ async function initializeDefaultUser() {
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
-        isSiteAdmin: "true"
+        isSiteAdmin: true
       });
       console.log("Site administrator account created successfully");
     } else {
@@ -609,7 +609,7 @@ export async function registerRoutes(app: Express) {
         const userOrgs = await storage.getUserOrganizations(user.id);
 
         // If user is site admin, use site_admin role
-        if (user.isSiteAdmin === "true") {
+        if (user.isSiteAdmin === true) {
           userRole = "site_admin";
           redirectUrl = "/";
         } else {
@@ -644,7 +644,7 @@ export async function registerRoutes(app: Express) {
             firstName: user.firstName,
             lastName: user.lastName,
             role: userRole,
-            isSiteAdmin: user.isSiteAdmin === "true",
+            isSiteAdmin: user.isSiteAdmin === true,
             athleteId: userRole === "athlete" ? user.id : undefined, // Use user ID as athlete ID for athletes
             primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
           };
@@ -741,7 +741,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Don't allow impersonating other site admins
-      if (targetUser.isSiteAdmin === "true") {
+      if (targetUser.isSiteAdmin === true) {
         return res.status(400).json({ message: "Cannot impersonate other site administrators" });
       }
 
@@ -749,7 +749,7 @@ export async function registerRoutes(app: Express) {
       let targetRole: string;
       const userOrgs = await storage.getUserOrganizations(targetUser.id);
 
-      if (targetUser.isSiteAdmin === "true") {
+      if (targetUser.isSiteAdmin === true) {
         targetRole = "site_admin";
       } else {
         // For non-site admins, get their organization role
@@ -773,7 +773,7 @@ export async function registerRoutes(app: Express) {
         firstName: targetUser.firstName,
         lastName: targetUser.lastName,
         role: targetRole,
-        isSiteAdmin: targetUser.isSiteAdmin === "true",
+        isSiteAdmin: targetUser.isSiteAdmin === true,
         athleteId: targetRole === "athlete" ? targetUser.id : undefined, // Use user ID as athlete ID for athletes
         primaryOrganizationId: userOrgs.length > 0 ? userOrgs[0].organizationId : undefined
       };
@@ -2785,7 +2785,7 @@ export async function registerRoutes(app: Express) {
 
       // Use the role from the invitation
       let userRole = invitation.role;
-      if (result.user.isSiteAdmin === "true") {
+      if (result.user.isSiteAdmin === true) {
         userRole = "site_admin";
       }
 
@@ -2803,7 +2803,7 @@ export async function registerRoutes(app: Express) {
           firstName: result.user.firstName,
           lastName: result.user.lastName,
           role: userRole,
-          isSiteAdmin: result.user.isSiteAdmin === "true"
+          isSiteAdmin: result.user.isSiteAdmin === true
         };
 
         req.session.save((saveErr) => {
@@ -3152,7 +3152,7 @@ export async function registerRoutes(app: Express) {
 
       // Determine user role
       let userRole = "athlete";
-      if (user.isSiteAdmin === "true") {
+      if (user.isSiteAdmin === true) {
         userRole = "site_admin";
       } else if (userOrgs && userOrgs.length > 0) {
         // Use the first organization role (users should only have one role per org)
@@ -3255,7 +3255,7 @@ export async function registerRoutes(app: Express) {
       const fixes: any[] = [];
 
       for (const user of users) {
-        if (user.isSiteAdmin === "true") continue; // Skip site admins
+        if (user.isSiteAdmin === true) continue; // Skip site admins
 
         const validation = await storage.validateUserRoleConstraint(user.id);
         if (!validation.valid) {

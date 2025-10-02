@@ -77,7 +77,7 @@ export class UserService extends BaseService {
 
       // Site admins can access any user
       const requestingUser = await this.storage.getUser(requestingUserId);
-      if (requestingUser?.isSiteAdmin === "true") {
+      if (requestingUser?.isSiteAdmin === true) {
         return user;
       }
 
@@ -230,7 +230,7 @@ export class UserService extends BaseService {
   async getSiteAdmins(): Promise<User[]> {
     try {
       const allUsers = await this.storage.getUsers();
-      return allUsers.filter(user => user.isSiteAdmin === "true");
+      return allUsers.filter(user => user.isSiteAdmin === true);
     } catch (error) {
       console.error("UserService.getSiteAdmins:", error);
       return [];
@@ -260,7 +260,7 @@ export class UserService extends BaseService {
         lastName: validatedData.lastName,
         emails: [`${validatedData.username}@admin.local`], // Temporary email based on username
         password: hashedPassword,
-        isSiteAdmin: "true",
+        isSiteAdmin: true,
         isActive: "true"
       };
 
@@ -293,7 +293,7 @@ export class UserService extends BaseService {
       const requestingUser = await this.storage.getUser(requestingUserId);
 
       // Site admins can access any organization
-      if (requestingUser?.isSiteAdmin === "true") {
+      if (requestingUser?.isSiteAdmin === true) {
         return await this.storage.getUsersByOrganization(organizationId);
       }
 

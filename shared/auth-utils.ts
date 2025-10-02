@@ -7,7 +7,7 @@
  * Check if a user is a site administrator
  *
  * Site admins are identified by multiple fields for legacy compatibility:
- * - isSiteAdmin: boolean true or string "true" (primary)
+ * - isSiteAdmin: boolean true (primary)
  * - role: string "site_admin" (legacy)
  * - admin: boolean true (legacy)
  *
@@ -15,14 +15,13 @@
  * @returns true if user is a site admin, false otherwise
  */
 export function isSiteAdmin(user: {
-  isSiteAdmin?: boolean | string;
+  isSiteAdmin?: boolean;
   role?: string;
   admin?: boolean;
 } | null | undefined): boolean {
   if (!user) return false;
 
   return user.isSiteAdmin === true ||
-         user.isSiteAdmin === 'true' ||
          user.role === 'site_admin' ||
          user.admin === true;
 }

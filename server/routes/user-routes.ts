@@ -277,7 +277,7 @@ export function registerUserRoutes(app: Express) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      if (targetUser.isSiteAdmin === "true" || targetUser.isSiteAdmin === true) {
+      if (targetUser.isSiteAdmin === true) {
         return res.status(403).json({
           message: "Cannot modify role of site administrators. Site admin status must be changed first."
         });
@@ -405,7 +405,7 @@ export function registerUserRoutes(app: Express) {
       
       const roleStats = {
         totalUsers: users.length,
-        siteAdmins: users.filter(u => u.isSiteAdmin === "true").length,
+        siteAdmins: users.filter(u => u.isSiteAdmin === true).length,
         orgAdmins: 0, // Role information is now organization-specific
         coaches: 0, // Role information is now organization-specific
         athletes: 0, // Role information is now organization-specific

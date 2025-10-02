@@ -81,7 +81,7 @@ export class AuthService extends BaseService {
   async determineUserRoleAndContext(user: any) {
     try {
       // Check if user is site admin first
-      if (user.isSiteAdmin === "true") {
+      if (user.isSiteAdmin === true) {
         return {
           role: "site_admin",
           primaryOrganizationId: undefined
@@ -121,7 +121,7 @@ export class AuthService extends BaseService {
     try {
       // Verify admin has site admin privileges
       const adminUser = await this.storage.getUser(adminUserId);
-      if (!adminUser || adminUser.isSiteAdmin !== "true") {
+      if (!adminUser || adminUser.isSiteAdmin !== true) {
         throw new Error("Unauthorized: Only site administrators can impersonate users");
       }
 

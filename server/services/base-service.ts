@@ -14,11 +14,10 @@ export abstract class BaseService {
 
   /**
    * Check if user is a site administrator
-   * Handles both string "true" and boolean true for compatibility
    */
   protected async isSiteAdmin(userId: string): Promise<boolean> {
     const user = await this.storage.getUser(userId);
-    return user?.isSiteAdmin === "true" || user?.isSiteAdmin === true;
+    return user?.isSiteAdmin === true;
   }
 
   /**
@@ -26,7 +25,7 @@ export abstract class BaseService {
    * Use this when you already have the user object to avoid duplicate queries
    */
   protected isSiteAdminFromUser(user: any): boolean {
-    return user?.isSiteAdmin === "true" || user?.isSiteAdmin === true;
+    return user?.isSiteAdmin === true;
   }
 
   /**
