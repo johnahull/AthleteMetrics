@@ -185,10 +185,57 @@ export class OrganizationService extends BaseService {
       // Create user and add to organization
       const user = await this.storage.createUser(userData);
       await this.storage.addUserToOrganization(user.id, organizationId, userData.role || 'athlete');
-      
+
       return user;
     } catch (error) {
       console.error("OrganizationService.addUserToOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get organization profiles in batch (optimized to avoid N+1 queries)
+   */
+  async getOrganizationProfilesBatch(
+    organizationIds: string[],
+    requestingUserId: string
+  ): Promise<Map<string, any>> {
+    try {
+      const profilesMap = new Map<string, any>();
+
+      // Fetch all organizations in parallel
+      const orgsPromise = Promise.all(
+        organizationIds.map(id => this.storage.getOrganization(id))
+      );
+
+      // Fetch all users for all organizations in parallel
+      const usersPromise = Promise.all(
+        organizationIds.map(id => this.storage.getOrganizationUsers(id))
+      );
+
+      // Fetch all invitations for all organizations in parallel
+      const invitationsPromise = Promise.all(
+        organizationIds.map(id => this.storage.getOrganizationInvitations(id))
+      );
+
+      const [orgs, usersArrays, invitationsArrays] = await Promise.all([
+        orgsPromise,
+        usersPromise,
+        invitationsPromise
+      ]);
+
+      // Build the profiles map
+      organizationIds.forEach((orgId, index) => {
+        profilesMap.set(orgId, {
+          organization: orgs[index],
+          users: usersArrays[index] || [],
+          invitations: invitationsArrays[index] || []
+        });
+      });
+
+      return profilesMap;
+    } catch (error) {
+      console.error("OrganizationService.getOrganizationProfilesBatch:", error);
       throw error;
     }
   }

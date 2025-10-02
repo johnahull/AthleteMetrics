@@ -42,12 +42,18 @@ export abstract class BaseService {
 
     // Site admins have access to all organizations
     if (isAdmin) {
-      // Audit log for site admin access
-      console.log(`[AUDIT] Site admin ${userId} accessed organization ${organizationId}`, {
-        timestamp: new Date().toISOString(),
+      // Create audit log for site admin access
+      await this.storage.createAuditLog({
         userId,
-        organizationId,
-        accessType: 'site_admin_override'
+        action: 'site_admin_organization_access',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({ accessType: 'site_admin_override' }),
+        ipAddress: null,
+        userAgent: null,
+      }).catch(err => {
+        // Don't fail the request if audit logging fails
+        console.error('Failed to create audit log:', err);
       });
       return true;
     }

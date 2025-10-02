@@ -165,55 +165,39 @@ export function registerOrganizationRoutes(app: Express) {
       // For site admins, get all organizations
       if (currentUser.isSiteAdmin === true) {
         const allOrganizations = await organizationService.getAllOrganizations(currentUser.id);
-        
-        // Get detailed info for each organization
-        const organizationsWithUsers = await Promise.all(
-          allOrganizations.map(async (org) => {
-            try {
-              const profile = await organizationService.getOrganizationProfile(org.id, currentUser.id);
-              return {
-                ...org,
-                users: profile.users,
-                invitations: profile.invitations || []
-              };
-            } catch (error) {
-              console.error(`Error fetching profile for org ${org.id}:`, error);
-              return {
-                ...org,
-                users: [],
-                invitations: []
-              };
-            }
-          })
-        );
-        
+        const orgIds = allOrganizations.map(org => org.id);
+
+        // Fetch all profiles in batch (optimized to avoid N+1 queries)
+        const profilesMap = await organizationService.getOrganizationProfilesBatch(orgIds, currentUser.id);
+
+        const organizationsWithUsers = allOrganizations.map(org => {
+          const profile = profilesMap.get(org.id);
+          return {
+            ...org,
+            users: profile?.users || [],
+            invitations: profile?.invitations || []
+          };
+        });
+
         res.json(organizationsWithUsers);
       } else {
         // For non-admin users, return their organizations with user lists
-        const organizationsWithUsers = await Promise.all(
-          userOrganizations.map(async (userOrg) => {
-            try {
-              const profile = await organizationService.getOrganizationProfile(
-                userOrg.organizationId, 
-                currentUser.id
-              );
-              return {
-                ...profile.organization,
-                users: profile.users,
-                invitations: profile.invitations || []
-              };
-            } catch (error) {
-              console.error(`Error fetching profile for org ${userOrg.organizationId}:`, error);
-              return {
-                id: userOrg.organizationId,
-                name: userOrg.organizationName || 'Unknown Organization',
-                users: [],
-                invitations: []
-              };
-            }
-          })
-        );
-        
+        const orgIds = userOrganizations.map(userOrg => userOrg.organizationId);
+
+        // Fetch all profiles in batch (optimized to avoid N+1 queries)
+        const profilesMap = await organizationService.getOrganizationProfilesBatch(orgIds, currentUser.id);
+
+        const organizationsWithUsers = userOrganizations.map(userOrg => {
+          const profile = profilesMap.get(userOrg.organizationId);
+          return {
+            id: userOrg.organizationId,
+            name: userOrg.organizationName || profile?.organization?.name || 'Unknown Organization',
+            ...profile?.organization,
+            users: profile?.users || [],
+            invitations: profile?.invitations || []
+          };
+        });
+
         res.json(organizationsWithUsers);
       }
     } catch (error) {

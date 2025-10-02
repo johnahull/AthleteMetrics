@@ -1,7 +1,7 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations,
-  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation,
-  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs,
+  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog,
+  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -172,6 +172,10 @@ export interface IStorage {
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
   getUsersByOrganization(organizationId: string): Promise<any[]>;
   getUserActivityStats(userId: string, organizationId: string): Promise<any>;
+
+  // Audit Logging
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2175,6 +2179,37 @@ export class DatabaseStorage implements IStorage {
 
     console.log(`Optimized query returned ${filteredResult.length} users with team memberships`);
     return filteredResult;
+  }
+
+  // Audit Logging
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [auditLog] = await db.insert(auditLogs).values(log).returning();
+    return auditLog;
+  }
+
+  async getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]> {
+    const limit = filters?.limit || 100;
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+
+    if (filters?.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+
+    const query = db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+
+    if (conditions.length > 0) {
+      return await query.where(and(...conditions));
+    }
+
+    return await query;
   }
 
 }
