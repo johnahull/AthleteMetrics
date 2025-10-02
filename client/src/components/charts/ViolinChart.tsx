@@ -91,6 +91,21 @@ export function ViolinChart({
   const calculateKDE = useCallback((values: number[]): Array<{ x: number; y: number }> => {
       if (values.length === 0) return [];
 
+      // Handle single-value dataset explicitly
+      if (values.length === 1) {
+        const singleValue = values[0];
+        const bandwidth = Math.abs(singleValue) * VIOLIN_CHART_CONFIG.ARTIFICIAL_BANDWIDTH_FACTOR || 1;
+        const kde: Array<{ x: number; y: number }> = [];
+        // Create narrow bell curve centered at single value
+        for (let i = -50; i <= 50; i++) {
+          const x = singleValue + (i / 50) * bandwidth;
+          const u = i / 50;
+          const gaussianValue = Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+          kde.push({ x, y: gaussianValue });
+        }
+        return kde;
+      }
+
       const min = Math.min(...values);
       const max = Math.max(...values);
       const range = max - min;
@@ -147,11 +162,13 @@ export function ViolinChart({
         return [{ x: min, y: 1 }];
       }
 
-      devLog.log('KDE calculation', {
-        valuesCount: sampledValues.length,
-        min, max, range,
-        std, iqr, bandwidth
-      });
+      if (process.env.NODE_ENV === 'development') {
+        devLog.log('KDE calculation', {
+          valuesCount: sampledValues.length,
+          min, max, range,
+          std, iqr, bandwidth
+        });
+      }
 
       const kde: Array<{ x: number; y: number }> = [];
 
@@ -189,10 +206,12 @@ export function ViolinChart({
         }
       }
 
-      devLog.log('KDE results', {
-        kdePoints: kde.length,
-        densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
-      });
+      if (process.env.NODE_ENV === 'development') {
+        devLog.log('KDE results', {
+          kdePoints: kde.length,
+          densityRange: kde.length > 0 ? [Math.min(...kde.map(p => p.y)), Math.max(...kde.map(p => p.y))] : [0, 0]
+        });
+      }
 
       return kde.length > 0 ? kde : [{ x: min, y: 1 }];
   }, []); // Empty deps - uses stable external helper functions
@@ -425,10 +444,11 @@ export function ViolinChart({
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
-    // Ensure positive value before modulo to avoid bias
-    const positiveHash = Math.abs(hash);
+    // Use unsigned right shift to ensure positive value without collision
+    // This preserves full entropy unlike Math.abs() which causes collisions
+    const unsignedHash = hash >>> 0;
     // Convert to range [-range/2, range/2]
-    return ((positiveHash % 1000) / 1000 - 0.5) * range;
+    return ((unsignedHash % 1000) / 1000 - 0.5) * range;
   }
 
   // Custom drawing logic for violin chart

@@ -279,6 +279,10 @@ export function FullscreenChartDialog({
         );
 
       case 'radar_chart':
+        // Radar chart requires multiMetric data (not regular ChartDataPoint data)
+        // The previous check for fallback to `data` was removed because ChartDataPoint[]
+        // and MultiMetricData[] have incompatible structures - attempting to pass
+        // ChartDataPoint[] would cause runtime errors in RadarChart component
         if (!multiMetric || multiMetric.length === 0) {
           return <div className="flex items-center justify-center h-full text-muted-foreground">No multi-metric data available for radar chart</div>;
         }

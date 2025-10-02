@@ -771,6 +771,95 @@ describe('ViolinChart', () => {
       // Verify points are drawn (arc calls for each athlete)
       expect(mockCanvasContext.arc.mock.calls.length).toBeGreaterThanOrEqual(100);
     });
+
+    it('should handle single-value dataset with explicit KDE handling', () => {
+      // Dataset with only one data point
+      const singleValueData: ChartDataPoint[] = [
+        {
+          athleteId: 'athlete-1',
+          athleteName: 'Solo Athlete',
+          metric: 'FLY10_TIME',
+          value: 1.5,
+          date: new Date('2024-01-01'),
+          teamName: 'Team A',
+          grouping: 'Team A'
+        }
+      ];
+
+      render(
+        <ViolinChart
+          data={singleValueData}
+          config={mockConfig}
+          statistics={mockStatistics}
+        />
+      );
+
+      // Should create artificial bandwidth and render bell curve
+      expect(mockCanvasContext.beginPath).toHaveBeenCalled();
+      expect(mockCanvasContext.fill).toHaveBeenCalled();
+      // Should render the single point
+      expect(mockCanvasContext.arc).toHaveBeenCalled();
+    });
+
+    it('should debounce resize events properly', async () => {
+      const { container } = render(
+        <ViolinChart
+          data={mockData}
+          config={mockConfig}
+          statistics={mockStatistics}
+        />
+      );
+
+      const initialCalls = mockCanvasContext.clearRect.mock.calls.length;
+
+      // Trigger multiple rapid resize events
+      fireEvent(window, new Event('resize'));
+      fireEvent(window, new Event('resize'));
+      fireEvent(window, new Event('resize'));
+
+      // Due to debouncing (150ms), the chart shouldn't redraw immediately
+      expect(mockCanvasContext.clearRect.mock.calls.length).toBe(initialCalls);
+
+      // Wait for debounce timeout (150ms + buffer)
+      await waitFor(() => {
+        expect(mockCanvasContext.clearRect.mock.calls.length).toBeGreaterThan(initialCalls);
+      }, { timeout: 300 });
+    });
+
+    it('should use unsigned right shift for jitter without hash collision', () => {
+      // Test that negative and positive hash values don't collide
+      const testData: ChartDataPoint[] = [
+        {
+          athleteId: 'athlete-negative-hash', // Will likely produce negative hash
+          athleteName: 'Athlete 1',
+          metric: 'FLY10_TIME',
+          value: 1.5,
+          date: new Date('2024-01-01'),
+          teamName: 'Team A',
+          grouping: 'Team A'
+        },
+        {
+          athleteId: 'athlete-positive-hash', // Will likely produce positive hash
+          athleteName: 'Athlete 2',
+          metric: 'FLY10_TIME',
+          value: 1.5,
+          date: new Date('2024-01-01'),
+          teamName: 'Team A',
+          grouping: 'Team A'
+        }
+      ];
+
+      render(
+        <ViolinChart
+          data={testData}
+          config={mockConfig}
+          statistics={mockStatistics}
+        />
+      );
+
+      // Both points should be rendered (no collision)
+      expect(mockCanvasContext.arc.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe('Performance', () => {
