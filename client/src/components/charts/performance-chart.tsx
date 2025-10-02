@@ -24,10 +24,10 @@ ChartJS.register(
 );
 
 interface PerformanceChartProps {
-  organizationId?: string | null;
+  organizationId?: string;
 }
 
-export default function PerformanceChart({ organizationId = null }: PerformanceChartProps) {
+export default function PerformanceChart({ organizationId }: PerformanceChartProps) {
   const { data: measurements, isError, error } = useQuery({
     queryKey: ["/api/measurements", organizationId],
     enabled: !!organizationId, // Only run query if organizationId is provided

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { isSiteAdmin } from '../../shared/auth-utils';
 
 /**
  * Tests for site admin detection logic
@@ -8,13 +9,6 @@ import { describe, it, expect } from 'vitest';
  * with both string and boolean values.
  */
 describe('Site Admin Detection', () => {
-  // Helper function that mimics the isSiteAdmin helper in routes.ts
-  const isSiteAdmin = (user: any): boolean => {
-    return user?.isSiteAdmin === true ||
-           user?.isSiteAdmin === 'true' ||
-           user?.role === "site_admin" ||
-           user?.admin === true;
-  };
 
   describe('isSiteAdmin helper', () => {
     it('should detect site admin from string "true"', () => {

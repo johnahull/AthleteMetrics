@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
+import { isSiteAdmin } from "@shared/auth-utils";
 import { z, ZodError } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
@@ -136,10 +137,6 @@ interface MeasurementFilters {
 }
 
 // Legacy helper functions (to be removed gradually)
-const isSiteAdmin = (user: SessionUser | null | undefined): boolean => {
-  return user?.isSiteAdmin === true || user?.isSiteAdmin === 'true' || user?.role === "site_admin" || user?.admin === true;
-};
-
 const canManageUsers = async (userId: string, organizationId: string): Promise<boolean> => {
   return await accessController.canManageOrganization(userId, organizationId);
 };

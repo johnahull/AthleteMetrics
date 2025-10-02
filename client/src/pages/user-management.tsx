@@ -962,6 +962,7 @@ export default function UserManagement() {
                         }
                       }}
                       aria-expanded={isExpanded}
+                      aria-controls={`org-users-${org.id}`}
                       aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${org.name} users`}
                     >
                       <div className="flex items-center gap-2">
@@ -970,7 +971,7 @@ export default function UserManagement() {
                         ) : (
                           <ChevronRight className="h-5 w-5 text-gray-600 transition-transform" />
                         )}
-                        <h3 className="text-lg font-semibold text-gray-900">{org.name}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900" id={`org-header-${org.id}`}>{org.name}</h3>
                       </div>
                       <span className="text-sm text-gray-500">
                         {roleFilter !== "all" ? (
@@ -986,7 +987,12 @@ export default function UserManagement() {
                     </div>
 
                     {isExpanded && (
-                      <div className="space-y-2 ml-7">
+                      <div
+                        className="space-y-2 ml-7"
+                        id={`org-users-${org.id}`}
+                        role="region"
+                        aria-labelledby={`org-header-${org.id}`}
+                      >
                     {/* Active Users */}
                     {filteredUsers.map((userOrg) => (
                       <div
