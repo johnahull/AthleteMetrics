@@ -2336,7 +2336,8 @@ export async function registerRoutes(app: Express) {
 
       // Skip rate limiting only if explicitly enabled via environment flag in non-production
       // This prevents accidental bypass in production
-      return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && req.session.user?.role === 'site_admin';
+      const userIsSiteAdmin = isSiteAdmin(req.session.user);
+      return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && userIsSiteAdmin;
     }
   });
 

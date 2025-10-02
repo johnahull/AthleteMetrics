@@ -1107,8 +1107,11 @@ export default function UserManagement() {
                       </div>
                     ))}
 
-                    {/* Pending Invitations - only show unused invitations */}
-                    {org.invitations?.filter(invitation => invitation.isUsed === "false").map((invitation) => {
+                    {/* Pending Invitations - only show unused invitations matching role filter */}
+                    {org.invitations?.filter(invitation =>
+                      invitation.isUsed === "false" &&
+                      (roleFilter === "all" || invitation.role === roleFilter)
+                    ).map((invitation) => {
                       const isExpired = new Date() > new Date(invitation.expiresAt);
                       const isUsed = invitation.isUsed === "true";
 

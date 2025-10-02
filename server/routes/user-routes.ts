@@ -41,6 +41,15 @@ const siteAdminCreateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for username enumeration prevention
+const usernameCheckLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 20, // Limit each IP to 20 username checks per minute
+  message: { message: "Too many username checks, please slow down." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerUserRoutes(app: Express) {
   /**
    * Create user (site admin only)
@@ -369,7 +378,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Check username availability
    */
-  app.get("/api/users/check-username", async (req, res) => {
+  app.get("/api/users/check-username", usernameCheckLimiter, async (req, res) => {
     try {
       const { username } = req.query;
       
