@@ -23,11 +23,24 @@ def parse_args():
     p.add_argument("--num", type=int, required=True, help="Number of players")
     p.add_argument("--gender", choices=["Male","Female","Not Specified"], help="Gender for all players")
     p.add_argument("--sport", default=None, help="Sport name (default: Soccer)")
-    p.add_argument("--birth_year_min", type=int, help="Min birth year (inclusive)")
-    p.add_argument("--birth_year_max", type=int, help="Max birth year (inclusive)")
+    p.add_argument("--age_group", choices=["middle_school","high_school","college","pro"], help="Age group (if omitted, randomly chosen)")
+    p.add_argument("--birth_year_min", type=int, help="Min birth year (inclusive, overrides age_group)")
+    p.add_argument("--birth_year_max", type=int, help="Max birth year (inclusive, overrides age_group)")
     p.add_argument("--team_name", default=None, help="Team name; if omitted, auto-generated")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     return p.parse_args()
+
+def get_birth_years_for_age_group(age_group: str, current_year: int = 2024):
+    """Return (min_birth_year, max_birth_year) for the given age group."""
+    age_ranges = {
+        "middle_school": (11, 14),  # ages 11-14
+        "high_school": (14, 18),    # ages 14-18
+        "college": (18, 22),        # ages 18-22
+        "pro": (22, 35),            # ages 22-35
+    }
+    min_age, max_age = age_ranges[age_group]
+    # birth_year = current_year - age
+    return (current_year - max_age, current_year - min_age)
 
 def rng_date_in_year(year: int) -> date:
     start = date(year, 1, 1)
@@ -79,9 +92,20 @@ def main():
     gender = args.gender if args.gender else random.choice(["Male","Female"])
     sport = args.sport if args.sport else "Soccer"
 
-    # Defaults for teen athletes
-    by_min = args.birth_year_min if args.birth_year_min else 2007
-    by_max = args.birth_year_max if args.birth_year_max else 2009
+    # Determine birth years
+    if args.birth_year_min and args.birth_year_max:
+        # Explicit birth years override everything
+        by_min, by_max = args.birth_year_min, args.birth_year_max
+        age_group = None
+    elif args.age_group:
+        # Use specified age group
+        age_group = args.age_group
+        by_min, by_max = get_birth_years_for_age_group(age_group)
+    else:
+        # Random age group
+        age_group = random.choice(["middle_school", "high_school", "college", "pro"])
+        by_min, by_max = get_birth_years_for_age_group(age_group)
+
     if by_min > by_max:
         by_min, by_max = by_max, by_min
 
@@ -142,7 +166,8 @@ def main():
 
     print(f"Wrote roster: {out_path}")
     print(f"Team: {team} | Players: {len(rows)} | Gender: {gender} | Sport: {sport}")
-    print(f"Birth years: {by_min}–{by_max}")
+    age_group_msg = f" | Age group: {age_group}" if age_group else ""
+    print(f"Birth years: {by_min}–{by_max}{age_group_msg}")
 
 if __name__ == "__main__":
     main()
