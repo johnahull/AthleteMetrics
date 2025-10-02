@@ -283,4 +283,32 @@ export class UserService extends BaseService {
       return false;
     }
   }
+
+  /**
+   * Get users by organization
+   */
+  async getUsersByOrganization(organizationId: string, requestingUserId: string): Promise<any[]> {
+    try {
+      // Verify requesting user has access to this organization
+      const requestingUser = await this.storage.getUser(requestingUserId);
+
+      // Site admins can access any organization
+      if (requestingUser?.isSiteAdmin === "true") {
+        return await this.storage.getUsersByOrganization(organizationId);
+      }
+
+      // Check if user has access to this organization
+      const userOrgs = await this.getUserOrganizations(requestingUserId);
+      const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
+
+      if (!hasAccess) {
+        throw new Error("Unauthorized: Access denied to this organization");
+      }
+
+      return await this.storage.getUsersByOrganization(organizationId);
+    } catch (error) {
+      console.error("UserService.getUsersByOrganization:", error);
+      throw error;
+    }
+  }
 }

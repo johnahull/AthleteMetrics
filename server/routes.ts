@@ -369,8 +369,13 @@ export async function registerRoutes(app: Express) {
 
     // Skip CSRF for certain API endpoints that use other authentication
     // Note: req.path is relative to the mount point, so '/api' prefix is not included
-    const skipCsrfPaths = ['/login', '/register', '/invitations'];
-    if (skipCsrfPaths.some(path => req.path.startsWith(path))) {
+    // - /login and /register: Pre-authentication endpoints
+    // - /invitations/:token/accept: Public endpoint for new users without sessions
+    const skipCsrfPaths = ['/login', '/register'];
+    const skipCsrfPatterns = [/^\/invitations\/[^\/]+\/accept$/];
+
+    if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
+        skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
       return next();
     }
 
@@ -3173,41 +3178,8 @@ export async function registerRoutes(app: Express) {
     }
   });
 
-  // Get all users - REMOVED: Duplicate route now handled by ./routes/user-routes.ts
-  // This route was causing conflicts with the refactored user management routes
-
-  app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
-    try {
-      const adminData = createSiteAdminSchema.parse(req.body);
-
-      const newUser = await storage.createUser({
-        username: adminData.username,
-        emails: [adminData.username + "@admin.local"], // Use username as email with dummy domain
-        firstName: adminData.firstName,
-        lastName: adminData.lastName,
-        password: adminData.password,
-        isSiteAdmin: "true"
-      });
-
-      res.json({
-        user: {
-          id: newUser.id,
-          email: newUser.emails?.[0] || `${newUser.username}@admin.local`,
-          firstName: newUser.firstName,
-          lastName: newUser.lastName,
-          role: "site_admin",
-        },
-        message: "Site admin created successfully"
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Validation error", errors: error.errors });
-      } else {
-        console.error("Error creating site admin:", error);
-        res.status(500).json({ message: "Failed to create site admin" });
-      }
-    }
-  });
+  // REMOVED: Duplicate site admin creation route now handled by ./routes/user-routes.ts
+  // The user-routes.ts version includes proper rate limiting and uses UserService
 
 
   app.put("/api/users/:id/role", requireAuth, async (req, res) => {

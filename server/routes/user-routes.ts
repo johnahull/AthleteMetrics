@@ -21,6 +21,15 @@ const createLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for site admin creation (more restrictive)
+const siteAdminCreateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 3, // Limit each IP to 3 site admin creation requests per hour
+  message: { message: "Too many site admin creation attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerUserRoutes(app: Express) {
   /**
    * Create user (site admin only)
@@ -83,8 +92,7 @@ export function registerUserRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // For now, use the basic getUsersByOrganization from storage directly
-      // since UserService doesn't have this method yet
+      // Use UserService method for organization-based user retrieval
       const userIsSiteAdmin = currentUser.isSiteAdmin === true;
 
       if (userIsSiteAdmin) {
@@ -92,16 +100,13 @@ export function registerUserRoutes(app: Express) {
         return res.json(users);
       }
 
-      // Use the storage layer directly for organization-based user retrieval
-      const storage = (userService as any).storage;
-
-      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      const userOrgs = await userService.getUserOrganizations(currentUser.id);
       if (userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization access" });
       }
 
       const targetOrgId = organizationId || userOrgs[0].organizationId;
-      let orgUsers = await storage.getUsersByOrganization(targetOrgId);
+      let orgUsers = await userService.getUsersByOrganization(targetOrgId, currentUser.id);
 
       // Filter by role if specified (e.g., role=athlete for players only)
       if (role) {
@@ -328,7 +333,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Create site administrator
    */
-  app.post("/api/site-admins", requireSiteAdmin, async (req, res) => {
+  app.post("/api/site-admins", siteAdminCreateLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const admin = await userService.createSiteAdmin(req.body, req.session.user!.id);
       res.status(201).json(admin);

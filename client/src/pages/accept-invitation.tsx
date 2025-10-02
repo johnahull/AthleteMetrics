@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
 
 interface InvitationData {
   email: string;
@@ -120,29 +121,10 @@ export default function AcceptInvitation() {
       return;
     }
 
-    // Validate password against backend requirements
-    if (formData.password.length < 12) {
-      setError('Password must be at least 12 characters long');
-      return;
-    }
-
-    if (!/[a-z]/.test(formData.password)) {
-      setError('Password must contain at least one lowercase letter');
-      return;
-    }
-
-    if (!/[A-Z]/.test(formData.password)) {
-      setError('Password must contain at least one uppercase letter');
-      return;
-    }
-
-    if (!/[0-9]/.test(formData.password)) {
-      setError('Password must contain at least one number');
-      return;
-    }
-
-    if (!/[^a-zA-Z0-9]/.test(formData.password)) {
-      setError('Password must contain at least one special character');
+    // Validate password against shared requirements
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.errors[0]);
       return;
     }
 
@@ -388,7 +370,7 @@ export default function AcceptInvitation() {
                   value={formData.password}
                   onChange={handleInputChange('password')}
                   required
-                  minLength={12}
+                  minLength={PASSWORD_REQUIREMENTS.minLength}
                   data-testid="input-password"
                   className="pr-10"
                 />
@@ -407,7 +389,7 @@ export default function AcceptInvitation() {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Must be at least 12 characters with uppercase, lowercase, number, and special character
+                {getPasswordRequirementsText()}
               </p>
             </div>
 
@@ -420,7 +402,7 @@ export default function AcceptInvitation() {
                   value={formData.confirmPassword}
                   onChange={handleInputChange('confirmPassword')}
                   required
-                  minLength={12}
+                  minLength={PASSWORD_REQUIREMENTS.minLength}
                   data-testid="input-confirm-password"
                   className="pr-10"
                 />
