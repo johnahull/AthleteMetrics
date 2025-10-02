@@ -30,6 +30,13 @@ export abstract class BaseService {
   ): Promise<boolean> {
     // Site admins have access to all organizations
     if (await this.isSiteAdmin(userId)) {
+      // Audit log for site admin access
+      console.log(`[AUDIT] Site admin ${userId} accessed organization ${organizationId}`, {
+        timestamp: new Date().toISOString(),
+        userId,
+        organizationId,
+        accessType: 'site_admin_override'
+      });
       return true;
     }
 

@@ -234,13 +234,21 @@ export function registerUserRoutes(app: Express) {
     try {
       const userId = req.params.id;
       const { role } = req.body;
-      
+
+      // Validate role - prevent site_admin assignment through this endpoint
+      const validOrgRoles = ["athlete", "coach", "org_admin"];
+      if (!validOrgRoles.includes(role)) {
+        return res.status(400).json({
+          message: "Invalid role. Site admin status must be managed separately."
+        });
+      }
+
       const updatedUser = await userService.updateUserRole(
-        userId, 
-        role, 
+        userId,
+        role,
         req.session.user!.id
       );
-      
+
       res.json(updatedUser);
     } catch (error) {
       console.error("Update user role error:", error);

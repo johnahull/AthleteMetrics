@@ -11,6 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { Plus, Building2, Users, UserPlus, Trash2, Edit3, Link } from "lucide-react";
 
 const organizationSchema = z.object({
@@ -52,6 +53,7 @@ type Organization = {
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
 
@@ -509,8 +511,10 @@ export default function AdminPage() {
                                 <select
                                   value={userOrg.role}
                                   onChange={(e) => handleRoleChange(userOrg.user.id, e.target.value)}
-                                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                                  disabled={userOrg.user.id === currentUser?.id}
+                                  className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                   data-testid={`user-role-select-${userOrg.user.id}`}
+                                  title={userOrg.user.id === currentUser?.id ? "Cannot change your own role" : ""}
                                 >
                                   <option value="athlete">Athlete</option>
                                   <option value="coach">Coach</option>

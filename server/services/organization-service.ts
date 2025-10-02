@@ -4,11 +4,15 @@
 
 import { BaseService } from "./base-service";
 import { insertOrganizationSchema } from "@shared/schema";
-import type { Organization, InsertOrganization, User } from "@shared/schema";
+import type { Organization, InsertOrganization, User, UserOrganization } from "@shared/schema";
 
 export interface OrganizationFilters {
   search?: string;
   isActive?: string;
+}
+
+interface UserOrganizationWithOrg extends UserOrganization {
+  organization: Organization;
 }
 
 export class OrganizationService extends BaseService {
@@ -16,13 +20,12 @@ export class OrganizationService extends BaseService {
    * Create a new organization (site admin only)
    */
   async createOrganization(
-    orgData: InsertOrganization, 
+    orgData: InsertOrganization,
     requestingUserId: string
   ): Promise<Organization> {
     try {
       // Verify permissions
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser?.isSiteAdmin) {
+      if (!(await this.isSiteAdmin(requestingUserId))) {
         throw new Error("Unauthorized: Only site administrators can create organizations");
       }
 
@@ -42,8 +45,7 @@ export class OrganizationService extends BaseService {
   async getAllOrganizations(requestingUserId: string): Promise<Organization[]> {
     try {
       // Verify permissions
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser?.isSiteAdmin) {
+      if (!(await this.isSiteAdmin(requestingUserId))) {
         throw new Error("Unauthorized: Only site administrators can view all organizations");
       }
 
@@ -58,7 +60,7 @@ export class OrganizationService extends BaseService {
    * Get organization by ID with access validation
    */
   async getOrganizationById(
-    organizationId: string, 
+    organizationId: string,
     requestingUserId: string
   ): Promise<Organization | null> {
     try {
@@ -66,8 +68,7 @@ export class OrganizationService extends BaseService {
       if (!organization) return null;
 
       // Site admins can access any organization
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (requestingUser?.isSiteAdmin === "true") {
+      if (await this.isSiteAdmin(requestingUserId)) {
         return organization;
       }
 
@@ -84,7 +85,7 @@ export class OrganizationService extends BaseService {
    * Get user's accessible organizations
    * Site admins get all organizations, regular users get only their assigned organizations
    */
-  async getUserOrganizations(userId: string): Promise<any[]> {
+  async getUserOrganizations(userId: string): Promise<Organization[]> {
     try {
       // Site admins can access all organizations
       if (await this.isSiteAdmin(userId)) {
@@ -94,7 +95,7 @@ export class OrganizationService extends BaseService {
       // Regular users get only their assigned organizations
       // Extract the organization object from the nested structure
       const userOrgs = await this.storage.getUserOrganizations(userId);
-      return userOrgs.map((userOrg: any) => userOrg.organization);
+      return userOrgs.map((userOrg: UserOrganizationWithOrg) => userOrg.organization);
     } catch (error) {
       console.error("OrganizationService.getUserOrganizations:", error);
       return [];
@@ -112,10 +113,7 @@ export class OrganizationService extends BaseService {
       // Validate access
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
       if (!hasAccess) {
-        const requestingUser = await this.storage.getUser(requestingUserId);
-        if (!requestingUser?.isSiteAdmin) {
-          throw new Error("Unauthorized: Access denied to this organization");
-        }
+        throw new Error("Unauthorized: Access denied to this organization");
       }
 
       const organization = await this.storage.getOrganization(organizationId);
@@ -148,10 +146,7 @@ export class OrganizationService extends BaseService {
       // Validate access
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
       if (!hasAccess) {
-        const requestingUser = await this.storage.getUser(requestingUserId);
-        if (!requestingUser?.isSiteAdmin) {
-          throw new Error("Unauthorized: Access denied to this organization");
-        }
+        throw new Error("Unauthorized: Access denied to this organization");
       }
 
       // Prevent removing self if it's the last admin
@@ -182,10 +177,7 @@ export class OrganizationService extends BaseService {
       // Validate access
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
       if (!hasAccess) {
-        const requestingUser = await this.storage.getUser(requestingUserId);
-        if (!requestingUser?.isSiteAdmin) {
-          throw new Error("Unauthorized: Access denied to this organization");
-        }
+        throw new Error("Unauthorized: Access denied to this organization");
       }
 
       // Create user and add to organization

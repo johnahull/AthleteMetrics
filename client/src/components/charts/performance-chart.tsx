@@ -30,10 +30,13 @@ interface PerformanceChartProps {
 export default function PerformanceChart({ organizationId = null }: PerformanceChartProps) {
   const { data: measurements, isError, error } = useQuery({
     queryKey: ["/api/measurements", organizationId],
+    enabled: !!organizationId, // Only run query if organizationId is provided
     queryFn: async () => {
-      const url = organizationId
-        ? `/api/measurements?organizationId=${organizationId}`
-        : `/api/measurements`;
+      if (!organizationId) {
+        throw new Error("Organization ID is required to fetch performance data");
+      }
+
+      const url = `/api/measurements?organizationId=${organizationId}`;
       const response = await fetch(url, {
         credentials: 'include'
       });
