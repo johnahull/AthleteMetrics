@@ -581,7 +581,7 @@ export default function MeasurementForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {Array.isArray(teams) ? teams.filter((team: Team) => team.isArchived !== "true").map((team: Team) => (
+                              {Array.isArray(teams) ? teams.filter((team: Team) => team.isArchived !== true).map((team: Team) => (
                                 <SelectItem key={team.id} value={team.id}>
                                   {team.name}
                                 </SelectItem>

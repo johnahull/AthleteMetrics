@@ -377,7 +377,7 @@ export class AnalyticsService {
 
       // Build where conditions
       const whereConditions = [
-        eq(measurements.isVerified, "true"),
+        eq(measurements.isVerified, true),
         eq(userOrganizations.organizationId, request.filters.organizationId),
         inArray(measurements.metric, allMetrics),
       ];
@@ -393,7 +393,7 @@ export class AnalyticsService {
                 and(
                   eq(userTeams.userId, users.id),
                   inArray(userTeams.teamId, request.filters.teams),
-                  eq(userTeams.isActive, "true")
+                  eq(userTeams.isActive, true)
                 )
               )
           )

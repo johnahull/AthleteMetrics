@@ -23,7 +23,7 @@ export const teams = pgTable("teams", {
   // Temporal archiving fields
   archivedAt: timestamp("archived_at"),
   season: text("season"), // "2024-Fall", "2025-Spring"
-  isArchived: text("is_archived").default("false").notNull(),
+  isArchived: boolean("is_archived").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -47,18 +47,18 @@ export const users = pgTable("users", {
   weight: integer("weight"), // pounds
   gender: text("gender").$type<"Male" | "Female" | "Not Specified">(), // CHECK constraint in migration
   // Enhanced Authentication fields
-  mfaEnabled: text("mfa_enabled").default("false").notNull(),
+  mfaEnabled: boolean("mfa_enabled").default(false).notNull(),
   mfaSecret: text("mfa_secret"), // TOTP secret
   backupCodes: text("backup_codes").array(), // Recovery codes
   lastLoginAt: timestamp("last_login_at"),
   loginAttempts: integer("login_attempts").default(0),
   lockedUntil: timestamp("locked_until"),
-  isEmailVerified: text("is_email_verified").default("false").notNull(),
-  requiresPasswordChange: text("requires_password_change").default("false").notNull(),
+  isEmailVerified: boolean("is_email_verified").default(false).notNull(),
+  requiresPasswordChange: boolean("requires_password_change").default(false).notNull(),
   passwordChangedAt: timestamp("password_changed_at"),
   // System fields
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
-  isActive: text("is_active").default("true").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -80,7 +80,7 @@ export const userTeams = pgTable("user_teams", {
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
   leftAt: timestamp("left_at"), // NULL = currently active
   season: text("season"), // "2024-Fall", "2025-Spring"
-  isActive: text("is_active").default("true").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -89,7 +89,7 @@ export const measurements = pgTable("measurements", {
   userId: varchar("user_id").notNull().references(() => users.id), // Changed from playerId to userId
   submittedBy: varchar("submitted_by").notNull().references(() => users.id),
   verifiedBy: varchar("verified_by").references(() => users.id),
-  isVerified: text("is_verified").default("false").notNull(),
+  isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement
   metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"
@@ -100,7 +100,7 @@ export const measurements = pgTable("measurements", {
   // Team context fields - auto-populated when measurement is created
   teamId: varchar("team_id").references(() => teams.id), // Team athlete was on when measurement was taken
   season: text("season"), // Season designation (e.g., "2024-Fall")
-  teamContextAuto: text("team_context_auto").default("true"), // Whether team was auto-assigned vs manually selected
+  teamContextAuto: boolean("team_context_auto").default(true), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -126,7 +126,7 @@ export const invitations = pgTable("invitations", {
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
   invitedBy: varchar("invited_by").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
-  isUsed: text("is_used").default("false").notNull(),
+  isUsed: boolean("is_used").default(false).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -278,6 +278,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
     .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]).default("athlete"),
   isSiteAdmin: z.boolean().default(false).optional(),
   birthDate: z.string().optional().refine((date) => {
     if (!date) return true;

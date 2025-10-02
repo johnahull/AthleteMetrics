@@ -88,7 +88,7 @@ export class AnalyticsService {
   private buildBaseQuery(filters: AnalyticsFilters, timeframe: TimeframeConfig, requiredMetrics?: string[]) {
     // Build all conditions at once to avoid multiple .where() calls
     const allConditions = [
-      eq(measurements.isVerified, "true"),
+      eq(measurements.isVerified, true),
       eq(userOrganizations.organizationId, filters.organizationId)
     ];
 
@@ -122,7 +122,7 @@ export class AnalyticsService {
           SELECT 1 FROM ${userTeams}
           WHERE ${userTeams.userId} = ${users.id}
             AND ${inArray(userTeams.teamId, filters.teams)}
-            AND ${eq(userTeams.isActive, 'true')}
+            AND ${eq(userTeams.isActive, true)}
         )`
       );
     }

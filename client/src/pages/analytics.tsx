@@ -368,7 +368,7 @@ export default function Analytics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
-                  {(teams || []).filter((team: Team) => team.isArchived !== "true").map((team: Team) => (
+                  {(teams || []).filter((team: Team) => team.isArchived !== true).map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>

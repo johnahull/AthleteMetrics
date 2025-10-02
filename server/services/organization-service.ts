@@ -68,7 +68,8 @@ export class OrganizationService extends BaseService {
       if (!organization) return null;
 
       // Site admins can access any organization
-      if (await this.isSiteAdmin(requestingUserId)) {
+      const requestingUser = await this.storage.getUser(requestingUserId);
+      if (requestingUser?.isSiteAdmin === true) {
         return organization;
       }
 

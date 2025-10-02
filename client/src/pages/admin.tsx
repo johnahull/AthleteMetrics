@@ -45,6 +45,7 @@ type Organization = {
       lastName: string;
       role: string;
       isActive: string;
+      isSiteAdmin: boolean;
       createdAt: string;
     };
   }[];
@@ -508,7 +509,7 @@ export default function AdminPage() {
                                 </p>
                               </div>
                               <div className="ml-4">
-                                {userOrg.user.isSiteAdmin === "true" ? (
+                                {userOrg.user.isSiteAdmin === true ? (
                                   <span className="text-sm px-3 py-1 bg-purple-100 text-purple-800 rounded border border-purple-300 font-medium">
                                     Site Admin
                                   </span>

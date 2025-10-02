@@ -232,6 +232,7 @@ async function initializeDefaultUser() {
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
+        role: "site_admin",
         isSiteAdmin: true
       });
       console.log("Site administrator account created successfully");
@@ -599,7 +600,7 @@ export async function registerRoutes(app: Express) {
       const user = await storage.authenticateUser(username, password);
       if (user) {
         // Check if user is active
-        if (user.isActive === "false") {
+        if (user.isActive === false) {
           return res.status(401).json({ message: "Account has been deactivated. Please contact your administrator." });
         }
 
@@ -1170,7 +1171,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Check if team is already archived
-      if (team.isArchived === "true") {
+      if (team.isArchived === true) {
         return res.status(400).json({ message: "Team is already archived" });
       }
 
@@ -1217,7 +1218,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Check if team is already active
-      if (team.isArchived !== "true") {
+      if (team.isArchived !== true) {
         return res.status(400).json({ message: "Team is not archived" });
       }
 
@@ -1380,7 +1381,7 @@ export async function registerRoutes(app: Express) {
             // Check if player is already on the team
             const existingMemberships = await storage.getUserTeams(playerId);
             const isActiveOnTeam = existingMemberships.some(membership =>
-              membership.teamId === teamId && membership.isActive === "true"
+              membership.teamId === teamId && membership.isActive === true
             );
 
             if (isActiveOnTeam) {
@@ -1528,7 +1529,7 @@ export async function registerRoutes(app: Express) {
       // Check if athlete is actually on the team
       const existingMemberships = await storage.getUserTeams(athleteId);
       const isActiveOnTeam = existingMemberships.some(membership =>
-        membership.teamId === teamId && membership.isActive === "true"
+        membership.teamId === teamId && membership.isActive === true
       );
 
       if (!isActiveOnTeam) {
@@ -1664,7 +1665,7 @@ export async function registerRoutes(app: Express) {
             // Check if athlete is currently on the team
             const existingMemberships = await storage.getUserTeams(athleteId);
             const isActiveOnTeam = existingMemberships.some(membership =>
-              membership.teamId === teamId && membership.isActive === "true"
+              membership.teamId === teamId && membership.isActive === true
             );
 
             if (!isActiveOnTeam) {
@@ -1814,7 +1815,7 @@ export async function registerRoutes(app: Express) {
         ...athlete,
         teams: athlete.teams,
         hasLogin: athlete.password !== "INVITATION_PENDING",
-        isActive: athlete.isActive === "true"
+        isActive: athlete.isActive === true
       }));
 
       // Athletes retrieved - debug logging removed for production
@@ -2640,9 +2641,9 @@ export async function registerRoutes(app: Express) {
       }
 
       const allInvitations = await storage.getInvitations();
-      const athleteInvitations = allInvitations.filter(invitation => 
-        invitation.role === 'athlete' && 
-        invitation.isUsed === 'false' &&
+      const athleteInvitations = allInvitations.filter(invitation =>
+        invitation.role === 'athlete' &&
+        invitation.isUsed === false &&
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
 
@@ -2677,7 +2678,7 @@ export async function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Invitation not found" });
       }
 
-      if (invitation.isUsed === "true") {
+      if (invitation.isUsed === true) {
         return res.status(400).json({ message: "Invitation already used" });
       }
 
@@ -2795,7 +2796,7 @@ export async function registerRoutes(app: Express) {
           console.error('Session regeneration error during invitation acceptance:', err);
           return res.status(500).json({ message: "Account creation successful but login failed" });
         }
-        
+
         req.session.user = {
           id: result.user.id,
           username: result.user.username,
@@ -3214,7 +3215,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Update user status
-      const user = await storage.updateUser(id, { isActive: isActive ? "true" : "false" });
+      const user = await storage.updateUser(id, { isActive: isActive ? true : false });
 
       res.json({ 
         message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
@@ -3766,8 +3767,8 @@ export async function registerRoutes(app: Express) {
                 // If athlete is not already on the team, mark them as inactive when importing
                 // Only deactivate if we have a target team to check against
                 if (teamId && !isAlreadyOnTeam) {
-                  await storage.updateUser(athlete.id, { isActive: "false" });
-                  athlete.isActive = "false"; // Update local object for consistency
+                  await storage.updateUser(athlete.id, { isActive: false });
+                  athlete.isActive = false; // Update local object for consistency
                   
                   results.push({
                     action: 'matched_and_deactivated',
