@@ -44,7 +44,7 @@ export function registerTeamRoutes(app: Express) {
    * @access All authenticated users (filtered by organization access)
    * @returns {Object[]} teams - Array of team objects
    */
-  app.get("/api/teams", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/teams", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
     const filters = { organizationId: organizationId as string | undefined };
 
@@ -59,7 +59,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} team - Created team object
    */
-  app.post("/api/teams", createLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/teams", createLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const team = await teamService.createTeam(req.body, req.session.user!.id);
     res.status(201).json(team);
   }));
@@ -72,7 +72,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} team - Updated team object
    */
-  app.patch("/api/teams/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/teams/:id", requireAuth, asyncHandler(async (req: any, res: any) => {
     const team = await teamService.updateTeam(
       req.params.id,
       req.body,
@@ -88,7 +88,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.delete("/api/teams/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/teams/:id", requireAuth, asyncHandler(async (req: any, res: any) => {
     await teamService.deleteTeam(req.params.id, req.session.user!.id);
     res.json({ message: "Team deleted successfully" });
   }));
@@ -101,7 +101,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.post("/api/teams/:id/archive", requireAuth, archiveLimiter, asyncHandler(async (req, res) => {
+  app.post("/api/teams/:id/archive", requireAuth, archiveLimiter, asyncHandler(async (req: any, res: any) => {
     await teamService.archiveTeam(req.params.id, req.body, req.session.user!.id);
     res.json({ message: "Team archived successfully" });
   }));
@@ -113,7 +113,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.post("/api/teams/:id/unarchive", requireAuth, archiveLimiter, asyncHandler(async (req, res) => {
+  app.post("/api/teams/:id/unarchive", requireAuth, archiveLimiter, asyncHandler(async (req: any, res: any) => {
     await teamService.unarchiveTeam(req.params.id, req.session.user!.id);
     res.json({ message: "Team unarchived successfully" });
   }));
@@ -127,7 +127,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.patch("/api/teams/:teamId/members/:userId", requireAuth, asyncHandler(async (req, res) => {
+  app.patch("/api/teams/:teamId/members/:userId", requireAuth, asyncHandler(async (req: any, res: any) => {
     await teamService.updateTeamMembership(
       req.params.teamId,
       req.params.userId,
@@ -145,7 +145,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { teamId } = req.params;
     const { playerIds, startDate, endDate } = req.body;
 
@@ -174,7 +174,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.delete("/api/teams/:teamId/athletes/:athleteId", teamManagementLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/teams/:teamId/athletes/:athleteId", teamManagementLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { teamId, athleteId } = req.params;
 
     // Update membership with end date set to now (effectively removing)
@@ -196,7 +196,7 @@ export function registerTeamRoutes(app: Express) {
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} message - Success message
    */
-  app.delete("/api/teams/:teamId/remove-athletes", teamManagementLimiter, requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/teams/:teamId/remove-athletes", teamManagementLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { teamId } = req.params;
     const { athleteIds } = req.body;
 

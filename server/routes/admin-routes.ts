@@ -54,7 +54,7 @@ export function registerAdminRoutes(app: Express) {
       firstName: targetUser.firstName,
       lastName: targetUser.lastName,
       role,
-      isSiteAdmin: targetUser.isSiteAdmin === true,
+      isSiteAdmin: Boolean(targetUser.isSiteAdmin),
       athleteId: role === "athlete" ? targetUser.id : undefined,
       primaryOrganizationId
     };

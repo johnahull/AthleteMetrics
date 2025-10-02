@@ -5,7 +5,7 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AuthService } from "../services/auth-service";
-import { requireAuth, requireSiteAdmin } from "../middleware";
+import { requireAuth, requireSiteAdmin, asyncHandler } from "../middleware";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -23,46 +23,41 @@ export function registerAuthRoutes(app: Express) {
   /**
    * User login
    */
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
-    try {
-      const { username, password } = req.body;
+  app.post("/api/auth/login", authLimiter, asyncHandler(async (req: any, res: any) => {
+    const { username, password } = req.body;
 
-      const result = await authService.login({ username, password });
-      
-      if (!result.success) {
-        return res.status(401).json({ message: result.error });
-      }
+    const result = await authService.login({ username, password });
 
-      const user = result.user!;
-
-      // Determine user's actual role and organization context
-      const roleContext = await authService.determineUserRoleAndContext(user);
-
-      // Set session
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.emails?.[0] || user.username + '@temp.local',
-        role: roleContext.role,
-        isSiteAdmin: user.isSiteAdmin === true,
-        primaryOrganizationId: roleContext.primaryOrganizationId,
-        athleteId: roleContext.role === 'athlete' ? user.id : undefined
-      };
-
-      // Get user organizations for context
-      const organizations = await authService.getUserOrganizations(user.id);
-
-      res.json({
-        user: req.session.user,
-        organizations
-      });
-    } catch (error) {
-      console.error("Login error:", error);
-      res.status(500).json({ message: "Login failed" });
+    if (!result.success) {
+      return res.status(401).json({ message: result.error });
     }
-  });
+
+    const user = result.user!;
+
+    // Determine user's actual role and organization context
+    const roleContext = await authService.determineUserRoleAndContext(user);
+
+    // Set session
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.emails?.[0] || user.username + '@temp.local',
+      role: roleContext.role,
+      isSiteAdmin: user.isSiteAdmin === true,
+      primaryOrganizationId: roleContext.primaryOrganizationId,
+      athleteId: roleContext.role === 'athlete' ? user.id : undefined
+    };
+
+    // Get user organizations for context
+    const organizations = await authService.getUserOrganizations(user.id);
+
+    res.json({
+      user: req.session.user,
+      organizations
+    });
+  }));
 
   /**
    * Get current user
@@ -86,19 +81,14 @@ export function registerAuthRoutes(app: Express) {
   /**
    * Get user organizations
    */
-  app.get("/api/auth/me/organizations", async (req, res) => {
-    try {
-      if (!req.session.user) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
-
-      const organizations = await authService.getUserOrganizations(req.session.user.id);
-      res.json(organizations);
-    } catch (error) {
-      console.error("Get organizations error:", error);
-      res.status(500).json({ message: "Failed to fetch organizations" });
+  app.get("/api/auth/me/organizations", asyncHandler(async (req: any, res: any) => {
+    if (!req.session.user) {
+      return res.status(401).json({ message: "Not authenticated" });
     }
-  });
+
+    const organizations = await authService.getUserOrganizations(req.session.user.id);
+    res.json(organizations);
+  }));
 
   /**
    * User logout
@@ -117,85 +107,73 @@ export function registerAuthRoutes(app: Express) {
   /**
    * Start impersonation (site admin only)
    */
-  app.post("/api/admin/impersonate/:userId", requireSiteAdmin, async (req, res) => {
-    try {
-      if (!req.session.user) {
-        return res.status(401).json({ message: "Not authenticated" });
-      }
-
-      const targetUserId = req.params.userId;
-      
-      const targetUser = await authService.startImpersonation(req.session.user.id, targetUserId);
-
-      // Determine target user's actual role and organization context
-      const targetRoleContext = await authService.determineUserRoleAndContext(targetUser);
-
-      // Store original user for stopping impersonation
-      if (!req.session.originalUser) {
-        req.session.originalUser = req.session.user;
-      }
-
-      // Set impersonated user as current session user
-      req.session.user = {
-        id: targetUser.id,
-        username: targetUser.username,
-        firstName: targetUser.firstName,
-        lastName: targetUser.lastName,
-        email: targetUser.emails?.[0] || targetUser.username + '@temp.local',
-        role: targetRoleContext.role,
-        isSiteAdmin: targetUser.isSiteAdmin === true,
-        primaryOrganizationId: targetRoleContext.primaryOrganizationId,
-        athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined
-      };
-
-      req.session.isImpersonating = true;
-      req.session.impersonationStartTime = new Date();
-
-      // Get user organizations for context
-      const organizations = await authService.getUserOrganizations(targetUser.id);
-
-      res.json({
-        user: req.session.user,
-        organizations,
-        impersonating: req.session.isImpersonating ? {
-          userId: targetUser.id,
-          username: targetUser.username,
-          startedAt: new Date().toISOString(),
-          startedBy: req.session.originalUser!.id
-        } : null
-      });
-    } catch (error) {
-      console.error("Impersonation error:", error);
-      const message = error instanceof Error ? error.message : "Impersonation failed";
-      res.status(error instanceof Error && error.message.includes("Unauthorized") ? 403 : 500)
-         .json({ message });
+  app.post("/api/admin/impersonate/:userId", requireSiteAdmin, asyncHandler(async (req: any, res: any) => {
+    if (!req.session.user) {
+      return res.status(401).json({ message: "Not authenticated" });
     }
-  });
+
+    const targetUserId = req.params.userId;
+
+    const targetUser = await authService.startImpersonation(req.session.user.id, targetUserId);
+
+    // Determine target user's actual role and organization context
+    const targetRoleContext = await authService.determineUserRoleAndContext(targetUser);
+
+    // Store original user for stopping impersonation
+    if (!req.session.originalUser) {
+      req.session.originalUser = req.session.user;
+    }
+
+    // Set impersonated user as current session user
+    req.session.user = {
+      id: targetUser.id,
+      username: targetUser.username,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+      email: targetUser.emails?.[0] || targetUser.username + '@temp.local',
+      role: targetRoleContext.role,
+      isSiteAdmin: targetUser.isSiteAdmin === true,
+      primaryOrganizationId: targetRoleContext.primaryOrganizationId,
+      athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined
+    };
+
+    req.session.isImpersonating = true;
+    req.session.impersonationStartTime = new Date();
+
+    // Get user organizations for context
+    const organizations = await authService.getUserOrganizations(targetUser.id);
+
+    res.json({
+      user: req.session.user,
+      organizations,
+      impersonating: req.session.isImpersonating ? {
+        userId: targetUser.id,
+        username: targetUser.username,
+        startedAt: new Date().toISOString(),
+        startedBy: req.session.originalUser!.id
+      } : null
+    });
+  }));
 
   /**
    * Stop impersonation
    */
-  app.post("/api/admin/stop-impersonation", requireAuth, (req, res) => {
-    try {
-      if (!req.session.user || !req.session.originalUser) {
-        return res.status(401).json({ message: "Not impersonating any user" });
-      }
-
-      // Restore original user
-      req.session.user = req.session.originalUser;
-      delete req.session.originalUser;
-      req.session.isImpersonating = false;
-      delete req.session.impersonationStartTime;
-
-      res.json({
-        user: req.session.user,
-        message: "Impersonation stopped successfully"
-      });
-    } catch (error) {
-      console.error("Stop impersonation error:", error);
-      res.status(500).json({ message: "Failed to stop impersonation" });
+  app.post("/api/admin/stop-impersonation", requireAuth, asyncHandler(async (req: any, res: any) => {
+    if (!req.session.user || !req.session.originalUser) {
+      return res.status(401).json({ message: "Not impersonating any user" });
     }
-  });
+
+    // Restore original user
+    req.session.user = req.session.originalUser;
+    delete req.session.originalUser;
+    req.session.isImpersonating = false;
+    delete req.session.impersonationStartTime;
+
+    res.json({
+      user: req.session.user,
+      message: "Impersonation stopped successfully"
+    });
+  }));
 
   /**
    * Get impersonation status

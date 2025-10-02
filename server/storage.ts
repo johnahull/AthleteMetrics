@@ -69,6 +69,7 @@ export interface IStorage {
     expiresAt: Date;
   }): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
+  getOrganizationInvitations(organizationId: string): Promise<Invitation[]>;
   updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 

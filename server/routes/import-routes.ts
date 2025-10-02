@@ -69,20 +69,19 @@ export function registerImportRoutes(app: Express) {
    * Process review decision
    */
   app.post("/api/import/review-decision", requireAuth, asyncHandler(async (req: any, res: any) => {
-    const { itemId, decision } = req.body;
+    const { itemId, action, notes } = req.body;
 
-    if (!itemId || !decision) {
-      return res.status(400).json({ message: "Item ID and decision are required" });
+    if (!itemId || !action) {
+      return res.status(400).json({ message: "Item ID and action are required" });
     }
 
-    // Get the item
-    const item = reviewQueue.getItem(itemId);
+    const reviewedBy = req.session.user!.id;
+    const result = reviewQueue.processDecision({ itemId, action, notes }, reviewedBy);
 
-    if (item) {
-      reviewQueue.removeItem(itemId);
-      res.json({ message: "Review decision processed successfully" });
-    } else {
-      res.status(400).json({ message: "Item not found" });
+    if (!result) {
+      return res.status(404).json({ message: "Review item not found" });
     }
+
+    res.json({ message: "Review decision processed successfully", item: result });
   }));
 }

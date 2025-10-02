@@ -126,7 +126,7 @@ export class OrganizationService extends BaseService {
    * @param userId - User ID to get organizations for
    * @param cachedIsSiteAdmin - Optional cached site admin status to avoid DB query
    */
-  async getUserOrganizations(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
+  async getOrganizationsForUser(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
     try {
       this.logger.info('Getting user organizations', {
         userId,

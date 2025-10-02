@@ -91,8 +91,8 @@ export function transformMeasurement(measurement: Measurement) {
     flyInDistance: measurement.flyInDistance
       ? formatMeasurementValue(measurement.flyInDistance, 'distance')
       : null,
-    isVerified: measurement.isVerified === 'true',
-    teamContextAuto: measurement.teamContextAuto === 'true',
+    isVerified: Boolean(measurement.isVerified),
+    teamContextAuto: Boolean(measurement.teamContextAuto),
   };
 }
 
@@ -170,7 +170,7 @@ export function generateFullName(firstName: string, lastName: string): string {
 export function transformTeam(team: Team) {
   return {
     ...team,
-    isArchived: team.isArchived === 'true',
+    isArchived: Boolean(team.isArchived),
   };
 }
 

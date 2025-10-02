@@ -71,7 +71,7 @@ export function registerUserRoutes(app: Express) {
    * @throws {429} Rate limit exceeded
    * @throws {500} Server error during user creation
    */
-  app.post("/api/users", createLimiter, requireSiteAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/users", createLimiter, requireSiteAdmin, asyncHandler(async (req: any, res: any) => {
     const user = await userService.createUser(req.body, req.session.user!.id);
     res.status(201).json(user);
   }));
@@ -97,7 +97,7 @@ export function registerUserRoutes(app: Express) {
    * @throws {403} No organization access
    * @throws {500} Server error fetching users
    */
-  app.get("/api/users", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/users", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId, includeTeamMemberships, role, search, excludeTeam, season } = req.query;
     const currentUser = req.session.user;
 
@@ -113,7 +113,7 @@ export function registerUserRoutes(app: Express) {
       return res.json(users);
     }
 
-    const userOrgs = await userService.getUserOrganizations(currentUser.id);
+    const userOrgs = await storage.getUserOrganizations(currentUser.id);
     if (userOrgs.length === 0) {
       return res.status(403).json({ message: "No organization access" });
     }
@@ -181,7 +181,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Get user profile
    */
-  app.get("/api/users/:id/profile", requireAuth, asyncHandler(async (req, res) => {
+  app.get("/api/users/:id/profile", requireAuth, asyncHandler(async (req: any, res: any) => {
     const userId = req.params.id;
     const user = await userService.getUserById(userId, req.session.user!.id);
 
@@ -195,7 +195,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Update user profile
    */
-  app.put("/api/profile", requireAuth, asyncHandler(async (req, res) => {
+  app.put("/api/profile", requireAuth, asyncHandler(async (req: any, res: any) => {
     const userId = req.session.user!.id;
     const updatedUser = await userService.updateProfile(userId, req.body);
 
@@ -213,7 +213,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Change password
    */
-  app.put("/api/profile/password", requireAuth, asyncHandler(async (req, res) => {
+  app.put("/api/profile/password", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.session.user!.id;
 
@@ -229,7 +229,7 @@ export function registerUserRoutes(app: Express) {
    * @route PUT /api/users/:id/role
    * @status 410 Gone
    */
-  app.put("/api/users/:id/role", requireAuth, asyncHandler(async (req, res) => {
+  app.put("/api/users/:id/role", requireAuth, asyncHandler(async (req: any, res: any) => {
     // Return 410 Gone to indicate this endpoint has been permanently deprecated
     res.status(410).json({
       message: "This endpoint has been deprecated. User roles are now organization-specific.",
@@ -242,7 +242,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Update user status (admin only)
    */
-  app.put("/api/users/:id/status", requireAuth, asyncHandler(async (req, res) => {
+  app.put("/api/users/:id/status", requireAuth, asyncHandler(async (req: any, res: any) => {
     const userId = req.params.id;
     const { isActive } = req.body;
 
@@ -258,7 +258,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Delete user (admin only)
    */
-  app.delete("/api/users/:id", requireAuth, asyncHandler(async (req, res) => {
+  app.delete("/api/users/:id", requireAuth, asyncHandler(async (req: any, res: any) => {
     const userId = req.params.id;
 
     await userService.deleteUser(userId, req.session.user!.id);
@@ -269,7 +269,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Get all site administrators
    */
-  app.get("/api/site-admins", requireSiteAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/site-admins", requireSiteAdmin, asyncHandler(async (req: any, res: any) => {
     const admins = await userService.getSiteAdmins();
     res.json(admins);
   }));
@@ -277,7 +277,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Create site administrator
    */
-  app.post("/api/site-admins", siteAdminCreateLimiter, requireSiteAdmin, asyncHandler(async (req, res) => {
+  app.post("/api/site-admins", siteAdminCreateLimiter, requireSiteAdmin, asyncHandler(async (req: any, res: any) => {
     const admin = await userService.createSiteAdmin(req.body, req.session.user!.id);
     res.status(201).json(admin);
   }));
@@ -285,7 +285,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Check username availability
    */
-  app.get("/api/users/check-username", usernameCheckLimiter, asyncHandler(async (req, res) => {
+  app.get("/api/users/check-username", usernameCheckLimiter, asyncHandler(async (req: any, res: any) => {
     const { username } = req.query;
 
     if (!username || typeof username !== 'string') {
@@ -299,7 +299,7 @@ export function registerUserRoutes(app: Express) {
   /**
    * Admin role verification endpoint
    */
-  app.get("/api/admin/verify-roles", requireSiteAdmin, asyncHandler(async (req, res) => {
+  app.get("/api/admin/verify-roles", requireSiteAdmin, asyncHandler(async (req: any, res: any) => {
     // This endpoint verifies that the requesting user has site admin privileges
     // and can be used for additional role-based access checks
     const users = await userService.getUsers();

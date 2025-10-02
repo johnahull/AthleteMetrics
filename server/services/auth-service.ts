@@ -7,7 +7,7 @@ import { z } from "zod";
 import { BaseService } from "./base-service";
 import type { User } from "@shared/schema";
 import { AuthenticationError, AuthorizationError, NotFoundError } from "../utils/errors";
-import { sanitizeUser, type SanitizedUser } from "../utils/transformers";
+import { sanitizeUser } from "../utils/transformers";
 
 export interface LoginCredentials {
   username: string;
