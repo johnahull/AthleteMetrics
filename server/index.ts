@@ -64,6 +64,11 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
+  //
+  // Note: reusePort option not needed - this application runs as a single process.
+  // For load balancing, use external load balancers (Nginx, cloud ALB/NLB, K8s services)
+  // rather than Node.js clustering. reusePort is only useful for multiple processes
+  // binding to the same port on the same machine (Linux only).
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);

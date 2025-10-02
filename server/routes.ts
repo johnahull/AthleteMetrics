@@ -226,6 +226,9 @@ async function initializeDefaultUser() {
     const existingUserByUsername = await storage.getUserByUsername("admin");
 
     if (!existingUserByEmail && !existingUserByUsername) {
+      // Note: Site admins don't have a role field - they are identified by isSiteAdmin flag
+      // This is intentional: role is for organization-level permissions (athlete, coach, org_admin)
+      // while isSiteAdmin grants platform-wide access independent of organizations
       await storage.createUser({
         username: "admin",
         emails: [adminEmail],
@@ -2743,6 +2746,13 @@ export async function registerRoutes(app: Express) {
 
       if (!/^[a-zA-Z0-9._-]+$/.test(username)) {
         return res.status(400).json({ message: "Username can only contain letters, numbers, periods, hyphens, and underscores" });
+      }
+
+      // Validate password using shared validation
+      const { validatePassword } = await import('@shared/password-requirements');
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.errors[0] });
       }
 
       // Check if username already exists
