@@ -3011,13 +3011,13 @@ export async function registerRoutes(app: Express) {
       if (userRolesToDelete.includes("org_admin")) {
         // Count total org admins in this organization
         const orgProfile = await storage.getOrganizationProfile(organizationId);
-        const orgAdmins = orgProfile?.coaches.filter(coach => 
-          coach.roles.includes("org_admin")
+        const orgAdmins = orgProfile?.coaches.filter(coach =>
+          coach.role === "org_admin"
         ) || [];
 
         if (orgAdmins.length <= 1) {
-          return res.status(400).json({ 
-            message: "Cannot delete the last organization administrator. Each organization must have at least one admin." 
+          return res.status(400).json({
+            message: "Cannot delete the last organization administrator. Each organization must have at least one admin."
           });
         }
       }
