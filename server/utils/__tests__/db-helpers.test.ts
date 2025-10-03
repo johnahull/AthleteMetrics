@@ -388,8 +388,8 @@ describe('Database Helpers', () => {
 
         expect(result.start).toBeInstanceOf(Date);
         expect(result.end).toBeInstanceOf(Date);
-        expect(result.start?.getFullYear()).toBe(2024);
-        expect(result.end?.getFullYear()).toBe(2024);
+        expect(result.start?.getUTCFullYear()).toBe(2024);
+        expect(result.end?.getUTCFullYear()).toBe(2024);
       });
 
       it('should handle only start date', () => {

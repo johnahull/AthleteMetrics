@@ -86,12 +86,19 @@ Use this checklist to ensure a safe and successful production deployment. Each i
 ### Session Storage
 
 - [ ] **Redis Configuration**: Production session store configured
-  - `REDIS_URL` environment variable set
+  - **Implementation**: Redis support is fully implemented in `server/setup-sessions.ts`
+  - Requires optional dependencies: `redis` and `connect-redis` packages
+  - `REDIS_URL` environment variable set (e.g., `redis://localhost:6379`)
   - Redis instance is running and accessible
-  - **WARNING**: In-memory sessions will cause:
-    - Session loss on server restart
-    - Cannot scale horizontally
+  - **Installation**: `npm install redis connect-redis` (if not already installed)
+  - **Verification**: Check server logs for "Using Redis session store" on startup
+  - **WARNING**: Without Redis in production, in-memory sessions will cause:
+    - Session loss on server restart/deployment
+    - Cannot scale horizontally (multiple instances)
     - Memory leaks over time
+  - **Graceful Degradation**: Application will start with in-memory sessions if Redis unavailable
+    - Logs CRITICAL error for monitoring/alerting
+    - Allows availability during Redis outages
 
 ---
 
