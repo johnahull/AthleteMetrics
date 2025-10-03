@@ -96,6 +96,19 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
       const num = parseFloat(value);
       return num >= 0.5 && num <= 5.0;
     }
+  },
+
+  TOP_SPEED: {
+    patterns: [
+      /(?:top|max|maximum).*?speed.*?(\d{1,2}(?:\.\d{1,2})?)\s*(?:mph|miles)/gi,
+      /(\d{1,2}(?:\.\d{1,2})?)\s*mph.*?(?:top|max|speed)/gi,
+      /speed.*?(\d{1,2}(?:\.\d{1,2})?)\s*mph/gi,
+    ],
+    confidence: 75,
+    validator: (value: string) => {
+      const num = parseFloat(value);
+      return num >= 10 && num <= 25;
+    }
   }
 };
 

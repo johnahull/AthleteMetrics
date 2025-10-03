@@ -4323,7 +4323,7 @@ export async function registerRoutes(app: Express) {
               age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
               value: parseFloat(value),
-              units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : ''),
+              units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : metric === 'TOP_SPEED' ? 'mph' : metric === 'RSI' ? '' : 's'),
               flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
               notes: notes || undefined,
               isVerified: "false"

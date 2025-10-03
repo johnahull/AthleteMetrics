@@ -401,7 +401,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().min(1, "Date is required"),
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"]),
+  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
   // Optional team context - will be auto-populated if not provided
@@ -471,6 +471,7 @@ export const MetricType = {
   T_TEST: "T_TEST",
   DASH_40YD: "DASH_40YD",
   RSI: "RSI",
+  TOP_SPEED: "TOP_SPEED",
 } as const;
 
 export const TeamLevel = {
