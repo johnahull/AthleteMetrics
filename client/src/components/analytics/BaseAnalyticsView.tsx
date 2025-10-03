@@ -121,6 +121,7 @@ function BaseAnalyticsViewContent({
     setSelectedGroups,
     groupComparisonData,
     chartData: groupChartData,
+    recommendedCharts: groupRecommendedCharts,
     isLoading: isGroupLoading,
     error: groupError,
     isDataReady: isGroupDataReady
@@ -411,7 +412,11 @@ function BaseAnalyticsViewContent({
             {customToolbar || (
               <AnalyticsToolbar
                 selectedChartType={state.selectedChartType}
-                availableChartTypes={state.analyticsData?.meta?.recommendedCharts || [state.selectedChartType]}
+                availableChartTypes={
+                  state.analysisType === 'multi_group' && selectedGroups.length >= 2 && groupRecommendedCharts
+                    ? groupRecommendedCharts
+                    : state.analyticsData?.meta?.recommendedCharts || [state.selectedChartType]
+                }
                 onChartTypeChange={setChartType}
                 formatChartTypeName={formatChartTypeName}
                 showAllCharts={state.showAllCharts}

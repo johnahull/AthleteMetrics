@@ -153,6 +153,9 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
     selectedAthleteId: '',
     selectedAthlete: null,
     selectedAthleteIds: [],
+    // Clear analytics data when switching analysis types
+    analyticsData: null,
+    error: null,
     // Clear teams from filters - multi-group uses GroupDefinitions instead
     filters: {
       ...state.filters,
@@ -208,6 +211,9 @@ const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): An
     selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
     selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
     selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+    // Clear analytics data when switching analysis types
+    analyticsData: null,
+    error: null,
     // Restore previous metrics/timeframe with deep clones
     metrics: restoredMetrics,
     timeframe: restoredTimeframe,
@@ -226,6 +232,9 @@ const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): 
   selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
   selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
   selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+  // Clear analytics data when switching analysis types
+  analyticsData: null,
+  error: null,
 });
 
 // Analytics Reducer

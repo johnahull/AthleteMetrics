@@ -55,6 +55,8 @@ interface UseGroupComparisonReturn {
   chartData: ChartDataPoint[] | null;
   /** Statistical summaries for normalization */
   statistics: Record<string, StatisticalSummary> | null;
+  /** Recommended chart types for multi-group analysis */
+  recommendedCharts: string[] | null;
   /** Loading state */
   isLoading: boolean;
   /** Error state */
@@ -255,12 +257,18 @@ export function useGroupComparison({
 
   const isDataReady = !isLoading && !error && selectedGroups.length >= 2 && !!chartData;
 
+  // Extract recommended charts from the fetched data
+  const recommendedCharts = useMemo(() => {
+    return measurementData?.meta?.recommendedCharts || null;
+  }, [measurementData]);
+
   return {
     selectedGroups,
     setSelectedGroups,
     groupComparisonData,
     chartData,
     statistics: groupComparisonData?.statistics || null,
+    recommendedCharts,
     isLoading,
     error: error?.message || null,
     isDataReady
