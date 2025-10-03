@@ -18,6 +18,11 @@ interface DashboardAnalytics {
   totalMeasurements: number;
   verifiedCount: number;
   metricBreakdown: Record<string, number>;
+  totalAthletes: number;
+  activeAthletes: number;
+  totalTeams: number;
+  bestFly10Today: { value: number; athleteId: string; athleteName: string } | null;
+  bestVerticalToday: { value: number; athleteId: string; athleteName: string } | null;
   dateRange?: {
     start: string | null;
     end: string | null;
@@ -61,6 +66,38 @@ export class AnalyticsService extends BaseService {
         { userId, filters }
       );
 
+      // Get unique athlete IDs from measurements (using userId)
+      const uniqueAthleteIds = [...new Set(measurements.map(m => m.userId))];
+      
+      // Get athletes to determine active status (have user accounts)
+      const athletes = await this.executeQuery(
+        'getAthletes',
+        () => this.storage.getAthletes({ organizationId: filters.organizationId }),
+        { userId, filters }
+      );
+      
+      // Create athlete lookup map
+      const athleteMap = new Map(athletes.map(a => [a.id, a]));
+      
+      // Get teams count
+      const teams = await this.executeQuery(
+        'getTeams',
+        () => this.storage.getTeams(filters.organizationId),
+        { userId, filters }
+      );
+      
+      // Find best performances for today
+      const today = new Date().toISOString().split('T')[0];
+      const todayMeasurements = measurements.filter(m => m.date.startsWith(today));
+      
+      const bestFly10 = todayMeasurements
+        .filter(m => m.metric === 'FLY10_TIME')
+        .sort((a, b) => parseFloat(a.value) - parseFloat(b.value))[0];
+      
+      const bestVertical = todayMeasurements
+        .filter(m => m.metric === 'VERTICAL_JUMP')
+        .sort((a, b) => parseFloat(b.value) - parseFloat(a.value))[0];
+
       // Calculate analytics
       const analytics: DashboardAnalytics = {
         totalMeasurements: measurements.length,
@@ -68,7 +105,20 @@ export class AnalyticsService extends BaseService {
         metricBreakdown: measurements.reduce((acc, m) => {
           acc[m.metric] = (acc[m.metric] || 0) + 1;
           return acc;
-        }, {} as Record<string, number>)
+        }, {} as Record<string, number>),
+        totalAthletes: uniqueAthleteIds.length,
+        activeAthletes: athletes.filter(a => a.id).length,
+        totalTeams: teams.length,
+        bestFly10Today: bestFly10 ? {
+          value: parseFloat(bestFly10.value),
+          athleteId: bestFly10.userId,
+          athleteName: athleteMap.get(bestFly10.userId)?.fullName || 'Unknown'
+        } : null,
+        bestVerticalToday: bestVertical ? {
+          value: parseFloat(bestVertical.value),
+          athleteId: bestVertical.userId,
+          athleteName: athleteMap.get(bestVertical.userId)?.fullName || 'Unknown'
+        } : null
       };
 
       // Include date range and results if provided
@@ -82,7 +132,9 @@ export class AnalyticsService extends BaseService {
 
       this.logger.info('Dashboard analytics retrieved', {
         userId,
-        totalMeasurements: analytics.totalMeasurements
+        totalMeasurements: analytics.totalMeasurements,
+        totalAthletes: analytics.totalAthletes,
+        activeAthletes: analytics.activeAthletes
       });
 
       return analytics;
