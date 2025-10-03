@@ -34,7 +34,7 @@ export function registerAuthRoutes(app: Express) {
    * Get CSRF token
    * Provides a token for CSRF protection on mutating requests
    */
-  app.get("/api/csrf-token", csrfLimiter, (req: any, res: any) => {
+  app.get("/api/csrf-token", csrfLimiter, asyncHandler(async (req: any, res: any) => {
     // Generate CSRF token if not exists
     if (!req.session.csrfToken) {
       // Generate a random token
@@ -42,7 +42,7 @@ export function registerAuthRoutes(app: Express) {
     }
 
     res.json({ csrfToken: req.session.csrfToken });
-  });
+  }));
 
   /**
    * User login

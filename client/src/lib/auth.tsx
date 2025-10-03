@@ -73,9 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             if (orgResponse.ok) {
               const organizations = await orgResponse.json();
-              // Only auto-select if user has exactly one organization to avoid confusion
+              // Auto-select organization context:
+              // 1. If user has exactly one organization, use it
+              // 2. Otherwise, fall back to user's primaryOrganizationId if available
               if (organizations && organizations.length === 1) {
                 setOrganizationContext(organizations[0].organizationId);
+              } else if (data.user.primaryOrganizationId) {
+                setOrganizationContext(data.user.primaryOrganizationId);
               }
             }
           } catch (orgError) {
