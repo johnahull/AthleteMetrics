@@ -9,7 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -20,6 +20,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { validateUsername } from "@shared/username-validation";
 
 // Form schemas
 const createUserSchema = z.object({
@@ -27,7 +28,13 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  roles: z.array(z.enum(["org_admin", "coach"])).min(1, "At least one role must be selected"),
+  username: z.string().refine(
+    (username) => validateUsername(username).valid,
+    (username) => ({
+      message: validateUsername(username).errors[0] || "Invalid username"
+    })
+  ),
+  role: z.enum(["org_admin", "coach", "athlete"]),
 });
 
 const invitationSchema = z.object({
@@ -53,8 +60,9 @@ type OrganizationProfile = {
       lastName: string;
       email: string;
       isActive?: string;
+      username?: string; // Added username to user type
     };
-    roles: string[];
+    role: string;
   }>;
   athletes: Array<{
     id: string;
@@ -103,7 +111,8 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       password: "",
       firstName: "",
       lastName: "",
-      roles: ["coach"],
+      username: "",
+      role: "coach",
     },
   });
 
@@ -137,10 +146,24 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       toast({ title: "Success", description: "User created successfully" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to create user",
-        variant: "destructive" 
+      // Sanitize error messages to avoid exposing internal details
+      let userMessage = "Failed to create user. Please try again.";
+
+      if (error.message?.toLowerCase().includes('unique') ||
+          error.message?.toLowerCase().includes('already exists')) {
+        userMessage = "Username already exists. Please choose a different username.";
+      } else if (error.message?.toLowerCase().includes('validation') ||
+                 error.message?.toLowerCase().includes('invalid')) {
+        userMessage = "Invalid input. Please check your entries and try again.";
+      } else if (error.message?.toLowerCase().includes('permission') ||
+                 error.message?.toLowerCase().includes('unauthorized')) {
+        userMessage = "You don't have permission to perform this action.";
+      }
+
+      toast({
+        title: "Error",
+        description: userMessage,
+        variant: "destructive"
       });
     },
   });
@@ -178,10 +201,23 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       toast({ title: "Success", description: "Invitation sent successfully" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to send invitation",
-        variant: "destructive" 
+      // Sanitize error messages to avoid exposing internal details
+      let userMessage = "Failed to send invitation. Please try again.";
+
+      if (error.message?.toLowerCase().includes('already') ||
+          error.message?.toLowerCase().includes('exists')) {
+        userMessage = "An invitation for this email already exists or user already registered.";
+      } else if (error.message?.toLowerCase().includes('invalid email')) {
+        userMessage = "Invalid email address. Please check and try again.";
+      } else if (error.message?.toLowerCase().includes('permission') ||
+                 error.message?.toLowerCase().includes('unauthorized')) {
+        userMessage = "You don't have permission to send invitations.";
+      }
+
+      toast({
+        title: "Error",
+        description: userMessage,
+        variant: "destructive"
       });
     },
   });
@@ -252,6 +288,24 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                   />
                 </div>
 
+                {/* Username Field */}
+                <FormField
+                  control={createUserForm.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input {...field} data-testid="input-username" placeholder="Enter unique username" />
+                      </FormControl>
+                      <p className="text-xs text-gray-500">
+                        Username must be unique and can contain letters, numbers, hyphens, and underscores
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={createUserForm.control}
                   name="email"
@@ -302,38 +356,45 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
                 <FormField
                   control={createUserForm.control}
-                  name="roles"
+                  name="role"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Roles</FormLabel>
-                      <div className="space-y-2">
-                        {[
-                          { value: "coach", label: "Coach" },
-                          { value: "org_admin", label: "Organization Admin" },
-                        ].map((role) => (
-                          <div key={role.value} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`role-${role.value}`}
-                              checked={field.value?.includes(role.value as any)}
-                              onCheckedChange={(checked) => {
-                                const currentRoles = field.value || [];
-                                if (checked) {
-                                  field.onChange([...currentRoles, role.value]);
-                                } else {
-                                  field.onChange(currentRoles.filter((r: string) => r !== role.value));
-                                }
-                              }}
-                              data-testid={`checkbox-role-${role.value}`}
-                            />
+                      <FormLabel>Role</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-col space-y-1"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="coach" id="role-coach" data-testid="radio-role-coach" />
                             <label
-                              htmlFor={`role-${role.value}`}
+                              htmlFor="role-coach"
                               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                             >
-                              {role.label}
+                              Coach
                             </label>
                           </div>
-                        ))}
-                      </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="org_admin" id="role-org-admin" data-testid="radio-role-org-admin" />
+                            <label
+                              htmlFor="role-org-admin"
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              Organization Admin
+                            </label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="athlete" id="role-athlete" data-testid="radio-role-athlete" />
+                            <label
+                              htmlFor="role-athlete"
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              Athlete
+                            </label>
+                          </div>
+                        </RadioGroup>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -945,6 +1006,13 @@ export default function OrganizationProfile() {
                           <Mail className="h-3 w-3" />
                           <span>{coach.user.email}</span>
                         </div>
+                        {/* Display username if available */}
+                        {coach.user.username && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <UserCog className="h-3 w-3" />
+                            <span>{coach.user.username}</span>
+                          </div>
+                        )}
 
                         {/* Invitation Status */}
                         <div className="flex items-center gap-2 mt-1">
@@ -963,16 +1031,11 @@ export default function OrganizationProfile() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <div className="flex gap-1">
-                          {coach.roles.map((role, roleIndex) => (
-                            <Badge 
-                              key={`${coach.user.id}-${role}-${roleIndex}`} 
-                              variant={role === 'org_admin' ? 'default' : 'secondary'}
-                            >
-                              {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}
-                            </Badge>
-                          ))}
-                        </div>
+                        <Badge
+                          variant={coach.role === 'org_admin' ? 'default' : 'secondary'}
+                        >
+                          {coach.role === 'org_admin' ? 'Admin' : coach.role === 'coach' ? 'Coach' : 'Athlete'}
+                        </Badge>
 
                         {/* Action Buttons - only for admin users */}
                         {(user?.isSiteAdmin || isOrgAdmin) && (
@@ -982,7 +1045,7 @@ export default function OrganizationProfile() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => sendInvitation(coach.user.email, coach.roles)}
+                                onClick={() => sendInvitation(coach.user.email, [coach.role])}
                                 data-testid={`send-invitation-${coach.user.id}`}
                               >
                                 <Send className="h-3 w-3" />

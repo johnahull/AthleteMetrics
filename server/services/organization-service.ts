@@ -88,7 +88,7 @@ export class OrganizationService extends BaseService {
    * @param userId - User ID to get organizations for
    * @param cachedIsSiteAdmin - Optional cached site admin status to avoid DB query
    */
-  async getUserOrganizations(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
+  async getAccessibleOrganizations(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
     try {
       // Use cached value if provided, otherwise query database
       // This prevents N+1 queries when called multiple times with session data
@@ -104,7 +104,7 @@ export class OrganizationService extends BaseService {
       const userOrgs = await this.storage.getUserOrganizations(userId);
       return userOrgs.map((userOrg: UserOrganizationWithOrg) => userOrg.organization);
     } catch (error) {
-      console.error("OrganizationService.getUserOrganizations:", error);
+      console.error("OrganizationService.getAccessibleOrganizations:", error);
       return [];
     }
   }
@@ -132,9 +132,14 @@ export class OrganizationService extends BaseService {
       const users = await this.storage.getOrganizationUsers(organizationId);
       const invitations = await this.storage.getOrganizationInvitations(organizationId);
 
+      // Categorize users into coaches (org_admin/coach) and athletes
+      const coaches = users.filter(u => u.role === 'org_admin' || u.role === 'coach');
+      const athletes = users.filter(u => u.role === 'athlete');
+
       return {
         organization,
-        users,
+        coaches,
+        athletes,
         invitations
       };
     } catch (error) {
@@ -152,14 +157,45 @@ export class OrganizationService extends BaseService {
     requestingUserId: string
   ): Promise<void> {
     try {
+      // Check if requesting user is site admin
+      const requestingUser = await this.storage.getUser(requestingUserId);
+      const isSiteAdmin = requestingUser?.isSiteAdmin === true;
+
       // Validate access
-      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
+      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId, isSiteAdmin);
       if (!hasAccess) {
         throw new Error("Unauthorized: Access denied to this organization");
       }
 
+      // Get target user's roles (reused below to avoid duplicate queries)
+      const targetUserRoles = await this.storage.getUserRoles(userId, organizationId);
+      const targetUserRole = targetUserRoles[0];
+
+      // Check hierarchical permissions (unless site admin)
+      if (!isSiteAdmin) {
+        const requestingUserRoles = await this.storage.getUserRoles(requestingUserId, organizationId);
+        const requestingUserRole = requestingUserRoles[0]; // Single role per user per organization
+        const isOrgAdmin = requestingUserRole === "org_admin";
+        const isCoach = requestingUserRole === "coach";
+
+        // Must be at least a coach to delete users
+        if (!isOrgAdmin && !isCoach) {
+          throw new Error("Access denied. Only coaches and organization admins can delete users.");
+        }
+
+        // Coaches can only delete athletes
+        if (isCoach && targetUserRole !== "athlete") {
+          throw new Error("Access denied. Coaches can only delete athletes.");
+        }
+
+        // Org admins can delete athletes and coaches, but not other org admins
+        if (isOrgAdmin && targetUserRole === "org_admin" && userId !== requestingUserId) {
+          // This will be checked in the "last admin" logic below
+        }
+      }
+
       // Prevent removing self if it's the last admin
-      if (userId === requestingUserId) {
+      if (userId === requestingUserId && targetUserRole === 'org_admin') {
         const orgUsers = await this.storage.getOrganizationUsers(organizationId);
         const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
         if (adminCount <= 1) {
@@ -167,7 +203,16 @@ export class OrganizationService extends BaseService {
         }
       }
 
-      await this.storage.removeUserFromOrganization(organizationId, userId);
+      // If trying to delete an org admin, ensure it's not the last one
+      if (targetUserRole === "org_admin") {
+        const orgUsers = await this.storage.getOrganizationUsers(organizationId);
+        const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
+        if (adminCount <= 1) {
+          throw new Error("Cannot remove the last organization administrator");
+        }
+      }
+
+      await this.storage.removeUserFromOrganization(userId, organizationId);
     } catch (error) {
       console.error("OrganizationService.removeUserFromOrganization:", error);
       throw error;
@@ -189,9 +234,20 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Access denied to this organization");
       }
 
+      // Check if username already exists
+      // Note: Using generic error to prevent username enumeration attacks
+      if (userData.username) {
+        const existingUser = await this.storage.getUserByUsername(userData.username);
+        if (existingUser) {
+          throw new Error("Unable to create user. Please check your input and try again.");
+        }
+      }
+
       // Create user and add to organization
+      // Each user can only have one role per organization
+      const role = userData.role || 'athlete';
       const user = await this.storage.createUser(userData);
-      await this.storage.addUserToOrganization(user.id, organizationId, userData.role || 'athlete');
+      await this.storage.addUserToOrganization(user.id, organizationId, role);
 
       return user;
     } catch (error) {

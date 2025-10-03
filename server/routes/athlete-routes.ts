@@ -1,5 +1,14 @@
 /**
  * Athlete management routes
+ *
+ * MIDDLEWARE MIGRATION STATUS:
+ * ✅ POST /api/athletes - Uses requireAthleteManagementPermission
+ * ✅ PUT /api/athletes/:id - Uses requireAthleteAccessPermission
+ * ✅ DELETE /api/athletes/:id - Uses requireAthleteAccessPermission
+ * ⚠️  GET /api/athletes/:id - Has inline permission checks (legacy pattern)
+ * ⚠️  GET /api/athletes - No specific permission middleware (requireAuth only)
+ *
+ * Future: Migrate GET routes to use middleware for consistency
  */
 
 import type { Express } from "express";
@@ -7,6 +16,10 @@ import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertUserSchema, insertAthleteSchema } from "@shared/schema";
+import {
+  requireAthleteManagementPermission,
+  requireAthleteAccessPermission
+} from "../middleware/athlete-permissions";
 // Session types are loaded globally
 
 // Helper function to check if user is site admin
@@ -19,6 +32,15 @@ const athleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 100, // Limit each IP to 100 athlete requests per windowMs
   message: { message: "Too many athlete requests, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+// Stricter rate limiting for delete operations
+const athleteDeleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10, // Limit each IP to 10 delete requests per windowMs (conservative for safety)
+  message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });
@@ -164,9 +186,9 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Create athlete (site admin only)
+   * Create athlete (org admins and coaches can create within their organization)
    */
-  app.post("/api/athletes", athleteLimiter, requireSiteAdmin, async (req, res) => {
+  app.post("/api/athletes", athleteLimiter, requireAuth, requireAthleteManagementPermission, async (req, res) => {
     try {
       // Validate request body using Zod schema
       const validatedData = insertAthleteSchema.parse(req.body);
@@ -183,16 +205,16 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Update athlete
+   * Update athlete (org admins and coaches can update athletes in their organization)
    */
-  app.put("/api/athletes/:id", athleteLimiter, requireSiteAdmin, async (req, res) => {
+  app.put("/api/athletes/:id", athleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
     try {
       const athleteId = req.params.id;
-      
+
       // Validate request body using partial schema (for updates)
       const updateSchema = insertAthleteSchema.partial();
       const validatedData = updateSchema.parse(req.body);
-      
+
       const updatedAthlete = await storage.updateAthlete(athleteId, validatedData);
       res.json(updatedAthlete);
     } catch (error) {
@@ -206,11 +228,12 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Delete athlete (site admin only)
+   * Delete athlete (org admins and coaches within their organization)
    */
-  app.delete("/api/athletes/:id", athleteLimiter, requireSiteAdmin, async (req, res) => {
+  app.delete("/api/athletes/:id", athleteDeleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
     try {
       const athleteId = req.params.id;
+
       await storage.deleteAthlete(athleteId);
       res.json({ message: "Athlete deleted successfully" });
     } catch (error) {

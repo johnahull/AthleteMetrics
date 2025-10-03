@@ -30,6 +30,11 @@ export interface IStorage {
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
   getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]>;
+  getOrganizationProfile(organizationId: string): Promise<Organization & {
+    coaches: Array<{ user: User, role: string }>,
+    athletes: (User & { teams: (Team & { organization: Organization })[] })[],
+    invitations: Invitation[]
+  } | null>;
   getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]>;
 
   // Teams
@@ -169,9 +174,11 @@ export interface IStorage {
   markEmailAsVerified(userId: string, email: string): Promise<void>;
   markEmailVerificationTokenUsed(token: string): Promise<void>;
   getUserRole(userId: string, organizationId: string): Promise<string | null>;
+  getUserRoles(userId: string, organizationId?: string): Promise<string[]>;
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
   getUsersByOrganization(organizationId: string): Promise<any[]>;
   getUserActivityStats(userId: string, organizationId: string): Promise<any>;
+  getOrganizationInvitations(organizationId: string): Promise<Invitation[]>;
 
   // Audit Logging
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
@@ -426,34 +433,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrganizationProfile(organizationId: string): Promise<Organization & {
-    coaches: Array<{ user: User, roles: string[] }>,
+    coaches: Array<{ user: User, role: string }>,
     athletes: (User & { teams: (Team & { organization: Organization })[] })[],
     invitations: Invitation[]
   } | null> {
     const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
     if (!organization) return null;
 
-    // Get users with all their roles grouped
+    // Get users with their single role (each user has only one role per organization)
     const allUsers = await this.getOrganizationUsers(organizationId);
 
-    // Group users by userId and collect all their roles
-    const userRoleMap = new Map<string, { user: User, roles: string[] }>();
+    // Map users to include their single role
+    const userRoleMap = new Map<string, { user: User, role: string }>();
 
     for (const userOrg of allUsers) {
       const userId = userOrg.user.id;
-      if (userRoleMap.has(userId)) {
-        userRoleMap.get(userId)!.roles.push(userOrg.role);
-      } else {
+      // Each user should only have one role per organization
+      if (!userRoleMap.has(userId)) {
         userRoleMap.set(userId, {
           user: userOrg.user,
-          roles: [userOrg.role]
+          role: userOrg.role
         });
       }
     }
 
     // Filter coaches (users with coach or org_admin roles, excluding pure athletes)
     const coaches = Array.from(userRoleMap.values()).filter(
-      userWithRoles => userWithRoles.roles.some(role => role === 'coach' || role === 'org_admin')
+      userWithRole => userWithRole.role === 'coach' || userWithRole.role === 'org_admin'
     );
 
     // Get athletes via organization filter

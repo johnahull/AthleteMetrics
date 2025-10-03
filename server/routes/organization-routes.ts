@@ -19,6 +19,15 @@ const createLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Stricter rate limiting for user deletion operations
+const userDeleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10, // Limit each IP to 10 user deletion requests per windowMs (conservative for safety)
+  message: { message: "Too many deletion attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerOrganizationRoutes(app: Express) {
   /**
    * Get all organizations (site admin only)
@@ -63,7 +72,7 @@ export function registerOrganizationRoutes(app: Express) {
    */
   app.get("/api/my-organizations", requireAuth, async (req, res) => {
     try {
-      const organizations = await organizationService.getUserOrganizations(req.session.user!.id);
+      const organizations = await organizationService.getAccessibleOrganizations(req.session.user!.id);
       res.json(organizations);
     } catch (error) {
       console.error("Get user organizations error:", error);
@@ -111,7 +120,7 @@ export function registerOrganizationRoutes(app: Express) {
   /**
    * Remove user from organization
    */
-  app.delete("/api/organizations/:id/users/:userId", requireAuth, async (req, res) => {
+  app.delete("/api/organizations/:id/users/:userId", userDeleteLimiter, requireAuth, async (req, res) => {
     try {
       const { id: organizationId, userId } = req.params;
       
@@ -160,7 +169,7 @@ export function registerOrganizationRoutes(app: Express) {
       const currentUser = req.session.user!;
       
       // Get user's organizations
-      const userOrganizations = await organizationService.getUserOrganizations(currentUser.id);
+      const userOrganizations = await organizationService.getAccessibleOrganizations(currentUser.id);
       
       // For site admins, get all organizations
       if (currentUser.isSiteAdmin === true) {
@@ -182,17 +191,15 @@ export function registerOrganizationRoutes(app: Express) {
         res.json(organizationsWithUsers);
       } else {
         // For non-admin users, return their organizations with user lists
-        const orgIds = userOrganizations.map(userOrg => userOrg.organizationId);
+        const orgIds = userOrganizations.map(org => org.id);
 
         // Fetch all profiles in batch (optimized to avoid N+1 queries)
         const profilesMap = await organizationService.getOrganizationProfilesBatch(orgIds, currentUser.id);
 
-        const organizationsWithUsers = userOrganizations.map(userOrg => {
-          const profile = profilesMap.get(userOrg.organizationId);
+        const organizationsWithUsers = userOrganizations.map(org => {
+          const profile = profilesMap.get(org.id);
           return {
-            id: userOrg.organizationId,
-            name: userOrg.organizationName || profile?.organization?.name || 'Unknown Organization',
-            ...profile?.organization,
+            ...org,
             users: profile?.users || [],
             invitations: profile?.invitations || []
           };
