@@ -136,21 +136,7 @@ export default function Athletes() {
 
   const deleteAthleteMutation = useMutation({
     mutationFn: async (athleteId: string) => {
-      // Get the athlete to check their roles
-      const athlete = athletes.find(a => a.id === athleteId);
-
-      // If athlete has coach or org_admin role, remove them from organization instead
-      if (athlete?.roles && (athlete.roles.includes('coach') || athlete.roles.includes('org_admin'))) {
-        const orgId = effectiveOrganizationId;
-        if (!orgId) {
-          throw new Error("Organization ID not found");
-        }
-
-        return await apiRequest("DELETE", `/api/organizations/${orgId}/users/${athleteId}`);
-      } else {
-        // For regular athletes, use the athlete endpoint
-        return await apiRequest("DELETE", `/api/athletes/${athleteId}`);
-      }
+      return await apiRequest("DELETE", `/api/athletes/${athleteId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });

@@ -20,6 +20,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { validateUsername } from "@shared/username-validation";
 
 // Form schemas
 const createUserSchema = z.object({
@@ -27,7 +28,12 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  username: z.string().min(1, "Username is required"),
+  username: z.string().refine(
+    (username) => validateUsername(username).valid,
+    (username) => ({
+      message: validateUsername(username).errors[0] || "Invalid username"
+    })
+  ),
   role: z.enum(["org_admin", "coach", "athlete"]),
 });
 

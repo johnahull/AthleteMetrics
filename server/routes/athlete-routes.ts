@@ -224,9 +224,9 @@ export function registerAthleteRoutes(app: Express) {
       
       // Non-site admins must have org admin or coach role and access to the athlete
       if (!userIsSiteAdmin) {
-        const [userOrgs, athleteTeams] = await Promise.all([
+        const [userOrgs, athleteOrgs] = await Promise.all([
           storage.getUserOrganizations(currentUser.id),
-          storage.getUserTeams(athleteId)
+          storage.getUserOrganizations(athleteId)
         ]);
 
         if (userOrgs.length === 0) {
@@ -234,7 +234,7 @@ export function registerAthleteRoutes(app: Express) {
         }
 
         // Check if user has appropriate role
-        const hasRole = userOrgs.some(org => 
+        const hasRole = userOrgs.some(org =>
           org.role === 'org_admin' || org.role === 'coach'
         );
 
@@ -243,7 +243,7 @@ export function registerAthleteRoutes(app: Express) {
         }
 
         // Check if athlete is in user's organization
-        const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+        const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
         const userOrgIds = userOrgs.map(org => org.organizationId);
         const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
 
