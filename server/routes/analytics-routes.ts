@@ -6,10 +6,12 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware";
 import { asyncHandler } from "../utils/errors";
-import { AnalyticsService } from "../services/analytics-service";
+import { AnalyticsService as DashboardAnalyticsService } from "../services/analytics-service";
+import { AnalyticsService } from "../analytics";
 import { env } from "../config/env";
 
 const analyticsService = new AnalyticsService();
+const dashboardAnalyticsService = new DashboardAnalyticsService();
 
 const analyticsLimiter = rateLimit({
   windowMs: env.ANALYTICS_RATE_WINDOW_MS,
@@ -21,12 +23,12 @@ const analyticsLimiter = rateLimit({
 
 export function registerAnalyticsRoutes(app: Express) {
   /**
-   * Get dashboard analytics (GET)
+   * Get dashboard analytics (GET) - Simple dashboard stats
    */
   app.get("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
-    const analytics = await analyticsService.getDashboardAnalytics(
+    const analytics = await dashboardAnalyticsService.getDashboardAnalytics(
       { organizationId: organizationId as string | undefined },
       req.session.user!.id
     );
@@ -35,31 +37,13 @@ export function registerAnalyticsRoutes(app: Express) {
   }));
 
   /**
-   * Get dashboard analytics (POST for complex queries)
+   * Get dashboard analytics (POST) - Full analytics with charts
    */
   app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
-    const { organizationId, metrics, dateRange, filters } = req.body;
-
-    // Convert MetricSelection object to string array if needed
-    let metricsArray: string[] | undefined;
-    if (metrics) {
-      if (typeof metrics === 'object' && 'primary' in metrics) {
-        // New format: { primary: string, additional: string[] }
-        metricsArray = [metrics.primary, ...(metrics.additional || [])];
-      } else if (Array.isArray(metrics)) {
-        // Old format: string[]
-        metricsArray = metrics;
-      }
-    }
-
-    const analytics = await analyticsService.getDashboardAnalytics(
-      { 
-        organizationId: organizationId || filters?.organizationId, 
-        metrics: metricsArray, 
-        dateRange 
-      },
-      req.session.user!.id
-    );
+    const request = req.body;
+    
+    // Compute full analytics response with chart data
+    const analytics = await analyticsService.getAnalyticsData(request);
 
     res.json(analytics);
   }));
@@ -70,7 +54,7 @@ export function registerAnalyticsRoutes(app: Express) {
   app.get("/api/analytics/teams", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
-    const analytics = await analyticsService.getTeamAnalytics(
+    const analytics = await dashboardAnalyticsService.getTeamAnalytics(
       organizationId as string | undefined,
       req.session.user!.id
     );
