@@ -27,6 +27,7 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  username: z.string().min(1, "Username is required"), // Added username schema
   roles: z.array(z.enum(["org_admin", "coach"])).min(1, "At least one role must be selected"),
 });
 
@@ -53,6 +54,7 @@ type OrganizationProfile = {
       lastName: string;
       email: string;
       isActive?: string;
+      username?: string; // Added username to user type
     };
     roles: string[];
   }>;
@@ -103,6 +105,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       password: "",
       firstName: "",
       lastName: "",
+      username: "", // Added username default value
       roles: ["coach"],
     },
   });
@@ -251,6 +254,24 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                     )}
                   />
                 </div>
+
+                {/* Username Field */}
+                <FormField
+                  control={createUserForm.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input {...field} data-testid="input-username" placeholder="Enter unique username" />
+                      </FormControl>
+                      <p className="text-xs text-gray-500">
+                        Username must be unique and can contain letters, numbers, periods, hyphens, and underscores
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={createUserForm.control}
@@ -945,6 +966,13 @@ export default function OrganizationProfile() {
                           <Mail className="h-3 w-3" />
                           <span>{coach.user.email}</span>
                         </div>
+                        {/* Display username if available */}
+                        {coach.user.username && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <UserCog className="h-3 w-3" />
+                            <span>{coach.user.username}</span>
+                          </div>
+                        )}
 
                         {/* Invitation Status */}
                         <div className="flex items-center gap-2 mt-1">
