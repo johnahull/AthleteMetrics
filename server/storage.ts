@@ -71,6 +71,7 @@ export interface IStorage {
   getInvitation(token: string): Promise<Invitation | undefined>;
   getOrganizationInvitations(organizationId: string): Promise<Invitation[]>;
   updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
+  deleteInvitation(invitationId: string): Promise<void>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 
   // Athletes (users with athlete role)

@@ -6,8 +6,9 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import { requireAuth, asyncHandler } from "../middleware";
-import { storage } from "../storage";
-import { reviewQueue } from "../review-queue";
+import { ImportService } from "../services/import-service";
+
+const importService = new ImportService();
 
 const upload = multer({ storage: multer.memoryStorage() });
 const imageUpload = multer({
@@ -39,8 +40,8 @@ export function registerImportRoutes(app: Express) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Photo import logic would go here
-    res.json({ message: "Photo uploaded successfully", filename: req.file.originalname });
+    const result = await importService.importPhoto(req.file, req.session.user!.id);
+    res.json(result);
   }));
 
   /**
@@ -53,15 +54,18 @@ export function registerImportRoutes(app: Express) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // CSV import logic delegated to appropriate handler
-    res.json({ message: `${type} import initiated`, filename: req.file.originalname });
+    const result = await importService.importCSV(type, req.file, req.session.user!.id);
+    res.json(result);
   }));
 
   /**
    * Get review queue items
    */
   app.get("/api/import/review-queue", requireAuth, asyncHandler(async (req: any, res: any) => {
-    const item = reviewQueue.getItem(req.query.itemId as string);
+    const item = await importService.getReviewQueueItem(
+      req.query.itemId as string,
+      req.session.user!.id
+    );
     res.json(item || []);
   }));
 
@@ -75,12 +79,10 @@ export function registerImportRoutes(app: Express) {
       return res.status(400).json({ message: "Item ID and action are required" });
     }
 
-    const reviewedBy = req.session.user!.id;
-    const result = reviewQueue.processDecision({ itemId, action, notes }, reviewedBy);
-
-    if (!result) {
-      return res.status(404).json({ message: "Review item not found" });
-    }
+    const result = await importService.processReviewDecision(
+      { itemId, action, notes },
+      req.session.user!.id
+    );
 
     res.json({ message: "Review decision processed successfully", item: result });
   }));

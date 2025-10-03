@@ -5,7 +5,9 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { requireAuth, asyncHandler } from "../middleware";
-import { storage } from "../storage";
+import { InvitationService } from "../services/invitation-service";
+
+const invitationService = new InvitationService();
 
 const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -28,7 +30,10 @@ export function registerInvitationRoutes(app: Express) {
    * Create invitation
    */
   app.post("/api/invitations", createLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
-    const invitation = await storage.createInvitation(req.body);
+    const invitation = await invitationService.createInvitation(
+      req.body,
+      req.session.user!.id
+    );
     res.status(201).json(invitation);
   }));
 
@@ -38,11 +43,10 @@ export function registerInvitationRoutes(app: Express) {
   app.get("/api/invitations/athletes", requireAuth, asyncHandler(async (req: any, res: any) => {
     const { organizationId } = req.query;
 
-    if (!organizationId) {
-      return res.status(400).json({ message: "Organization ID is required" });
-    }
-
-    const invitations = await storage.getOrganizationInvitations(organizationId as string);
+    const invitations = await invitationService.getOrganizationInvitations(
+      organizationId as string,
+      req.session.user!.id
+    );
     res.json(invitations);
   }));
 
@@ -50,7 +54,7 @@ export function registerInvitationRoutes(app: Express) {
    * Get invitation by token (public endpoint)
    */
   app.get("/api/invitations/:token", asyncHandler(async (req: any, res: any) => {
-    const invitation = await storage.getInvitationById(req.params.token);
+    const invitation = await invitationService.getInvitationByToken(req.params.token);
 
     if (!invitation) {
       return res.status(404).json({ message: "Invitation not found or expired" });
@@ -63,7 +67,7 @@ export function registerInvitationRoutes(app: Express) {
    * Delete invitation
    */
   app.delete("/api/invitations/:id", requireAuth, asyncHandler(async (req: any, res: any) => {
-    await storage.deleteInvitation(req.params.id);
+    await invitationService.deleteInvitation(req.params.id, req.session.user!.id);
     res.json({ message: "Invitation deleted successfully" });
   }));
 
@@ -74,13 +78,7 @@ export function registerInvitationRoutes(app: Express) {
     const { token } = req.params;
     const { password } = req.body;
 
-    const invitation = await storage.getInvitationById(token);
-
-    if (!invitation) {
-      return res.status(404).json({ message: "Invitation not found or expired" });
-    }
-
-    // Invitation acceptance logic would go here
-    res.json({ message: "Invitation accepted successfully" });
+    const result = await invitationService.acceptInvitation(token, password);
+    res.json(result);
   }));
 }
