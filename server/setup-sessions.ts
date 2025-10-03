@@ -4,20 +4,10 @@
 
 import { type Express } from "express";
 import session from "express-session";
+import { env, isProduction } from "./config/env";
+import { logger } from "./utils/logger";
 
 export async function setupSessions(app: Express) {
-  // Session setup with security best practices
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret) {
-    console.error("SECURITY: SESSION_SECRET environment variable must be set");
-    process.exit(1);
-  }
-
-  if (sessionSecret.length < 32) {
-    console.error("SECURITY: SESSION_SECRET must be at least 32 characters long");
-    process.exit(1);
-  }
-
   // Initialize Redis client for session storage (optional)
   let redisClient = null;
   try {
@@ -36,32 +26,32 @@ export async function setupSessions(app: Express) {
       });
 
       redisClient.on('error', (err: any) => {
-        console.warn('Redis client error:', err);
-        console.warn('Falling back to in-memory session store');
+        logger.warn('Redis client error', { error: err });
+        logger.warn('Falling back to in-memory session store');
       });
 
       // Try to connect to Redis
       await redisClient.connect().catch((err: any) => {
-        console.warn('Could not connect to Redis:', err);
-        console.warn('Using in-memory session store instead');
+        logger.warn('Could not connect to Redis', { error: err });
+        logger.warn('Using in-memory session store instead');
         redisClient = null;
       });
     } else {
-      console.warn('Redis module not available');
+      logger.warn('Redis module not available');
     }
   } catch (error: any) {
-    console.warn('Redis packages not available or initialization failed:', error?.message || error);
-    console.warn('Using in-memory session store instead');
+    logger.warn('Redis packages not available or initialization failed', { error: error?.message || error });
+    logger.warn('Using in-memory session store instead');
     redisClient = null;
   }
 
   // Configure session store
   const sessionConfig: any = {
-    secret: sessionSecret,
+    secret: env.SESSION_SECRET,
     resave: false,  // Don't save unchanged sessions
     saveUninitialized: false,  // Don't create sessions for unauthenticated users
     cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      secure: isProduction, // HTTPS only in production
       httpOnly: true, // Prevent XSS attacks
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: 'strict' // CSRF protection
@@ -80,17 +70,35 @@ export async function setupSessions(app: Express) {
           prefix: 'athletemetrics:sess:',
           ttl: 24 * 60 * 60 // 24 hours in seconds
         });
-        console.log('Using Redis session store');
+        logger.info('Using Redis session store');
       } else {
-        console.warn('connect-redis module not available');
-        console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+        logger.warn('connect-redis module not available');
+        logger.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+
+        // Fail in production if Redis is not available
+        if (isProduction) {
+          logger.error('FATAL: Redis session store required in production but connect-redis module not available');
+          throw new Error('Production deployment requires Redis session store. Install connect-redis package.');
+        }
       }
     } catch (error: any) {
-      console.warn('Failed to create Redis store:', error?.message || error);
-      console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+      logger.warn('Failed to create Redis store', { error: error?.message || error });
+      logger.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+
+      // Fail in production if Redis is not available
+      if (isProduction) {
+        logger.error('FATAL: Redis session store required in production but failed to initialize');
+        throw new Error('Production deployment requires Redis session store. Check REDIS_URL and Redis availability.');
+      }
     }
   } else {
-    console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+    logger.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+
+    // Fail in production if Redis is not available
+    if (isProduction) {
+      logger.error('FATAL: Redis session store required in production but Redis client not available');
+      throw new Error('Production deployment requires Redis session store. Set REDIS_URL and ensure redis package is installed.');
+    }
   }
 
   app.use(session(sessionConfig));

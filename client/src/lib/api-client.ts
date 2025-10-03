@@ -24,15 +24,36 @@ interface RequestConfig extends RequestInit {
 class ApiClient {
   private baseUrl = '/api';
   private csrfToken: string | null = null;
+  private csrfTokenTimestamp: number | null = null;
   private csrfPromise: Promise<string> | null = null;
 
+  // CSRF token TTL: 15 minutes
+  private readonly CSRF_TOKEN_TTL = 15 * 60 * 1000;
+
   /**
-   * Get CSRF token with caching and automatic retry
+   * Check if cached CSRF token is expired
+   */
+  private isCsrfTokenExpired(): boolean {
+    if (!this.csrfToken || !this.csrfTokenTimestamp) {
+      return true;
+    }
+
+    const now = Date.now();
+    return now - this.csrfTokenTimestamp > this.CSRF_TOKEN_TTL;
+  }
+
+  /**
+   * Get CSRF token with caching, TTL, and automatic retry
    */
   private async getCsrfToken(): Promise<string> {
-    // Return cached token if available
-    if (this.csrfToken) {
+    // Return cached token if available and not expired
+    if (this.csrfToken && !this.isCsrfTokenExpired()) {
       return this.csrfToken;
+    }
+
+    // If token is expired, clear it
+    if (this.isCsrfTokenExpired()) {
+      this.clearCsrfToken();
     }
 
     // If a fetch is in progress, wait for it
@@ -64,6 +85,7 @@ class ApiClient {
 
       const data = await response.json();
       this.csrfToken = data.csrfToken;
+      this.csrfTokenTimestamp = Date.now();
       this.csrfPromise = null;
       return this.csrfToken!;
     } catch (error) {
@@ -88,10 +110,11 @@ class ApiClient {
   }
 
   /**
-   * Clear cached CSRF token (e.g., after logout)
+   * Clear cached CSRF token (e.g., after logout or expiration)
    */
   clearCsrfToken(): void {
     this.csrfToken = null;
+    this.csrfTokenTimestamp = null;
     this.csrfPromise = null;
   }
 
@@ -101,7 +124,7 @@ class ApiClient {
   private async fetch<T>(
     endpoint: string,
     config: RequestConfig = {}
-  ): Promise<T> {
+  ): Promise<T | null> {
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseUrl}${endpoint}`;
 
     // Prepare headers
@@ -226,7 +249,7 @@ class ApiClient {
   /**
    * GET request
    */
-  async get<T>(endpoint: string, config?: RequestConfig): Promise<T> {
+  async get<T>(endpoint: string, config?: RequestConfig): Promise<T | null> {
     return this.fetch<T>(endpoint, {
       ...config,
       method: 'GET',
@@ -240,7 +263,7 @@ class ApiClient {
     endpoint: string,
     body?: unknown,
     config?: RequestConfig
-  ): Promise<T> {
+  ): Promise<T | null> {
     return this.fetch<T>(endpoint, {
       ...config,
       method: 'POST',
@@ -255,7 +278,7 @@ class ApiClient {
     endpoint: string,
     body?: unknown,
     config?: RequestConfig
-  ): Promise<T> {
+  ): Promise<T | null> {
     return this.fetch<T>(endpoint, {
       ...config,
       method: 'PUT',
@@ -270,7 +293,7 @@ class ApiClient {
     endpoint: string,
     body?: unknown,
     config?: RequestConfig
-  ): Promise<T> {
+  ): Promise<T | null> {
     return this.fetch<T>(endpoint, {
       ...config,
       method: 'PATCH',
@@ -281,7 +304,7 @@ class ApiClient {
   /**
    * DELETE request
    */
-  async delete<T>(endpoint: string, config?: RequestConfig): Promise<T> {
+  async delete<T>(endpoint: string, config?: RequestConfig): Promise<T | null> {
     return this.fetch<T>(endpoint, {
       ...config,
       method: 'DELETE',
