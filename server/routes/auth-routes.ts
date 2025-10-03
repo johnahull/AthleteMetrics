@@ -35,18 +35,36 @@ export function registerAuthRoutes(app: Express) {
    * Provides a token for CSRF protection on mutating requests
    */
   app.get("/api/csrf-token", csrfLimiter, asyncHandler(async (req: any, res: any) => {
-    // Ensure session exists
-    if (!req.session) {
-      req.session = {};
-    }
+    try {
+      // Check if session exists and is accessible
+      if (!req.session) {
+        console.error('CSRF token request: Session middleware not initialized');
+        return res.status(503).json({ message: "Session not available" });
+      }
 
-    // Generate CSRF token if not exists
-    if (!req.session.csrfToken) {
-      // Generate a random token
-      req.session.csrfToken = require('crypto').randomBytes(32).toString('hex');
-    }
+      // Generate CSRF token if not exists
+      if (!req.session.csrfToken) {
+        // Generate a random token
+        req.session.csrfToken = require('crypto').randomBytes(32).toString('hex');
 
-    res.json({ csrfToken: req.session.csrfToken });
+        // Save session to ensure token is persisted
+        await new Promise((resolve, reject) => {
+          req.session.save((err: any) => {
+            if (err) {
+              console.error('Failed to save session:', err);
+              reject(err);
+            } else {
+              resolve(undefined);
+            }
+          });
+        });
+      }
+
+      res.json({ csrfToken: req.session.csrfToken });
+    } catch (error) {
+      console.error('CSRF token generation error:', error);
+      return res.status(500).json({ message: "Failed to generate CSRF token" });
+    }
   }));
 
   /**

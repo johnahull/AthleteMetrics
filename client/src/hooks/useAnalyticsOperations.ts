@@ -134,6 +134,12 @@ export function useAnalyticsDataFetcher() {
         athleteId: (state.analysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
 
+      console.log('Fetching analytics with request:', {
+        analysisType: request.analysisType,
+        metricsCount: 1 + request.metrics.additional.length,
+        timeframeType: request.timeframe.type
+      });
+
       // Try to fetch CSRF token, but don't fail if it's not available
       let csrfToken: string | undefined;
       try {

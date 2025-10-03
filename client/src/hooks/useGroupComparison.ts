@@ -79,6 +79,14 @@ export function useGroupComparison({
   // This prevents CSRF race conditions by waiting for the main analytics to complete
   const shouldFetchSeparately = !analyticsData && !isMainAnalyticsLoading;
 
+  devLog.log('useGroupComparison props:', {
+    hasAnalyticsData: !!analyticsData,
+    analysisTypeInData: analyticsData?.meta?.analysisType || 'none',
+    chartsInData: analyticsData?.meta?.recommendedCharts || [],
+    isMainAnalyticsLoading,
+    shouldFetchSeparately
+  });
+
   // Fetch measurement data for all athletes (only if analytics data not provided)
   const { data: fetchedData, isLoading, error } = useQuery({
     queryKey: ['group-measurements', organizationId, metrics],
