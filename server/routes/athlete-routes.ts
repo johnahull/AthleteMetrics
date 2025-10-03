@@ -164,10 +164,36 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Create athlete (site admin only)
+   * Create athlete (org admins and coaches can create within their organization)
    */
-  app.post("/api/athletes", athleteLimiter, requireSiteAdmin, async (req, res) => {
+  app.post("/api/athletes", athleteLimiter, requireAuth, async (req, res) => {
     try {
+      const currentUser = req.session.user;
+      
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
+      
+      // Non-site admins must have org admin or coach role
+      if (!userIsSiteAdmin) {
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "No organization access" });
+        }
+
+        // Check if user has appropriate role in any organization
+        const hasPermission = userOrgs.some(org => 
+          org.role === 'org_admin' || org.role === 'coach'
+        );
+
+        if (!hasPermission) {
+          return res.status(403).json({ message: "Organization admin or coach role required to create athletes" });
+        }
+      }
+
       // Validate request body using Zod schema
       const validatedData = insertAthleteSchema.parse(req.body);
       const athlete = await storage.createAthlete(validatedData);
@@ -183,11 +209,48 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Update athlete
+   * Update athlete (org admins and coaches can update athletes in their organization)
    */
-  app.put("/api/athletes/:id", athleteLimiter, requireSiteAdmin, async (req, res) => {
+  app.put("/api/athletes/:id", athleteLimiter, requireAuth, async (req, res) => {
     try {
       const athleteId = req.params.id;
+      const currentUser = req.session.user;
+      
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
+      
+      // Non-site admins must have org admin or coach role and access to the athlete
+      if (!userIsSiteAdmin) {
+        const [userOrgs, athleteTeams] = await Promise.all([
+          storage.getUserOrganizations(currentUser.id),
+          storage.getUserTeams(athleteId)
+        ]);
+
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "No organization access" });
+        }
+
+        // Check if user has appropriate role
+        const hasRole = userOrgs.some(org => 
+          org.role === 'org_admin' || org.role === 'coach'
+        );
+
+        if (!hasRole) {
+          return res.status(403).json({ message: "Organization admin or coach role required" });
+        }
+
+        // Check if athlete is in user's organization
+        const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+        const userOrgIds = userOrgs.map(org => org.organizationId);
+        const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+
+        if (!hasSharedOrg) {
+          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+        }
+      }
       
       // Validate request body using partial schema (for updates)
       const updateSchema = insertAthleteSchema.partial();
@@ -206,11 +269,47 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Delete athlete (site admin only)
+   * Delete athlete (org admins only within their organization)
    */
-  app.delete("/api/athletes/:id", athleteLimiter, requireSiteAdmin, async (req, res) => {
+  app.delete("/api/athletes/:id", athleteLimiter, requireAuth, async (req, res) => {
     try {
       const athleteId = req.params.id;
+      const currentUser = req.session.user;
+      
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
+      
+      // Non-site admins must have org admin role and access to the athlete
+      if (!userIsSiteAdmin) {
+        const [userOrgs, athleteTeams] = await Promise.all([
+          storage.getUserOrganizations(currentUser.id),
+          storage.getUserTeams(athleteId)
+        ]);
+
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "No organization access" });
+        }
+
+        // Only org admins can delete athletes
+        const hasOrgAdminRole = userOrgs.some(org => org.role === 'org_admin');
+
+        if (!hasOrgAdminRole) {
+          return res.status(403).json({ message: "Organization admin role required to delete athletes" });
+        }
+
+        // Check if athlete is in user's organization
+        const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+        const userOrgIds = userOrgs.map(org => org.organizationId);
+        const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+
+        if (!hasSharedOrg) {
+          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+        }
+      }
+      
       await storage.deleteAthlete(athleteId);
       res.json({ message: "Athlete deleted successfully" });
     } catch (error) {
