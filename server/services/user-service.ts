@@ -85,7 +85,7 @@ export class UserService extends BaseService {
 
       return sanitizeUsers(allUsers);
     } catch (error) {
-      this.logger.error('Failed to get users', filters, error as Error);
+      this.logger.error('Failed to get users', { ...filters, error: error as Error });
       return [];
     }
   }

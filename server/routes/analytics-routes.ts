@@ -7,13 +7,14 @@ import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware";
 import { asyncHandler } from "../utils/errors";
 import { AnalyticsService } from "../services/analytics-service";
+import { env } from "../config/env";
 
 const analyticsService = new AnalyticsService();
 
 const analyticsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 50,
-  message: { message: "Too many analytics requests, please try again later." },
+  windowMs: env.ANALYTICS_RATE_WINDOW_MS,
+  limit: env.ANALYTICS_RATE_LIMIT,
+  message: { message: env.ANALYTICS_RATE_LIMIT_MESSAGE },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });

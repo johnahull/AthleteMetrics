@@ -3,8 +3,9 @@
  * Provides consistent error classes and handling across the application
  */
 
-import { Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { logger } from "./logger";
 
 /**
  * Base application error class
@@ -111,11 +112,12 @@ export function sendErrorResponse(
   error: unknown,
   operation?: string
 ): void {
-  // Log error for debugging
+  // Log error for debugging using structured logger
+  const errorContext: any = { error };
   if (operation) {
-    console.error(`Error in ${operation}:`, error);
+    logger.error(`Error in ${operation}`, errorContext);
   } else {
-    console.error('Error:', error);
+    logger.error('Error occurred', errorContext);
   }
 
   // Handle known error types
@@ -169,9 +171,9 @@ export function sendErrorResponse(
  * Wraps async route handlers to catch errors and pass to error middleware
  */
 export function asyncHandler(
-  fn: (req: any, res: Response, next: any) => Promise<any>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
 ) {
-  return (req: any, res: Response, next: any) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }

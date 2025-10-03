@@ -76,3 +76,47 @@ export function getCacheConfig(type: keyof typeof CACHE_DURATIONS) {
     gcTime: GC_TIMES[type],
   };
 }
+
+/**
+ * Query key patterns for cache invalidation
+ * Used to invalidate related caches after mutations
+ */
+export const QUERY_KEYS = {
+  MEASUREMENTS: '/api/measurements',
+  TEAMS: '/api/teams',
+  ATHLETES: '/api/athletes',
+  USERS: '/api/users',
+  ORGANIZATIONS: '/api/organizations',
+  ANALYTICS: '/api/analytics',
+} as const;
+
+/**
+ * Cache invalidation helper
+ * Returns array of query keys to invalidate based on mutation type
+ */
+export function getInvalidationKeys(mutationType: 'measurement' | 'team' | 'athlete' | 'user' | 'organization'): string[] {
+  switch (mutationType) {
+    case 'measurement':
+      // Invalidate measurements and related analytics
+      return [QUERY_KEYS.MEASUREMENTS, QUERY_KEYS.ANALYTICS];
+
+    case 'team':
+      // Invalidate teams, related athletes, and analytics
+      return [QUERY_KEYS.TEAMS, QUERY_KEYS.ATHLETES, QUERY_KEYS.ANALYTICS];
+
+    case 'athlete':
+      // Invalidate athletes, related teams, and analytics
+      return [QUERY_KEYS.ATHLETES, QUERY_KEYS.TEAMS, QUERY_KEYS.ANALYTICS];
+
+    case 'user':
+      // Invalidate users only
+      return [QUERY_KEYS.USERS];
+
+    case 'organization':
+      // Invalidate everything related to organization
+      return [QUERY_KEYS.ORGANIZATIONS, QUERY_KEYS.TEAMS, QUERY_KEYS.ATHLETES, QUERY_KEYS.ANALYTICS];
+
+    default:
+      return [];
+  }
+}

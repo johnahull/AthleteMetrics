@@ -51,14 +51,18 @@ function validateEnv() {
         parsed.BYPASS_GENERAL_RATE_LIMIT = false;
       }
 
-      // Ensure strong session secret in production
+      // Ensure strong session secret in production - FAIL instead of warn
       if (parsed.SESSION_SECRET.length < 64) {
-        console.warn('WARNING: SESSION_SECRET should be at least 64 characters in production');
+        throw new Error('FATAL: SESSION_SECRET must be at least 64 characters in production. Current length: ' + parsed.SESSION_SECRET.length);
       }
 
-      // Warn about default admin credentials
-      if (parsed.ADMIN_USER === 'admin' && parsed.ADMIN_PASS.length < 20) {
-        console.warn('WARNING: Using default or weak admin credentials in production is not recommended');
+      // Fail on default or weak admin credentials in production
+      if (parsed.ADMIN_USER === 'admin') {
+        throw new Error('FATAL: Default admin username "admin" is not allowed in production. Please use a unique admin username.');
+      }
+
+      if (parsed.ADMIN_PASS.length < 20) {
+        throw new Error('FATAL: ADMIN_PASS must be at least 20 characters in production for security. Current length: ' + parsed.ADMIN_PASS.length);
       }
     }
 

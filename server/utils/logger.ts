@@ -25,7 +25,9 @@ export interface LogContext {
   userAgent?: string;
   duration?: number;
   statusCode?: number;
-  [key: string]: any;
+  stack?: string;
+  // Additional context fields - allow any serializable value
+  [key: string]: unknown;
 }
 
 export interface LogEntry {
