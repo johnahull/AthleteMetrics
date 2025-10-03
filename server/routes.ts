@@ -39,6 +39,7 @@ import {
 import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
 import { registerAllRoutes } from "./routes/index";
+import { emailService } from "./services/email-service";
 
 // Session configuration
 declare module 'express-session' {
@@ -2661,20 +2662,46 @@ export async function registerRoutes(app: Express) {
           return res.status(500).json({ message: "Failed to create any invitations" });
         }
 
-        // Generate invite links for all emails
-        const inviteLinks = invitations.map(inv => 
-          `${req.protocol}://${req.get('host')}/accept-invitation?token=${inv.token}`
-        );
+        // Generate invite links and send emails
+        const inviteLinks = [];
+        const emailResults = [];
+        const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+        const inviter = await storage.getUser(invitedById);
+        const organization = await storage.getOrganization(organizationId);
 
-        // Invitations created for athlete - debug logging removed for production
+        for (const inv of invitations) {
+          const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${inv.token}`;
+          inviteLinks.push(inviteLink);
+
+          // Send invitation email
+          const emailSent = await emailService.sendInvitation(inv.email, {
+            recipientName: `${athlete.firstName} ${athlete.lastName}`,
+            inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
+            organizationName: organization?.name || 'the organization',
+            invitationLink: inviteLink,
+            expiryDays,
+            role: 'Athlete'
+          });
+
+          emailResults.push({ email: inv.email, sent: emailSent });
+
+          // Update invitation with email sent status
+          if (emailSent) {
+            await storage.updateInvitation(inv.id, {
+              emailSent: true,
+              emailSentAt: new Date()
+            });
+          }
+        }
 
         return res.status(201).json({
           invitations: invitations.map(inv => ({ id: inv.id, email: inv.email })),
           inviteLinks,
-          athlete: { 
-            id: athlete.id, 
-            firstName: athlete.firstName, 
-            lastName: athlete.lastName 
+          emailResults,
+          athlete: {
+            id: athlete.id,
+            firstName: athlete.firstName,
+            lastName: athlete.lastName
           },
           message: `${invitations.length} invitations created for ${athlete.firstName} ${athlete.lastName}`
         });
@@ -2710,6 +2737,7 @@ export async function registerRoutes(app: Express) {
         return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
       }
 
+      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
       const invitation = await storage.createInvitation({
         email,
         firstName: firstName || null,
@@ -2718,24 +2746,261 @@ export async function registerRoutes(app: Express) {
         teamIds: teamIds || [],
         role,
         invitedBy: invitedById,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
+        expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       });
 
-      // Generate invite link for email sending (token should not be exposed to client)
-      const inviteLink = `${req.protocol}://${req.get('host')}/accept-invitation?token=${invitation.token}`;
+      // Generate invite link for email sending
+      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
 
-      // Log invitation creation for admin reference
-      // Invitation created - debug logging removed for production
+      // Send invitation email
+      const inviter = await storage.getUser(invitedById);
+      const organization = await storage.getOrganization(organizationId);
+      const emailSent = await emailService.sendInvitation(email, {
+        recipientName: firstName && lastName ? `${firstName} ${lastName}` : email,
+        inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
+        organizationName: organization?.name || 'the organization',
+        invitationLink: inviteLink,
+        expiryDays,
+        role: role === 'org_admin' ? 'Organization Admin' : role === 'coach' ? 'Coach' : 'Athlete'
+      });
+
+      // Update invitation with email sent status
+      if (emailSent) {
+        await storage.updateInvitation(invitation.id, {
+          emailSent: true,
+          emailSentAt: new Date()
+        });
+      }
 
       return res.status(201).json({
         id: invitation.id,
         email: invitation.email,
-        inviteLink, // Include link for email sending, but not raw token
+        inviteLink,
+        emailSent,
         message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
       });
     } catch (error) {
       console.error("Error creating invitation:", error);
       res.status(500).json({ message: "Failed to create invitation" });
+    }
+  });
+
+  /**
+   * Resend invitation email
+   */
+  app.post("/api/invitations/:invitationId/resend", requireAuth, async (req, res) => {
+    try {
+      const { invitationId } = req.params;
+      const userId = req.session.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Get the invitation
+      const allInvitations = await storage.getInvitations();
+      const invitation = allInvitations.find(inv => inv.id === invitationId);
+
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+
+      // Check if user has permission (must be in the same organization)
+      const userOrgs = await storage.getUserOrganizations(userId);
+      const hasPermission = userOrgs.some(org => org.organizationId === invitation.organizationId);
+
+      if (!hasPermission && !req.session.user?.isSiteAdmin) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      // Check if invitation is still pending
+      if (invitation.isUsed) {
+        return res.status(400).json({ message: "Invitation has already been accepted" });
+      }
+
+      if (invitation.status === 'cancelled') {
+        return res.status(400).json({ message: "Invitation has been cancelled" });
+      }
+
+      // Check if expired - if so, extend the expiration
+      const now = new Date();
+      if (invitation.expiresAt && invitation.expiresAt < now) {
+        const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+        await storage.updateInvitation(invitationId, {
+          expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000),
+          status: 'pending'
+        });
+      }
+
+      // Generate invite link
+      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+
+      // Send invitation email
+      const inviter = await storage.getUser(userId);
+      const organization = await storage.getOrganization(invitation.organizationId);
+      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+
+      const emailSent = await emailService.sendInvitation(invitation.email, {
+        recipientName: invitation.firstName && invitation.lastName
+          ? `${invitation.firstName} ${invitation.lastName}`
+          : invitation.email,
+        inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
+        organizationName: organization?.name || 'the organization',
+        invitationLink: inviteLink,
+        expiryDays,
+        role: invitation.role === 'org_admin' ? 'Organization Admin' : invitation.role === 'coach' ? 'Coach' : 'Athlete'
+      });
+
+      // Update invitation with email sent status
+      if (emailSent) {
+        await storage.updateInvitation(invitationId, {
+          emailSent: true,
+          emailSentAt: new Date()
+        });
+      }
+
+      res.json({
+        success: true,
+        emailSent,
+        message: emailSent
+          ? "Invitation email resent successfully"
+          : "Invitation updated but email sending failed"
+      });
+    } catch (error) {
+      console.error("Error resending invitation:", error);
+      res.status(500).json({ message: "Failed to resend invitation" });
+    }
+  });
+
+  /**
+   * Cancel invitation
+   */
+  app.post("/api/invitations/:invitationId/cancel", requireAuth, async (req, res) => {
+    try {
+      const { invitationId } = req.params;
+      const userId = req.session.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Get the invitation
+      const allInvitations = await storage.getInvitations();
+      const invitation = allInvitations.find(inv => inv.id === invitationId);
+
+      if (!invitation) {
+        return res.status(404).json({ message: "Invitation not found" });
+      }
+
+      // Check if user has permission (must be in the same organization)
+      const userOrgs = await storage.getUserOrganizations(userId);
+      const hasPermission = userOrgs.some(org => org.organizationId === invitation.organizationId);
+
+      if (!hasPermission && !req.session.user?.isSiteAdmin) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      // Check if invitation is already used or cancelled
+      if (invitation.isUsed) {
+        return res.status(400).json({ message: "Cannot cancel an accepted invitation" });
+      }
+
+      if (invitation.status === 'cancelled') {
+        return res.status(400).json({ message: "Invitation is already cancelled" });
+      }
+
+      // Cancel the invitation
+      await storage.updateInvitation(invitationId, {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelledBy: userId
+      });
+
+      res.json({
+        success: true,
+        message: "Invitation cancelled successfully"
+      });
+    } catch (error) {
+      console.error("Error cancelling invitation:", error);
+      res.status(500).json({ message: "Failed to cancel invitation" });
+    }
+  });
+
+  /**
+   * Send email verification
+   */
+  app.post("/api/auth/send-verification-email", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.isEmailVerified) {
+        return res.status(400).json({ message: "Email is already verified" });
+      }
+
+      // Create verification token
+      const { token } = await storage.createEmailVerificationToken(userId, user.emails[0]);
+
+      // Generate verification link
+      const verificationLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/verify-email?token=${token}`;
+
+      // Send verification email
+      const emailSent = await emailService.sendEmailVerification(user.emails[0], {
+        userName: `${user.firstName} ${user.lastName}`,
+        verificationLink
+      });
+
+      if (!emailSent) {
+        return res.status(500).json({ message: "Failed to send verification email" });
+      }
+
+      res.json({
+        success: true,
+        message: "Verification email sent successfully"
+      });
+    } catch (error) {
+      console.error("Error sending verification email:", error);
+      res.status(500).json({ message: "Failed to send verification email" });
+    }
+  });
+
+  /**
+   * Verify email token
+   */
+  app.post("/api/auth/verify-email/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return res.status(400).json({ message: "Verification token is required" });
+      }
+
+      const result = await storage.verifyEmailToken(token);
+
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid or expired verification token" });
+      }
+
+      // Update session if user is currently logged in
+      if (req.session.user && req.session.user.id === result.userId) {
+        req.session.user.emailVerified = true;
+      }
+
+      res.json({
+        success: true,
+        message: "Email verified successfully"
+      });
+    } catch (error) {
+      console.error("Error verifying email:", error);
+      res.status(500).json({ message: "Failed to verify email" });
     }
   });
 
@@ -2897,6 +3162,14 @@ export async function registerRoutes(app: Express) {
       });
 
       console.log("Invitation accepted successfully, user created:", result.user.id);
+
+      // Send welcome email
+      const organization = await storage.getOrganization(invitation.organizationId);
+      await emailService.sendWelcome(result.user.emails[0], {
+        userName: `${result.user.firstName} ${result.user.lastName}`,
+        organizationName: organization?.name || 'the organization',
+        role: invitation.role === 'org_admin' ? 'Organization Admin' : invitation.role === 'coach' ? 'Coach' : 'Athlete'
+      });
 
       // Use the role from the invitation
       let userRole = invitation.role;

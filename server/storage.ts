@@ -1,6 +1,6 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs,
-  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens,
+  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   insertUserSchema
 } from "@shared/schema";
@@ -74,8 +74,13 @@ export interface IStorage {
     expiresAt: Date;
   }): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
-  updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
+  updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
+
+  // Email Verification
+  createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
+  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  getEmailVerificationToken(token: string): Promise<any>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
@@ -575,8 +580,8 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation> {
-    const [updated] = await db.update(invitations).set(invitation).where(eq(invitations.id, id)).returning();
+  async updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation> {
+    const [updated] = await db.update(invitations).set(invitation as any).where(eq(invitations.id, id)).returning();
     return updated;
   }
 
@@ -968,12 +973,74 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Mark the invitation as used
+    // Mark the invitation as used and accepted
     await db.update(invitations)
-      .set({ isUsed: true })
+      .set({
+        isUsed: true,
+        status: 'accepted',
+        acceptedAt: new Date(),
+        acceptedBy: user.id
+      })
       .where(eq(invitations.token, token));
 
     return { user };
+  }
+
+  // Email Verification
+  async createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await db.insert(emailVerificationTokens).values({
+      userId,
+      email,
+      token,
+      expiresAt
+    });
+
+    return { token, expiresAt };
+  }
+
+  async verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }> {
+    const [verificationToken] = await db.select()
+      .from(emailVerificationTokens)
+      .where(and(
+        eq(emailVerificationTokens.token, token),
+        eq(emailVerificationTokens.isUsed, false),
+        gte(emailVerificationTokens.expiresAt, new Date())
+      ));
+
+    if (!verificationToken) {
+      return { success: false };
+    }
+
+    // Mark token as used
+    await db.update(emailVerificationTokens)
+      .set({ isUsed: true })
+      .where(eq(emailVerificationTokens.token, token));
+
+    // Mark user's email as verified
+    await db.update(users)
+      .set({ isEmailVerified: true })
+      .where(eq(users.id, verificationToken.userId));
+
+    return {
+      success: true,
+      userId: verificationToken.userId,
+      email: verificationToken.email
+    };
+  }
+
+  async getEmailVerificationToken(token: string): Promise<typeof emailVerificationTokens.$inferSelect | undefined> {
+    const [verificationToken] = await db.select()
+      .from(emailVerificationTokens)
+      .where(and(
+        eq(emailVerificationTokens.token, token),
+        eq(emailVerificationTokens.isUsed, false),
+        gte(emailVerificationTokens.expiresAt, new Date())
+      ));
+
+    return verificationToken || undefined;
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers

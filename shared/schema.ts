@@ -131,7 +131,17 @@ export const invitations = pgTable("invitations", {
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
   invitedBy: varchar("invited_by").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
+  // Enhanced tracking fields
+  status: text("status").notNull().default("pending"), // "pending", "accepted", "expired", "cancelled"
   isUsed: boolean("is_used").default(false).notNull(),
+  emailSent: boolean("email_sent").default(false).notNull(),
+  emailSentAt: timestamp("email_sent_at"),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedBy: varchar("accepted_by").references(() => users.id), // User ID created from invitation
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: varchar("cancelled_by").references(() => users.id),
+  lastAttemptAt: timestamp("last_attempt_at"), // Track failed acceptance attempts
+  attemptCount: integer("attempt_count").default(0).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -152,6 +162,20 @@ export const auditLogs = pgTable("audit_logs", {
   userTimeIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_user_time_idx ON ${table} (${table.userId}, ${table.createdAt} DESC)`,
   // Index for querying by action type
   actionIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON ${table} (${table.action}, ${table.createdAt} DESC)`,
+}));
+
+// Email verification tokens
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  isUsed: boolean("is_used").default(false).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Index for efficient token lookup
+  tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
 }));
 
 // Relations
@@ -176,6 +200,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   submittedMeasurements: many(measurements, { relationName: "submittedMeasurements" }),
   verifiedMeasurements: many(measurements, { relationName: "verifiedMeasurements" }),
   invitationsSent: many(invitations),
+  emailVerificationTokens: many(emailVerificationTokens),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
@@ -241,6 +266,13 @@ export const measurementsRelations = relations(measurements, ({ one }) => ({
     fields: [measurements.verifiedBy],
     references: [users.id],
     relationName: "verifiedMeasurements",
+  }),
+}));
+
+export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [emailVerificationTokens.userId],
+    references: [users.id],
   }),
 }));
 
@@ -458,6 +490,9 @@ export type Invitation = typeof invitations.$inferSelect;
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type InsertEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
 
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
