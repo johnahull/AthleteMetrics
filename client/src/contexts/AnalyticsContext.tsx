@@ -138,36 +138,36 @@ const isExitingMultiGroup = (current: AnalysisType, next: AnalysisType): boolean
  * - Timeframe forced to 'best' if currently 'trends' (trends not supported)
  */
 const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
-  // Deep clone current state to avoid reference issues
-  const preservedMetrics = state.metrics.additional.length > 0
-    ? { ...state.metrics, additional: [...state.metrics.additional] }
-    : state.previousMetrics;
-
-  const preservedTimeframe = state.timeframe.type === 'trends'
-    ? { ...state.timeframe }
-    : state.previousTimeframe;
-
   return {
     ...state,
     analysisType: nextType,
     selectedAthleteId: '',
     selectedAthlete: null,
     selectedAthleteIds: [],
-    // Clear teamIds from filters - multi-group uses GroupDefinitions instead
+    selectedDates: [],
+    // Reset to clean state
+    analyticsData: null,
+    error: null,
+    // Reset filters to only organizationId
     filters: {
-      ...state.filters,
-      teamIds: undefined,
-      athleteIds: undefined
+      organizationId: state.filters.organizationId
     },
-    // Store current state for restoration later (only if there's something to preserve)
-    previousMetrics: preservedMetrics,
-    previousTimeframe: preservedTimeframe,
-    // Clear additional metrics (multi-group requires single metric)
-    metrics: { ...state.metrics, additional: [] },
-    // Force 'best' timeframe type (trends not supported in multi-group)
-    timeframe: state.timeframe.type === 'trends'
-      ? { ...state.timeframe, type: 'best' }
-      : state.timeframe,
+    // Reset metrics to default
+    metrics: {
+      primary: 'FLY10_TIME',
+      additional: []
+    },
+    // Reset timeframe to default
+    timeframe: {
+      type: 'best',
+      period: 'all_time'
+    },
+    // Reset chart settings
+    selectedChartType: 'box_swarm_combo',
+    showAllCharts: false,
+    // Clear saved state
+    previousMetrics: null,
+    previousTimeframe: null,
   };
 };
 
@@ -191,25 +191,34 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
  * - Clears saved state after restoration to prevent memory leaks
  */
 const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
-  // Deep clone previous state to avoid reference mutations
-  const restoredMetrics = state.previousMetrics
-    ? { ...state.previousMetrics, additional: [...state.previousMetrics.additional] }
-    : state.metrics;
-
-  const restoredTimeframe = state.previousTimeframe
-    ? { ...state.previousTimeframe }
-    : state.timeframe;
-
   return {
     ...state,
     analysisType: nextType,
-    selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
-    selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
-    selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
-    // Restore previous metrics/timeframe with deep clones
-    metrics: restoredMetrics,
-    timeframe: restoredTimeframe,
-    // Clear saved state to prevent memory leaks
+    selectedAthleteId: '',
+    selectedAthlete: null,
+    selectedAthleteIds: [],
+    selectedDates: [],
+    // Reset to clean state
+    analyticsData: null,
+    error: null,
+    // Reset filters to only organizationId
+    filters: {
+      organizationId: state.filters.organizationId
+    },
+    // Reset metrics to default
+    metrics: {
+      primary: 'FLY10_TIME',
+      additional: []
+    },
+    // Reset timeframe to default
+    timeframe: {
+      type: 'best',
+      period: 'all_time'
+    },
+    // Reset chart settings
+    selectedChartType: 'box_swarm_combo',
+    showAllCharts: false,
+    // Clear saved state
     previousMetrics: null,
     previousTimeframe: null,
   };
@@ -221,9 +230,33 @@ const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): An
 const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
   ...state,
   analysisType: nextType,
-  selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
-  selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
-  selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+  selectedAthleteId: '',
+  selectedAthlete: null,
+  selectedAthleteIds: [],
+  selectedDates: [],
+  // Reset to clean state
+  analyticsData: null,
+  error: null,
+  // Reset filters to only organizationId
+  filters: {
+    organizationId: state.filters.organizationId
+  },
+  // Reset metrics to default
+  metrics: {
+    primary: 'FLY10_TIME',
+    additional: []
+  },
+  // Reset timeframe to default
+  timeframe: {
+    type: 'best',
+    period: 'all_time'
+  },
+  // Reset chart settings
+  selectedChartType: 'box_swarm_combo',
+  showAllCharts: false,
+  // Clear saved state
+  previousMetrics: null,
+  previousTimeframe: null,
 });
 
 // Analytics Reducer
