@@ -112,6 +112,9 @@ export function ChartContainer({
   };
 
   // Memoize chart component selection for generic cases only
+  // List of explicitly handled chart types (needed before other code)
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'violin_plot'];
+
   // Exclude types that are handled explicitly with custom props
   const ChartComponent = useMemo(() => {
     switch (chartType) {
@@ -157,15 +160,18 @@ export function ChartContainer({
   const chartData = useMemo(() => {
     devLog.log('ChartContainer Debug:', {
       chartType,
+      chartTypeType: typeof chartType,
       dataLength: data?.length || 0,
       trendsLength: trends?.length || 0,
       multiMetricLength: multiMetric?.length || 0,
       hasMultiMetric: !!multiMetric,
-      isPreAggregated: data && data.length > 0 && data[0].athleteId?.startsWith?.('group-')
+      isPreAggregated: data && data.length > 0 && data[0].athleteId?.startsWith?.('group-'),
+      isExplicitlyHandled: explicitlyHandledTypes.includes(chartType),
+      hasChartComponent: !!ChartComponent
     });
 
     return getChartDataForType(chartType, data, trends, multiMetric);
-  }, [chartType, data, trends, multiMetric]);
+  }, [chartType, data, trends, multiMetric, ChartComponent]);
 
   if (isLoading) {
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
@@ -203,7 +209,6 @@ export function ChartContainer({
 
   // Only show unsupported chart error for truly unsupported types
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
-  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'violin_plot'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
     return (
