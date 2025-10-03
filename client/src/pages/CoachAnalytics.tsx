@@ -66,12 +66,13 @@ export function CoachAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
-  // Wait for organization context to be available before rendering analytics
+  // Show loading state while organization context is being established
   if (!organizationContext) {
     return (
       <div className="p-6">
-        <div className="text-center text-gray-600">
-          Loading organization context...
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <div className="text-lg font-medium mb-2">Loading organization...</div>
+          <div className="text-sm text-muted-foreground">Setting up your team analytics dashboard</div>
         </div>
       </div>
     );
@@ -82,7 +83,7 @@ export function CoachAnalytics() {
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
       organizationId={organizationContext}
-      defaultAnalysisType="multi_group"
+      defaultAnalysisType="intra_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}
       headerActions={headerActions}

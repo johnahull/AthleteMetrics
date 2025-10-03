@@ -40,12 +40,6 @@ export interface AnalyticsState {
   selectedAthleteIds: string[];
   selectedDates: string[];
 
-  // State Preservation (for mode switching)
-  // Stores previous metrics/timeframe when entering multi-group mode
-  // Allows restoration when exiting multi-group mode
-  previousMetrics: MetricSelection | null;
-  previousTimeframe: TimeframeConfig | null;
-
   // Available Options
   availableTeams: Array<{ id: string; name: string }>;
   availableAthletes: Array<{
@@ -99,8 +93,6 @@ const getDefaultState = (organizationId: string = '', userId?: string): Analytic
   selectedAthlete: null,
   selectedAthleteIds: [],
   selectedDates: [],
-  previousMetrics: null,
-  previousTimeframe: null,
   availableTeams: [],
   availableAthletes: []
 });
@@ -123,107 +115,117 @@ const isExitingMultiGroup = (current: AnalysisType, next: AnalysisType): boolean
 
 /**
  * Handles state transitions when entering multi-group mode
- * Preserves current metrics/timeframe for restoration later
+ * Preserves compatible settings while clearing incompatible ones
  *
  * @param state - Current analytics state
  * @param nextType - The analysis type being transitioned to
- * @returns New state with preserved settings and multi-group constraints applied
+ * @returns New state with hybrid preservation/reset approach
  *
- * State preservation occurs when:
- * - Additional metrics exist (length > 0) - saved to previousMetrics
- * - Timeframe type is 'trends' - saved to previousTimeframe
- *
- * Restrictions applied:
- * - Additional metrics cleared (single metric required for fair comparison)
- * - Timeframe forced to 'best' if currently 'trends' (trends not supported)
+ * Preservation logic:
+ * - Preserves: primary metric, chart type, timeframe (unless 'trends')
+ * - Preserves compatible filters: organizationId, genders, birthYearFrom, birthYearTo
+ * - Clears incompatible filters: athleteIds, teams (multi-group uses group selection)
+ * - Clears additional metrics (multi-group only supports 1 metric)
+ * - Resets 'trends' timeframe to 'best/all_time' (trends not supported in multi-group)
  */
 const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
-  // Deep clone current state to avoid reference issues
-  const preservedMetrics = state.metrics.additional.length > 0
-    ? { ...state.metrics, additional: [...state.metrics.additional] }
-    : state.previousMetrics;
-
-  const preservedTimeframe = state.timeframe.type === 'trends'
-    ? { ...state.timeframe }
-    : state.previousTimeframe;
-
   return {
     ...state,
     analysisType: nextType,
     selectedAthleteId: '',
     selectedAthlete: null,
     selectedAthleteIds: [],
-    // Clear teamIds from filters - multi-group uses GroupDefinitions instead
+    selectedDates: [],
+    // Clear data and errors
+    analyticsData: null,
+    error: null,
+    // Clear incompatible filters (athleteIds, teams), preserve compatible ones
     filters: {
-      ...state.filters,
-      teamIds: undefined,
-      athleteIds: undefined
+      organizationId: state.filters.organizationId,
+      ...(state.filters.genders && { genders: state.filters.genders }),
+      ...(state.filters.birthYearFrom && { birthYearFrom: state.filters.birthYearFrom }),
+      ...(state.filters.birthYearTo && { birthYearTo: state.filters.birthYearTo })
     },
-    // Store current state for restoration later (only if there's something to preserve)
-    previousMetrics: preservedMetrics,
-    previousTimeframe: preservedTimeframe,
-    // Clear additional metrics (multi-group requires single metric)
-    metrics: { ...state.metrics, additional: [] },
-    // Force 'best' timeframe type (trends not supported in multi-group)
+    // Preserve primary metric, clear additional (multi-group only supports 1 metric)
+    metrics: {
+      primary: state.metrics.primary,
+      additional: []
+    },
+    // Preserve timeframe unless it's trends (incompatible with multi-group)
     timeframe: state.timeframe.type === 'trends'
-      ? { ...state.timeframe, type: 'best' }
+      ? { type: 'best', period: 'all_time' }
       : state.timeframe,
+    // Preserve chart type if compatible, otherwise default to box_swarm_combo
+    selectedChartType: state.selectedChartType,
+    showAllCharts: false,
   };
 };
 
 /**
  * Handles state transitions when exiting multi-group mode
- * Restores previously saved metrics/timeframe if available
+ * Preserves all current settings (no state restoration from previous mode)
  *
  * @param state - Current analytics state
  * @param nextType - The analysis type being transitioned to
- * @returns New state with restored settings (if available)
+ * @returns New state with all filters and settings preserved
  *
- * Restoration logic:
- * - If previousMetrics exists: Restore with deep clone to avoid reference issues
- * - If previousMetrics null: Keep current metrics (user made no changes worth preserving)
- * - If previousTimeframe exists: Restore saved timeframe
- * - If previousTimeframe null: Keep current timeframe
- *
- * Edge cases handled:
- * - Prevents restoring null/undefined values
- * - Deep clones restored state to prevent mutation issues
- * - Clears saved state after restoration to prevent memory leaks
+ * Preservation logic:
+ * - Preserves all filters (organizationId, genders, birthYear ranges, etc.)
+ * - Preserves primary metric (additional metrics already empty in multi-group)
+ * - Preserves timeframe and chart type
+ * - Resets athlete selections (different selection model between modes)
+ * - Clears analytics data (will be refetched for new mode)
  */
 const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
-  // Deep clone previous state to avoid reference mutations
-  const restoredMetrics = state.previousMetrics
-    ? { ...state.previousMetrics, additional: [...state.previousMetrics.additional] }
-    : state.metrics;
-
-  const restoredTimeframe = state.previousTimeframe
-    ? { ...state.previousTimeframe }
-    : state.timeframe;
-
   return {
     ...state,
     analysisType: nextType,
-    selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
-    selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
-    selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
-    // Restore previous metrics/timeframe with deep clones
-    metrics: restoredMetrics,
-    timeframe: restoredTimeframe,
-    // Clear saved state to prevent memory leaks
-    previousMetrics: null,
-    previousTimeframe: null,
+    selectedAthleteId: '',
+    selectedAthlete: null,
+    selectedAthleteIds: [],
+    selectedDates: [],
+    // Clear data and errors
+    analyticsData: null,
+    error: null,
+    // Preserve all filters (selection models handle athlete/team filtering separately)
+    filters: state.filters,
+    // Preserve metrics (primary carries over, additional was empty anyway)
+    metrics: {
+      primary: state.metrics.primary,
+      additional: []
+    },
+    // Preserve timeframe
+    timeframe: state.timeframe,
+    // Preserve chart type
+    selectedChartType: state.selectedChartType,
+    showAllCharts: false,
   };
 };
 
 /**
  * Handles normal analysis type changes (not involving multi-group transitions)
+ * Individual <-> Multi-athlete transitions preserve all settings (fully compatible)
  */
 const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
   ...state,
   analysisType: nextType,
-  selectedAthleteId: nextType === 'individual' ? state.selectedAthleteId : '',
-  selectedAthlete: nextType === 'individual' ? state.selectedAthlete : null,
-  selectedAthleteIds: nextType !== 'individual' ? state.selectedAthleteIds : [],
+  // Reset athlete selections (different selection model)
+  selectedAthleteId: '',
+  selectedAthlete: null,
+  selectedAthleteIds: [],
+  selectedDates: [],
+  // Clear data and errors
+  analyticsData: null,
+  error: null,
+  // Preserve all filters (fully compatible between individual and multi-athlete)
+  filters: state.filters,
+  // Preserve all metrics (fully compatible between individual and multi-athlete)
+  metrics: state.metrics,
+  // Preserve timeframe
+  timeframe: state.timeframe,
+  // Preserve chart settings
+  selectedChartType: state.selectedChartType,
+  showAllCharts: state.showAllCharts,
 });
 
 // Analytics Reducer

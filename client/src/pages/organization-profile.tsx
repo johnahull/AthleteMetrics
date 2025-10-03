@@ -513,8 +513,8 @@ export default function OrganizationProfile() {
         id: organization.id,
         name: organization.name,
         description: organization.description,
-        coaches: organization.coaches.length,
-        athletes: organization.athletes.length
+        coaches: organization.coaches?.length ?? 0,
+        athletes: organization.athletes?.length ?? 0
       });
 
       if (userOrganizations) {
@@ -807,7 +807,7 @@ export default function OrganizationProfile() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserCog className="h-5 w-5" />
-              Coaches & Administrators ({organization.coaches.length})
+              Coaches & Administrators ({organization.coaches?.length ?? 0})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -922,7 +922,7 @@ export default function OrganizationProfile() {
                 </div>
               )}
 
-              {organization.coaches.length === 0 ? (
+              {!organization.coaches || organization.coaches.length === 0 ? (
                 <p className="text-gray-500 text-sm">No coaches assigned</p>
               ) : (
                 organization.coaches.map((coach, index) => {

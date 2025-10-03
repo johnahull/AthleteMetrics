@@ -253,8 +253,14 @@ export function ChartContainer({
     );
   }
 
-  // Use larger height for radar chart due to additional controls
-  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+  // Use larger height for radar chart due to additional controls, violin plot and box+swarm for better visibility
+  // Box+swarm: 1100px for multi-group (more data), 700px for individual/multi-athlete
+  const isMultiGroup = selectedGroups && selectedGroups.length > 0;
+  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]'
+    : chartType === 'violin_plot' ? 'h-[910px]'
+    : (chartType === 'box_swarm_combo' || chartType === 'time_series_box_swarm')
+      ? (isMultiGroup ? 'h-[1100px]' : 'h-[700px]')
+    : 'h-[700px]';
 
   return (
     <Card className={`${className} ${cardHeight} flex flex-col`}>
