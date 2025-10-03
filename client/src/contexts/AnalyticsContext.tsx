@@ -148,9 +148,12 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
     // Clear data and errors
     analyticsData: null,
     error: null,
-    // Preserve organizationId filter only
+    // Clear incompatible filters (athleteIds, teams), preserve compatible ones
     filters: {
-      organizationId: state.filters.organizationId
+      organizationId: state.filters.organizationId,
+      ...(state.filters.genders && { genders: state.filters.genders }),
+      ...(state.filters.birthYearFrom && { birthYearFrom: state.filters.birthYearFrom }),
+      ...(state.filters.birthYearTo && { birthYearTo: state.filters.birthYearTo })
     },
     // Preserve primary metric, clear additional (multi-group only supports 1 metric)
     metrics: {
@@ -197,10 +200,8 @@ const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): An
     // Clear data and errors
     analyticsData: null,
     error: null,
-    // Preserve organizationId filter
-    filters: {
-      organizationId: state.filters.organizationId
-    },
+    // Preserve all filters (selection models handle athlete/team filtering separately)
+    filters: state.filters,
     // Preserve metrics (primary carries over, additional was empty anyway)
     metrics: {
       primary: state.metrics.primary,
@@ -232,10 +233,8 @@ const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): 
   // Clear data and errors
   analyticsData: null,
   error: null,
-  // Preserve all filters
-  filters: {
-    organizationId: state.filters.organizationId
-  },
+  // Preserve all filters (fully compatible between individual and multi-athlete)
+  filters: state.filters,
   // Preserve all metrics (fully compatible between individual and multi-athlete)
   metrics: state.metrics,
   // Preserve timeframe

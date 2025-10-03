@@ -521,9 +521,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           // Center groups and spread them edge to edge
           const xPos = baseX + (groupIndex - (numGroups - 1) / 2) * groupSpacing;
 
-          // Debug logging for spacing calculations
-          console.log(`BoxPlot spacing calc: groups=${numGroups}, boxWidth=${boxWidth.toFixed(3)}, spacing=${groupSpacing.toFixed(3)}, xPos=${xPos.toFixed(3)} for group ${groupIndex}`);
-
           // Group colors - use the SERIES array from chart config
           const groupColors = CHART_CONFIG.COLORS.SERIES;
           const groupColor = groupColors[groupIndex % groupColors.length];
@@ -1388,7 +1385,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       currentMetric,
       formatValue
     };
-  }, [selectedGroups, data]);
+  }, [selectedGroups, data]); // METRIC_CONFIG is a static constant, not included in deps
 
   // Add error boundary wrapper for chart rendering
   return (
@@ -1474,7 +1471,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Mean row */}
               <div className="font-medium text-right pr-4">Mean</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-red-600 text-center">
+                <div key={index} className="text-lg font-bold text-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.mean)}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
@@ -1482,7 +1479,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Median row */}
               <div className="font-medium text-right pr-4">Median</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-yellow-600 text-center">
+                <div key={index} className="text-lg font-bold text-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.median)}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
@@ -1490,7 +1487,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Min row */}
               <div className="font-medium text-right pr-4">Min</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                <div key={index} className="text-lg font-bold text-muted-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.min)}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
@@ -1498,7 +1495,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Max row */}
               <div className="font-medium text-right pr-4">Max</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                <div key={index} className="text-lg font-bold text-muted-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.max)}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
@@ -1506,7 +1503,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Std Dev row */}
               <div className="font-medium text-right pr-4">Std Dev</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                <div key={index} className="text-lg font-bold text-muted-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.stdDev || item.stats.std || 0)}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
@@ -1514,7 +1511,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Q1 row */}
               <div className="font-medium text-right pr-4">Q1</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                <div key={index} className="text-lg font-bold text-muted-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.q1 || item.stats.percentiles?.p25 || (item.stats.median - (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
@@ -1522,7 +1519,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               {/* Q3 row */}
               <div className="font-medium text-right pr-4">Q3</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
-                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                <div key={index} className="text-lg font-bold text-muted-foreground text-center">
                   {multiGroupStats.formatValue(item.stats.q3 || item.stats.percentiles?.p75 || (item.stats.median + (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.metricConfig?.unit || ''}
                 </div>
               ))}
