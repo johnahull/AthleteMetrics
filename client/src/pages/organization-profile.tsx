@@ -56,7 +56,7 @@ type OrganizationProfile = {
       isActive?: string;
       username?: string; // Added username to user type
     };
-    roles: string[];
+    role: string;
   }>;
   athletes: Array<{
     id: string;
@@ -998,16 +998,11 @@ export default function OrganizationProfile() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <div className="flex gap-1">
-                          {coach.roles.map((role, roleIndex) => (
-                            <Badge 
-                              key={`${coach.user.id}-${role}-${roleIndex}`} 
-                              variant={role === 'org_admin' ? 'default' : 'secondary'}
-                            >
-                              {role === 'org_admin' ? 'Admin' : role === 'coach' ? 'Coach' : 'Athlete'}
-                            </Badge>
-                          ))}
-                        </div>
+                        <Badge
+                          variant={coach.role === 'org_admin' ? 'default' : 'secondary'}
+                        >
+                          {coach.role === 'org_admin' ? 'Admin' : coach.role === 'coach' ? 'Coach' : 'Athlete'}
+                        </Badge>
 
                         {/* Action Buttons - only for admin users */}
                         {(user?.isSiteAdmin || isOrgAdmin) && (
@@ -1017,7 +1012,7 @@ export default function OrganizationProfile() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => sendInvitation(coach.user.email, coach.roles)}
+                                onClick={() => sendInvitation(coach.user.email, [coach.role])}
                                 data-testid={`send-invitation-${coach.user.id}`}
                               >
                                 <Send className="h-3 w-3" />
