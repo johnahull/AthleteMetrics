@@ -27,7 +27,7 @@ class ApiClient {
   private csrfPromise: Promise<string> | null = null;
 
   /**
-   * Get CSRF token (cached)
+   * Get CSRF token with caching and automatic retry
    */
   private async getCsrfToken(): Promise<string> {
     // Return cached token if available
@@ -40,29 +40,51 @@ class ApiClient {
       return this.csrfPromise;
     }
 
-    // Fetch new token
-    this.csrfPromise = fetch('/api/csrf-token', {
-      credentials: 'include',
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new ApiError(
-            'Failed to fetch CSRF token',
-            response.status,
-            'CSRF_FETCH_FAILED'
-          );
-        }
-        const data = await response.json();
-        this.csrfToken = data.csrfToken;
-        this.csrfPromise = null;
-        return this.csrfToken!;
-      })
-      .catch((error) => {
-        this.csrfPromise = null;
-        throw error;
+    // Fetch new token with retry logic
+    this.csrfPromise = this.fetchCsrfTokenWithRetry();
+    return this.csrfPromise;
+  }
+
+  /**
+   * Fetch CSRF token with exponential backoff retry
+   */
+  private async fetchCsrfTokenWithRetry(retryCount = 0, maxRetries = 3): Promise<string> {
+    try {
+      const response = await fetch('/api/csrf-token', {
+        credentials: 'include',
       });
 
-    return this.csrfPromise;
+      if (!response.ok) {
+        throw new ApiError(
+          'Failed to fetch CSRF token',
+          response.status,
+          'CSRF_FETCH_FAILED'
+        );
+      }
+
+      const data = await response.json();
+      this.csrfToken = data.csrfToken;
+      this.csrfPromise = null;
+      return this.csrfToken!;
+    } catch (error) {
+      // Clear promise on error
+      this.csrfPromise = null;
+
+      // Retry with exponential backoff if not exceeded max retries
+      if (retryCount < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Cap at 5s
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.fetchCsrfTokenWithRetry(retryCount + 1, maxRetries);
+      }
+
+      // Max retries exceeded - throw user-friendly error
+      throw new ApiError(
+        'Unable to establish secure connection. Please check your network connection and try again.',
+        0,
+        'CSRF_MAX_RETRIES_EXCEEDED',
+        error
+      );
+    }
   }
 
   /**
@@ -94,14 +116,10 @@ class ApiClient {
         const csrfToken = await this.getCsrfToken();
         headers['X-CSRF-Token'] = csrfToken;
       } catch (error) {
-        console.error('Failed to get CSRF token:', error);
-        // Throw error instead of continuing without CSRF protection
-        throw new ApiError(
-          'Failed to get CSRF token. Please refresh the page and try again.',
-          0,
-          'CSRF_TOKEN_FAILED',
-          error
-        );
+        // CSRF token fetch already includes retry logic with exponential backoff
+        // If we reach here, all retries have failed
+        console.error('CSRF token fetch failed after retries:', error);
+        throw error; // Re-throw with original error from getCsrfToken
       }
     }
 

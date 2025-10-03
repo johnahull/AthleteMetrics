@@ -35,6 +35,9 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  // Performance
+  SLOW_QUERY_THRESHOLD_MS: z.coerce.number().int().positive().default(1000),
 });
 
 // Parse and validate environment variables
@@ -45,8 +48,12 @@ function validateEnv() {
     // Additional security checks for production
     if (parsed.NODE_ENV === 'production') {
       // Disable rate limit bypasses in production
+      // This is intentional behavior for security - rate limits cannot be bypassed in production
+      // even if environment variables are set. This provides a fail-safe against accidental
+      // misconfiguration that could expose the application to DoS attacks.
       if (parsed.BYPASS_ANALYTICS_RATE_LIMIT || parsed.BYPASS_GENERAL_RATE_LIMIT) {
         console.warn('WARNING: Rate limit bypasses are automatically disabled in production');
+        console.warn('This is expected behavior and cannot be overridden for security reasons.');
         parsed.BYPASS_ANALYTICS_RATE_LIMIT = false;
         parsed.BYPASS_GENERAL_RATE_LIMIT = false;
       }

@@ -8,6 +8,7 @@
 import { db } from '../db';
 import { logger } from './logger';
 import { NotFoundError } from './errors';
+import { env } from '../config/env';
 
 /**
  * Execute a database operation with transaction support
@@ -49,11 +50,12 @@ export async function executeQuery<T>(
 
     logger.logQuery(queryName, duration, context);
 
-    // Warn on slow queries (>1000ms)
-    if (duration > 1000) {
+    // Warn on slow queries (threshold configurable via env)
+    if (duration > env.SLOW_QUERY_THRESHOLD_MS) {
       logger.warn(`Slow query detected: ${queryName}`, {
         ...context,
         duration,
+        threshold: env.SLOW_QUERY_THRESHOLD_MS,
       });
     }
 

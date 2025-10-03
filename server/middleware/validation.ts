@@ -95,40 +95,52 @@ export function validateMultiple(schemas: Partial<Record<ValidationType, ZodSche
 }
 
 /**
- * Sanitize string inputs to prevent XSS
+ * Trim whitespace from string inputs recursively
+ *
+ * Note: This function only trims whitespace. XSS protection is provided by:
+ * - Zod schema validation (rejects malicious patterns)
+ * - Parameterized database queries (prevents SQL injection)
+ * - Content-Security-Policy headers (prevents script injection)
+ * - React's automatic escaping (prevents XSS in UI)
  */
-export function sanitizeStrings(obj: any): any {
+export function trimStrings(obj: any): any {
   if (typeof obj === 'string') {
     return obj.trim();
   }
 
   if (Array.isArray(obj)) {
-    return obj.map(sanitizeStrings);
+    return obj.map(trimStrings);
   }
 
   if (obj !== null && typeof obj === 'object') {
-    const sanitized: any = {};
+    const trimmed: any = {};
     for (const [key, value] of Object.entries(obj)) {
-      sanitized[key] = sanitizeStrings(value);
+      trimmed[key] = trimStrings(value);
     }
-    return sanitized;
+    return trimmed;
   }
 
   return obj;
 }
 
 /**
- * Middleware to sanitize all request data
+ * Legacy alias for backwards compatibility
+ * @deprecated Use trimStrings() instead
+ */
+export const sanitizeStrings = trimStrings;
+
+/**
+ * Middleware to trim whitespace from all request data
  */
 export function sanitizeRequest(req: Request, res: Response, next: NextFunction) {
   if (req.body) {
-    req.body = sanitizeStrings(req.body);
+    req.body = trimStrings(req.body);
   }
   if (req.query) {
-    req.query = sanitizeStrings(req.query);
+    req.query = trimStrings(req.query);
   }
   if (req.params) {
-    req.params = sanitizeStrings(req.params);
+    req.params = trimStrings(req.params);
   }
   next();
 }

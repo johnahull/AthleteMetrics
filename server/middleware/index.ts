@@ -18,7 +18,8 @@ export {
 export {
   validate,
   validateMultiple,
-  sanitizeStrings,
+  trimStrings,
+  sanitizeStrings, // deprecated alias
   sanitizeRequest,
   type ValidationType,
 } from './validation';
