@@ -46,8 +46,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('Auth: fetchUserOrganizations result:', data);
         setUserOrganizations(data);
       } else {
+        console.log('Auth: fetchUserOrganizations failed with status:', response.status);
         setUserOrganizations(null);
       }
     } catch (error) {
@@ -73,13 +75,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             if (orgResponse.ok) {
               const organizations = await orgResponse.json();
+              console.log('Auth: Fetched organizations:', organizations);
               // Auto-select organization context:
               // 1. If user has exactly one organization, use it
               // 2. Otherwise, fall back to user's primaryOrganizationId if available
               if (organizations && organizations.length === 1) {
+                console.log('Auth: Auto-selecting single organization:', organizations[0].organizationId);
                 setOrganizationContext(organizations[0].organizationId);
               } else if (data.user.primaryOrganizationId) {
+                console.log('Auth: Using primaryOrganizationId:', data.user.primaryOrganizationId);
                 setOrganizationContext(data.user.primaryOrganizationId);
+              } else {
+                console.log('Auth: No organization context set - multiple orgs or no primary');
               }
             }
           } catch (orgError) {

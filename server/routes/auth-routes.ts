@@ -35,6 +35,12 @@ export function registerAuthRoutes(app: Express) {
    * Provides a token for CSRF protection on mutating requests
    */
   app.get("/api/csrf-token", csrfLimiter, asyncHandler(async (req: any, res: any) => {
+    // Check if session exists
+    if (!req.session) {
+      console.error('CSRF token request: Session not found');
+      return res.status(500).json({ message: "Session not initialized" });
+    }
+
     // Generate CSRF token if not exists
     if (!req.session.csrfToken) {
       // Generate a random token

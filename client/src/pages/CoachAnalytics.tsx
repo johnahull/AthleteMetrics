@@ -13,16 +13,24 @@ import { devLog } from '@/utils/dev-logger';
 
 export function CoachAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations, setOrganizationContext } = useAuth();
+
+  // Auto-select first organization if context is missing but organizations exist
+  React.useEffect(() => {
+    if (!organizationContext && userOrganizations && userOrganizations.length > 0) {
+      devLog.log('CoachAnalytics - Auto-selecting first organization:', userOrganizations[0]);
+      setOrganizationContext(userOrganizations[0].organizationId);
+    }
+  }, [organizationContext, userOrganizations, setOrganizationContext]);
 
   // Debug organization context
   React.useEffect(() => {
     devLog.log('CoachAnalytics - User context:', {
       userId: user?.id,
-      currentOrganization: user?.currentOrganization,
-      organizationContext: user?.currentOrganization?.id
+      organizationContext,
+      userOrganizations: userOrganizations?.length
     });
-  }, [user]);
+  }, [user, organizationContext, userOrganizations]);
 
   // Header actions for coach-specific navigation
   // Note: Refresh and Export buttons are provided by AnalyticsToolbar
@@ -66,11 +74,16 @@ export function CoachAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
+  // Wait for organization context to be set (either from auth or auto-selection)
+  if (!organizationContext) {
+    return <div className="p-6">Loading organization...</div>;
+  }
+
   return (
     <BaseAnalyticsView
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
-      organizationId={organizationContext || undefined}
+      organizationId={organizationContext}
       defaultAnalysisType="multi_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}
