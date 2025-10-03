@@ -105,18 +105,6 @@ function BaseAnalyticsViewContent({
     effectiveOrganizationId
   } = useAnalyticsOperations();
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('BaseAnalyticsView - Organization context:', {
-      effectiveOrganizationId,
-      analysisType: state.analysisType,
-      shouldFetchData,
-      hasData: !!state.analyticsData,
-      isLoading: state.isLoading,
-      error: state.error
-    });
-  }, [effectiveOrganizationId, state.analysisType, shouldFetchData, state.analyticsData, state.isLoading, state.error]);
-
   // Group comparison functionality for multi-group analysis
   const {
     selectedGroups,
