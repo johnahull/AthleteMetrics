@@ -195,8 +195,8 @@ export class OrganizationService extends BaseService {
       }
 
       // Create user and add to organization
-      // Handle both 'role' (string) and 'roles' (array) from frontend
-      const role = userData.role || userData.roles?.[0] || 'athlete';
+      // Each user can only have one role per organization
+      const role = userData.role || 'athlete';
       const user = await this.storage.createUser(userData);
       await this.storage.addUserToOrganization(user.id, organizationId, role);
 
