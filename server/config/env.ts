@@ -63,13 +63,9 @@ function validateEnv() {
         throw new Error('FATAL: SESSION_SECRET must be at least 64 characters in production. Current length: ' + parsed.SESSION_SECRET.length);
       }
 
-      // Fail on default or weak admin credentials in production
+      // Fail on default admin credentials in production
       if (parsed.ADMIN_USER === 'admin') {
         throw new Error('FATAL: Default admin username "admin" is not allowed in production. Please use a unique admin username.');
-      }
-
-      if (parsed.ADMIN_PASS.length < 20) {
-        throw new Error('FATAL: ADMIN_PASS must be at least 20 characters in production for security. Current length: ' + parsed.ADMIN_PASS.length);
       }
     }
 

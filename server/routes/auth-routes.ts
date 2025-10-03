@@ -20,12 +20,21 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for CSRF token endpoint
+const csrfLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 10, // Limit each IP to 10 requests per minute
+  message: { message: "Too many CSRF token requests, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerAuthRoutes(app: Express) {
   /**
    * Get CSRF token
    * Provides a token for CSRF protection on mutating requests
    */
-  app.get("/api/csrf-token", (req: any, res: any) => {
+  app.get("/api/csrf-token", csrfLimiter, (req: any, res: any) => {
     // Generate CSRF token if not exists
     if (!req.session.csrfToken) {
       // Generate a random token

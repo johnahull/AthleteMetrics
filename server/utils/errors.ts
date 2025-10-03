@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { logger } from "./logger";
+import { isProduction } from "../config/env";
 
 /**
  * Base application error class
@@ -107,13 +108,37 @@ export function fromZodError(error: z.ZodError): ValidationError {
 /**
  * Send error response
  */
+/**
+ * Sanitize error object to prevent PII leakage in production
+ * Removes stack traces, query details, and user inputs
+ */
+function sanitizeError(error: any): any {
+  if (!isProduction) {
+    // In development, return full error details for debugging
+    return error;
+  }
+
+  // In production, create sanitized error object
+  const sanitized: any = {
+    name: error?.name || 'Error',
+    message: error?.message || 'An error occurred',
+  };
+
+  // Remove sensitive fields that might contain PII
+  // Do not include: stack, query, sql, params, input, data, details, validation, etc.
+
+  return sanitized;
+}
+
 export function sendErrorResponse(
   res: Response,
   error: unknown,
   operation?: string
 ): void {
-  // Log error for debugging using structured logger
-  const errorContext: any = { error };
+  // Sanitize error before logging in production
+  const sanitizedError = sanitizeError(error);
+  const errorContext: any = { error: sanitizedError };
+
   if (operation) {
     logger.error(`Error in ${operation}`, errorContext);
   } else {

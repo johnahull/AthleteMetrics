@@ -180,11 +180,26 @@ class Logger {
   // Database query logging
   logQuery(query: string, duration: number, context?: LogContext): void {
     if (this.isDevelopment) {
+      // In development, log full query details
       this.debug(`Query executed in ${duration}ms`, {
         ...context,
         query,
         duration,
       });
+    } else {
+      // In production, only log slow queries with redacted query text
+      const slowQueryThreshold = env.SLOW_QUERY_THRESHOLD_MS;
+      if (duration > slowQueryThreshold) {
+        // Redact query text - only log metadata
+        const queryType = query.trim().split(' ')[0]?.toUpperCase() || 'UNKNOWN';
+        this.warn(`Slow query detected: ${queryType} query`, {
+          ...context,
+          queryType,
+          duration,
+          threshold: slowQueryThreshold,
+          // Do not include actual query text in production
+        });
+      }
     }
   }
 
