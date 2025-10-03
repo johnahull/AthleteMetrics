@@ -7,6 +7,8 @@ import React from 'react';
 import { BaseAnalyticsView } from '@/components/analytics/BaseAnalyticsView';
 import { Button } from '@/components/ui/button';
 import { Users, BarChart3, Trophy } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 import { useAuth } from '@/lib/auth';
 import { devLog } from '@/utils/dev-logger';
@@ -23,6 +25,35 @@ export function CoachAnalytics() {
       organizationContext: user?.currentOrganization?.id
     });
   }, [user]);
+
+  const { data: userOrgs, isLoading: orgsLoading } = useQuery({
+    queryKey: ['/api/auth/me/organizations'],
+    enabled: !!user
+  });
+
+  const organizationId = userOrgs?.[0]?.organizationId;
+
+  const { data: organization, isLoading: orgLoading } = useQuery({
+    queryKey: [`/api/organizations/${organizationId}`],
+    enabled: !!organizationId
+  });
+
+  // Handle case where user has no organization
+  if (!orgsLoading && (!userOrgs || userOrgs.length === 0)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>No Organization Found</CardTitle>
+            <CardDescription>
+              You are not associated with any organization. Please contact your administrator.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
 
   // Header actions for coach-specific navigation
   // Note: Refresh and Export buttons are provided by AnalyticsToolbar
