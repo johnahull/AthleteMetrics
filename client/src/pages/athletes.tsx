@@ -17,13 +17,13 @@ import type { Team } from "@shared/schema";
 export default function Athletes() {
   const { user, organizationContext, userOrganizations } = useAuth();
   const [location, setLocation] = useLocation();
-  
+
   // Get user's primary role to check access
   const { data: userOrganizationsData } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
   });
-  
+
   // Get effective organization ID - same pattern as dashboard and other pages
   const getEffectiveOrganizationId = () => {
     if (organizationContext) return organizationContext;
@@ -35,11 +35,11 @@ export default function Athletes() {
   };
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
-  
+
   // Use session role as primary source, fallback to organization role, then 'athlete'
   const primaryRole = user?.role || (Array.isArray(userOrganizationsData) && userOrganizationsData.length > 0 ? userOrganizationsData[0]?.role : 'athlete');
   const isSiteAdmin = user?.isSiteAdmin || false;
-  
+
   // Redirect athletes away from this management page
   useEffect(() => {
     if (!isSiteAdmin && primaryRole === "athlete") {
@@ -47,7 +47,7 @@ export default function Athletes() {
       setLocation(`/athletes/${athleteId}`);
     }
   }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
-  
+
   // Don't render management UI for athletes
   if (!isSiteAdmin && primaryRole === "athlete") {
     return null;
@@ -69,7 +69,7 @@ export default function Athletes() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const teamIdParam = urlParams.get('teamId');
-    
+
     if (teamIdParam) {
       setFilters(prev => ({
         ...prev,
@@ -77,7 +77,7 @@ export default function Athletes() {
       }));
     }
   }, [location]);
-  
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -122,12 +122,12 @@ export default function Athletes() {
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
       if (debouncedSearch) params.append('search', debouncedSearch);
-      
+
       // Always include organization context for proper filtering
       if (effectiveOrganizationId) {
         params.append('organizationId', effectiveOrganizationId);
       }
-      
+
       const response = await fetch(`/api/athletes?${params}`);
       if (!response.ok) throw new Error('Failed to fetch athletes');
       return response.json();
@@ -136,19 +136,55 @@ export default function Athletes() {
 
   const deleteAthleteMutation = useMutation({
     mutationFn: async (athleteId: string) => {
-      await apiRequest("DELETE", `/api/athletes/${athleteId}`);
+      // Get the athlete to check their roles
+      const athlete = athletes.find(a => a.id === athleteId);
+
+      // If athlete has coach or org_admin role, remove them from organization instead
+      if (athlete?.roles && (athlete.roles.includes('coach') || athlete.roles.includes('org_admin'))) {
+        const orgId = user?.primaryOrganizationId;
+        if (!orgId) {
+          throw new Error("Organization ID not found");
+        }
+
+        const response = await fetch(`/api/organizations/${orgId}/users/${athleteId}`, {
+          method: "DELETE",
+          credentials: "include",
+          headers: {
+            "X-CSRF-Token": csrfToken,
+          },
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || "Failed to delete user");
+        }
+      } else {
+        // For regular athletes, use the athlete endpoint
+        const response = await fetch(`/api/athletes/${athleteId}`, {
+          method: "DELETE",
+          credentials: "include",
+          headers: {
+            "X-CSRF-Token": csrfToken,
+          },
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || "Failed to delete athlete");
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${user?.primaryOrganizationId}/profile`] });
       toast({
         title: "Success",
-        description: "Athlete deleted successfully",
+        description: "User deleted successfully",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to delete athlete",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -209,10 +245,10 @@ export default function Athletes() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
-      
+
       const emailCount = data.invitations?.length || 1;
       const athleteName = data.athlete ? `${data.athlete.firstName} ${data.athlete.lastName}` : 'athlete';
-      
+
       toast({
         title: "Success",
         description: `${emailCount} invitation${emailCount > 1 ? 's' : ''} sent to ${athleteName}`,
@@ -258,7 +294,7 @@ export default function Athletes() {
     const now = new Date();
     const diffTime = expDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays < 0) {
       return `Expired ${Math.abs(diffDays)} days ago`;
     } else if (diffDays === 0) {
@@ -277,7 +313,7 @@ export default function Athletes() {
       });
       return;
     }
-    
+
     const orgId = userOrgs[0]?.organization?.id;
     if (!orgId) {
       toast({
@@ -287,7 +323,7 @@ export default function Athletes() {
       });
       return;
     }
-    
+
     sendAthleteInvitationMutation.mutate({ athleteId, organizationId: orgId });
   };
 
@@ -431,7 +467,7 @@ export default function Athletes() {
               </div>
             </div>
           </div>
-          
+
           {(filters.teamId || filters.birthYearFrom || filters.birthYearTo || filters.search) && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
               <div className="flex items-center space-x-4">
@@ -566,7 +602,7 @@ export default function Athletes() {
               </span>
             </div>
           </div>
-          
+
           {athletes?.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <UsersRound className="h-12 w-12 text-gray-400 mb-4" />
