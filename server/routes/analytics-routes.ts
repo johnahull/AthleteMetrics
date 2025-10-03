@@ -38,10 +38,26 @@ export function registerAnalyticsRoutes(app: Express) {
    * Get dashboard analytics (POST for complex queries)
    */
   app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
-    const { organizationId, metrics, dateRange } = req.body;
+    const { organizationId, metrics, dateRange, filters } = req.body;
+
+    // Convert MetricSelection object to string array if needed
+    let metricsArray: string[] | undefined;
+    if (metrics) {
+      if (typeof metrics === 'object' && 'primary' in metrics) {
+        // New format: { primary: string, additional: string[] }
+        metricsArray = [metrics.primary, ...(metrics.additional || [])];
+      } else if (Array.isArray(metrics)) {
+        // Old format: string[]
+        metricsArray = metrics;
+      }
+    }
 
     const analytics = await analyticsService.getDashboardAnalytics(
-      { organizationId, metrics, dateRange },
+      { 
+        organizationId: organizationId || filters?.organizationId, 
+        metrics: metricsArray, 
+        dateRange 
+      },
       req.session.user!.id
     );
 

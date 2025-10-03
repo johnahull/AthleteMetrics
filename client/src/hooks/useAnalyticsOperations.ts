@@ -134,24 +134,32 @@ export function useAnalyticsDataFetcher() {
         athleteId: (state.analysisType === 'individual' && state.selectedAthleteId) ? state.selectedAthleteId : undefined
       };
 
-
-      // Fetch CSRF token first
-      const csrfResponse = await fetch('/api/csrf-token', {
-        credentials: 'include',
-      });
-      
-      if (!csrfResponse.ok) {
-        throw new Error('Failed to fetch CSRF token');
+      // Try to fetch CSRF token, but don't fail if it's not available
+      let csrfToken: string | undefined;
+      try {
+        const csrfResponse = await fetch('/api/csrf-token', {
+          credentials: 'include',
+        });
+        
+        if (csrfResponse.ok) {
+          const csrfData = await csrfResponse.json();
+          csrfToken = csrfData.csrfToken;
+        }
+      } catch (csrfError) {
+        console.warn('CSRF token fetch failed, proceeding without it:', csrfError);
       }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
       
-      const { csrfToken } = await csrfResponse.json();
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
 
       const response = await fetch('/api/analytics/dashboard', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify(request)
       });
