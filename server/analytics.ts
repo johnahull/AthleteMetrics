@@ -561,7 +561,7 @@ export class AnalyticsService {
     const metricCount = uniqueMetrics.size;
     
     if (metricCount === 1) {
-      return ['box_swarm_combo', 'distribution', 'bar_chart'] as ChartType[];
+      return ['box_swarm_combo', 'violin', 'distribution', 'bar_chart'] as ChartType[];
     } else if (metricCount === 2) {
       return ['scatter_plot', 'connected_scatter'] as ChartType[];
     } else {
