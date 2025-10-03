@@ -3020,6 +3020,11 @@ export async function registerRoutes(app: Express) {
 
       // Check if the user exists and is part of this organization
       const userOrgs = await storage.getUserOrganizations(userId);
+      console.log('Delete user check:', {
+        userId,
+        organizationId,
+        userOrgs: userOrgs.map(org => ({ id: org.organizationId, role: org.role }))
+      });
       const isUserInOrg = userOrgs.some(org => org.organizationId === organizationId);
       if (!isUserInOrg) {
         return res.status(404).json({ message: "User not found in this organization" });
