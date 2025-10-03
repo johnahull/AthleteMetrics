@@ -5,7 +5,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { TeamService } from "../services/team-service";
-import { requireAuth, asyncHandler } from "../middleware";
+import { requireAuth } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 
 const teamService = new TeamService();
 

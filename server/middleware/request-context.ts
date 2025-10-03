@@ -111,6 +111,13 @@ export function logRequestEnd(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
+ * Type guard to check if request has complete context
+ */
+export function hasContext(req: Request): req is Request & { context: Required<Request['context']> } {
+  return !!req.context && !!req.context.userId;
+}
+
+/**
  * Combined request context middleware
  */
 export const requestContext = [

@@ -4,7 +4,8 @@
 
 import type { Express } from "express";
 import { AuthService } from "../services/auth-service";
-import { requireAuth, requireSiteAdmin, asyncHandler } from "../middleware";
+import { requireAuth, requireSiteAdmin } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 
 const authService = new AuthService();
 

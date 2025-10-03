@@ -6,7 +6,8 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { body } from "express-validator";
 import { UserService } from "../services/user-service";
-import { requireAuth, requireSiteAdmin, asyncHandler } from "../middleware";
+import { requireAuth, requireSiteAdmin } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
 import { storage } from "../storage";
 // Session types are loaded globally

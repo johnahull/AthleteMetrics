@@ -3,6 +3,7 @@ import "express-session";
 declare module "express-session" {
   interface SessionData {
     sessionToken?: string; // Added for enhanced auth
+    csrfToken?: string; // CSRF protection token
     user?: {
       id: string;
       username: string;

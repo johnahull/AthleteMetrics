@@ -11,6 +11,7 @@ export {
   logRequestStart,
   logRequestEnd,
   requestContext,
+  hasContext,
 } from './request-context';
 
 // Validation

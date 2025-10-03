@@ -5,7 +5,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
-import { requireAuth, asyncHandler } from "../middleware";
+import { requireAuth } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 
 const measurementService = new MeasurementService();
 

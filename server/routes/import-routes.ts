@@ -5,7 +5,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
-import { requireAuth, asyncHandler } from "../middleware";
+import { requireAuth } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 import { ImportService } from "../services/import-service";
 
 const importService = new ImportService();

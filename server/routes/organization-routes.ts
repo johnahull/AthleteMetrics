@@ -5,7 +5,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
-import { requireAuth, requireSiteAdmin, asyncHandler } from "../middleware";
+import { requireAuth, requireSiteAdmin } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 import { storage } from "../storage";
 // Session types are loaded globally
 

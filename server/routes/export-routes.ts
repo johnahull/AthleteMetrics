@@ -3,7 +3,8 @@
  */
 
 import type { Express } from "express";
-import { requireAuth, asyncHandler } from "../middleware";
+import { requireAuth } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 import { ExportService } from "../services/export-service";
 
 const exportService = new ExportService();

@@ -58,7 +58,8 @@ class Logger {
       error: LogLevel.ERROR,
     };
 
-    const configLevel = process.env.LOG_LEVEL?.toLowerCase() || 'info';
+    // Use validated env config instead of process.env directly
+    const configLevel = env.LOG_LEVEL.toLowerCase();
     return levelMap[configLevel] || LogLevel.INFO;
   }
 
@@ -92,7 +93,8 @@ class Logger {
 
     if (entry.error) {
       output += `\n  Error: ${entry.error.message}`;
-      if (entry.error.stack) {
+      // Only show stack traces in development or when debug level is enabled
+      if (entry.error.stack && (this.isDevelopment || this.minLevel === LogLevel.DEBUG)) {
         output += `\n  Stack: ${entry.error.stack}`;
       }
     }

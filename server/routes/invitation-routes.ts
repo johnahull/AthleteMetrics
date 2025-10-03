@@ -4,7 +4,8 @@
 
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
-import { requireAuth, asyncHandler } from "../middleware";
+import { requireAuth } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 import { InvitationService } from "../services/invitation-service";
 
 const invitationService = new InvitationService();

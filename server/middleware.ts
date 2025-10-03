@@ -30,36 +30,8 @@ const canAccessOrganization = async (user: any, organizationId: string): Promise
   return userOrgs.some(org => org.organizationId === organizationId);
 };
 
-/**
- * Async handler wrapper that catches errors and maps them to appropriate HTTP responses
- * Eliminates need for try/catch in route handlers
- */
-export const asyncHandler = (fn: Function) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch((error: Error) => {
-      // Map custom error classes to HTTP status codes
-      if (error instanceof AuthenticationError) {
-        return res.status(401).json({ message: error.message });
-      }
-      if (error instanceof AuthorizationError) {
-        return res.status(403).json({ message: error.message });
-      }
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      if (error instanceof ValidationError) {
-        return res.status(400).json({ message: error.message });
-      }
-      if (error instanceof ConflictError) {
-        return res.status(409).json({ message: error.message });
-      }
-
-      // Generic error fallback
-      const message = error.message || "Internal server error";
-      return res.status(500).json({ message });
-    });
-  };
-};
+// asyncHandler removed - use the one from ./utils/errors.ts instead
+// This ensures errors are properly passed to the global error middleware
 
 // Base authentication middleware
 export const requireAuth = (req: any, res: Response, next: NextFunction) => {

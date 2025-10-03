@@ -5,7 +5,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AuthService } from "../services/auth-service";
-import { requireAuth, requireSiteAdmin, asyncHandler } from "../middleware";
+import { requireAuth, requireSiteAdmin } from "../middleware";
+import { asyncHandler } from "../utils/errors";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -20,6 +21,20 @@ const authLimiter = rateLimit({
 });
 
 export function registerAuthRoutes(app: Express) {
+  /**
+   * Get CSRF token
+   * Provides a token for CSRF protection on mutating requests
+   */
+  app.get("/api/csrf-token", (req: any, res: any) => {
+    // Generate CSRF token if not exists
+    if (!req.session.csrfToken) {
+      // Generate a random token
+      req.session.csrfToken = require('crypto').randomBytes(32).toString('hex');
+    }
+
+    res.json({ csrfToken: req.session.csrfToken });
+  });
+
   /**
    * User login
    */

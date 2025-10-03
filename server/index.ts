@@ -72,11 +72,12 @@ app.use(requestContext);
       process.exit(0);
     });
 
-    // Force shutdown after 10 seconds
+    // Force shutdown timeout (30s in production, 10s in development)
+    const shutdownTimeout = env.NODE_ENV === 'production' ? 30000 : 10000;
     setTimeout(() => {
       logger.error('Forced shutdown after timeout');
       process.exit(1);
-    }, 10000);
+    }, shutdownTimeout);
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
