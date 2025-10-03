@@ -191,30 +191,20 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           const stats = point.additionalData.groupStats;
           const groupName = point.athleteName;
           
-          // Position calculation for multi-group layout - dynamic spacing
+          // Position calculation for multi-group layout - spread edge to edge like violin chart
           const numGroups = metricGroups[metric].length;
           const numMetrics = Object.keys(metricGroups).length;
 
-          // Dynamic box width based on number of groups to prevent overlap
-          const maxBoxWidth = 0.15;
-          const minBoxWidth = 0.05;
-          const dynamicBoxWidth = Math.max(minBoxWidth, Math.min(maxBoxWidth, 0.8 / numGroups));
-          const boxWidth = dynamicBoxWidth;
+          // Box width proportional to number of groups
+          const boxWidth = Math.max(0.08, Math.min(0.2, 0.7 / numGroups));
 
-          // Calculate spacing to ensure no overlap
-          const minSpacing = boxWidth * 1.2; // Minimum gap between boxes
-          const chartPadding = Math.min(0.4, 0.5 / numGroups); // Dynamic padding
-          const availableWidth = 1 - (2 * chartPadding);
-          const totalBoxWidth = numGroups * boxWidth;
-          const totalGaps = (numGroups - 1) * minSpacing;
-          const remainingSpace = Math.max(0, availableWidth - totalBoxWidth - totalGaps);
-          const extraSpacing = numGroups > 1 ? remainingSpace / (numGroups - 1) : 0;
-          const groupSpacing = minSpacing + extraSpacing;
+          // Spacing between group centers - adjust for 2 groups vs many
+          // For 2 groups, use tighter spacing; for 3+, spread wider
+          const groupSpacing = numGroups === 2 ? 0.5 : 0.9 / Math.max(1, numGroups - 1);
           const baseX = metricIndex; // Metric position
 
-          // Calculate position with proper spacing to prevent overlap
-          const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
-          const xPos = baseX + startOffset + (groupIndex * groupSpacing);
+          // Center groups and spread them edge to edge
+          const xPos = baseX + (groupIndex - (numGroups - 1) / 2) * groupSpacing;
 
           // Group colors
           const groupColors = CHART_CONFIG.COLORS.SERIES;
@@ -516,30 +506,20 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             }
           };
 
-          // Position calculation for multi-group layout - dynamic spacing
+          // Position calculation for multi-group layout - spread edge to edge like violin chart
           const numGroups = selectedGroups.length;
           const numMetrics = Object.keys(metricGroups).length;
 
-          // Dynamic box width based on number of groups to prevent overlap
-          const maxBoxWidth = 0.15;
-          const minBoxWidth = 0.05;
-          const dynamicBoxWidth = Math.max(minBoxWidth, Math.min(maxBoxWidth, 0.8 / numGroups));
-          const boxWidth = dynamicBoxWidth;
+          // Box width proportional to number of groups
+          const boxWidth = Math.max(0.08, Math.min(0.2, 0.7 / numGroups));
 
-          // Calculate spacing to ensure no overlap
-          const minSpacing = boxWidth * 1.2; // Minimum gap between boxes
-          const chartPadding = Math.min(0.4, 0.5 / numGroups); // Dynamic padding
-          const availableWidth = 1 - (2 * chartPadding);
-          const totalBoxWidth = numGroups * boxWidth;
-          const totalGaps = (numGroups - 1) * minSpacing;
-          const remainingSpace = Math.max(0, availableWidth - totalBoxWidth - totalGaps);
-          const extraSpacing = numGroups > 1 ? remainingSpace / (numGroups - 1) : 0;
-          const groupSpacing = minSpacing + extraSpacing;
+          // Spacing between group centers - adjust for 2 groups vs many
+          // For 2 groups, use tighter spacing; for 3+, spread wider
+          const groupSpacing = numGroups === 2 ? 0.5 : 0.9 / Math.max(1, numGroups - 1);
           const baseX = metricIndex; // Metric position
 
-          // Calculate position with proper spacing to prevent overlap
-          const startOffset = -availableWidth / 2 + boxWidth / 2; // Start from left edge plus half box width
-          const xPos = baseX + startOffset + (groupIndex * groupSpacing);
+          // Center groups and spread them edge to edge
+          const xPos = baseX + (groupIndex - (numGroups - 1) / 2) * groupSpacing;
 
           // Debug logging for spacing calculations
           console.log(`BoxPlot spacing calc: groups=${numGroups}, boxWidth=${boxWidth.toFixed(3)}, spacing=${groupSpacing.toFixed(3)}, xPos=${xPos.toFixed(3)} for group ${groupIndex}`);
