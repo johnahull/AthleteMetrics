@@ -145,25 +145,24 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
     selectedAthlete: null,
     selectedAthleteIds: [],
     selectedDates: [],
-    // Reset to clean state
+    // Clear data and errors
     analyticsData: null,
     error: null,
-    // Reset filters to only organizationId
+    // Preserve organizationId filter only
     filters: {
       organizationId: state.filters.organizationId
     },
-    // Reset metrics to default
+    // Preserve primary metric, clear additional (multi-group only supports 1 metric)
     metrics: {
-      primary: 'FLY10_TIME',
+      primary: state.metrics.primary,
       additional: []
     },
-    // Reset timeframe to default
-    timeframe: {
-      type: 'best',
-      period: 'all_time'
-    },
-    // Reset chart settings
-    selectedChartType: 'box_swarm_combo',
+    // Preserve timeframe unless it's trends (incompatible with multi-group)
+    timeframe: state.timeframe.type === 'trends'
+      ? { type: 'best', period: 'all_time' }
+      : state.timeframe,
+    // Preserve chart type if compatible, otherwise default to box_swarm_combo
+    selectedChartType: state.selectedChartType,
     showAllCharts: false,
     // Clear saved state
     previousMetrics: null,
@@ -173,21 +172,19 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
 
 /**
  * Handles state transitions when exiting multi-group mode
- * Resets all state to defaults to ensure clean slate
+ * Preserves compatible settings while resetting incompatible ones
  *
  * @param state - Current analytics state
  * @param nextType - The analysis type being transitioned to
- * @returns New state with all settings reset to defaults
+ * @returns New state with preserved compatible settings
  *
- * Reset behavior:
- * - Clears all athlete selections
- * - Resets metrics to default (FLY10_TIME)
- * - Resets timeframe to best/all_time
- * - Resets chart type to box_swarm_combo
- * - Preserves only organizationId filter
+ * Preservation logic:
+ * - Preserves primary metric and timeframe (compatible across all modes)
+ * - Clears additional metrics array (was empty in multi-group anyway)
+ * - Resets athlete selections (different selection model)
+ * - Preserves chart type
+ * - Preserves organizationId filter
  * - Clears analytics data and errors
- *
- * This prevents settings from carrying over between analysis modes.
  */
 const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
   return {
@@ -197,25 +194,22 @@ const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): An
     selectedAthlete: null,
     selectedAthleteIds: [],
     selectedDates: [],
-    // Reset to clean state
+    // Clear data and errors
     analyticsData: null,
     error: null,
-    // Reset filters to only organizationId
+    // Preserve organizationId filter
     filters: {
       organizationId: state.filters.organizationId
     },
-    // Reset metrics to default
+    // Preserve metrics (primary carries over, additional was empty anyway)
     metrics: {
-      primary: 'FLY10_TIME',
+      primary: state.metrics.primary,
       additional: []
     },
-    // Reset timeframe to default
-    timeframe: {
-      type: 'best',
-      period: 'all_time'
-    },
-    // Reset chart settings
-    selectedChartType: 'box_swarm_combo',
+    // Preserve timeframe
+    timeframe: state.timeframe,
+    // Preserve chart type
+    selectedChartType: state.selectedChartType,
     showAllCharts: false,
     // Clear saved state
     previousMetrics: null,
@@ -225,34 +219,30 @@ const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): An
 
 /**
  * Handles normal analysis type changes (not involving multi-group transitions)
+ * Individual <-> Multi-athlete transitions preserve all settings (fully compatible)
  */
 const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => ({
   ...state,
   analysisType: nextType,
+  // Reset athlete selections (different selection model)
   selectedAthleteId: '',
   selectedAthlete: null,
   selectedAthleteIds: [],
   selectedDates: [],
-  // Reset to clean state
+  // Clear data and errors
   analyticsData: null,
   error: null,
-  // Reset filters to only organizationId
+  // Preserve all filters
   filters: {
     organizationId: state.filters.organizationId
   },
-  // Reset metrics to default
-  metrics: {
-    primary: 'FLY10_TIME',
-    additional: []
-  },
-  // Reset timeframe to default
-  timeframe: {
-    type: 'best',
-    period: 'all_time'
-  },
-  // Reset chart settings
-  selectedChartType: 'box_swarm_combo',
-  showAllCharts: false,
+  // Preserve all metrics (fully compatible between individual and multi-athlete)
+  metrics: state.metrics,
+  // Preserve timeframe
+  timeframe: state.timeframe,
+  // Preserve chart settings
+  selectedChartType: state.selectedChartType,
+  showAllCharts: state.showAllCharts,
   // Clear saved state
   previousMetrics: null,
   previousTimeframe: null,
