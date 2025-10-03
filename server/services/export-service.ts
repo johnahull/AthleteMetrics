@@ -5,6 +5,27 @@
 import { BaseService } from "./base-service";
 import type { User, Team, Measurement } from "@shared/schema";
 
+/**
+ * Escape a CSV field value
+ * - Wraps in quotes if it contains comma, quote, or newline
+ * - Doubles any quotes inside the value
+ */
+function escapeCsvField(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const stringValue = String(value);
+
+  // Check if value needs to be quoted (contains comma, quote, or newline)
+  if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+    // Escape quotes by doubling them and wrap in quotes
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+
+  return stringValue;
+}
+
 export class ExportService extends BaseService {
   /**
    * Export athletes to CSV
@@ -30,7 +51,14 @@ export class ExportService extends BaseService {
       // Generate CSV
       const headers = ['ID', 'First Name', 'Last Name', 'Email', 'Birthdate', 'Gender'].join(',');
       const rows = athletes.map(a =>
-        [a.id, a.firstName, a.lastName, a.emails?.[0] || '', a.birthDate || '', a.gender || ''].join(',')
+        [
+          escapeCsvField(a.id),
+          escapeCsvField(a.firstName),
+          escapeCsvField(a.lastName),
+          escapeCsvField(a.emails?.[0] || ''),
+          escapeCsvField(a.birthDate || ''),
+          escapeCsvField(a.gender || '')
+        ].join(',')
       );
 
       const csv = [headers, ...rows].join('\n');
@@ -74,7 +102,14 @@ export class ExportService extends BaseService {
       // Generate CSV
       const headers = ['Date', 'Athlete', 'Metric', 'Value', 'Units', 'Verified'].join(',');
       const rows = measurements.map(m =>
-        [m.date, `${m.user?.firstName} ${m.user?.lastName}`, m.metric, m.value, m.units || '', m.isVerified || 'false'].join(',')
+        [
+          escapeCsvField(m.date),
+          escapeCsvField(`${m.user?.firstName} ${m.user?.lastName}`),
+          escapeCsvField(m.metric),
+          escapeCsvField(m.value),
+          escapeCsvField(m.units || ''),
+          escapeCsvField(m.isVerified ? 'true' : 'false')
+        ].join(',')
       );
 
       const csv = [headers, ...rows].join('\n');
@@ -114,7 +149,13 @@ export class ExportService extends BaseService {
       // Generate CSV
       const headers = ['ID', 'Name', 'Level', 'Season', 'Is Archived'].join(',');
       const rows = teams.map(t =>
-        [t.id, t.name, t.level || '', t.season || '', t.isArchived || 'false'].join(',')
+        [
+          escapeCsvField(t.id),
+          escapeCsvField(t.name),
+          escapeCsvField(t.level || ''),
+          escapeCsvField(t.season || ''),
+          escapeCsvField(t.isArchived ? 'true' : 'false')
+        ].join(',')
       );
 
       const csv = [headers, ...rows].join('\n');

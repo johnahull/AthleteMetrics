@@ -95,7 +95,13 @@ class ApiClient {
         headers['X-CSRF-Token'] = csrfToken;
       } catch (error) {
         console.error('Failed to get CSRF token:', error);
-        // Continue without CSRF token - let server handle it
+        // Throw error instead of continuing without CSRF protection
+        throw new ApiError(
+          'Failed to get CSRF token. Please refresh the page and try again.',
+          0,
+          'CSRF_TOKEN_FAILED',
+          error
+        );
       }
     }
 
@@ -279,8 +285,18 @@ class ApiClient {
     delete headers['Content-Type'];
 
     // Get CSRF token
-    const csrfToken = await this.getCsrfToken();
-    headers['X-CSRF-Token'] = csrfToken;
+    try {
+      const csrfToken = await this.getCsrfToken();
+      headers['X-CSRF-Token'] = csrfToken;
+    } catch (error) {
+      console.error('Failed to get CSRF token for upload:', error);
+      throw new ApiError(
+        'Failed to get CSRF token. Please refresh the page and try again.',
+        0,
+        'CSRF_TOKEN_FAILED',
+        error
+      );
+    }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...config,
