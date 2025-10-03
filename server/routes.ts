@@ -2772,6 +2772,22 @@ export async function registerRoutes(app: Express) {
         });
       }
 
+      // Audit log
+      await storage.createAuditLog({
+        userId: invitedById,
+        action: 'invitation_created',
+        resourceType: 'invitation',
+        resourceId: invitation.id,
+        details: JSON.stringify({
+          email: invitation.email,
+          role: invitation.role,
+          organizationId: invitation.organizationId,
+          emailSent
+        }),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      });
+
       return res.status(201).json({
         id: invitation.id,
         email: invitation.email,
@@ -2859,6 +2875,20 @@ export async function registerRoutes(app: Express) {
         });
       }
 
+      // Audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'invitation_resent',
+        resourceType: 'invitation',
+        resourceId: invitationId,
+        details: JSON.stringify({
+          email: invitation.email,
+          emailSent
+        }),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      });
+
       res.json({
         success: true,
         emailSent,
@@ -2914,6 +2944,20 @@ export async function registerRoutes(app: Express) {
         status: 'cancelled',
         cancelledAt: new Date(),
         cancelledBy: userId
+      });
+
+      // Audit log
+      await storage.createAuditLog({
+        userId,
+        action: 'invitation_cancelled',
+        resourceType: 'invitation',
+        resourceId: invitationId,
+        details: JSON.stringify({
+          email: invitation.email,
+          role: invitation.role
+        }),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
       });
 
       res.json({
@@ -3004,6 +3048,56 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+
+  /**
+   * Get all invitations for user's organizations
+   */
+  app.get("/api/invitations", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Get user's organizations
+      const userOrgs = await storage.getUserOrganizations(userId);
+
+      if (userOrgs.length === 0) {
+        return res.json([]);
+      }
+
+      // Get all invitations for these organizations
+      const allInvitations = await storage.getInvitations();
+      const userInvitations = allInvitations.filter(invitation =>
+        userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
+      );
+
+      // Enrich with additional data
+      const enrichedInvitations = await Promise.all(
+        userInvitations.map(async (invitation) => {
+          const inviter = await storage.getUser(invitation.invitedBy);
+          const organization = await storage.getOrganization(invitation.organizationId);
+
+          return {
+            ...invitation,
+            inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'Unknown',
+            organizationName: organization?.name || 'Unknown'
+          };
+        })
+      );
+
+      // Sort by creation date (newest first)
+      enrichedInvitations.sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      res.json(enrichedInvitations);
+    } catch (error) {
+      console.error("Error fetching invitations:", error);
+      res.status(500).json({ message: "Failed to fetch invitations" });
+    }
+  });
 
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
     try {
@@ -3139,18 +3233,58 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Username unavailable. Please choose a different username." });
       }
 
-      const invitation = await storage.getInvitation(token);
+      // Get invitation (without the isUsed check to track failed attempts)
+      const allInvitations = await storage.getInvitations();
+      const invitation = allInvitations.find(inv => inv.token === token);
+
       if (!invitation) {
         console.error("Invitation not found for token:", token);
         return res.status(404).json({ message: "Invitation not found" });
       }
 
-      console.log("Accepting invitation:", { 
+      // Check if invitation is already used
+      if (invitation.isUsed || invitation.status === 'accepted') {
+        await storage.updateInvitation(invitation.id, {
+          lastAttemptAt: new Date(),
+          attemptCount: (invitation.attemptCount || 0) + 1
+        });
+        return res.status(400).json({ message: "This invitation has already been used" });
+      }
+
+      // Check if invitation is cancelled
+      if (invitation.status === 'cancelled') {
+        await storage.updateInvitation(invitation.id, {
+          lastAttemptAt: new Date(),
+          attemptCount: (invitation.attemptCount || 0) + 1
+        });
+        return res.status(400).json({ message: "This invitation has been cancelled" });
+      }
+
+      // Check if invitation is expired
+      if (new Date(invitation.expiresAt) < new Date()) {
+        await storage.updateInvitation(invitation.id, {
+          lastAttemptAt: new Date(),
+          attemptCount: (invitation.attemptCount || 0) + 1,
+          status: 'expired'
+        });
+        return res.status(400).json({ message: "This invitation has expired" });
+      }
+
+      // Check attempt count (max 10 attempts)
+      if ((invitation.attemptCount || 0) >= 10) {
+        await storage.updateInvitation(invitation.id, {
+          status: 'cancelled',
+          cancelledAt: new Date()
+        });
+        return res.status(429).json({ message: "Too many failed attempts. This invitation has been locked." });
+      }
+
+      console.log("Accepting invitation:", {
         invitationId: invitation.id,
         email: invitation.email,
         role: invitation.role,
         organizationId: invitation.organizationId,
-        username 
+        username
       });
 
       const result = await storage.acceptInvitation(token, {
@@ -3162,6 +3296,21 @@ export async function registerRoutes(app: Express) {
       });
 
       console.log("Invitation accepted successfully, user created:", result.user.id);
+
+      // Audit log
+      await storage.createAuditLog({
+        userId: result.user.id,
+        action: 'invitation_accepted',
+        resourceType: 'invitation',
+        resourceId: invitation.id,
+        details: JSON.stringify({
+          email: invitation.email,
+          role: invitation.role,
+          organizationId: invitation.organizationId
+        }),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      });
 
       // Send welcome email
       const organization = await storage.getOrganization(invitation.organizationId);
@@ -3217,6 +3366,23 @@ export async function registerRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error accepting invitation:", error);
+
+      // Track failed attempt if we have the invitation
+      const { token } = req.params;
+      if (token) {
+        try {
+          const allInvitations = await storage.getInvitations();
+          const invitation = allInvitations.find(inv => inv.token === token);
+          if (invitation && !invitation.isUsed) {
+            await storage.updateInvitation(invitation.id, {
+              lastAttemptAt: new Date(),
+              attemptCount: (invitation.attemptCount || 0) + 1
+            });
+          }
+        } catch (trackError) {
+          console.error("Error tracking failed attempt:", trackError);
+        }
+      }
 
       // Handle Zod validation errors with user-friendly messages
       if (error instanceof ZodError) {

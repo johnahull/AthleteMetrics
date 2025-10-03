@@ -30,6 +30,8 @@ const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
 const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
 const ResetPassword = React.lazy(() => import("./pages/reset-password"));
+const VerifyEmail = React.lazy(() => import("./pages/verify-email"));
+const Invitations = React.lazy(() => import("./pages/invitations"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -45,6 +47,7 @@ function Router() {
       <Route path="/enhanced-login" component={EnhancedLogin} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
@@ -118,6 +121,11 @@ function Router() {
       <Route path="/profile">
         <RouteWrapper loadingText="Loading Profile...">
           <Profile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/invitations">
+        <RouteWrapper loadingText="Loading Invitations...">
+          <Invitations />
         </RouteWrapper>
       </Route>
       <Route path="/">
