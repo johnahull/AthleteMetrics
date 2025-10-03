@@ -2970,11 +2970,30 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Organization ID must be a valid string" });
       }
 
+      // Check permissions
       if (!userIsSiteAdmin) {
         const userRoles = await storage.getUserRoles(currentUser.id, organizationId);
-        const isOrgAdmin = userRoles.includes("org_admin");
-        if (!isOrgAdmin) {
-          return res.status(403).json({ message: "Access denied. Only organization admins can delete users." });
+        const currentUserRole = userRoles[0]; // Single role per user per organization
+        const isOrgAdmin = currentUserRole === "org_admin";
+        const isCoach = currentUserRole === "coach";
+
+        // Must be at least a coach to delete users
+        if (!isOrgAdmin && !isCoach) {
+          return res.status(403).json({ message: "Access denied. Only coaches and organization admins can delete users." });
+        }
+
+        // Check what role the target user has
+        const targetUserRoles = await storage.getUserRoles(userId, organizationId);
+        const targetUserRole = targetUserRoles[0];
+
+        // Coaches can only delete athletes
+        if (isCoach && targetUserRole !== "athlete") {
+          return res.status(403).json({ message: "Access denied. Coaches can only delete athletes." });
+        }
+
+        // Org admins can delete athletes and coaches, but not other org admins (checked later)
+        if (isOrgAdmin && targetUserRole === "org_admin" && userId !== currentUser.id) {
+          // This will be checked in the "last admin" logic below
         }
       }
 
