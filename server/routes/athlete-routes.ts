@@ -27,6 +27,15 @@ const athleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Stricter rate limiting for delete operations
+const athleteDeleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // Limit each IP to 20 delete requests per windowMs
+  message: { message: "Too many deletion attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerAthleteRoutes(app: Express) {
   /**
    * Get all athletes with optional filtering
@@ -210,47 +219,12 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
-   * Delete athlete (org admins only within their organization)
+   * Delete athlete (org admins and coaches within their organization)
    */
-  app.delete("/api/athletes/:id", athleteLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/athletes/:id", athleteDeleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
     try {
       const athleteId = req.params.id;
-      const currentUser = req.session.user;
-      
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
 
-      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
-      
-      // Non-site admins must have org admin role and access to the athlete
-      if (!userIsSiteAdmin) {
-        const [userOrgs, athleteOrgs] = await Promise.all([
-          storage.getUserOrganizations(currentUser.id),
-          storage.getUserOrganizations(athleteId)
-        ]);
-
-        if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "No organization access" });
-        }
-
-        // Check if athlete is in user's organization
-        const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
-        const userOrgIds = userOrgs.map(org => org.organizationId);
-        const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
-
-        if (!hasSharedOrg) {
-          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
-        }
-
-        // Then check if user has org admin role
-        const hasOrgAdminRole = userOrgs.some(org => org.role === 'org_admin');
-
-        if (!hasOrgAdminRole) {
-          return res.status(403).json({ message: "Organization admin role required to delete athletes" });
-        }
-      }
-      
       await storage.deleteAthlete(athleteId);
       res.json({ message: "Athlete deleted successfully" });
     } catch (error) {

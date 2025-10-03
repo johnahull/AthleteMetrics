@@ -234,6 +234,14 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Access denied to this organization");
       }
 
+      // Check if username already exists (provide user-friendly error)
+      if (userData.username) {
+        const existingUser = await this.storage.getUserByUsername(userData.username);
+        if (existingUser) {
+          throw new Error("Username already exists. Please choose a different username.");
+        }
+      }
+
       // Create user and add to organization
       // Each user can only have one role per organization
       const role = userData.role || 'athlete';

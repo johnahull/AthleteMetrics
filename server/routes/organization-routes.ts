@@ -19,6 +19,15 @@ const createLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Stricter rate limiting for user deletion operations
+const userDeleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // Limit each IP to 20 user deletion requests per windowMs
+  message: { message: "Too many deletion attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerOrganizationRoutes(app: Express) {
   /**
    * Get all organizations (site admin only)
@@ -111,7 +120,7 @@ export function registerOrganizationRoutes(app: Express) {
   /**
    * Remove user from organization
    */
-  app.delete("/api/organizations/:id/users/:userId", requireAuth, async (req, res) => {
+  app.delete("/api/organizations/:id/users/:userId", userDeleteLimiter, requireAuth, async (req, res) => {
     try {
       const { id: organizationId, userId } = req.params;
       

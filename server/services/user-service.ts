@@ -39,6 +39,14 @@ export class UserService extends BaseService {
       // Validate input
       const validatedData = insertUserSchema.parse(userData);
 
+      // Check if username already exists (provide user-friendly error)
+      if (validatedData.username) {
+        const existingUser = await this.storage.getUserByUsername(validatedData.username);
+        if (existingUser) {
+          throw new Error("Username already exists. Please choose a different username.");
+        }
+      }
+
       // Hash password if provided
       if (validatedData.password && validatedData.password !== "INVITATION_PENDING") {
         validatedData.password = await bcrypt.hash(validatedData.password, 10);
