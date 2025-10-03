@@ -3450,7 +3450,7 @@ export async function registerRoutes(app: Express) {
   app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
     try {
       const { type } = req.params;
-      const { createMissing, teamId } = req.body;
+      const { createMissing, teamId, preview, confirmData } = req.body;
       const file = req.file;
 
       if (!file) {
@@ -3488,7 +3488,63 @@ export async function registerRoutes(app: Express) {
         totalRows++;
       }
 
+      // Preview mode: analyze teams and return preview data
+      if (preview === 'true' && type === 'athletes') {
+        const teamMap = new Map<string, { athleteNames: string[], athleteCount: number }>();
+
+        // Extract team information from CSV
+        for (const row of csvData) {
+          const { firstName, lastName, teamName } = row;
+          if (teamName && teamName.trim()) {
+            const normalizedTeamName = teamName.trim();
+            if (!teamMap.has(normalizedTeamName)) {
+              teamMap.set(normalizedTeamName, { athleteNames: [], athleteCount: 0 });
+            }
+            const teamInfo = teamMap.get(normalizedTeamName)!;
+            teamInfo.athleteNames.push(`${firstName} ${lastName}`);
+            teamInfo.athleteCount++;
+          }
+        }
+
+        // Get current user's organization context
+        const currentUser = req.session.user!;
+        let organizationId: string | undefined;
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        organizationId = userOrgs[0]?.organizationId;
+
+        // Check which teams exist
+        const allTeams = await storage.getTeams();
+        const missingTeams: any[] = [];
+
+        for (const [teamName, info] of teamMap.entries()) {
+          const existingTeam = allTeams.find(t =>
+            t.name?.toLowerCase().trim() === teamName.toLowerCase().trim() &&
+            (!organizationId || t.organization?.id === organizationId)
+          );
+
+          if (!existingTeam) {
+            missingTeams.push({
+              teamName,
+              exists: false,
+              athleteCount: info.athleteCount,
+              athleteNames: info.athleteNames
+            });
+          }
+        }
+
+        return res.json({
+          type: 'athletes',
+          totalRows,
+          missingTeams,
+          previewData: csvData,
+          requiresConfirmation: missingTeams.length > 0
+        });
+      }
+
       if (type === 'athletes') {
+        // Track created teams for reporting
+        const createdTeams = new Map<string, { id: string, name: string, athleteCount: number }>();
+
         // Process athletes import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
@@ -3562,15 +3618,54 @@ export async function registerRoutes(app: Express) {
 
             // Create or find athlete
             let athlete;
+            let targetTeamId = teamId; // Default to UI-selected team
+
+            // If confirmData provided and athlete has a teamName, use that instead
+            if (confirmData && teamName && teamName.trim()) {
+              const parsedConfirmData = typeof confirmData === 'string' ? JSON.parse(confirmData) : confirmData;
+              const normalizedTeamName = teamName.trim();
+
+              // Check if team exists or needs to be created
+              const allTeams = await storage.getTeams();
+              let team = allTeams.find(t =>
+                t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim() &&
+                (!parsedConfirmData.organizationId || t.organization?.id === parsedConfirmData.organizationId)
+              );
+
+              // Create team if it doesn't exist and user confirmed creation
+              if (!team && parsedConfirmData.createMissingTeams && parsedConfirmData.organizationId) {
+                team = await storage.createTeam({
+                  organizationId: parsedConfirmData.organizationId,
+                  name: normalizedTeamName,
+                  level: undefined,
+                  notes: 'Created during athlete import'
+                });
+
+                // Track created team
+                if (!createdTeams.has(normalizedTeamName)) {
+                  createdTeams.set(normalizedTeamName, {
+                    id: team.id,
+                    name: team.name,
+                    athleteCount: 0
+                  });
+                }
+                createdTeams.get(normalizedTeamName)!.athleteCount++;
+              }
+
+              if (team) {
+                targetTeamId = team.id;
+              }
+            }
+
             if (createMissing === 'true') {
               athlete = await storage.createUser(athleteData as any);
 
               // Add to team if specified
-              if (teamId) {
-                await storage.addUserToTeam(athlete.id, teamId);
+              if (targetTeamId) {
+                await storage.addUserToTeam(athlete.id, targetTeamId);
 
                 // Also add to organization as athlete
-                const team = await storage.getTeam(teamId);
+                const team = await storage.getTeam(targetTeamId);
                 if (team?.organization?.id) {
                   await storage.addUserToOrganization(athlete.id, team.organization.id, 'athlete');
                 }
@@ -3799,7 +3894,7 @@ export async function registerRoutes(app: Express) {
 
       const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
 
-      res.json({
+      const response: ImportResult = {
         type,
         totalRows,
         results,
@@ -3811,7 +3906,14 @@ export async function registerRoutes(app: Express) {
           warnings: warnings.length,
           pendingReview: pendingReviewCount
         }
-      } as ImportResult);
+      };
+
+      // Add created teams if any (only for athletes import)
+      if (type === 'athletes' && typeof createdTeams !== 'undefined') {
+        response.createdTeams = Array.from(createdTeams.values());
+      }
+
+      res.json(response);
     } catch (error) {
       console.error('Import error:', error);
       res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });

@@ -49,6 +49,29 @@ export interface ImportReviewDecision {
   notes?: string;
 }
 
+export interface TeamPreview {
+  teamName: string;
+  exists: boolean;
+  teamId?: string;
+  athleteCount: number;
+  athleteNames: string[];
+}
+
+export interface ImportPreview {
+  type: 'athletes' | 'measurements';
+  totalRows: number;
+  missingTeams: TeamPreview[];
+  previewData: any[];
+  requiresConfirmation: boolean;
+}
+
+export interface ImportConfirmation {
+  createMissingTeams: boolean;
+  organizationId?: string;
+  teamMappings?: Record<string, string>; // CSV team name -> existing team ID
+  previewData: any[];
+}
+
 export interface ImportResult {
   type: 'athletes' | 'measurements';
   totalRows: number;
@@ -83,4 +106,9 @@ export interface ImportResult {
     warnings: number;
     pendingReview: number;
   };
+  createdTeams?: Array<{
+    id: string;
+    name: string;
+    athleteCount: number;
+  }>;
 }

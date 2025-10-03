@@ -4,11 +4,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CloudUpload, Download, Copy, Info, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CloudUpload, Download, Copy, Info, AlertTriangle, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { downloadCSV } from "@/lib/csv";
 import { PhotoUpload } from "@/components/photo-upload";
 import type { Team } from "@shared/schema";
+import type { ImportPreview } from "@shared/import-types";
+import { useAuth } from "@/lib/auth";
 
 export default function ImportExport() {
   const [importType, setImportType] = useState<"athletes" | "measurements">("athletes");
@@ -16,18 +19,64 @@ export default function ImportExport() {
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<ImportPreview | null>(null);
+  const [showTeamConfirmDialog, setShowTeamConfirmDialog] = useState(false);
+  const [selectedOrgForTeams, setSelectedOrgForTeams] = useState("");
   const { toast } = useToast();
+  const { user, userOrganizations } = useAuth();
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: Team[] };
 
+  const previewMutation = useMutation({
+    mutationFn: async ({ file, type }: { file: File; type: string }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('preview', 'true');
+
+      const response = await fetch(`/api/import/${type}`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Preview failed: ${errorText}`);
+      }
+
+      return response.json() as Promise<ImportPreview>;
+    },
+    onSuccess: (data) => {
+      setPreviewData(data);
+      if (data.requiresConfirmation && data.missingTeams.length > 0) {
+        // Auto-select first organization if user has only one
+        if (userOrganizations && userOrganizations.length === 1) {
+          setSelectedOrgForTeams(userOrganizations[0].organizationId);
+        }
+        setShowTeamConfirmDialog(true);
+      } else {
+        // No missing teams, proceed with import
+        executeImport(data.previewData);
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Preview Failed",
+        description: error instanceof Error ? error.message : "Failed to preview CSV file",
+        variant: "destructive",
+      });
+    },
+  });
+
   const importMutation = useMutation({
-    mutationFn: async ({ file, type, mode, teamId }: { 
-      file: File; 
-      type: string; 
-      mode: string; 
-      teamId?: string; 
+    mutationFn: async ({ file, type, mode, teamId, confirmData }: {
+      file: File;
+      type: string;
+      mode: string;
+      teamId?: string;
+      confirmData?: any;
     }) => {
       const formData = new FormData();
       formData.append('file', file);
@@ -35,6 +84,10 @@ export default function ImportExport() {
         formData.append('teamId', teamId);
       }
       formData.append('createMissing', mode === 'create' ? 'true' : 'false');
+
+      if (confirmData) {
+        formData.append('confirmData', JSON.stringify(confirmData));
+      }
 
       const response = await fetch(`/api/import/${type === 'athletes' ? 'athletes' : type}`, {
         method: 'POST',
@@ -51,18 +104,26 @@ export default function ImportExport() {
     },
     onSuccess: (data) => {
       setImportResults(data);
+      setShowTeamConfirmDialog(false);
       const hasResults = data.results.length > 0;
       const hasErrors = data.errors.length > 0;
       const hasWarnings = data.warnings?.length > 0;
+      const createdTeamsCount = data.createdTeams?.length || 0;
+
+      let description = `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors${hasWarnings ? `, ${data.warnings.length} warnings` : ''}.`;
+      if (createdTeamsCount > 0) {
+        description += ` Created ${createdTeamsCount} new team${createdTeamsCount > 1 ? 's' : ''}.`;
+      }
 
       toast({
         title: hasResults ? "Import Complete" : "Import Issues",
-        description: `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors${hasWarnings ? `, ${data.warnings.length} warnings` : ''}.`,
+        description,
         variant: hasResults ? "default" : "destructive",
       });
     },
     onError: (error: any) => {
       console.error("Import error:", error);
+      setShowTeamConfirmDialog(false);
       toast({
         title: "Import Failed",
         description: error instanceof Error ? error.message : "Failed to process CSV file",
@@ -70,6 +131,24 @@ export default function ImportExport() {
       });
     },
   });
+
+  const executeImport = (previewDataToUse?: any) => {
+    if (!uploadFile) return;
+
+    const confirmData = previewDataToUse ? {
+      createMissingTeams: true,
+      organizationId: selectedOrgForTeams,
+      previewData: previewDataToUse
+    } : undefined;
+
+    importMutation.mutate({
+      file: uploadFile,
+      type: importType,
+      mode: importMode,
+      teamId: selectedTeamId,
+      confirmData
+    });
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,21 +168,30 @@ export default function ImportExport() {
       return;
     }
 
-    if (importMode === "create" && !selectedTeamId) {
-      toast({
-        title: "Error", 
-        description: "Please select a team for creating missing athletes",
-        variant: "destructive",
+    // For athletes import in create mode, first preview to check for missing teams
+    if (importType === "athletes" && importMode === "create") {
+      previewMutation.mutate({
+        file: uploadFile,
+        type: importType,
       });
-      return;
-    }
+    } else {
+      // For measurements or match mode, proceed directly
+      if (importMode === "create" && !selectedTeamId) {
+        toast({
+          title: "Error",
+          description: "Please select a team for creating missing athletes",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    importMutation.mutate({
-      file: uploadFile,
-      type: importType,
-      mode: importMode,
-      teamId: selectedTeamId,
-    });
+      importMutation.mutate({
+        file: uploadFile,
+        type: importType,
+        mode: importMode,
+        teamId: selectedTeamId,
+      });
+    }
   };
 
   const handleExport = async (exportType: string) => {
@@ -497,6 +585,93 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
             </div>
           </CardContent>
         </Card>
+
+        {/* Team Creation Confirmation Dialog */}
+        <Dialog open={showTeamConfirmDialog} onOpenChange={setShowTeamConfirmDialog}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Create Missing Teams?</DialogTitle>
+              <DialogDescription>
+                The following teams don't exist in your organization. Would you like to create them?
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-4">
+              {/* Organization Selection */}
+              {userOrganizations && userOrganizations.length > 1 && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Organization for New Teams
+                  </label>
+                  <Select value={selectedOrgForTeams} onValueChange={setSelectedOrgForTeams}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select organization..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {userOrganizations.map((org) => (
+                        <SelectItem key={org.organizationId} value={org.organizationId}>
+                          {org.organizationName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Missing Teams List */}
+              <div className="space-y-3">
+                {previewData?.missingTeams.map((team, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <h4 className="font-medium text-gray-900">{team.teamName}</h4>
+                          <p className="text-sm text-gray-600">
+                            {team.athleteCount} athlete{team.athleteCount > 1 ? 's' : ''} will be added
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {team.athleteNames.length <= 5 && (
+                      <div className="mt-2 text-xs text-gray-500">
+                        {team.athleteNames.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowTeamConfirmDialog(false);
+                  setPreviewData(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!selectedOrgForTeams && userOrganizations && userOrganizations.length > 0) {
+                    toast({
+                      title: "Organization Required",
+                      description: "Please select an organization for the new teams",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  executeImport(previewData?.previewData);
+                }}
+                disabled={importMutation.isPending}
+              >
+                {importMutation.isPending ? "Creating Teams & Importing..." : "Create Teams & Import"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
