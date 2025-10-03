@@ -32,6 +32,7 @@ const envSchema = z.object({
 
   // Optional Services
   SENDGRID_API_KEY: z.string().optional(),
+  REDIS_URL: z.string().url().optional(),
 
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

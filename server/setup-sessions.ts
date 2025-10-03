@@ -17,11 +17,12 @@ export async function setupSessions(app: Express) {
 
     if (redisModule) {
       const { createClient } = redisModule;
-      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      const redisUrl = env.REDIS_URL || 'redis://localhost:6379';
       redisClient = createClient({
         url: redisUrl,
         socket: {
-          connectTimeout: 60000
+          connectTimeout: 5000,  // 5s is better than 60s for health checks
+          reconnectStrategy: (retries: number) => Math.min(retries * 100, 3000),  // Exponential backoff capped at 3s
         }
       });
 
@@ -75,29 +76,32 @@ export async function setupSessions(app: Express) {
         logger.warn('connect-redis module not available');
         logger.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
 
-        // Fail in production if Redis is not available
+        // Critical warning in production but allow degraded mode for availability
         if (isProduction) {
-          logger.error('FATAL: Redis session store required in production but connect-redis module not available');
-          throw new Error('Production deployment requires Redis session store. Install connect-redis package.');
+          logger.error('CRITICAL: Redis session store unavailable in production!');
+          logger.error('Sessions will be lost on restart. This is NOT recommended for production.');
+          logger.error('Install connect-redis package for production deployments.');
         }
       }
     } catch (error: any) {
       logger.warn('Failed to create Redis store', { error: error?.message || error });
       logger.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
 
-      // Fail in production if Redis is not available
+      // Critical warning in production but allow degraded mode for availability
       if (isProduction) {
-        logger.error('FATAL: Redis session store required in production but failed to initialize');
-        throw new Error('Production deployment requires Redis session store. Check REDIS_URL and Redis availability.');
+        logger.error('CRITICAL: Redis session store failed to initialize in production!');
+        logger.error('Sessions will be lost on restart. This is NOT recommended for production.');
+        logger.error('Check REDIS_URL and ensure Redis is available.');
       }
     }
   } else {
     logger.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
 
-    // Fail in production if Redis is not available
+    // Critical warning in production but allow degraded mode for availability
     if (isProduction) {
-      logger.error('FATAL: Redis session store required in production but Redis client not available');
-      throw new Error('Production deployment requires Redis session store. Set REDIS_URL and ensure redis package is installed.');
+      logger.error('CRITICAL: Redis session store unavailable in production!');
+      logger.error('Sessions will be lost on restart. This is NOT recommended for production.');
+      logger.error('Set REDIS_URL and ensure redis package is installed.');
     }
   }
 

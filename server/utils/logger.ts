@@ -191,7 +191,8 @@ class Logger {
       const slowQueryThreshold = env.SLOW_QUERY_THRESHOLD_MS;
       if (duration > slowQueryThreshold) {
         // Redact query text - only log metadata
-        const queryType = query.trim().split(' ')[0]?.toUpperCase() || 'UNKNOWN';
+        // Use regex to extract query type and strip non-alphabetic characters
+        const queryType = query.trim().split(/\s+/)[0]?.toUpperCase().replace(/[^A-Z]/g, '') || 'UNKNOWN';
         this.warn(`Slow query detected: ${queryType} query`, {
           ...context,
           queryType,

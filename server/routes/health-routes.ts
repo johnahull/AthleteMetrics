@@ -7,6 +7,22 @@ import type { Express } from "express";
 import { checkDatabaseHealth } from "../utils/db-helpers";
 
 /**
+ * Timeout wrapper for database health checks
+ * Prevents hanging on slow/unresponsive databases
+ */
+async function checkDatabaseHealthWithTimeout(timeoutMs: number = 5000) {
+  return Promise.race([
+    checkDatabaseHealth(),
+    new Promise<{ healthy: false; error: string }>((_, reject) =>
+      setTimeout(() => reject(new Error('Health check timeout')), timeoutMs)
+    ),
+  ]).catch(() => ({
+    healthy: false as const,
+    error: 'Timeout or connection failed',
+  }));
+}
+
+/**
  * Register health check routes
  */
 export function registerHealthRoutes(app: Express) {
@@ -16,8 +32,8 @@ export function registerHealthRoutes(app: Express) {
    */
   app.get('/api/health', async (req, res) => {
     try {
-      // Check database connectivity
-      const dbHealth = await checkDatabaseHealth();
+      // Check database connectivity with timeout
+      const dbHealth = await checkDatabaseHealthWithTimeout();
 
       const health = {
         status: dbHealth.healthy ? 'healthy' : 'degraded',
@@ -30,7 +46,7 @@ export function registerHealthRoutes(app: Express) {
         },
         database: {
           connected: dbHealth.healthy,
-          latency: dbHealth.latency,
+          latency: 'latency' in dbHealth ? dbHealth.latency : undefined,
         },
         environment: process.env.NODE_ENV || 'development',
       };
@@ -52,8 +68,8 @@ export function registerHealthRoutes(app: Express) {
    */
   app.get('/api/health/ready', async (req, res) => {
     try {
-      // Check if app is ready to accept traffic
-      const dbHealth = await checkDatabaseHealth();
+      // Check if app is ready to accept traffic with timeout
+      const dbHealth = await checkDatabaseHealthWithTimeout();
 
       if (dbHealth.healthy) {
         res.status(200).json({ ready: true });
