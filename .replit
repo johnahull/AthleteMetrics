@@ -4,7 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["vim-full"]
+packages = ["vim-full", "lsof"]
 
 [deployment]
 deploymentTarget = "autoscale"
