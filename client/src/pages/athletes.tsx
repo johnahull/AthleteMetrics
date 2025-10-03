@@ -136,12 +136,16 @@ export default function Athletes() {
 
   const deleteAthleteMutation = useMutation({
     mutationFn: async (athleteId: string) => {
+      // Get CSRF token
+      const csrfResponse = await fetch("/api/auth/csrf", { credentials: "include" });
+      const { csrfToken } = await csrfResponse.json();
+
       // Get the athlete to check their roles
       const athlete = athletes.find(a => a.id === athleteId);
 
       // If athlete has coach or org_admin role, remove them from organization instead
       if (athlete?.roles && (athlete.roles.includes('coach') || athlete.roles.includes('org_admin'))) {
-        const orgId = user?.primaryOrganizationId;
+        const orgId = effectiveOrganizationId;
         if (!orgId) {
           throw new Error("Organization ID not found");
         }
@@ -150,6 +154,7 @@ export default function Athletes() {
           method: "DELETE",
           credentials: "include",
           headers: {
+            "Content-Type": "application/json",
             "X-CSRF-Token": csrfToken,
           },
         });
@@ -163,6 +168,7 @@ export default function Athletes() {
           method: "DELETE",
           credentials: "include",
           headers: {
+            "Content-Type": "application/json",
             "X-CSRF-Token": csrfToken,
           },
         });
