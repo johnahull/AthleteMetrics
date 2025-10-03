@@ -23,11 +23,26 @@ export function useAnalyticsPermissions() {
 
   return useMemo(() => {
     const getEffectiveOrganizationId = () => {
-      if (organizationContext) return organizationContext;
+      console.log('useAnalyticsPermissions - Getting effective org ID:', {
+        organizationContext,
+        userOrganizations,
+        user: user?.username,
+        isSiteAdmin: user?.isSiteAdmin
+      });
+      
+      if (organizationContext) {
+        console.log('Using organizationContext:', organizationContext);
+        return organizationContext;
+      }
+      
       const isSiteAdmin = user?.isSiteAdmin || false;
       if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
-        return userOrganizations[0].organizationId;
+        const orgId = userOrganizations[0].organizationId;
+        console.log('Using first userOrganization:', orgId);
+        return orgId;
       }
+      
+      console.warn('No effective organization ID found');
       return null;
     };
 
@@ -53,8 +68,13 @@ export function useAnalyticsDataLoader() {
   const { setAvailableTeams, setAvailableAthletes, setLoading } = useAnalyticsActions();
 
   const loadInitialData = useCallback(async () => {
+    console.log('loadInitialData called:', {
+      effectiveOrganizationId,
+      hasEffectiveOrg: !!effectiveOrganizationId
+    });
+    
     if (!effectiveOrganizationId) {
-      console.log('No effective organization ID found, skipping data load');
+      console.warn('No effective organization ID found, skipping data load');
       return;
     }
 
