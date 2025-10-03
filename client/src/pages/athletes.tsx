@@ -136,10 +136,6 @@ export default function Athletes() {
 
   const deleteAthleteMutation = useMutation({
     mutationFn: async (athleteId: string) => {
-      // Get CSRF token
-      const csrfResponse = await fetch("/api/auth/csrf", { credentials: "include" });
-      const { csrfToken } = await csrfResponse.json();
-
       // Get the athlete to check their roles
       const athlete = athletes.find(a => a.id === athleteId);
 
@@ -150,32 +146,10 @@ export default function Athletes() {
           throw new Error("Organization ID not found");
         }
 
-        const response = await fetch(`/api/organizations/${orgId}/users/${athleteId}`, {
-          method: "DELETE",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-        });
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.message || "Failed to delete user");
-        }
+        return await apiRequest("DELETE", `/api/organizations/${orgId}/users/${athleteId}`);
       } else {
         // For regular athletes, use the athlete endpoint
-        const response = await fetch(`/api/athletes/${athleteId}`, {
-          method: "DELETE",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-        });
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.message || "Failed to delete athlete");
-        }
+        return await apiRequest("DELETE", `/api/athletes/${athleteId}`);
       }
     },
     onSuccess: () => {
