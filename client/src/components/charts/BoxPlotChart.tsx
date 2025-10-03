@@ -1330,6 +1330,86 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   const chartData = boxPlotData;
   const chartOptions = options;
 
+  // Calculate multi-group statistics grid data
+  const multiGroupStats = useMemo(() => {
+    if (!selectedGroups || selectedGroups.length < 2 || !data || data.length === 0) {
+      return null;
+    }
+
+    const currentMetric = data.length > 0 ? data[0].metric : '';
+    const metricConfig = currentMetric ? METRIC_CONFIG[currentMetric as keyof typeof METRIC_CONFIG] : null;
+
+    // Collect group stats for all groups
+    const groupsWithStats = selectedGroups.map((group, index) => {
+      const groupDataPoint = data.find(d =>
+        d.grouping === group.id &&
+        d.additionalData?.groupStats &&
+        d.metric === currentMetric
+      );
+
+      let groupStats = groupDataPoint?.additionalData?.groupStats;
+      let groupDataCount = group.memberIds?.length ||
+        data.filter(d => d.grouping === group.id && d.metric === currentMetric && !d.additionalData?.groupStats).length;
+
+      if (!groupStats) {
+        // Calculate from raw data if not in additionalData
+        const groupValues = data
+          .filter(d => d.grouping === group.id && d.metric === currentMetric)
+          .map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value)
+          .filter(v => !isNaN(v))
+          .sort((a, b) => a - b);
+
+        if (groupValues.length === 0) return null;
+
+        const mean = groupValues.reduce((a, b) => a + b, 0) / groupValues.length;
+        const median = groupValues.length % 2 === 0
+          ? (groupValues[Math.floor(groupValues.length / 2) - 1] + groupValues[Math.floor(groupValues.length / 2)]) / 2
+          : groupValues[Math.floor(groupValues.length / 2)];
+
+        const variance = groupValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / groupValues.length;
+        const stdDev = Math.sqrt(variance);
+
+        const q1Index = Math.floor(groupValues.length * 0.25);
+        const q3Index = Math.floor(groupValues.length * 0.75);
+
+        groupStats = {
+          count: groupValues.length,
+          mean,
+          median,
+          min: groupValues[0],
+          max: groupValues[groupValues.length - 1],
+          stdDev,
+          std: stdDev,
+          q1: groupValues[q1Index],
+          q3: groupValues[q3Index]
+        };
+        groupDataCount = groupValues.length;
+      }
+
+      return {
+        group,
+        stats: groupStats,
+        count: groupDataCount || groupStats.count || groupStats.groupSize || 0,
+        color: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length]
+      };
+    }).filter(Boolean);
+
+    // Format values based on metric type
+    const formatValue = (value: number) => {
+      if (typeof value !== 'number' || isNaN(value)) return '-';
+      const isTimeMetric = currentMetric?.includes('TIME') || currentMetric?.includes('AGILITY') ||
+                          currentMetric?.includes('TEST') || currentMetric?.includes('DASH');
+      return isTimeMetric ? value.toFixed(2) : value.toFixed(1);
+    };
+
+    return {
+      groupsWithStats,
+      metricConfig,
+      currentMetric,
+      formatValue
+    };
+  }, [selectedGroups, data]);
+
   // Add error boundary wrapper for chart rendering
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
@@ -1390,165 +1470,92 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           })()}
         </div>
 
-        {/* Statistics Summary Table for Multi-Group Comparison */}
-        {selectedGroups && selectedGroups.length >= 2 && data && data.length > 0 && (
+        {/* Statistics Summary Grid for Multi-Group Comparison */}
+        {multiGroupStats && (
           <div className="mt-6 pb-4">
             <div className="text-sm font-medium text-muted-foreground mb-3 px-2">Group Statistics Summary</div>
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 px-3 font-medium">Group</th>
-                  <th className="text-right py-2 px-3 font-medium">n</th>
-                  <th className="text-right py-2 px-3 font-medium">Mean</th>
-                  <th className="text-right py-2 px-3 font-medium">Median</th>
-                  <th className="text-right py-2 px-3 font-medium">Min</th>
-                  <th className="text-right py-2 px-3 font-medium">Max</th>
-                  <th className="text-right py-2 px-3 font-medium">Std Dev</th>
-                  <th className="text-right py-2 px-3 font-medium">Q1</th>
-                  <th className="text-right py-2 px-3 font-medium">Q3</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedGroups.map((group, index) => {
-                  // Find the group data point that contains the statistics
-                  // The statistics are stored in the additionalData.groupStats of the aggregated data points
-                  const currentMetric = data.length > 0 ? data[0].metric : '';
-                  const groupDataPoint = data.find(d =>
-                    d.grouping === group.id &&
-                    d.additionalData?.groupStats &&
-                    d.metric === currentMetric
-                  );
-
-                  const groupStats = groupDataPoint?.additionalData?.groupStats;
-
-                  // Calculate the actual count of data points for this group
-                  // For aggregated group data, there's typically one point per group
-                  // The actual member count should be in group.memberIds or groupStats
-                  const groupDataCount = group.memberIds?.length ||
-                    data.filter(d => d.grouping === group.id && d.metric === currentMetric && !d.additionalData?.groupStats).length;
-
-                  if (!groupStats) {
-                    // If no groupStats in additionalData, calculate them from raw data
-                    const groupValues = data
-                      .filter(d => d.grouping === group.id && d.metric === currentMetric)
-                      .map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value)
-                      .filter(v => !isNaN(v))
-                      .sort((a, b) => a - b);
-
-                    if (groupValues.length === 0) return null;
-
-                    const mean = groupValues.reduce((a, b) => a + b, 0) / groupValues.length;
-                    const median = groupValues.length % 2 === 0
-                      ? (groupValues[Math.floor(groupValues.length / 2) - 1] + groupValues[Math.floor(groupValues.length / 2)]) / 2
-                      : groupValues[Math.floor(groupValues.length / 2)];
-
-                    // Calculate standard deviation
-                    const variance = groupValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / groupValues.length;
-                    const stdDev = Math.sqrt(variance);
-
-                    // Calculate quartiles
-                    const q1Index = Math.floor(groupValues.length * 0.25);
-                    const q3Index = Math.floor(groupValues.length * 0.75);
-
-                    return (
-                      <tr key={group.id} className="hover:bg-gray-50">
-                        <td className="py-2 px-3">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded"
-                              style={{ backgroundColor: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length] }}
-                            />
-                            <span className="font-medium">{group.name}</span>
-                          </div>
-                        </td>
-                        <td className="text-right py-2 px-3">{groupValues.length}</td>
-                        <td className="text-right py-2 px-3">{mean.toFixed(2)}</td>
-                        <td className="text-right py-2 px-3">{median.toFixed(2)}</td>
-                        <td className="text-right py-2 px-3">{groupValues[0].toFixed(2)}</td>
-                        <td className="text-right py-2 px-3">{groupValues[groupValues.length - 1].toFixed(2)}</td>
-                        <td className="text-right py-2 px-3">{stdDev.toFixed(2)}</td>
-                        <td className="text-right py-2 px-3">{groupValues[q1Index].toFixed(2)}</td>
-                        <td className="text-right py-2 px-3">{groupValues[q3Index].toFixed(2)}</td>
-                      </tr>
-                    );
-                  }
-
-                  // Format values based on metric type
-                  const formatValue = (value: number) => {
-                    if (typeof value !== 'number' || isNaN(value)) return '-';
-                    // For time metrics (lower is better), show with 2 decimal places
-                    // For jump metrics (higher is better), show with 1 decimal place
-                    const isTimeMetric = currentMetric?.includes('TIME') || currentMetric?.includes('AGILITY') ||
-                                        currentMetric?.includes('TEST') || currentMetric?.includes('DASH');
-                    return isTimeMetric ? value.toFixed(2) : value.toFixed(1);
-                  };
-
-                  return (
-                    <tr key={group.id} className="hover:bg-gray-50">
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded"
-                            style={{ backgroundColor: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length] }}
-                          />
-                          <span className="font-medium">{group.name}</span>
-                        </div>
-                      </td>
-                      <td className="text-right py-2 px-3">{groupDataCount || groupStats.count || groupStats.groupSize || 0}</td>
-                      <td className="text-right py-2 px-3 font-medium">
-                        {formatValue(groupStats.mean)}
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.median)}
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.min)}
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.max)}
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {formatValue(groupStats.stdDev || groupStats.std || 0)}
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {/* Q1 - Try multiple possible property names */}
-                        {formatValue(groupStats.q1 || groupStats.percentiles?.p25 || (groupStats.median - (groupStats.stdDev || groupStats.std || 0) * 0.674))}
-                      </td>
-                      <td className="text-right py-2 px-3">
-                        {/* Q3 - Try multiple possible property names */}
-                        {formatValue(groupStats.q3 || groupStats.percentiles?.p75 || (groupStats.median + (groupStats.stdDev || groupStats.std || 0) * 0.674))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Add metric context */}
-          {(() => {
-            const metric = data.length > 0 ? data[0].metric : '';
-            return metric ? (
-              <div className="mt-3 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                  <span>Metric:</span>
-                  <span className="font-medium">
-                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}
-                  </span>
-                  {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit && (
-                    <span>({METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG].unit})</span>
-                  )}
-                  <span className="ml-2">
-                    {METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
-                      ? '• Lower values are better'
-                      : '• Higher values are better'}
-                  </span>
+            <div className="grid gap-4 text-sm" style={{ gridTemplateColumns: `auto repeat(${multiGroupStats.groupsWithStats.length}, 1fr)` }}>
+              {/* Header row */}
+              <div className="font-medium"></div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="font-medium text-center" style={{ color: item.color }}>
+                  {item.group.name}
                 </div>
-              </div>
-            ) : null;
-          })()}
-        </div>
+              ))}
+
+              {/* Count row */}
+              <div className="font-medium text-right pr-4">Count</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-center">
+                  {item.count}
+                </div>
+              ))}
+
+              {/* Mean row */}
+              <div className="font-medium text-right pr-4">Mean</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-red-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.mean)}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+
+              {/* Median row */}
+              <div className="font-medium text-right pr-4">Median</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-yellow-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.median)}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+
+              {/* Min row */}
+              <div className="font-medium text-right pr-4">Min</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.min)}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+
+              {/* Max row */}
+              <div className="font-medium text-right pr-4">Max</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.max)}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+
+              {/* Std Dev row */}
+              <div className="font-medium text-right pr-4">Std Dev</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.stdDev || item.stats.std || 0)}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+
+              {/* Q1 row */}
+              <div className="font-medium text-right pr-4">Q1</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.q1 || item.stats.percentiles?.p25 || (item.stats.median - (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+
+              {/* Q3 row */}
+              <div className="font-medium text-right pr-4">Q3</div>
+              {multiGroupStats.groupsWithStats.map((item, index) => (
+                <div key={index} className="text-lg font-bold text-gray-600 text-center">
+                  {multiGroupStats.formatValue(item.stats.q3 || item.stats.percentiles?.p75 || (item.stats.median + (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.metricConfig?.unit || ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Metric context */}
+            {multiGroupStats.metricConfig && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {multiGroupStats.metricConfig.label} ({multiGroupStats.metricConfig.unit})
+                {multiGroupStats.metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
