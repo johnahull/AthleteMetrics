@@ -1,0 +1,42 @@
+useAnalyticsPermissions - Getting effective org ID: {organizationContext: 'c0a14980-c605-4776-81f3-a328bb610865', userOrganizations: Array(1), user: 'fiercecoach1', isSiteAdmin: false}
+useAnalyticsOperations.ts:34 Using organizationContext: c0a14980-c605-4776-81f3-a328bb610865
+useAnalyticsOperations.ts:26 useAnalyticsPermissions - Getting effective org ID: {organizationContext: 'c0a14980-c605-4776-81f3-a328bb610865', userOrganizations: Array(1), user: 'fiercecoach1', isSiteAdmin: false}
+useAnalyticsOperations.ts:34 Using organizationContext: c0a14980-c605-4776-81f3-a328bb610865
+useAnalyticsOperations.ts:26 useAnalyticsPermissions - Getting effective org ID: {organizationContext: 'c0a14980-c605-4776-81f3-a328bb610865', userOrganizations: Array(1), user: 'fiercecoach1', isSiteAdmin: false}
+useAnalyticsOperations.ts:34 Using organizationContext: c0a14980-c605-4776-81f3-a328bb610865
+useAnalyticsOperations.ts:71 loadInitialData called: {effectiveOrganizationId: 'c0a14980-c605-4776-81f3-a328bb610865', hasEffectiveOrg: true}
+useAnalyticsOperations.ts:83 Loading initial data for organization: c0a14980-c605-4776-81f3-a328bb610865
+BaseAnalyticsView.tsx:110 BaseAnalyticsView - Organization context: {effectiveOrganizationId: 'c0a14980-c605-4776-81f3-a328bb610865', analysisType: 'individual', shouldFetchData: false, hasData: false, isLoading: false, …}
+dev-logger.ts:11 CoachAnalytics - User context: {userId: '311d889c-4d43-407c-9346-3a0cb806bb01', currentOrganization: undefined, organizationContext: undefined}
+BaseAnalyticsView.tsx:110 BaseAnalyticsView - Organization context: {effectiveOrganizationId: 'c0a14980-c605-4776-81f3-a328bb610865', analysisType: 'intra_group', shouldFetchData: true, hasData: false, isLoading: false, …}
+useGroupComparison.ts:95  POST https://a0c4b239-1511-47b6-bc98-bdc9d88ed5ea-00-1vm9rgzvwl2c3.picard.replit.dev:5000/api/analytics/dashboard 403 (Forbidden)
+queryFn @ useGroupComparison.ts:95
+await in queryFn
+fetchFn @ @tanstack_react-query.js?v=f214c634:840
+run @ @tanstack_react-query.js?v=f214c634:494
+start @ @tanstack_react-query.js?v=f214c634:536
+fetch @ @tanstack_react-query.js?v=f214c634:926
+executeFetch_fn @ @tanstack_react-query.js?v=f214c634:2211
+onSubscribe @ @tanstack_react-query.js?v=f214c634:1898
+subscribe @ @tanstack_react-query.js?v=f214c634:24
+(anonymous) @ @tanstack_react-query.js?v=f214c634:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=f214c634:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=f214c634:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=f214c634:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=f214c634:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=f214c634:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=f214c634:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=f214c634:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=f214c634:19447
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=f214c634:18868
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=f214c634:9119
+commitRootImpl @ chunk-RPCDYKBN.js?v=f214c634:19432
+commitRoot @ chunk-RPCDYKBN.js?v=f214c634:19277
+finishConcurrentRender @ chunk-RPCDYKBN.js?v=f214c634:18805
+performConcurrentWorkOnRoot @ chunk-RPCDYKBN.js?v=f214c634:18718
+workLoop @ chunk-RPCDYKBN.js?v=f214c634:197
+flushWork @ chunk-RPCDYKBN.js?v=f214c634:176
+performWorkUntilDeadline @ chunk-RPCDYKBN.js?v=f214c634:384Understand this error
+useAnalyticsOperations.ts:185 Analytics data received: {hasData: true, dataLength: 94, hasTrends: true, trendsLength: 0, hasMultiMetric: true, …}
+dev-logger.ts:11 ChartContainer Debug: {chartType: 'box_swarm_combo', dataLength: 94, trendsLength: 0, multiMetricLength: 0, hasMultiMetric: true, …}
+BaseAnalyticsView.tsx:110 BaseAnalyticsView - Organization context: {effectiveOrganizationId: 'c0a14980-c605-4776-81f3-a328bb610865', analysisType: 'intra_group', shouldFetchData: true, hasData: true, isLoading: false, …}
