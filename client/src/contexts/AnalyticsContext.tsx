@@ -173,22 +173,21 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
 
 /**
  * Handles state transitions when exiting multi-group mode
- * Restores previously saved metrics/timeframe if available
+ * Resets all state to defaults to ensure clean slate
  *
  * @param state - Current analytics state
  * @param nextType - The analysis type being transitioned to
- * @returns New state with restored settings (if available)
+ * @returns New state with all settings reset to defaults
  *
- * Restoration logic:
- * - If previousMetrics exists: Restore with deep clone to avoid reference issues
- * - If previousMetrics null: Keep current metrics (user made no changes worth preserving)
- * - If previousTimeframe exists: Restore saved timeframe
- * - If previousTimeframe null: Keep current timeframe
+ * Reset behavior:
+ * - Clears all athlete selections
+ * - Resets metrics to default (FLY10_TIME)
+ * - Resets timeframe to best/all_time
+ * - Resets chart type to box_swarm_combo
+ * - Preserves only organizationId filter
+ * - Clears analytics data and errors
  *
- * Edge cases handled:
- * - Prevents restoring null/undefined values
- * - Deep clones restored state to prevent mutation issues
- * - Clears saved state after restoration to prevent memory leaks
+ * This prevents settings from carrying over between analysis modes.
  */
 const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
   return {
