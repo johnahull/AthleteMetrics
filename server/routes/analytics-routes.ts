@@ -40,12 +40,24 @@ export function registerAnalyticsRoutes(app: Express) {
    * Get dashboard analytics (POST) - Full analytics with charts
    */
   app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, asyncHandler(async (req: any, res: any) => {
-    const request = req.body;
-    
-    // Compute full analytics response with chart data
-    const analytics = await analyticsService.getAnalyticsData(request);
+    try {
+      const request = req.body;
+      
+      // Validate request has required fields
+      if (!request.filters || !request.metrics || !request.timeframe) {
+        return res.status(400).json({ 
+          message: 'Invalid request: missing required fields (filters, metrics, timeframe)' 
+        });
+      }
+      
+      // Compute full analytics response with chart data
+      const analytics = await analyticsService.getAnalyticsData(request);
 
-    res.json(analytics);
+      res.json(analytics);
+    } catch (error) {
+      console.error('Analytics POST error:', error);
+      throw error;
+    }
   }));
 
   /**

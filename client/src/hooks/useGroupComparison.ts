@@ -92,25 +92,32 @@ export function useGroupComparison({
     queryKey: ['group-measurements', organizationId, metrics],
     ...getCacheConfig('MEASUREMENTS'),
     queryFn: async () => {
-      // Reuse the main analytics API instead of separate measurements API
-      // This avoids CSRF token conflicts
-      const csrfResponse = await fetch('/api/csrf-token', {
-        credentials: 'include'
-      });
-
-      if (!csrfResponse.ok) {
-        throw new Error('Failed to fetch CSRF token');
+      // Try to fetch CSRF token, but continue even if it fails (non-blocking)
+      let csrfToken = '';
+      try {
+        const csrfResponse = await fetch('/api/csrf-token', {
+          credentials: 'include'
+        });
+        if (csrfResponse.ok) {
+          const data = await csrfResponse.json();
+          csrfToken = data.csrfToken || '';
+        }
+      } catch (err) {
+        console.warn('CSRF token fetch failed, continuing without it:', err);
       }
 
-      const { csrfToken } = await csrfResponse.json();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
 
       const response = await fetch(`/api/analytics/dashboard`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken
-        },
+        headers,
         body: JSON.stringify({
           analysisType: 'multi_group',
           filters: { organizationId },
