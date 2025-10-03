@@ -253,8 +253,8 @@ export function ChartContainer({
     );
   }
 
-  // Use larger height for radar chart due to additional controls
-  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+  // Use larger height for radar chart due to additional controls, and violin plot for better visibility
+  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : chartType === 'violin_plot' ? 'h-[910px]' : 'h-[700px]';
 
   return (
     <Card className={`${className} ${cardHeight} flex flex-col`}>
