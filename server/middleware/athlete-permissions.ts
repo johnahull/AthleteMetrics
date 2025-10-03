@@ -55,7 +55,10 @@ export async function requireAthleteManagementPermission(
 
 /**
  * Checks if user has permission to access a specific athlete
- * Requires: Same organization as athlete + (org_admin or coach role)
+ * Requires:
+ * - Athletes can access their own profile
+ * - Org admins and coaches can access athletes in same organization
+ * - Site admins can access any athlete
  */
 export async function requireAthleteAccessPermission(
   req: Request,
@@ -80,6 +83,11 @@ export async function requireAthleteAccessPermission(
 
     // Site admins can access any athlete
     if (userIsSiteAdmin) {
+      return next();
+    }
+
+    // Athletes can access their own profile
+    if (currentUser.id === athleteId) {
       return next();
     }
 

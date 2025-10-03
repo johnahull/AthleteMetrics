@@ -1,5 +1,14 @@
 /**
  * Athlete management routes
+ *
+ * MIDDLEWARE MIGRATION STATUS:
+ * ✅ POST /api/athletes - Uses requireAthleteManagementPermission
+ * ✅ PUT /api/athletes/:id - Uses requireAthleteAccessPermission
+ * ✅ DELETE /api/athletes/:id - Uses requireAthleteAccessPermission
+ * ⚠️  GET /api/athletes/:id - Has inline permission checks (legacy pattern)
+ * ⚠️  GET /api/athletes - No specific permission middleware (requireAuth only)
+ *
+ * Future: Migrate GET routes to use middleware for consistency
  */
 
 import type { Express } from "express";

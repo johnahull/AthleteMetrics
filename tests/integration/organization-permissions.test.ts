@@ -1,9 +1,23 @@
 /**
- * Integration tests for organization permissions and role-based access control
- * Tests for PR review issues: permissions, validation, and hierarchical delete
+ * Business Logic Tests for Organization Permission System
  *
- * NOTE: These tests document expected behavior and validate business logic.
- * Full integration tests with database would require additional setup.
+ * IMPORTANT: These are BUSINESS LOGIC tests, not full API integration tests.
+ * They validate the permission checking logic patterns without database/API setup.
+ *
+ * What these tests do:
+ * - Document expected hierarchical permission behavior
+ * - Validate role-based access control logic
+ * - Test organization boundary enforcement
+ * - Test "last admin" deletion prevention logic
+ * - Serve as executable documentation
+ *
+ * What these tests DON'T do:
+ * - Make actual HTTP requests to endpoints
+ * - Connect to a real database
+ * - Test full authentication flow
+ *
+ * For actual API integration tests with database, see:
+ * TODO: Create tests/e2e/organization-api.test.ts
  */
 
 import { describe, it, expect } from 'vitest';
