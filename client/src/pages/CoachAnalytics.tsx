@@ -28,7 +28,13 @@ export function CoachAnalytics() {
 
   const { data: userOrgs, isLoading: orgsLoading } = useQuery({
     queryKey: ['/api/auth/me/organizations'],
-    enabled: !!user
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me/organizations', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch organizations');
+      return res.json();
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
 
@@ -103,11 +109,14 @@ export function CoachAnalytics() {
     );
   }
 
+  // Determine the effective organization ID
+  const effectiveOrganizationId = organizationContext || (userOrgs?.[0]?.organizationId) || undefined;
+
   return (
     <BaseAnalyticsView
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
-      organizationId={organizationContext || undefined}
+      organizationId={effectiveOrganizationId}
       defaultAnalysisType="intra_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}

@@ -78,7 +78,7 @@ export function useAnalyticsDataLoader() {
           name: team.name
         })));
       } else {
-        console.error('Teams request failed:', teamsResponse.status);
+        devLog.error('Teams request failed:', teamsResponse.status);
       }
 
       // Process athletes
@@ -93,10 +93,10 @@ export function useAnalyticsDataLoader() {
           teams: athlete.teams || []
         })));
       } else {
-        console.error('Athletes request failed:', athletesResponse.status);
+        devLog.error('Athletes request failed:', athletesResponse.status);
       }
     } catch (error) {
-      console.error('Failed to load initial data:', error);
+      devLog.error('Failed to load initial data:', error);
     } finally {
       setLoading(false);
     }
@@ -322,7 +322,7 @@ export function useAnalyticsExport() {
       // const csvData = convertAnalyticsDataToCSV(state.analyticsData);
       // downloadCSV(csvData, `analytics-${Date.now()}.csv`);
     } catch (error) {
-      console.error('Failed to export analytics data:', error);
+      devLog.error('Failed to export analytics data:', error);
     }
   }, [state.analyticsData]);
 
