@@ -1313,7 +1313,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       return null;
     }
 
-    const currentMetric = data.length > 0 ? data[0].metric : '';
+    const currentMetric = data.length > 0 ? (data[0]?.metric ?? '') : '';
     const metricConfig = currentMetric ? METRIC_CONFIG[currentMetric as keyof typeof METRIC_CONFIG] : null;
 
     // Collect group stats for all groups
@@ -1369,7 +1369,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         count: groupDataCount || groupStats.count || groupStats.groupSize || 0,
         color: group.color || CHART_CONFIG.COLORS.SERIES[index % CHART_CONFIG.COLORS.SERIES.length]
       };
-    }).filter(Boolean);
+    }).filter((item): item is NonNullable<typeof item> => item !== null && item.stats !== undefined);
 
     // Format values based on metric type
     const formatValue = (value: number) => {

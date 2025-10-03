@@ -28,16 +28,6 @@ import type { AnalysisType, AnalyticsFilters } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
-/**
- * Toast notification object for multi-group mode transitions
- */
-interface MultiGroupToastNotification {
-  /** Whether the toast should be displayed */
-  show: boolean;
-  /** The message to display in the toast */
-  message: string;
-}
-
 interface BaseAnalyticsViewProps {
   // Required props
   title: string;
@@ -157,45 +147,10 @@ function BaseAnalyticsViewContent({
     }
   }, [state.error, onError]);
 
-  // Memoize toast notification conditions for performance
-  // Only depend on specific values rather than entire objects
-  const additionalMetricsCount = state.previousMetrics?.additional.length ?? 0;
-  const previousTimeframeType = state.previousTimeframe?.type;
-
-  const toastNotification = useMemo<MultiGroupToastNotification>(() => {
-    const wasMultiGroup = previousAnalysisTypeRef.current === 'multi_group';
-    const isMultiGroup = state.analysisType === 'multi_group';
-    const hadAdditionalMetrics = additionalMetricsCount > 0;
-    const hadTrends = previousTimeframeType === 'trends';
-
-    const shouldShowToast = isMultiGroup && !wasMultiGroup && (hadAdditionalMetrics || hadTrends);
-
-    if (shouldShowToast) {
-      const changes: string[] = [];
-      if (hadAdditionalMetrics) changes.push('additional metrics cleared');
-      if (hadTrends) changes.push('timeframe changed to best values');
-
-      return {
-        show: true,
-        message: `${changes.join(' and ')} for fair comparison. Your previous settings will be restored when you exit multi-group mode.`
-      };
-    }
-
-    return { show: false, message: '' };
-  }, [state.analysisType, additionalMetricsCount, previousTimeframeType]);
-
-  // Notify user when switching to multi-group mode with state changes
+  // Track previous analysis type for mode switch detection
   useEffect(() => {
-    if (toastNotification.show) {
-      toast({
-        title: 'Multi-group mode activated',
-        description: toastNotification.message,
-        duration: 5000,
-      });
-    }
-
     previousAnalysisTypeRef.current = state.analysisType;
-  }, [toastNotification, state.analysisType, toast]);
+  }, [state.analysisType]);
 
   // Prepare athletes for selector
   const athletesForSelector = state.availableAthletes.map(athlete => ({

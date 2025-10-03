@@ -40,12 +40,6 @@ export interface AnalyticsState {
   selectedAthleteIds: string[];
   selectedDates: string[];
 
-  // State Preservation (for mode switching)
-  // Stores previous metrics/timeframe when entering multi-group mode
-  // Allows restoration when exiting multi-group mode
-  previousMetrics: MetricSelection | null;
-  previousTimeframe: TimeframeConfig | null;
-
   // Available Options
   availableTeams: Array<{ id: string; name: string }>;
   availableAthletes: Array<{
@@ -99,8 +93,6 @@ const getDefaultState = (organizationId: string = '', userId?: string): Analytic
   selectedAthlete: null,
   selectedAthleteIds: [],
   selectedDates: [],
-  previousMetrics: null,
-  previousTimeframe: null,
   availableTeams: [],
   availableAthletes: []
 });
@@ -123,19 +115,18 @@ const isExitingMultiGroup = (current: AnalysisType, next: AnalysisType): boolean
 
 /**
  * Handles state transitions when entering multi-group mode
- * Preserves current metrics/timeframe for restoration later
+ * Preserves compatible settings while clearing incompatible ones
  *
  * @param state - Current analytics state
  * @param nextType - The analysis type being transitioned to
- * @returns New state with preserved settings and multi-group constraints applied
+ * @returns New state with hybrid preservation/reset approach
  *
- * State preservation occurs when:
- * - Additional metrics exist (length > 0) - saved to previousMetrics
- * - Timeframe type is 'trends' - saved to previousTimeframe
- *
- * Restrictions applied:
- * - Additional metrics cleared (single metric required for fair comparison)
- * - Timeframe forced to 'best' if currently 'trends' (trends not supported)
+ * Preservation logic:
+ * - Preserves: primary metric, chart type, timeframe (unless 'trends')
+ * - Preserves compatible filters: organizationId, genders, birthYearFrom, birthYearTo
+ * - Clears incompatible filters: athleteIds, teams (multi-group uses group selection)
+ * - Clears additional metrics (multi-group only supports 1 metric)
+ * - Resets 'trends' timeframe to 'best/all_time' (trends not supported in multi-group)
  */
 const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
   return {
@@ -167,27 +158,23 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
     // Preserve chart type if compatible, otherwise default to box_swarm_combo
     selectedChartType: state.selectedChartType,
     showAllCharts: false,
-    // Clear saved state
-    previousMetrics: null,
-    previousTimeframe: null,
   };
 };
 
 /**
  * Handles state transitions when exiting multi-group mode
- * Preserves compatible settings while resetting incompatible ones
+ * Preserves all current settings (no state restoration from previous mode)
  *
  * @param state - Current analytics state
  * @param nextType - The analysis type being transitioned to
- * @returns New state with preserved compatible settings
+ * @returns New state with all filters and settings preserved
  *
  * Preservation logic:
- * - Preserves primary metric and timeframe (compatible across all modes)
- * - Clears additional metrics array (was empty in multi-group anyway)
- * - Resets athlete selections (different selection model)
- * - Preserves chart type
- * - Preserves organizationId filter
- * - Clears analytics data and errors
+ * - Preserves all filters (organizationId, genders, birthYear ranges, etc.)
+ * - Preserves primary metric (additional metrics already empty in multi-group)
+ * - Preserves timeframe and chart type
+ * - Resets athlete selections (different selection model between modes)
+ * - Clears analytics data (will be refetched for new mode)
  */
 const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): AnalyticsState => {
   return {
@@ -212,9 +199,6 @@ const handleExitMultiGroup = (state: AnalyticsState, nextType: AnalysisType): An
     // Preserve chart type
     selectedChartType: state.selectedChartType,
     showAllCharts: false,
-    // Clear saved state
-    previousMetrics: null,
-    previousTimeframe: null,
   };
 };
 
@@ -242,9 +226,6 @@ const handleNormalTypeChange = (state: AnalyticsState, nextType: AnalysisType): 
   // Preserve chart settings
   selectedChartType: state.selectedChartType,
   showAllCharts: state.showAllCharts,
-  // Clear saved state
-  previousMetrics: null,
-  previousTimeframe: null,
 });
 
 // Analytics Reducer

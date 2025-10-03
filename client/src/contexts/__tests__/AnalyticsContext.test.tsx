@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { AnalyticsState, AnalysisType, AnalyticsFilters, MetricSelection, TimeframeConfig } from '@shared/analytics-types';
+import type { AnalysisType, AnalyticsFilters, MetricSelection, TimeframeConfig } from '@shared/analytics-types';
+import type { AnalyticsState } from '../AnalyticsContext';
 
 // Mock the state transition handlers (these are internal to AnalyticsContext)
 // We'll test the logic directly by simulating the reducer behavior
@@ -40,8 +41,6 @@ function simulateEnterMultiGroup(state: AnalyticsState, nextType: AnalysisType):
       : state.timeframe,
     selectedChartType: state.selectedChartType,
     showAllCharts: false,
-    previousMetrics: null,
-    previousTimeframe: null,
   };
 }
 
@@ -68,8 +67,6 @@ function simulateExitMultiGroup(state: AnalyticsState, nextType: AnalysisType): 
     timeframe: state.timeframe,
     selectedChartType: state.selectedChartType,
     showAllCharts: false,
-    previousMetrics: null,
-    previousTimeframe: null,
   };
 }
 
@@ -93,8 +90,6 @@ function simulateNormalTypeChange(state: AnalyticsState, nextType: AnalysisType)
     timeframe: state.timeframe,
     selectedChartType: state.selectedChartType,
     showAllCharts: state.showAllCharts,
-    previousMetrics: null,
-    previousTimeframe: null,
   };
 }
 
@@ -121,8 +116,6 @@ describe('AnalyticsContext State Transitions', () => {
     },
     selectedChartType: 'box_swarm_combo',
     showAllCharts: false,
-    previousMetrics: null,
-    previousTimeframe: null,
     ...overrides,
   });
 
