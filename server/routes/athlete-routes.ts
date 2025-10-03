@@ -284,29 +284,29 @@ export function registerAthleteRoutes(app: Express) {
       
       // Non-site admins must have org admin role and access to the athlete
       if (!userIsSiteAdmin) {
-        const [userOrgs, athleteTeams] = await Promise.all([
+        const [userOrgs, athleteOrgs] = await Promise.all([
           storage.getUserOrganizations(currentUser.id),
-          storage.getUserTeams(athleteId)
+          storage.getUserOrganizations(athleteId)
         ]);
 
         if (userOrgs.length === 0) {
           return res.status(403).json({ message: "No organization access" });
         }
 
-        // Only org admins can delete athletes
-        const hasOrgAdminRole = userOrgs.some(org => org.role === 'org_admin');
-
-        if (!hasOrgAdminRole) {
-          return res.status(403).json({ message: "Organization admin role required to delete athletes" });
-        }
-
         // Check if athlete is in user's organization
-        const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+        const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
         const userOrgIds = userOrgs.map(org => org.organizationId);
         const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
 
         if (!hasSharedOrg) {
           return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+        }
+
+        // Then check if user has org admin role
+        const hasOrgAdminRole = userOrgs.some(org => org.role === 'org_admin');
+
+        if (!hasOrgAdminRole) {
+          return res.status(403).json({ message: "Organization admin role required to delete athletes" });
         }
       }
       
