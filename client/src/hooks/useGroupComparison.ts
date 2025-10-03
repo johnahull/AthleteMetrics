@@ -259,7 +259,14 @@ export function useGroupComparison({
 
   // Extract recommended charts from the fetched data
   const recommendedCharts = useMemo(() => {
-    return measurementData?.meta?.recommendedCharts || null;
+    const charts = measurementData?.meta?.recommendedCharts || null;
+    devLog.log('useGroupComparison recommendedCharts:', {
+      hasData: !!measurementData,
+      hasMeta: !!measurementData?.meta,
+      charts,
+      fullMeta: measurementData?.meta
+    });
+    return charts;
   }, [measurementData]);
 
   return {

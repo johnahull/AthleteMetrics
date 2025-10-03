@@ -133,7 +133,8 @@ function BaseAnalyticsViewContent({
       name: athlete.name,
       team: athlete.teamName
     })),
-    analyticsData: state.analyticsData,
+    // Don't pass analytics data when in multi-group mode - let it fetch with correct analysisType
+    analyticsData: state.analysisType === 'multi_group' ? undefined : state.analyticsData,
     isMainAnalyticsLoading: state.isLoading
   });
 
@@ -412,11 +413,23 @@ function BaseAnalyticsViewContent({
             {customToolbar || (
               <AnalyticsToolbar
                 selectedChartType={state.selectedChartType}
-                availableChartTypes={
-                  state.analysisType === 'multi_group' && selectedGroups.length >= 2 && groupRecommendedCharts
+                availableChartTypes={(() => {
+                  const inMultiGroupMode = state.analysisType === 'multi_group' && selectedGroups.length >= 2;
+                  const charts = inMultiGroupMode && groupRecommendedCharts
                     ? groupRecommendedCharts
-                    : state.analyticsData?.meta?.recommendedCharts || [state.selectedChartType]
-                }
+                    : state.analyticsData?.meta?.recommendedCharts || [state.selectedChartType];
+
+                  devLog.log('Chart type selection:', {
+                    analysisType: state.analysisType,
+                    selectedGroupsCount: selectedGroups.length,
+                    inMultiGroupMode,
+                    groupRecommendedCharts,
+                    mainRecommendedCharts: state.analyticsData?.meta?.recommendedCharts,
+                    selectedCharts: charts
+                  });
+
+                  return charts;
+                })()}
                 onChartTypeChange={setChartType}
                 formatChartTypeName={formatChartTypeName}
                 showAllCharts={state.showAllCharts}
