@@ -234,11 +234,12 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Access denied to this organization");
       }
 
-      // Check if username already exists (provide user-friendly error)
+      // Check if username already exists
+      // Note: Using generic error to prevent username enumeration attacks
       if (userData.username) {
         const existingUser = await this.storage.getUserByUsername(userData.username);
         if (existingUser) {
-          throw new Error("Username already exists. Please choose a different username.");
+          throw new Error("Unable to create user. Please check your input and try again.");
         }
       }
 

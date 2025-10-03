@@ -70,6 +70,12 @@ export async function requireAthleteAccessPermission(
       return res.status(401).json({ message: "User not authenticated" });
     }
 
+    // Validate athleteId format (UUID v4 format)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!athleteId || !uuidRegex.test(athleteId)) {
+      return res.status(400).json({ message: "Invalid athlete ID format" });
+    }
+
     const userIsSiteAdmin = currentUser.isSiteAdmin === true;
 
     // Site admins can access any athlete
@@ -95,6 +101,11 @@ export async function requireAthleteAccessPermission(
       return res.status(403).json({
         message: "Organization admin or coach role required"
       });
+    }
+
+    // Check if athlete exists (athleteOrgs will be empty if user doesn't exist)
+    if (athleteOrgs.length === 0) {
+      return res.status(404).json({ message: "Athlete not found" });
     }
 
     // Check if athlete is in user's organization

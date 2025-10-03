@@ -140,13 +140,14 @@ export default function Athletes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      // Invalidate invitations - endpoint filters by user's organizations
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
       if (effectiveOrganizationId) {
         queryClient.invalidateQueries({ queryKey: [`/api/organizations/${effectiveOrganizationId}/profile`] });
       }
       toast({
         title: "Success",
-        description: "User deleted successfully",
+        description: "Athlete deleted successfully",
       });
     },
     onError: (error: Error) => {

@@ -22,7 +22,7 @@ const createLimiter = rateLimit({
 // Stricter rate limiting for user deletion operations
 const userDeleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 20, // Limit each IP to 20 user deletion requests per windowMs
+  limit: 10, // Limit each IP to 10 user deletion requests per windowMs (conservative for safety)
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,

@@ -30,7 +30,7 @@ const athleteLimiter = rateLimit({
 // Stricter rate limiting for delete operations
 const athleteDeleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 20, // Limit each IP to 20 delete requests per windowMs
+  limit: 10, // Limit each IP to 10 delete requests per windowMs (conservative for safety)
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
