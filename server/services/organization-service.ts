@@ -167,6 +167,10 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Access denied to this organization");
       }
 
+      // Get target user's roles (reused below to avoid duplicate queries)
+      const targetUserRoles = await this.storage.getUserRoles(userId, organizationId);
+      const targetUserRole = targetUserRoles[0];
+
       // Check hierarchical permissions (unless site admin)
       if (!isSiteAdmin) {
         const requestingUserRoles = await this.storage.getUserRoles(requestingUserId, organizationId);
@@ -178,10 +182,6 @@ export class OrganizationService extends BaseService {
         if (!isOrgAdmin && !isCoach) {
           throw new Error("Access denied. Only coaches and organization admins can delete users.");
         }
-
-        // Check what role the target user has
-        const targetUserRoles = await this.storage.getUserRoles(userId, organizationId);
-        const targetUserRole = targetUserRoles[0];
 
         // Coaches can only delete athletes
         if (isCoach && targetUserRole !== "athlete") {
@@ -195,7 +195,7 @@ export class OrganizationService extends BaseService {
       }
 
       // Prevent removing self if it's the last admin
-      if (userId === requestingUserId) {
+      if (userId === requestingUserId && targetUserRole === 'org_admin') {
         const orgUsers = await this.storage.getOrganizationUsers(organizationId);
         const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
         if (adminCount <= 1) {
@@ -204,8 +204,7 @@ export class OrganizationService extends BaseService {
       }
 
       // If trying to delete an org admin, ensure it's not the last one
-      const targetUserRoles = await this.storage.getUserRoles(userId, organizationId);
-      if (targetUserRoles.includes("org_admin")) {
+      if (targetUserRole === "org_admin") {
         const orgUsers = await this.storage.getOrganizationUsers(organizationId);
         const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
         if (adminCount <= 1) {
