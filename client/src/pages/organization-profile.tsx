@@ -146,10 +146,24 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       toast({ title: "Success", description: "User created successfully" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to create user",
-        variant: "destructive" 
+      // Sanitize error messages to avoid exposing internal details
+      let userMessage = "Failed to create user. Please try again.";
+
+      if (error.message?.toLowerCase().includes('unique') ||
+          error.message?.toLowerCase().includes('already exists')) {
+        userMessage = "Username already exists. Please choose a different username.";
+      } else if (error.message?.toLowerCase().includes('validation') ||
+                 error.message?.toLowerCase().includes('invalid')) {
+        userMessage = "Invalid input. Please check your entries and try again.";
+      } else if (error.message?.toLowerCase().includes('permission') ||
+                 error.message?.toLowerCase().includes('unauthorized')) {
+        userMessage = "You don't have permission to perform this action.";
+      }
+
+      toast({
+        title: "Error",
+        description: userMessage,
+        variant: "destructive"
       });
     },
   });
@@ -187,10 +201,23 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       toast({ title: "Success", description: "Invitation sent successfully" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to send invitation",
-        variant: "destructive" 
+      // Sanitize error messages to avoid exposing internal details
+      let userMessage = "Failed to send invitation. Please try again.";
+
+      if (error.message?.toLowerCase().includes('already') ||
+          error.message?.toLowerCase().includes('exists')) {
+        userMessage = "An invitation for this email already exists or user already registered.";
+      } else if (error.message?.toLowerCase().includes('invalid email')) {
+        userMessage = "Invalid email address. Please check and try again.";
+      } else if (error.message?.toLowerCase().includes('permission') ||
+                 error.message?.toLowerCase().includes('unauthorized')) {
+        userMessage = "You don't have permission to send invitations.";
+      }
+
+      toast({
+        title: "Error",
+        description: userMessage,
+        variant: "destructive"
       });
     },
   });
@@ -272,7 +299,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                         <Input {...field} data-testid="input-username" placeholder="Enter unique username" />
                       </FormControl>
                       <p className="text-xs text-gray-500">
-                        Username must be unique and can contain letters, numbers, periods, hyphens, and underscores
+                        Username must be unique and can contain letters, numbers, hyphens, and underscores
                       </p>
                       <FormMessage />
                     </FormItem>

@@ -7,6 +7,10 @@ import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertUserSchema, insertAthleteSchema } from "@shared/schema";
+import {
+  requireAthleteManagementPermission,
+  requireAthleteAccessPermission
+} from "../middleware/athlete-permissions";
 // Session types are loaded globally
 
 // Helper function to check if user is site admin
@@ -166,34 +170,8 @@ export function registerAthleteRoutes(app: Express) {
   /**
    * Create athlete (org admins and coaches can create within their organization)
    */
-  app.post("/api/athletes", athleteLimiter, requireAuth, async (req, res) => {
+  app.post("/api/athletes", athleteLimiter, requireAuth, requireAthleteManagementPermission, async (req, res) => {
     try {
-      const currentUser = req.session.user;
-      
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
-      
-      // Non-site admins must have org admin or coach role
-      if (!userIsSiteAdmin) {
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        
-        if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "No organization access" });
-        }
-
-        // Check if user has appropriate role in any organization
-        const hasPermission = userOrgs.some(org => 
-          org.role === 'org_admin' || org.role === 'coach'
-        );
-
-        if (!hasPermission) {
-          return res.status(403).json({ message: "Organization admin or coach role required to create athletes" });
-        }
-      }
-
       // Validate request body using Zod schema
       const validatedData = insertAthleteSchema.parse(req.body);
       const athlete = await storage.createAthlete(validatedData);
@@ -211,51 +189,14 @@ export function registerAthleteRoutes(app: Express) {
   /**
    * Update athlete (org admins and coaches can update athletes in their organization)
    */
-  app.put("/api/athletes/:id", athleteLimiter, requireAuth, async (req, res) => {
+  app.put("/api/athletes/:id", athleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
     try {
       const athleteId = req.params.id;
-      const currentUser = req.session.user;
-      
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
 
-      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
-      
-      // Non-site admins must have org admin or coach role and access to the athlete
-      if (!userIsSiteAdmin) {
-        const [userOrgs, athleteOrgs] = await Promise.all([
-          storage.getUserOrganizations(currentUser.id),
-          storage.getUserOrganizations(athleteId)
-        ]);
-
-        if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "No organization access" });
-        }
-
-        // Check if user has appropriate role
-        const hasRole = userOrgs.some(org =>
-          org.role === 'org_admin' || org.role === 'coach'
-        );
-
-        if (!hasRole) {
-          return res.status(403).json({ message: "Organization admin or coach role required" });
-        }
-
-        // Check if athlete is in user's organization
-        const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
-        const userOrgIds = userOrgs.map(org => org.organizationId);
-        const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
-
-        if (!hasSharedOrg) {
-          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
-        }
-      }
-      
       // Validate request body using partial schema (for updates)
       const updateSchema = insertAthleteSchema.partial();
       const validatedData = updateSchema.parse(req.body);
-      
+
       const updatedAthlete = await storage.updateAthlete(athleteId, validatedData);
       res.json(updatedAthlete);
     } catch (error) {
