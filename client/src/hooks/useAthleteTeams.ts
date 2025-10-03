@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { getAthleteUserId } from '@/lib/athlete-utils';
+import { getCacheConfig } from '@/lib/query-cache-config';
 
 export interface AthleteTeam {
   id: string;
@@ -70,8 +71,7 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
       return [];
     },
     enabled: Boolean(athleteUserId),
-    staleTime: 5 * 60 * 1000, // 5 minutes - teams don't change frequently
-    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after last use
+    ...getCacheConfig('TEAMS'), // Teams don't change frequently
     retry: 2, // Retry failed requests twice
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });

@@ -7,6 +7,7 @@ import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
+import { getCacheConfig } from "@/lib/query-cache-config";
 
 export default function Dashboard() {
   const { user, organizationContext, userOrganizations } = useAuth();
@@ -30,6 +31,7 @@ export default function Dashboard() {
 
   const { data: dashboardStats, isLoading, error } = useQuery({
     queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, user?.isSiteAdmin],
+    ...getCacheConfig('DASHBOARD'),
     queryFn: async () => {
       // Organization selection is required for all users
       if (!effectiveOrganizationId) {
@@ -51,6 +53,7 @@ export default function Dashboard() {
 
   const { data: recentMeasurements } = useQuery({
     queryKey: ["/api/measurements", effectiveOrganizationId],
+    ...getCacheConfig('MEASUREMENTS'),
     queryFn: async () => {
       const url = effectiveOrganizationId
         ? `/api/measurements?organizationId=${effectiveOrganizationId}`
@@ -70,6 +73,7 @@ export default function Dashboard() {
   // Get organization name for context indicator
   const { data: currentOrganization } = useQuery({
     queryKey: [`/api/organizations/${effectiveOrganizationId}`],
+    ...getCacheConfig('ORGANIZATIONS'),
     enabled: !!effectiveOrganizationId && !!user,
     queryFn: async () => {
       const response = await fetch(`/api/organizations/${effectiveOrganizationId}`, {
@@ -85,6 +89,7 @@ export default function Dashboard() {
 
   const { data: teamStats } = useQuery({
     queryKey: ["/api/analytics/teams", effectiveOrganizationId],
+    ...getCacheConfig('TEAMS'),
     queryFn: async () => {
       const url = effectiveOrganizationId
         ? `/api/analytics/teams?organizationId=${effectiveOrganizationId}`

@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { getCacheConfig } from '@/lib/query-cache-config';
 import type {
   GroupDefinition,
   GroupComparisonData,
@@ -79,6 +80,7 @@ export function useGroupComparison({
   // Fetch measurement data for all athletes (only if analytics data not provided)
   const { data: fetchedData, isLoading, error } = useQuery({
     queryKey: ['group-measurements', organizationId, metrics],
+    ...getCacheConfig('MEASUREMENTS'),
     queryFn: async () => {
       // Reuse the main analytics API instead of separate measurements API
       // This avoids CSRF token conflicts

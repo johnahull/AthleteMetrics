@@ -5,6 +5,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useCallback } from 'react';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { CACHE_DURATIONS, GC_TIMES } from '@/lib/query-cache-config';
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -43,8 +44,8 @@ const getAnalyticsQueryKey = (request: AnalyticsRequest): [string, string] => {
 export function useAnalyticsData({
   request,
   enabled = true,
-  staleTime = 5 * 60 * 1000, // 5 minutes
-  gcTime = 10 * 60 * 1000, // 10 minutes
+  staleTime = CACHE_DURATIONS.ANALYTICS,
+  gcTime = GC_TIMES.ANALYTICS,
 }: UseAnalyticsDataOptions) {
   const queryClient = useQueryClient();
 

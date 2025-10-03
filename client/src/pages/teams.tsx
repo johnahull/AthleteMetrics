@@ -15,6 +15,7 @@ import ArchiveTeamModal from "@/components/archive-team-modal";
 import TeamAthletesModal from "@/components/TeamAthletesModal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { useAuth } from "@/lib/auth";
+import { getCacheConfig } from "@/lib/query-cache-config";
 import type { Team, ArchiveTeam } from "@shared/schema";
 
 export default function Teams() {
@@ -42,8 +43,9 @@ export default function Teams() {
 
   const { data: teams, isLoading } = useQuery({
     queryKey: ["/api/teams", effectiveOrganizationId],
+    ...getCacheConfig('TEAMS'),
     queryFn: async () => {
-      const url = effectiveOrganizationId 
+      const url = effectiveOrganizationId
         ? `/api/teams?organizationId=${effectiveOrganizationId}`
         : `/api/teams`;
       const response = await fetch(url);
@@ -53,8 +55,9 @@ export default function Teams() {
 
   const { data: teamStats } = useQuery({
     queryKey: ["/api/analytics/teams", effectiveOrganizationId],
+    ...getCacheConfig('TEAMS'),
     queryFn: async () => {
-      const url = effectiveOrganizationId 
+      const url = effectiveOrganizationId
         ? `/api/analytics/teams?organizationId=${effectiveOrganizationId}`
         : `/api/analytics/teams`;
       const response = await fetch(url);
