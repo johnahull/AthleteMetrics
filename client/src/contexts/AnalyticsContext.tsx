@@ -168,6 +168,8 @@ const handleEnterMultiGroup = (state: AnalyticsState, nextType: AnalysisType): A
     timeframe: state.timeframe.type === 'trends'
       ? { ...state.timeframe, type: 'best' }
       : state.timeframe,
+    // Clear analytics data to force refetch with multi-group analysis type
+    analyticsData: null,
   };
 };
 

@@ -15,7 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
-import { devLog } from '@/utils/dev-logger';
 import { getGroupColor as getChartGroupColor, sanitizeColor, DEFAULT_GROUP_COLOR } from '@/utils/chart-colors';
 
 /**
@@ -224,8 +223,6 @@ export function GroupSelector({
   function getGroupColor(index: number): string {
     return getChartGroupColor(index);
   }
-
-  devLog.log('GroupSelector', { selectedGroups, uniqueTeams, ageRanges });
 
   return (
     <div className={className}>
