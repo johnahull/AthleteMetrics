@@ -3447,6 +3447,79 @@ export async function registerRoutes(app: Express) {
   });
 
   // Import routes
+
+  // Parse CSV and return headers with suggested mappings
+  app.post("/api/import/parse-csv", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
+    try {
+      const { type } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // Parse CSV headers
+      const csvText = file.buffer.toString('utf-8');
+      const lines = csvText.split('\n').filter(line => line.trim());
+
+      if (lines.length === 0) {
+        return res.status(400).json({ message: "CSV file is empty" });
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+      // Parse first 20 rows for preview
+      const rows: any[] = [];
+      const maxPreviewRows = Math.min(20, lines.length - 1);
+
+      for (let i = 1; i <= maxPreviewRows; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        rows.push(row);
+      }
+
+      // Auto-detect column mappings
+      const systemFields = type === 'athletes'
+        ? ['firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear', 'gender', 'emails', 'phoneNumbers', 'sports', 'height', 'weight', 'school', 'teamName']
+        : ['firstName', 'lastName', 'teamName', 'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes', 'gender'];
+
+      const suggestedMappings: any[] = [];
+
+      // Simple auto-detection based on column name similarity
+      headers.forEach(csvColumn => {
+        const normalized = csvColumn.toLowerCase().replace(/[\s_-]/g, '');
+
+        for (const systemField of systemFields) {
+          const normalizedSystem = systemField.toLowerCase().replace(/[\s_-]/g, '');
+
+          if (normalized === normalizedSystem ||
+              normalized.includes(normalizedSystem) ||
+              normalizedSystem.includes(normalized)) {
+            suggestedMappings.push({
+              csvColumn,
+              systemField,
+              isRequired: ['firstName', 'lastName', 'date', 'metric', 'value'].includes(systemField),
+              autoDetected: true
+            });
+            break;
+          }
+        }
+      });
+
+      res.json({
+        headers,
+        rows,
+        suggestedMappings
+      });
+    } catch (error) {
+      console.error('CSV parse error:', error);
+      res.status(500).json({ message: "Failed to parse CSV", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
     try {
       const { type } = req.params;

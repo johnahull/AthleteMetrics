@@ -72,6 +72,35 @@ export interface ImportConfirmation {
   previewData: any[];
 }
 
+export interface ColumnMapping {
+  csvColumn: string;
+  systemField: string;
+  isRequired: boolean;
+  autoDetected: boolean;
+}
+
+export interface CSVParseResult {
+  headers: string[];
+  rows: any[];
+  suggestedMappings: ColumnMapping[];
+}
+
+export interface ValidationResult {
+  rowIndex: number;
+  field: string;
+  status: 'valid' | 'warning' | 'error';
+  message?: string;
+}
+
+export interface PreviewRow {
+  rowIndex: number;
+  data: Record<string, any>;
+  validations: ValidationResult[];
+  matchStatus?: 'will_create' | 'will_match' | 'duplicate' | 'error';
+  matchedAthleteId?: string;
+  matchedAthleteName?: string;
+}
+
 export interface ImportResult {
   type: 'athletes' | 'measurements';
   totalRows: number;
