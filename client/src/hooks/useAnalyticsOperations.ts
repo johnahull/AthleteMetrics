@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useAnalyticsContext, useAnalyticsActions } from '@/contexts/AnalyticsContext';
 import { getRecommendedChartType } from '@/components/charts/ChartContainer';
+import { devLog } from '@/utils/dev-logger';
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -61,7 +62,7 @@ export function useAnalyticsDataLoader() {
 
     try {
       setLoading(true);
-      console.log('Loading initial data for organization:', effectiveOrganizationId);
+      devLog.log('Loading initial data for organization:', effectiveOrganizationId);
 
       // Load teams and athletes in parallel
       const [teamsResponse, athletesResponse] = await Promise.all([
@@ -162,8 +163,8 @@ export function useAnalyticsDataFetcher() {
       }
 
       const data: AnalyticsResponse = await response.json();
-      
-      console.log('Analytics data received:', {
+
+      devLog.log('Analytics data received:', {
         hasData: !!data.data,
         dataLength: data.data?.length || 0,
         hasTrends: !!data.trends,
@@ -176,7 +177,7 @@ export function useAnalyticsDataFetcher() {
         totalAthletes: data.meta?.totalAthletes || 0,
         totalMeasurements: data.meta?.totalMeasurements || 0
       });
-      
+
       setAnalyticsData(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch analytics data';
@@ -308,14 +309,14 @@ export function useAnalyticsExport() {
 
   const handleExport = useCallback(async () => {
     if (!state.analyticsData) {
-      console.warn('No analytics data to export');
+      devLog.warn('No analytics data to export');
       return;
     }
 
     try {
       // TODO: Implement actual export logic
       // This could export to CSV, PDF, or other formats
-      console.log('Exporting analytics data:', state.analyticsData);
+      devLog.log('Exporting analytics data:', state.analyticsData);
 
       // Example CSV export implementation:
       // const csvData = convertAnalyticsDataToCSV(state.analyticsData);

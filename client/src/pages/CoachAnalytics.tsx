@@ -31,29 +31,6 @@ export function CoachAnalytics() {
     enabled: !!user
   });
 
-  const organizationId = userOrgs?.[0]?.organizationId;
-
-  const { data: organization, isLoading: orgLoading } = useQuery({
-    queryKey: [`/api/organizations/${organizationId}`],
-    enabled: !!organizationId
-  });
-
-  // Handle case where user has no organization
-  if (!orgsLoading && (!userOrgs || userOrgs.length === 0)) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>No Organization Found</CardTitle>
-            <CardDescription>
-              You are not associated with any organization. Please contact your administrator.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
 
   // Header actions for coach-specific navigation
   // Note: Refresh and Export buttons are provided by AnalyticsToolbar
@@ -97,8 +74,8 @@ export function CoachAnalytics() {
     return <div className="p-6">Loading...</div>;
   }
 
-  // Show loading state while organization context is being established
-  if (!organizationContext) {
+  // Show loading state while data is being fetched
+  if (orgsLoading) {
     return (
       <div className="p-6">
         <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -109,11 +86,28 @@ export function CoachAnalytics() {
     );
   }
 
+  // Check organizationContext first (from auth), then fall back to userOrgs
+  // Only show error if BOTH are missing
+  if (!organizationContext && (!userOrgs || !Array.isArray(userOrgs) || userOrgs.length === 0)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>No Organization Found</CardTitle>
+            <CardDescription>
+              You are not associated with any organization. Please contact your administrator.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <BaseAnalyticsView
       title="Team Analytics Dashboard"
       description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
-      organizationId={organizationContext}
+      organizationId={organizationContext || undefined}
       defaultAnalysisType="intra_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}
       requireRole={['coach', 'org_admin', 'site_admin']}
