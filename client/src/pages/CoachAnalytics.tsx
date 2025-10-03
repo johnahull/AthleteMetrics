@@ -7,7 +7,6 @@ import React from 'react';
 import { BaseAnalyticsView } from '@/components/analytics/BaseAnalyticsView';
 import { Button } from '@/components/ui/button';
 import { Users, BarChart3, Trophy } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 import { useAuth } from '@/lib/auth';
@@ -15,27 +14,17 @@ import { devLog } from '@/utils/dev-logger';
 
 export function CoachAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations, isLoading } = useAuth();
 
   // Debug organization context
   React.useEffect(() => {
     devLog.log('CoachAnalytics - User context:', {
       userId: user?.id,
       currentOrganization: user?.currentOrganization,
-      organizationContext: user?.currentOrganization?.id
+      organizationContext: user?.currentOrganization?.id,
+      userOrganizations
     });
-  }, [user]);
-
-  const { data: userOrgs, isLoading: orgsLoading } = useQuery({
-    queryKey: ['/api/auth/me/organizations'],
-    queryFn: async () => {
-      const res = await fetch('/api/auth/me/organizations', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch organizations');
-      return res.json();
-    },
-    enabled: !!user,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
+  }, [user, userOrganizations]);
 
 
   // Header actions for coach-specific navigation
@@ -76,12 +65,8 @@ export function CoachAnalytics() {
   );
 
   // Conditional rendering AFTER all hooks - prevents hooks order violations
-  if (!user) {
-    return <div className="p-6">Loading...</div>;
-  }
-
-  // Show loading state while data is being fetched
-  if (orgsLoading) {
+  // Show loading state while auth is being established
+  if (isLoading) {
     return (
       <div className="p-6">
         <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -92,9 +77,14 @@ export function CoachAnalytics() {
     );
   }
 
-  // Check organizationContext first (from auth), then fall back to userOrgs
+  // Check if user is authenticated
+  if (!user) {
+    return <div className="p-6">Please log in to access analytics.</div>;
+  }
+
+  // Check organizationContext first (from auth), then fall back to userOrganizations
   // Only show error if BOTH are missing
-  if (!organizationContext && (!userOrgs || !Array.isArray(userOrgs) || userOrgs.length === 0)) {
+  if (!organizationContext && (!userOrganizations || !Array.isArray(userOrganizations) || userOrganizations.length === 0)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Card className="w-full max-w-md">
@@ -110,7 +100,7 @@ export function CoachAnalytics() {
   }
 
   // Determine the effective organization ID
-  const effectiveOrganizationId = organizationContext || (userOrgs?.[0]?.organizationId) || undefined;
+  const effectiveOrganizationId = organizationContext || (userOrganizations?.[0]?.organizationId) || undefined;
 
   return (
     <BaseAnalyticsView
