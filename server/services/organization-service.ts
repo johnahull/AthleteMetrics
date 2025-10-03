@@ -132,9 +132,14 @@ export class OrganizationService extends BaseService {
       const users = await this.storage.getOrganizationUsers(organizationId);
       const invitations = await this.storage.getOrganizationInvitations(organizationId);
 
+      // Categorize users into coaches (org_admin/coach) and athletes
+      const coaches = users.filter(u => u.role === 'org_admin' || u.role === 'coach');
+      const athletes = users.filter(u => u.role === 'athlete');
+
       return {
         organization,
-        users,
+        coaches,
+        athletes,
         invitations
       };
     } catch (error) {
@@ -190,8 +195,10 @@ export class OrganizationService extends BaseService {
       }
 
       // Create user and add to organization
+      // Handle both 'role' (string) and 'roles' (array) from frontend
+      const role = userData.role || userData.roles?.[0] || 'athlete';
       const user = await this.storage.createUser(userData);
-      await this.storage.addUserToOrganization(user.id, organizationId, userData.role || 'athlete');
+      await this.storage.addUserToOrganization(user.id, organizationId, role);
 
       return user;
     } catch (error) {
