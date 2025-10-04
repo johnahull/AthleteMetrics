@@ -45,8 +45,10 @@ export default function ImportExport() {
   const [importMode, setImportMode] = useState<"match" | "create">("match");
   const [selectedTeamId, setSelectedTeamId] = useState("");
 
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [importResults, setImportResults] = useState<any>(null);
+  const [batchResults, setBatchResults] = useState<Map<string, any>>(new Map());
+  const [processingProgress, setProcessingProgress] = useState<{ current: number; total: number } | null>(null);
   const [previewData, setPreviewData] = useState<ImportPreview | null>(null);
   const [showTeamConfirmDialog, setShowTeamConfirmDialog] = useState(false);
   const [selectedOrgForTeams, setSelectedOrgForTeams] = useState("");
@@ -298,7 +300,8 @@ export default function ImportExport() {
   };
 
   const executeImport = (previewDataToUse?: any) => {
-    if (!uploadFile) return;
+    if (uploadFiles.length === 0) return;
+    const uploadFile = uploadFiles[0]; // For single file imports with preview
 
     const options = buildImportOptions();
 
@@ -320,22 +323,105 @@ export default function ImportExport() {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploadFile(file);
+    const fileList = e.target.files;
+    if (fileList && fileList.length > 0) {
+      const files = Array.from(fileList).filter(f =>
+        f.name.endsWith('.csv') || f.name.endsWith('.xlsx')
+      );
+      setUploadFiles(files);
       setImportResults(null);
+      setBatchResults(new Map());
     }
   };
 
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const fileList = event.dataTransfer.files;
+    if (fileList && fileList.length > 0) {
+      const files = Array.from(fileList).filter(f =>
+        f.name.endsWith('.csv') || f.name.endsWith('.xlsx')
+      );
+      setUploadFiles(files);
+      setImportResults(null);
+      setBatchResults(new Map());
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+  };
+
+  const removeFile = (index: number) => {
+    setUploadFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAllFiles = () => {
+    setUploadFiles([]);
+    setImportResults(null);
+    setBatchResults(new Map());
+  };
+
+  const processBatch = async () => {
+    if (uploadFiles.length === 0) return;
+
+    const results = new Map<string, any>();
+    setProcessingProgress({ current: 0, total: uploadFiles.length });
+
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const file = uploadFiles[i];
+      setProcessingProgress({ current: i + 1, total: uploadFiles.length });
+
+      try {
+        const options = buildImportOptions();
+        const result = await importMutation.mutateAsync({
+          file,
+          type: importType,
+          mode: importMode,
+          teamId: selectedTeamId,
+          options
+        });
+        results.set(file.name, { success: true, data: result, file });
+      } catch (error) {
+        results.set(file.name, {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          file
+        });
+      }
+    }
+
+    setBatchResults(results);
+    setProcessingProgress(null);
+
+    // Show summary toast
+    const successCount = Array.from(results.values()).filter(r => r.success).length;
+    const failCount = results.size - successCount;
+
+    toast({
+      title: "Batch Import Complete",
+      description: `${successCount} file${successCount !== 1 ? 's' : ''} imported successfully${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      variant: failCount > 0 ? "destructive" : "default",
+    });
+  };
+
   const handleImport = () => {
-    if (!uploadFile) {
+    if (uploadFiles.length === 0) {
       toast({
         title: "Error",
-        description: "Please select a file to import",
+        description: "Please select at least one file to import",
         variant: "destructive",
       });
       return;
     }
+
+    // If multiple files, process as batch
+    if (uploadFiles.length > 1) {
+      processBatch();
+      return;
+    }
+
+    // Single file - use existing flow
+    const uploadFile = uploadFiles[0];
 
     // If column mapping is enabled, start with CSV parsing
     if (useColumnMapping) {
@@ -383,11 +469,13 @@ export default function ImportExport() {
 
   const handlePreviewConfirm = () => {
     setShowPreviewDialog(false);
+    if (uploadFiles.length === 0) return;
+    const uploadFile = uploadFiles[0];
 
     // Check for missing teams if in create mode
     if (importType === "athletes" && importMode === "create") {
       previewMutation.mutate({
-        file: uploadFile!,
+        file: uploadFile,
         type: importType,
       });
     } else {
@@ -402,7 +490,7 @@ export default function ImportExport() {
       }
 
       importMutation.mutate({
-        file: uploadFile!,
+        file: uploadFile,
         type: importType,
         mode: importMode,
         teamId: selectedTeamId,
@@ -487,19 +575,23 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                   </Select>
                 </div>
 
-                <div 
+                <div
                   className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer"
                   onClick={() => document.getElementById('file-upload')?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
                   data-testid="file-drop-zone"
                 >
                   <CloudUpload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 mb-2">
-                    {uploadFile ? uploadFile.name : `Drop your ${importType} CSV file here, or`}
+                    {uploadFiles.length > 0
+                      ? `${uploadFiles.length} file${uploadFiles.length !== 1 ? 's' : ''} selected`
+                      : `Drop your ${importType} CSV file(s) here, or`}
                   </p>
                   <Button variant="ghost" className="text-primary hover:text-blue-700 font-medium">
                     click to browse
                   </Button>
-                  <p className="text-xs text-gray-500 mt-2">Supports CSV and XLSX files</p>
+                  <p className="text-xs text-gray-500 mt-2">Supports CSV and XLSX files (multiple files supported)</p>
 
                   <Input
                     id="file-upload"
@@ -508,8 +600,49 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                     onChange={handleFileUpload}
                     className="hidden"
                     data-testid="input-file-upload"
+                    multiple
                   />
                 </div>
+
+                {/* File List */}
+                {uploadFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-sm font-medium text-gray-700">
+                        Selected Files ({uploadFiles.length})
+                      </h5>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFiles}
+                        className="text-red-600 hover:text-red-700 text-xs"
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-40 overflow-y-auto">
+                      {uploadFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 hover:bg-gray-50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFile(index);
+                            }}
+                            className="ml-2 text-gray-400 hover:text-red-600"
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4">
                   <Button
@@ -768,19 +901,137 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                     </div>
                   )}
 
-                  <Button 
+                  {/* Progress Indicator */}
+                  {processingProgress && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-between text-sm text-blue-800 mb-2">
+                        <span className="font-medium">
+                          Processing file {processingProgress.current} of {processingProgress.total}
+                        </span>
+                        <span className="text-xs">
+                          {Math.round((processingProgress.current / processingProgress.total) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${(processingProgress.current / processingProgress.total) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
                     onClick={handleImport}
-                    disabled={!uploadFile || importMutation.isPending}
+                    disabled={uploadFiles.length === 0 || importMutation.isPending || processingProgress !== null}
                     className="w-full"
                     data-testid="button-import"
                   >
-                    {importMutation.isPending ? "Importing..." : "Import Data"}
+                    {processingProgress
+                      ? `Processing ${processingProgress.current}/${processingProgress.total}...`
+                      : importMutation.isPending
+                      ? "Importing..."
+                      : `Import ${uploadFiles.length > 1 ? `${uploadFiles.length} Files` : 'Data'}`}
                   </Button>
                 </div>
               </div>
             </div>
 
-            {/* Import Results */}
+            {/* Batch Results - Multiple Files */}
+            {batchResults.size > 0 && (
+              <div className="mt-6 space-y-4">
+                {/* Summary */}
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h5 className="font-medium text-blue-900 mb-2">Batch Import Summary</h5>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-900">{batchResults.size}</p>
+                      <p className="text-blue-700">Total Files</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">
+                        {Array.from(batchResults.values()).filter(r => r.success).length}
+                      </p>
+                      <p className="text-blue-700">Successful</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-red-600">
+                        {Array.from(batchResults.values()).filter(r => !r.success).length}
+                      </p>
+                      <p className="text-blue-700">Failed</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual File Results */}
+                <div className="space-y-3">
+                  <h5 className="font-medium text-gray-900">File Results</h5>
+                  {Array.from(batchResults.entries()).map(([filename, result]) => (
+                    <details key={filename} className="border border-gray-200 rounded-lg">
+                      <summary className="cursor-pointer p-3 hover:bg-gray-50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {result.success ? '✓ Success' : '✗ Failed'}
+                          </span>
+                          <span className="font-medium text-gray-900">{filename}</span>
+                        </div>
+                        {result.success && result.data && (
+                          <span className="text-sm text-gray-600">
+                            {result.data.totalRows} rows • {result.data.results?.length || 0} valid
+                          </span>
+                        )}
+                      </summary>
+                      <div className="p-4 border-t border-gray-200 bg-gray-50">
+                        {result.success && result.data ? (
+                          <>
+                            <div className="grid grid-cols-3 gap-4 text-sm mb-4">
+                              <div className="text-center">
+                                <p className="text-xl font-bold text-gray-900">{result.data.totalRows}</p>
+                                <p className="text-gray-600">Total Rows</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xl font-bold text-green-600">{result.data.results?.length || 0}</p>
+                                <p className="text-gray-600">Valid</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-xl font-bold text-red-600">{result.data.errors?.length || 0}</p>
+                                <p className="text-gray-600">Errors</p>
+                              </div>
+                            </div>
+                            {result.data.errors?.length > 0 && (
+                              <div className="mt-3">
+                                <h6 className="font-medium text-red-800 mb-2 text-sm">Errors:</h6>
+                                <div className="max-h-32 overflow-y-auto space-y-1 border border-red-200 rounded p-2 bg-red-50">
+                                  {result.data.errors.slice(0, 10).map((error: any, index: number) => (
+                                    <p key={index} className="text-xs text-red-600">
+                                      Row {error.row}: {error.error}
+                                    </p>
+                                  ))}
+                                  {result.data.errors.length > 10 && (
+                                    <p className="text-xs text-red-500 italic">
+                                      ...and {result.data.errors.length - 10} more errors
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-sm text-red-600">
+                            <p className="font-medium mb-1">Import Failed:</p>
+                            <p>{result.error || 'Unknown error'}</p>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Import Results - Single File */}
             {importResults && (
               <div className="mt-6 p-4 border border-gray-200 rounded-lg">
                 <h5 className="font-medium text-gray-900 mb-3">Import Results</h5>
