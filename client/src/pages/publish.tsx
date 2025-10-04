@@ -46,7 +46,7 @@ export default function Publish() {
     queryFn: async () => {
       // Don't fetch if metric is not selected
       if (!filters.metric) return [];
-      
+
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
@@ -56,7 +56,7 @@ export default function Publish() {
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
-      
+
       const response = await fetch(`/api/measurements?${params}`, {
         credentials: 'include',
         headers: {
@@ -72,10 +72,22 @@ export default function Publish() {
   // Bulk delete mutation
   const bulkDeleteMutation = useMutation({
     mutationFn: async (measurementIds: string[]) => {
+      // Fetch CSRF token first
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include',
+      });
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+
+      const { csrfToken } = await csrfResponse.json();
+
       const response = await fetch('/api/measurements/bulk-delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
         },
         credentials: 'include',
         body: JSON.stringify({ measurementIds }),
@@ -112,31 +124,31 @@ export default function Publish() {
   const bestMeasurements = measurements ? (() => {
     const athleteBest = new Map();
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
-    
+
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
       const value = parseFloat(measurement.value);
-      
+
       if (!athleteBest.has(athleteId)) {
         athleteBest.set(athleteId, measurement);
       } else {
         const current = athleteBest.get(athleteId);
         const currentValue = parseFloat(current.value);
-        
+
         // For time-based metrics, lower is better; for others, higher is better
         const isBetter = isTimeBased ? value < currentValue : value > currentValue;
-        
+
         if (isBetter) {
           athleteBest.set(athleteId, measurement);
         }
       }
     });
-    
+
     // Convert to array and sort from best to worst
     return Array.from(athleteBest.values()).sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);
-      
+
       if (isTimeBased) {
         return aValue - bValue; // ascending for time (lower is better)
       } else {
@@ -192,11 +204,11 @@ export default function Publish() {
     const pdf = new jsPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    
+
     // Title
     pdf.setFontSize(16);
     pdf.text(`${getMetricDisplayName(filters.metric)} Results`, pageWidth / 2, 20, { align: "center" });
-    
+
     // Date and filters info
     pdf.setFontSize(10);
     let yPos = 35;
@@ -214,9 +226,9 @@ export default function Publish() {
       pdf.text(`Birth Years: ${filters.birthYearFrom || "Any"} - ${filters.birthYearTo || "Any"}`, 20, yPos);
       yPos += 10;
     }
-    
+
     yPos += 10;
-    
+
     // Table headers
     pdf.setFontSize(12);
     pdf.text("Rank", 20, yPos);
@@ -224,9 +236,9 @@ export default function Publish() {
     pdf.text("Team(s)", 100, yPos);
     pdf.text("Value", 140, yPos);
     pdf.text("Date", 170, yPos);
-    
+
     yPos += 15;
-    
+
     // Table data
     pdf.setFontSize(10);
     sortedMeasurements.forEach((measurement: any, index: number) => {
@@ -234,20 +246,20 @@ export default function Publish() {
         pdf.addPage();
         yPos = 30;
       }
-      
+
       const teamNames = measurement.user.teams && measurement.user.teams.length > 0 
         ? measurement.user.teams.map((team: any) => team.name).join(", ")
         : "Independent";
-      
+
       pdf.text(`${index + 1}`, 20, yPos);
       pdf.text(measurement.user.fullName, 40, yPos);
       pdf.text(teamNames, 100, yPos);
       pdf.text(`${measurement.value}${getMetricUnits(filters.metric)}`, 140, yPos);
       pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
-      
+
       yPos += 12;
     });
-    
+
     // Save the PDF
     const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
     const fileName = `${getMetricDisplayName(filters.metric)}_Results_${dateStr}.pdf`;
