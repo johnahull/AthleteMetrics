@@ -3704,41 +3704,53 @@ export async function registerRoutes(app: Express) {
               role: "athlete"
             };
 
-            // Create or find athlete
-            let athlete;
-            let targetTeamId = teamId; // Default to UI-selected team
+            // Get organization context
+            let organizationId: string | undefined = options.organizationId;
+            if (!organizationId) {
+              const currentUser = req.session.user!;
+              const userOrgs = await storage.getUserOrganizations(currentUser.id);
+              organizationId = userOrgs[0]?.organizationId;
+            }
 
-            // If confirmData provided and athlete has a teamName, use that instead
-            if (confirmData && teamName && teamName.trim()) {
-              const parsedConfirmData = typeof confirmData === 'string' ? JSON.parse(confirmData) : confirmData;
+            // Handle team resolution
+            let targetTeamId: string | undefined = teamId; // Legacy default
+
+            if (teamName && teamName.trim()) {
               const normalizedTeamName = teamName.trim();
-
-              // Check if team exists or needs to be created
               const allTeams = await storage.getTeams();
               let team = allTeams.find(t =>
                 t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim() &&
-                (!parsedConfirmData.organizationId || t.organization?.id === parsedConfirmData.organizationId)
+                (!organizationId || t.organization?.id === organizationId)
               );
 
-              // Create team if it doesn't exist and user confirmed creation
-              if (!team && parsedConfirmData.createMissingTeams && parsedConfirmData.organizationId) {
-                const newTeam = await storage.createTeam({
-                  organizationId: parsedConfirmData.organizationId,
-                  name: normalizedTeamName,
-                  level: undefined,
-                  notes: 'Created during athlete import'
-                });
-                team = newTeam as any; // Type assertion needed due to storage interface
+              // Handle team creation based on teamHandling mode
+              if (!team) {
+                if (options.teamHandling === 'auto_create_silent' ||
+                    (options.teamHandling === 'auto_create_confirm' && confirmData)) {
+                  // Create team automatically
+                  if (organizationId) {
+                    const newTeam = await storage.createTeam({
+                      organizationId,
+                      name: normalizedTeamName,
+                      level: undefined,
+                      notes: 'Auto-created during athlete import'
+                    });
+                    team = newTeam as any;
 
-                // Track created team
-                if (!createdTeams.has(normalizedTeamName)) {
-                  createdTeams.set(normalizedTeamName, {
-                    id: newTeam.id,
-                    name: newTeam.name,
-                    athleteCount: 0
-                  });
+                    if (!createdTeams.has(normalizedTeamName)) {
+                      createdTeams.set(normalizedTeamName, {
+                        id: newTeam.id,
+                        name: newTeam.name,
+                        athleteCount: 0
+                      });
+                    }
+                    createdTeams.get(normalizedTeamName)!.athleteCount++;
+                  }
+                } else if (options.teamHandling === 'require_existing') {
+                  errors.push({ row: rowNum, error: `Team "${normalizedTeamName}" does not exist and team creation is disabled` });
+                  continue;
                 }
-                createdTeams.get(normalizedTeamName)!.athleteCount++;
+                // For 'leave_teamless', team remains undefined
               }
 
               if (team) {
@@ -3746,11 +3758,84 @@ export async function registerRoutes(app: Express) {
               }
             }
 
-            if (createMissing === 'true') {
-              athlete = await storage.createUser(athleteData as any);
+            // Mode-specific athlete handling
+            let athlete;
+            let action: string;
+            const athleteMode = options.athleteMode || 'smart_import';
 
-              // Add to team if specified
-              if (targetTeamId) {
+            if (athleteMode === 'create_only') {
+              // Always create new athlete, never match
+              athlete = await storage.createUser(athleteData as any);
+              action = 'created';
+              createdAthletes.push({
+                id: athlete.id,
+                name: `${athlete.firstName} ${athlete.lastName}`
+              });
+
+            } else {
+              // Try to find existing athlete
+              const existingAthletes = await storage.getAthletes({
+                search: `${firstName} ${lastName}`,
+                organizationId
+              });
+
+              const matchedAthlete = existingAthletes.find(p =>
+                p.firstName?.toLowerCase() === firstName.toLowerCase() &&
+                p.lastName?.toLowerCase() === lastName.toLowerCase()
+              );
+
+              if (matchedAthlete) {
+                // Found existing athlete
+                athlete = matchedAthlete;
+
+                if (athleteMode === 'smart_import' || athleteMode === 'match_and_update') {
+                  // Update athlete info
+                  if (options.updateExisting !== false) {
+                    await storage.updateUser(athlete.id, {
+                      birthDate: athleteData.birthDate,
+                      birthYear: athleteData.birthYear,
+                      graduationYear: athleteData.graduationYear,
+                      sports: athleteData.sports,
+                      height: athleteData.height,
+                      weight: athleteData.weight,
+                      school: athleteData.school,
+                      gender: athleteData.gender
+                    } as any);
+                    action = 'updated';
+                  } else {
+                    action = 'matched';
+                  }
+                } else {
+                  // match_only mode - just match without updating
+                  action = 'matched';
+                }
+
+              } else {
+                // No existing athlete found
+                if (athleteMode === 'smart_import') {
+                  // Create new athlete
+                  athlete = await storage.createUser(athleteData as any);
+                  action = 'created';
+                  createdAthletes.push({
+                    id: athlete.id,
+                    name: `${athlete.firstName} ${athlete.lastName}`
+                  });
+                } else {
+                  // match_and_update or match_only - skip if not found
+                  if (options.skipDuplicates) {
+                    results.push({ action: 'skipped', athlete: { id: '', name: `${firstName} ${lastName}`, note: 'Not found, skipped' } });
+                    continue;
+                  } else {
+                    errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found (mode: ${athleteMode})` });
+                    continue;
+                  }
+                }
+              }
+            }
+
+            // Add to team if specified
+            if (targetTeamId && athlete) {
+              try {
                 await storage.addUserToTeam(athlete.id, targetTeamId);
 
                 // Also add to organization as athlete
@@ -3758,73 +3843,14 @@ export async function registerRoutes(app: Express) {
                 if (team?.organization?.id) {
                   await storage.addUserToOrganization(athlete.id, team.organization.id, 'athlete');
                 }
-              }
-            } else {
-              // Get organization context for filtering
-              let organizationId: string | undefined;
-              if (teamId) {
-                const team = await storage.getTeam(teamId);
-                organizationId = team?.organization?.id;
-              } else {
-                // Fallback to current user's primary organization
-                const currentUser = req.session.user!;
-                const userOrgs = await storage.getUserOrganizations(currentUser.id);
-                organizationId = userOrgs[0]?.organizationId;
-              }
-
-              // Match existing athlete by name within the same organization
-              const existingAthlete = await storage.getAthletes({
-                search: `${firstName} ${lastName}`,
-                organizationId: organizationId
-              });
-
-              const matchedAthlete = existingAthlete.find(p => 
-                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
-                p.lastName?.toLowerCase() === lastName.toLowerCase()
-              );
-
-              if (matchedAthlete) {
-                athlete = matchedAthlete;
-                
-                // Check if athlete is already on the target team using reliable method
-                let isAlreadyOnTeam = false;
-                if (teamId) {
-                  try {
-                    const userTeams = await storage.getUserTeams(athlete.id);
-                    isAlreadyOnTeam = userTeams.some((ut: any) => String(ut.team.id) === String(teamId));
-                  } catch (error) {
-                    console.warn(`Could not check team membership for user ${athlete.id}:`, error);
-                    // Err on the side of caution - don't deactivate if we can't verify membership
-                    isAlreadyOnTeam = true;
-                  }
-                }
-                
-                // If athlete is not already on the team, mark them as inactive when importing
-                // Only deactivate if we have a target team to check against
-                if (teamId && !isAlreadyOnTeam) {
-                  await storage.updateUser(athlete.id, { isActive: false });
-                  athlete.isActive = false; // Update local object for consistency
-                  
-                  results.push({
-                    action: 'matched_and_deactivated',
-                    athlete: {
-                      id: athlete.id,
-                      name: `${athlete.firstName} ${athlete.lastName}`,
-                      username: athlete.username,
-                      note: 'Athlete deactivated as they were not already on the target team'
-                    }
-                  });
-                  continue; // Skip the normal results.push below to avoid duplication
-                }
-                
-              } else {
-                errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found` });
-                continue;
+              } catch (error) {
+                // Team membership might already exist, that's okay
+                console.warn(`Could not add athlete ${athlete.id} to team ${targetTeamId}:`, error);
               }
             }
 
             results.push({
-              action: createMissing === 'true' ? 'created' : 'matched',
+              action,
               athlete: {
                 id: athlete.id,
                 name: `${athlete.firstName} ${athlete.lastName}`,
@@ -3882,28 +3908,106 @@ export async function registerRoutes(app: Express) {
             const matchResult: MatchResult = findBestAthleteMatch(matchingCriteria, athletes);
 
             let matchedAthlete;
+            const measurementMode = options.measurementMode || 'match_only';
+
             if (matchResult.type === 'none') {
               // No suitable match found
-              let errorMsg = `No matching athlete found for ${firstName} ${lastName}`;
-              if (teamName) {
-                errorMsg += ` in team "${teamName}"`;
+              if (measurementMode === 'create_athletes') {
+                // Auto-create athlete
+                const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
+                let username = baseUsername;
+                let counter = 1;
+                while (await storage.getUserByUsername(username)) {
+                  username = `${baseUsername}${counter}`;
+                  counter++;
+                }
+
+                const newAthlete = await storage.createUser({
+                  username,
+                  firstName,
+                  lastName,
+                  emails: [`${username}@temp.local`],
+                  phoneNumbers: [],
+                  gender: gender || 'Not Specified',
+                  password: 'INVITATION_PENDING',
+                  isActive: false,
+                  role: 'athlete'
+                } as any);
+
+                matchedAthlete = newAthlete;
+                createdAthletes.push({
+                  id: newAthlete.id,
+                  name: `${firstName} ${lastName}`
+                });
+
+                // Add to team if specified
+                if (teamName) {
+                  const teams = await storage.getTeams();
+                  let team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
+
+                  // Handle team creation if needed
+                  if (!team && organizationId &&
+                      (options.teamHandling === 'auto_create_silent' ||
+                       options.teamHandling === 'auto_create_confirm')) {
+                    const newTeam = await storage.createTeam({
+                      organizationId,
+                      name: teamName,
+                      level: undefined,
+                      notes: 'Auto-created during measurement import'
+                    });
+                    team = newTeam as any;
+
+                    if (!createdTeams.has(teamName)) {
+                      createdTeams.set(teamName, {
+                        id: newTeam.id,
+                        name: newTeam.name,
+                        athleteCount: 0
+                      });
+                    }
+                    createdTeams.get(teamName)!.athleteCount++;
+                  }
+
+                  if (team) {
+                    try {
+                      await storage.addUserToTeam(newAthlete.id, team.id);
+                      if (team.organization?.id) {
+                        await storage.addUserToOrganization(newAthlete.id, team.organization.id, 'athlete');
+                      }
+                    } catch (error) {
+                      console.warn(`Could not add athlete to team:`, error);
+                    }
+                  }
+                }
+
+                warnings.push(`Row ${rowNum}: Created new athlete ${firstName} ${lastName}`);
+
+              } else {
+                // match_only mode - fail if not found
+                let errorMsg = `No matching athlete found for ${firstName} ${lastName}`;
+                if (teamName) {
+                  errorMsg += ` in team "${teamName}"`;
+                }
+
+                // Suggest alternatives if available
+                if (matchResult.alternatives && matchResult.alternatives.length > 0) {
+                  const suggestions = matchResult.alternatives
+                    .slice(0, 2)
+                    .map(alt => `${alt.firstName} ${alt.lastName} (${alt.matchReason})`)
+                    .join(', ');
+                  errorMsg += `. Similar athletes found: ${suggestions}`;
+                }
+
+                errors.push({ row: rowNum, error: errorMsg });
+                continue;
               }
-              
-              // Suggest alternatives if available
-              if (matchResult.alternatives && matchResult.alternatives.length > 0) {
-                const suggestions = matchResult.alternatives
-                  .slice(0, 2)
-                  .map(alt => `${alt.firstName} ${alt.lastName} (${alt.matchReason})`)
-                  .join(', ');
-                errorMsg += `. Similar athletes found: ${suggestions}`;
-              }
-              
-              errors.push({ row: rowNum, error: errorMsg });
-              continue;
             }
 
-            // Handle review queue for low-confidence matches
-            if (matchResult.requiresManualReview || matchResult.confidence < 75) {
+            // Handle review queue based on mode
+            const shouldReview = measurementMode === 'review_all' ||
+                                (measurementMode === 'review_low_confidence' &&
+                                 (matchResult.requiresManualReview || matchResult.confidence < 75));
+
+            if (shouldReview && matchResult.candidate) {
               // Add to review queue instead of processing immediately
               const reviewItem = reviewQueue.addItem({
                 type: 'measurement',

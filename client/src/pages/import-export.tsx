@@ -531,6 +531,92 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
               <div>
                 <h4 className="text-md font-medium text-gray-700 mb-4">Import Options</h4>
 
+                {/* Preset Workflows */}
+                <div className="mb-4 pb-4 border-b">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Quick Presets</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (importType === 'athletes') {
+                          setAthleteMode('smart_import');
+                          setTeamHandling('auto_create_silent');
+                          setUpdateExisting(true);
+                          setSkipDuplicates(false);
+                        } else {
+                          setMeasurementMode('create_athletes');
+                          setTeamHandling('auto_create_silent');
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      🚀 Quick Import
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (importType === 'athletes') {
+                          setAthleteMode('smart_import');
+                          setTeamHandling('auto_create_confirm');
+                          setUpdateExisting(true);
+                          setSkipDuplicates(false);
+                        } else {
+                          setMeasurementMode('review_low_confidence');
+                          setTeamHandling('auto_create_confirm');
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      🔍 Careful Import
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (importType === 'athletes') {
+                          setAthleteMode('match_and_update');
+                          setTeamHandling('require_existing');
+                          setUpdateExisting(true);
+                          setSkipDuplicates(true);
+                        } else {
+                          setMeasurementMode('match_only');
+                          setTeamHandling('require_existing');
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      ✏️ Update Only
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (importType === 'athletes') {
+                          setAthleteMode('create_only');
+                          setTeamHandling('auto_create_silent');
+                          setUpdateExisting(false);
+                          setSkipDuplicates(false);
+                        } else {
+                          setMeasurementMode('create_athletes');
+                          setTeamHandling('auto_create_silent');
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      ➕ Create All New
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Click a preset to quickly configure all options, or customize below
+                  </p>
+                </div>
+
                 <div className="space-y-4">
                   {/* Column Mapping Toggle */}
                   <div className="pb-3 border-b">
@@ -556,7 +642,10 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                   {/* Import Mode Selector */}
                   {importType === "athletes" ? (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        Import Mode
+                        <span className="text-xs text-blue-600" title="How to handle athlete records">ℹ️</span>
+                      </label>
                       <Select
                         value={athleteMode}
                         onValueChange={(value) => setAthleteMode(value as AthleteImportMode)}
@@ -575,10 +664,18 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                           ))}
                         </SelectContent>
                       </Select>
+                      {athleteMode === 'smart_import' && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-800">
+                          💡 Recommended for most imports. Automatically creates new athletes or updates existing ones.
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        Import Mode
+                        <span className="text-xs text-blue-600" title="How to match measurements to athletes">ℹ️</span>
+                      </label>
                       <Select
                         value={measurementMode}
                         onValueChange={(value) => setMeasurementMode(value as MeasurementImportMode)}
@@ -597,6 +694,11 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                           ))}
                         </SelectContent>
                       </Select>
+                      {measurementMode === 'create_athletes' && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-800">
+                          💡 New athletes will be created automatically for any measurements without matching athletes.
+                        </div>
+                      )}
                     </div>
                   )}
 
