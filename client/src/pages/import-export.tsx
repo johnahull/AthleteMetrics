@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,9 @@ export default function ImportExport() {
   const [importResults, setImportResults] = useState<any>(null);
   const [batchResults, setBatchResults] = useState<Map<string, any>>(new Map());
   const [processingProgress, setProcessingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [fileRowCounts, setFileRowCounts] = useState<Map<string, number>>(new Map());
+  const [importStartTime, setImportStartTime] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [previewData, setPreviewData] = useState<ImportPreview | null>(null);
   const [showTeamConfirmDialog, setShowTeamConfirmDialog] = useState(false);
   const [selectedOrgForTeams, setSelectedOrgForTeams] = useState("");
@@ -64,6 +67,54 @@ export default function ImportExport() {
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: Team[] };
+
+  // Helper: Count rows in CSV file
+  const countCSVRows = async (file: File): Promise<number> => {
+    // Skip row counting for large files (> 5MB) to avoid UI lag
+    if (file.size > 5 * 1024 * 1024) {
+      return 0;
+    }
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string;
+          const lines = text.split('\n').filter(line => line.trim());
+          // Subtract 1 for header row
+          resolve(Math.max(0, lines.length - 1));
+        } catch (error) {
+          resolve(0);
+        }
+      };
+      reader.onerror = () => resolve(0);
+      reader.readAsText(file);
+    });
+  };
+
+  // Helper: Format elapsed time
+  const formatElapsedTime = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
+
+  // Timer effect for elapsed time
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (importStartTime !== null) {
+      interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - importStartTime) / 1000);
+        setElapsedSeconds(elapsed);
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [importStartTime]);
 
   // Parse CSV and return headers with suggested mappings
   const parseCsvMutation = useMutation({
@@ -201,6 +252,12 @@ export default function ImportExport() {
       confirmData?: any;
       options?: ImportOptions;
     }) => {
+      // Start timer for single file imports (batch handles its own timer)
+      if (uploadFiles.length === 1) {
+        setImportStartTime(Date.now());
+        setElapsedSeconds(0);
+      }
+
       const formData = new FormData();
       formData.append('file', file);
 
@@ -235,6 +292,12 @@ export default function ImportExport() {
     onSuccess: (data) => {
       setImportResults(data);
       setShowTeamConfirmDialog(false);
+
+      // Reset timer for single file imports
+      if (uploadFiles.length === 1) {
+        setImportStartTime(null);
+        setElapsedSeconds(0);
+      }
       const hasResults = data.results.length > 0;
       const hasErrors = data.errors.length > 0;
       const hasWarnings = data.warnings?.length > 0;
@@ -270,6 +333,13 @@ export default function ImportExport() {
     onError: (error: any) => {
       console.error("Import error:", error);
       setShowTeamConfirmDialog(false);
+
+      // Reset timer for single file imports
+      if (uploadFiles.length === 1) {
+        setImportStartTime(null);
+        setElapsedSeconds(0);
+      }
+
       toast({
         title: "Import Failed",
         description: error instanceof Error ? error.message : "Failed to process CSV file",
@@ -322,7 +392,7 @@ export default function ImportExport() {
     });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (fileList && fileList.length > 0) {
       const files = Array.from(fileList).filter(f =>
@@ -331,10 +401,18 @@ export default function ImportExport() {
       setUploadFiles(files);
       setImportResults(null);
       setBatchResults(new Map());
+
+      // Count rows for each file
+      const rowCounts = new Map<string, number>();
+      for (const file of files) {
+        const count = await countCSVRows(file);
+        rowCounts.set(file.name, count);
+      }
+      setFileRowCounts(rowCounts);
     }
   };
 
-  const handleDrop = (event: React.DragEvent) => {
+  const handleDrop = async (event: React.DragEvent) => {
     event.preventDefault();
     const fileList = event.dataTransfer.files;
     if (fileList && fileList.length > 0) {
@@ -344,6 +422,14 @@ export default function ImportExport() {
       setUploadFiles(files);
       setImportResults(null);
       setBatchResults(new Map());
+
+      // Count rows for each file
+      const rowCounts = new Map<string, number>();
+      for (const file of files) {
+        const count = await countCSVRows(file);
+        rowCounts.set(file.name, count);
+      }
+      setFileRowCounts(rowCounts);
     }
   };
 
@@ -352,13 +438,20 @@ export default function ImportExport() {
   };
 
   const removeFile = (index: number) => {
+    const fileToRemove = uploadFiles[index];
     setUploadFiles(prev => prev.filter((_, i) => i !== index));
+    setFileRowCounts(prev => {
+      const newCounts = new Map(prev);
+      newCounts.delete(fileToRemove.name);
+      return newCounts;
+    });
   };
 
   const clearAllFiles = () => {
     setUploadFiles([]);
     setImportResults(null);
     setBatchResults(new Map());
+    setFileRowCounts(new Map());
   };
 
   const processBatch = async () => {
@@ -370,6 +463,10 @@ export default function ImportExport() {
     for (let i = 0; i < uploadFiles.length; i++) {
       const file = uploadFiles[i];
       setProcessingProgress({ current: i + 1, total: uploadFiles.length });
+
+      // Start timer for this file
+      setImportStartTime(Date.now());
+      setElapsedSeconds(0);
 
       try {
         const options = buildImportOptions();
@@ -392,6 +489,8 @@ export default function ImportExport() {
 
     setBatchResults(results);
     setProcessingProgress(null);
+    setImportStartTime(null);
+    setElapsedSeconds(0);
 
     // Show summary toast
     const successCount = Array.from(results.values()).filter(r => r.success).length;
@@ -625,7 +724,10 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                         <div key={index} className="flex items-center justify-between p-2 hover:bg-gray-50">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                            <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                            <p className="text-xs text-gray-500">
+                              {(file.size / 1024).toFixed(1)} KB
+                              {fileRowCounts.get(file.name) && fileRowCounts.get(file.name)! > 0 && ` • ${fileRowCounts.get(file.name)} rows`}
+                            </p>
                           </div>
                           <Button
                             variant="ghost"
@@ -905,11 +1007,26 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                   {processingProgress && (
                     <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <div className="flex items-center justify-between text-sm text-blue-800 mb-2">
-                        <span className="font-medium">
-                          Processing file {processingProgress.current} of {processingProgress.total}
-                        </span>
-                        <span className="text-xs">
-                          {Math.round((processingProgress.current / processingProgress.total) * 100)}%
+                        <div className="flex-1">
+                          <div className="font-medium">
+                            Processing {uploadFiles[processingProgress.current - 1]?.name || 'file'}
+                          </div>
+                          <div className="text-xs text-blue-600 mt-1">
+                            {(() => {
+                              const currentFile = uploadFiles[processingProgress.current - 1];
+                              const rowCount = currentFile ? fileRowCounts.get(currentFile.name) : 0;
+                              return (
+                                <>
+                                  {rowCount && rowCount > 0 && <>{rowCount} rows • </>}
+                                  {currentFile && <>{(currentFile.size / 1024).toFixed(1)} KB</>}
+                                  {elapsedSeconds > 0 && ` • ⏱ ${formatElapsedTime(elapsedSeconds)} elapsed`}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        <span className="text-xs font-medium">
+                          {processingProgress.current}/{processingProgress.total}
                         </span>
                       </div>
                       <div className="w-full bg-blue-200 rounded-full h-2">
@@ -929,6 +1046,15 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                   >
                     {processingProgress
                       ? `Processing ${processingProgress.current}/${processingProgress.total}...`
+                      : importMutation.isPending && uploadFiles.length === 1
+                      ? (() => {
+                          const file = uploadFiles[0];
+                          const rowCount = file ? fileRowCounts.get(file.name) : undefined;
+                          if (rowCount && rowCount > 0) {
+                            return `Importing ${rowCount} rows${elapsedSeconds > 0 ? ` (${formatElapsedTime(elapsedSeconds)})` : '...'}`;
+                          }
+                          return `Importing${elapsedSeconds > 0 ? ` (${formatElapsedTime(elapsedSeconds)})` : '...'}`;
+                        })()
                       : importMutation.isPending
                       ? "Importing..."
                       : `Import ${uploadFiles.length > 1 ? `${uploadFiles.length} Files` : 'Data'}`}
