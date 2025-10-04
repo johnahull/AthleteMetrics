@@ -470,6 +470,13 @@ export default function ImportExport() {
 
       try {
         const options = buildImportOptions();
+
+        // For batch imports, automatically create teams without confirmation
+        // to avoid showing multiple dialogs
+        if (options.teamHandling === 'auto_create_confirm') {
+          options.teamHandling = 'auto_create_silent';
+        }
+
         const result = await importMutation.mutateAsync({
           file,
           type: importType,
@@ -496,9 +503,19 @@ export default function ImportExport() {
     const successCount = Array.from(results.values()).filter(r => r.success).length;
     const failCount = results.size - successCount;
 
+    // Count total created teams across all files
+    const totalCreatedTeams = Array.from(results.values())
+      .filter(r => r.success)
+      .reduce((sum, r) => sum + (r.data?.createdTeams?.length || 0), 0);
+
+    let description = `${successCount} file${successCount !== 1 ? 's' : ''} imported successfully${failCount > 0 ? `, ${failCount} failed` : ''}`;
+    if (totalCreatedTeams > 0) {
+      description += `. ${totalCreatedTeams} team${totalCreatedTeams !== 1 ? 's' : ''} created automatically`;
+    }
+
     toast({
       title: "Batch Import Complete",
-      description: `${successCount} file${successCount !== 1 ? 's' : ''} imported successfully${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      description,
       variant: failCount > 0 ? "destructive" : "default",
     });
   };
@@ -515,6 +532,13 @@ export default function ImportExport() {
 
     // If multiple files, process as batch
     if (uploadFiles.length > 1) {
+      // Notify user if teams will be auto-created during batch import
+      if (teamHandling === 'auto_create_confirm') {
+        toast({
+          title: "Batch Import Starting",
+          description: "Any missing teams will be created automatically for batch imports",
+        });
+      }
       processBatch();
       return;
     }
