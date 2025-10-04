@@ -465,7 +465,7 @@ export async function registerRoutes(app: Express) {
   // Rate limiting for file upload endpoints
   const uploadLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    limit: 30, // Limit each IP to 30 file uploads per hour
+    limit: 10000, // Limit each IP to 10000 file uploads per hour
     message: {
       error: "Too many file uploads, please try again in an hour"
     },
