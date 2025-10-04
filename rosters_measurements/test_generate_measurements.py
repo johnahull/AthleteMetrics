@@ -8,11 +8,16 @@ Tests cover:
 - Gender adjustment factors
 - Combined age + gender adjustments
 - Edge cases (missing data, min/max boundaries)
+- Integration test with full CSV generation
 """
 
 import unittest
 import sys
+import csv
+import tempfile
+import math
 from pathlib import Path
+from datetime import datetime
 
 # Import functions from generate_measurements.py
 sys.path.insert(0, str(Path(__file__).parent))
@@ -20,6 +25,8 @@ from generate_measurements import (
     get_age_bracket,
     get_adjustment_factor,
     gen_value,
+    age_on,
+    athlete_baseline_offsets,
     METRICS,
     AGE_BRACKETS,
     GENDER_ADJUSTMENTS,
@@ -350,6 +357,276 @@ class TestDataRealism(unittest.TestCase):
         self.assertLess(adj_ms, adj_yhs)
         self.assertLess(adj_yhs, adj_ohs)
         self.assertLess(adj_ohs, adj_college)
+
+
+class TestIntegration(unittest.TestCase):
+    """Integration test for full CSV generation with mixed roster"""
+
+    def setUp(self):
+        """Create a test roster with mixed ages and genders"""
+        self.test_date = datetime.strptime("2025-01-15", "%Y-%m-%d").date()
+
+        # Create diverse roster
+        self.roster = [
+            # Young males (middle school)
+            {"firstName": "Alex", "lastName": "Smith", "birthDate": "2012-03-15", "gender": "Male", "teamName": "TeamA"},
+            {"firstName": "Ben", "lastName": "Jones", "birthDate": "2011-06-20", "gender": "Male", "teamName": "TeamA"},
+
+            # Young females (middle school)
+            {"firstName": "Chloe", "lastName": "Davis", "birthDate": "2012-01-10", "gender": "Female", "teamName": "TeamA"},
+            {"firstName": "Diana", "lastName": "Wilson", "birthDate": "2011-09-25", "gender": "Female", "teamName": "TeamA"},
+
+            # High school males
+            {"firstName": "Ethan", "lastName": "Brown", "birthDate": "2008-05-12", "gender": "Male", "teamName": "TeamB"},
+            {"firstName": "Frank", "lastName": "Miller", "birthDate": "2007-11-30", "gender": "Male", "teamName": "TeamB"},
+
+            # High school females
+            {"firstName": "Grace", "lastName": "Taylor", "birthDate": "2008-02-18", "gender": "Female", "teamName": "TeamB"},
+            {"firstName": "Hannah", "lastName": "Anderson", "birthDate": "2007-07-22", "gender": "Female", "teamName": "TeamB"},
+
+            # College+ males
+            {"firstName": "Ian", "lastName": "Moore", "birthDate": "2005-04-05", "gender": "Male", "teamName": "TeamC"},
+            {"firstName": "Jack", "lastName": "White", "birthDate": "2004-12-15", "gender": "Male", "teamName": "TeamC"},
+
+            # College+ females
+            {"firstName": "Kate", "lastName": "Harris", "birthDate": "2005-08-08", "gender": "Female", "teamName": "TeamC"},
+            {"firstName": "Luna", "lastName": "Martin", "birthDate": "2004-10-30", "gender": "Female", "teamName": "TeamC"},
+
+            # Edge cases
+            {"firstName": "Mike", "lastName": "Lee", "birthDate": "", "gender": "Male", "teamName": "TeamD"},  # Missing birthdate
+            {"firstName": "Nina", "lastName": "Garcia", "birthDate": "2009-03-15", "gender": "", "teamName": "TeamD"},  # Missing gender
+        ]
+
+    def test_full_csv_generation(self):
+        """Integration test: generate full CSV and validate output"""
+        # Calculate ages for all athletes
+        athlete_ages = {}
+        for athlete in self.roster:
+            key = (athlete["firstName"], athlete["lastName"], athlete["teamName"])
+            athlete_ages[key] = age_on(athlete.get("birthDate", ""), self.test_date)
+
+        # Generate baseline offsets
+        baselines = athlete_baseline_offsets(self.roster)
+
+        # Generate measurements for all athletes
+        measurements = []
+        for athlete in self.roster:
+            key = (athlete["firstName"], athlete["lastName"], athlete["teamName"])
+            age = athlete_ages[key]
+            gender = athlete.get("gender", "")
+
+            for metric_name, spec in METRICS.items():
+                # Generate 3 trials per metric
+                for trial in range(3):
+                    jitter_sd = spec["sd"] * 0.5
+                    value = gen_value(
+                        spec,
+                        baselines[key][metric_name],
+                        day_index=0,
+                        jitter_sd=jitter_sd,
+                        age=age,
+                        gender=gender,
+                        metric=metric_name
+                    )
+
+                    measurements.append({
+                        "firstName": key[0],
+                        "lastName": key[1],
+                        "gender": gender,
+                        "teamName": key[2],
+                        "date": self.test_date.isoformat(),
+                        "age": age,
+                        "metric": metric_name,
+                        "value": value,
+                        "units": spec["units"],
+                    })
+
+        # Validate all measurements
+        self.assertGreater(len(measurements), 0, "Should generate measurements")
+
+        # Check 1: All values within bounds
+        for m in measurements:
+            metric_spec = METRICS[m["metric"]]
+            self.assertGreaterEqual(m["value"], metric_spec["min"],
+                f"{m['firstName']} {m['lastName']}: {m['metric']} below min ({m['value']} < {metric_spec['min']})")
+            self.assertLessEqual(m["value"], metric_spec["max"],
+                f"{m['firstName']} {m['lastName']}: {m['metric']} above max ({m['value']} > {metric_spec['max']})")
+
+            # Check for NaN/infinity
+            self.assertFalse(math.isnan(m["value"]), f"NaN value detected for {m['firstName']} {m['metric']}")
+            self.assertFalse(math.isinf(m["value"]), f"Infinity value detected for {m['firstName']} {m['metric']}")
+
+        # Check 2: Younger athletes consistently slower/lower than older (on average)
+        # Group measurements by metric and age bracket
+        by_metric_age = {}
+        for m in measurements:
+            if not m["age"] or m["age"] == "":
+                continue
+            metric = m["metric"]
+            bracket = get_age_bracket(m["age"])
+            gender = m["gender"]
+
+            # Only compare males to avoid gender confounding
+            if gender != "Male":
+                continue
+
+            key = (metric, bracket)
+            if key not in by_metric_age:
+                by_metric_age[key] = []
+            by_metric_age[key].append(m["value"])
+
+        # Compare averages across age brackets for "lower is better" metrics
+        for metric_name, spec in METRICS.items():
+            if spec["better"] != "lower":
+                continue
+
+            # Get average times for each bracket (if we have data)
+            ms_key = (metric_name, "middle_school")
+            yhs_key = (metric_name, "young_hs")
+            ohs_key = (metric_name, "older_hs")
+            cp_key = (metric_name, "college_plus")
+
+            if ms_key in by_metric_age and cp_key in by_metric_age:
+                ms_avg = sum(by_metric_age[ms_key]) / len(by_metric_age[ms_key])
+                cp_avg = sum(by_metric_age[cp_key]) / len(by_metric_age[cp_key])
+
+                # Younger should have higher (slower) times
+                self.assertGreater(ms_avg, cp_avg,
+                    f"{metric_name}: Middle school males should be slower than college+ males")
+
+        # Compare averages for "higher is better" metrics
+        for metric_name, spec in METRICS.items():
+            if spec["better"] != "higher":
+                continue
+
+            ms_key = (metric_name, "middle_school")
+            cp_key = (metric_name, "college_plus")
+
+            if ms_key in by_metric_age and cp_key in by_metric_age:
+                ms_avg = sum(by_metric_age[ms_key]) / len(by_metric_age[ms_key])
+                cp_avg = sum(by_metric_age[cp_key]) / len(by_metric_age[cp_key])
+
+                # Younger should have lower jumps
+                self.assertLess(ms_avg, cp_avg,
+                    f"{metric_name}: Middle school males should have lower values than college+ males")
+
+        # Check 3: Female athletes follow expected patterns
+        # Compare average values for same age, different gender
+        by_metric_gender = {}
+        for m in measurements:
+            if not m["age"] or m["age"] == "" or m["age"] < 18:
+                continue  # Use only adult athletes to isolate gender effect
+
+            metric = m["metric"]
+            gender = m["gender"]
+            if gender not in ["Male", "Female"]:
+                continue
+
+            key = (metric, gender)
+            if key not in by_metric_gender:
+                by_metric_gender[key] = []
+            by_metric_gender[key].append(m["value"])
+
+        # For metrics with gender adjustments, verify pattern
+        for metric_name in ["FLY10_TIME", "VERTICAL_JUMP"]:
+            male_key = (metric_name, "Male")
+            female_key = (metric_name, "Female")
+
+            if male_key in by_metric_gender and female_key in by_metric_gender:
+                male_avg = sum(by_metric_gender[male_key]) / len(by_metric_gender[male_key])
+                female_avg = sum(by_metric_gender[female_key]) / len(by_metric_gender[female_key])
+
+                if metric_name == "FLY10_TIME":
+                    # Females should be slower (higher times)
+                    self.assertGreater(female_avg, male_avg,
+                        "Female FLY10_TIME should be slower than male")
+
+                if metric_name == "VERTICAL_JUMP":
+                    # Females should have lower jumps
+                    self.assertLess(female_avg, male_avg,
+                        "Female VERTICAL_JUMP should be lower than male")
+
+        # Check 4: Missing data handled gracefully
+        missing_age_measurements = [m for m in measurements if m["age"] == ""]
+        self.assertGreater(len(missing_age_measurements), 0,
+            "Should have measurements for athletes with missing birthdate")
+
+        for m in missing_age_measurements:
+            # Even with missing age, values should be valid
+            self.assertFalse(math.isnan(m["value"]))
+            self.assertFalse(math.isinf(m["value"]))
+
+    def test_csv_file_generation(self):
+        """Integration test: write and read CSV file to verify format"""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as f:
+            temp_path = f.name
+
+            # Write CSV
+            fieldnames = ["firstName", "lastName", "gender", "teamName", "date", "age", "metric", "value", "units", "flyInDistance", "notes"]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+
+            # Generate and write sample measurements
+            baselines = athlete_baseline_offsets(self.roster)
+            for athlete in self.roster[:2]:  # Just test first 2 athletes
+                key = (athlete["firstName"], athlete["lastName"], athlete["teamName"])
+                age = age_on(athlete.get("birthDate", ""), self.test_date)
+                gender = athlete.get("gender", "")
+
+                for metric_name, spec in METRICS.items():
+                    value = gen_value(
+                        spec,
+                        baselines[key][metric_name],
+                        day_index=0,
+                        jitter_sd=spec["sd"] * 0.5,
+                        age=age,
+                        gender=gender,
+                        metric=metric_name
+                    )
+
+                    writer.writerow({
+                        "firstName": key[0],
+                        "lastName": key[1],
+                        "gender": gender,
+                        "teamName": key[2],
+                        "date": self.test_date.isoformat(),
+                        "age": age,
+                        "metric": metric_name,
+                        "value": round(value, 3),
+                        "units": spec["units"],
+                        "flyInDistance": spec.get("flyInDistance", ""),
+                        "notes": "Test-generated",
+                    })
+
+        # Read back and validate
+        try:
+            with open(temp_path, 'r', newline='') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+
+                self.assertGreater(len(rows), 0, "CSV should have rows")
+
+                # Verify header
+                self.assertIn("firstName", rows[0])
+                self.assertIn("age", rows[0])
+                self.assertIn("metric", rows[0])
+                self.assertIn("value", rows[0])
+
+                # Verify data types
+                for row in rows:
+                    # Value should be numeric
+                    val = float(row["value"])
+                    self.assertFalse(math.isnan(val))
+                    self.assertFalse(math.isinf(val))
+
+                    # Age should be numeric or empty
+                    if row["age"] != "":
+                        age = int(row["age"])
+                        self.assertGreaterEqual(age, 0)
+
+        finally:
+            # Cleanup
+            Path(temp_path).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
