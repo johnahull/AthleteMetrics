@@ -21,6 +21,13 @@ AGE_BRACKETS = {
     "college_plus": 1.00,   # ages 18+
 }
 
+# Age boundary constants for bracket determination
+AGE_MIDDLE_SCHOOL_MAX = 14
+AGE_YOUNG_HS_MAX = 16
+AGE_OLDER_HS_MAX = 18
+AGE_MIN_VALID = 0
+AGE_MAX_VALID = 100
+
 # Gender-specific adjustments per metric (multiplier applied to baseline)
 # Based on typical performance differences between male/female athletes
 GENDER_ADJUSTMENTS = {
@@ -84,14 +91,14 @@ def get_age_bracket(age):
         return "college_plus"  # default for invalid values
 
     # Sanity check for unrealistic ages
-    if age < 0 or age > 100:
+    if age < AGE_MIN_VALID or age > AGE_MAX_VALID:
         return "college_plus"  # default to adult baseline
 
-    if age < 14:
+    if age < AGE_MIDDLE_SCHOOL_MAX:
         return "middle_school"
-    elif age < 16:
+    elif age < AGE_YOUNG_HS_MAX:
         return "young_hs"
-    elif age < 18:
+    elif age < AGE_OLDER_HS_MAX:
         return "older_hs"
     else:
         return "college_plus"
@@ -103,10 +110,12 @@ def get_adjustment_factor(age, gender, metric, metric_spec):
     age_mult = AGE_BRACKETS[bracket]
 
     # Get gender multiplier - explicit fallback to Male baseline
+    # Use .get() to prevent KeyError if metric is added without gender adjustments
+    metric_adjustments = GENDER_ADJUSTMENTS.get(metric, {"Male": 1.00, "Female": 1.00})
     if gender not in ["Male", "Female"]:
         gender_mult = 1.00  # Default to Male baseline for unexpected/missing values
     else:
-        gender_mult = GENDER_ADJUSTMENTS[metric][gender]
+        gender_mult = metric_adjustments.get(gender, 1.00)
 
     # For "better is lower" metrics (times), adjustments work differently
     # Lower performance = higher times, so we multiply by the inverse relationship
@@ -136,7 +145,8 @@ def athlete_baseline_offsets(roster_rows):
 def gen_value(spec, base_offset, day_index, jitter_sd, age=None, gender=None, metric=None):
     # Apply age and gender adjustments to center baseline
     center = spec["center"]
-    if age is not None and gender and metric:
+    # Explicitly check for None and empty string to handle all edge cases
+    if age is not None and age != "" and gender and metric:
         adjustment = get_adjustment_factor(age, gender, metric, spec)
         center = center * adjustment
 
