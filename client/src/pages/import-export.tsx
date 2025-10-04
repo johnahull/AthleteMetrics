@@ -12,13 +12,39 @@ import { PhotoUpload } from "@/components/photo-upload";
 import { ColumnMappingDialog } from "@/components/import/ColumnMappingDialog";
 import { PreviewTableDialog } from "@/components/import/PreviewTableDialog";
 import type { Team } from "@shared/schema";
-import type { ImportPreview, CSVParseResult, PreviewRow } from "@shared/import-types";
+import type {
+  ImportPreview,
+  CSVParseResult,
+  PreviewRow,
+  AthleteImportMode,
+  MeasurementImportMode,
+  TeamHandlingMode,
+  ImportOptions
+} from "@shared/import-types";
+import {
+  ATHLETE_MODE_DESCRIPTIONS,
+  MEASUREMENT_MODE_DESCRIPTIONS,
+  TEAM_HANDLING_DESCRIPTIONS
+} from "@shared/import-types";
 import { useAuth } from "@/lib/auth";
 
 export default function ImportExport() {
   const [importType, setImportType] = useState<"athletes" | "measurements">("athletes");
+
+  // New import mode states
+  const [athleteMode, setAthleteMode] = useState<AthleteImportMode>("smart_import");
+  const [measurementMode, setMeasurementMode] = useState<MeasurementImportMode>("match_only");
+  const [teamHandling, setTeamHandling] = useState<TeamHandlingMode>("auto_create_confirm");
+
+  // Additional options
+  const [updateExisting, setUpdateExisting] = useState(true);
+  const [skipDuplicates, setSkipDuplicates] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+
+  // Legacy states (kept for backward compatibility during transition)
   const [importMode, setImportMode] = useState<"match" | "create">("match");
   const [selectedTeamId, setSelectedTeamId] = useState("");
+
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<any>(null);
   const [previewData, setPreviewData] = useState<ImportPreview | null>(null);
@@ -165,15 +191,18 @@ export default function ImportExport() {
   });
 
   const importMutation = useMutation({
-    mutationFn: async ({ file, type, mode, teamId, confirmData }: {
+    mutationFn: async ({ file, type, mode, teamId, confirmData, options }: {
       file: File;
       type: string;
-      mode: string;
+      mode?: string;
       teamId?: string;
       confirmData?: any;
+      options?: ImportOptions;
     }) => {
       const formData = new FormData();
       formData.append('file', file);
+
+      // Legacy fields for backward compatibility
       if (mode === 'create' && teamId) {
         formData.append('teamId', teamId);
       }
@@ -181,6 +210,11 @@ export default function ImportExport() {
 
       if (confirmData) {
         formData.append('confirmData', JSON.stringify(confirmData));
+      }
+
+      // New options object
+      if (options) {
+        formData.append('options', JSON.stringify(options));
       }
 
       const response = await fetch(`/api/import/${type === 'athletes' ? 'athletes' : type}`, {
@@ -203,10 +237,26 @@ export default function ImportExport() {
       const hasErrors = data.errors.length > 0;
       const hasWarnings = data.warnings?.length > 0;
       const createdTeamsCount = data.createdTeams?.length || 0;
+      const createdAthletesCount = data.createdAthletes?.length || 0;
 
-      let description = `Processed ${data.totalRows} rows. ${data.results.length} valid, ${data.errors.length} errors${hasWarnings ? `, ${data.warnings.length} warnings` : ''}.`;
+      // Build detailed description
+      const summary = data.summary || {};
+      const parts: string[] = [`Processed ${data.totalRows} rows`];
+
+      if (summary.created > 0) parts.push(`${summary.created} created`);
+      if (summary.updated > 0) parts.push(`${summary.updated} updated`);
+      if (summary.matched > 0) parts.push(`${summary.matched} matched`);
+      if (summary.skipped > 0) parts.push(`${summary.skipped} skipped`);
+      if (hasErrors) parts.push(`${data.errors.length} errors`);
+      if (hasWarnings) parts.push(`${data.warnings.length} warnings`);
+
+      let description = parts.join(', ') + '.';
+
       if (createdTeamsCount > 0) {
         description += ` Created ${createdTeamsCount} new team${createdTeamsCount > 1 ? 's' : ''}.`;
+      }
+      if (createdAthletesCount > 0) {
+        description += ` Created ${createdAthletesCount} new athlete${createdAthletesCount > 1 ? 's' : ''}.`;
       }
 
       toast({
@@ -226,21 +276,46 @@ export default function ImportExport() {
     },
   });
 
+  // Build import options from current state
+  const buildImportOptions = (): ImportOptions => {
+    const options: ImportOptions = {
+      athleteMode: importType === 'athletes' ? athleteMode : undefined,
+      measurementMode: importType === 'measurements' ? measurementMode : undefined,
+      teamHandling,
+      updateExisting,
+      skipDuplicates,
+      columnMappings: Object.keys(columnMappings).length > 0 ? columnMappings : undefined,
+    };
+
+    // Add organization ID if available
+    if (selectedOrgForTeams) {
+      options.organizationId = selectedOrgForTeams;
+    } else if (userOrganizations && userOrganizations.length === 1) {
+      options.organizationId = userOrganizations[0].organizationId;
+    }
+
+    return options;
+  };
+
   const executeImport = (previewDataToUse?: any) => {
     if (!uploadFile) return;
 
+    const options = buildImportOptions();
+
     const confirmData = previewDataToUse ? {
-      createMissingTeams: true,
-      organizationId: selectedOrgForTeams,
-      previewData: previewDataToUse
+      createMissingTeams: teamHandling === 'auto_create_confirm' || teamHandling === 'auto_create_silent',
+      organizationId: options.organizationId,
+      previewData: previewDataToUse,
+      options
     } : undefined;
 
     importMutation.mutate({
       file: uploadFile,
       type: importType,
-      mode: importMode,
-      teamId: selectedTeamId,
-      confirmData
+      mode: importMode, // Legacy field for backward compatibility
+      teamId: selectedTeamId, // Legacy field
+      confirmData,
+      options // New options object
     });
   };
 
@@ -271,28 +346,25 @@ export default function ImportExport() {
       return;
     }
 
-    // For athletes import in create mode, first preview to check for missing teams
-    if (importType === "athletes" && importMode === "create") {
+    // Check if we need team confirmation dialog
+    const needsTeamConfirmation = teamHandling === 'auto_create_confirm' &&
+      (importType === 'athletes' || (importType === 'measurements' && measurementMode === 'create_athletes'));
+
+    // For athletes import or measurements with create mode, preview to check for missing teams
+    if (needsTeamConfirmation) {
       previewMutation.mutate({
         file: uploadFile,
         type: importType,
       });
     } else {
-      // For measurements or match mode, proceed directly
-      if (importMode === "create" && !selectedTeamId) {
-        toast({
-          title: "Error",
-          description: "Please select a team for creating missing athletes",
-          variant: "destructive",
-        });
-        return;
-      }
-
+      // Proceed directly with import
+      const options = buildImportOptions();
       importMutation.mutate({
         file: uploadFile,
         type: importType,
-        mode: importMode,
-        teamId: selectedTeamId,
+        mode: importMode, // Legacy
+        teamId: selectedTeamId, // Legacy
+        options
       });
     }
   };
@@ -481,48 +553,116 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                     </label>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
-                    <div className="space-y-3">
-                      <label className="flex items-center space-x-3">
-                        <input 
-                          type="radio" 
-                          name="import-mode" 
-                          value="match" 
-                          checked={importMode === "match"}
-                          onChange={(e) => setImportMode(e.target.value as "match" | "create")}
-                          className="text-primary focus:ring-primary"
-                          data-testid="radio-match-athletes"
-                        />
-                        <span className="text-sm text-gray-700">Match athletes by firstName + lastName</span>
-                      </label>
-                      <label className="flex items-center space-x-3">
-                        <input 
-                          type="radio" 
-                          name="import-mode" 
-                          value="create" 
-                          checked={importMode === "create"}
-                          onChange={(e) => setImportMode(e.target.value as "match" | "create")}
-                          className="text-primary focus:ring-primary"
-                          data-testid="radio-create-athletes"
-                        />
-                        <span className="text-sm text-gray-700">Create missing athletes and assign to team:</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {importMode === "create" && (
-                    <div className="ml-6">
-                      <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                        <SelectTrigger className="w-48" data-testid="select-team-import">
-                          <SelectValue placeholder="Select team..." />
+                  {/* Import Mode Selector */}
+                  {importType === "athletes" ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
+                      <Select
+                        value={athleteMode}
+                        onValueChange={(value) => setAthleteMode(value as AthleteImportMode)}
+                      >
+                        <SelectTrigger data-testid="select-athlete-mode">
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {teams?.filter((team) => team.isArchived !== true).map((team) => (
-                            <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                          {Object.entries(ATHLETE_MODE_DESCRIPTIONS).map(([mode, { label, description }]) => (
+                            <SelectItem key={mode} value={mode}>
+                              <div>
+                                <div className="font-medium">{label}</div>
+                                <div className="text-xs text-gray-500">{description}</div>
+                              </div>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
+                      <Select
+                        value={measurementMode}
+                        onValueChange={(value) => setMeasurementMode(value as MeasurementImportMode)}
+                      >
+                        <SelectTrigger data-testid="select-measurement-mode">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(MEASUREMENT_MODE_DESCRIPTIONS).map(([mode, { label, description }]) => (
+                            <SelectItem key={mode} value={mode}>
+                              <div>
+                                <div className="font-medium">{label}</div>
+                                <div className="text-xs text-gray-500">{description}</div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Team Handling */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Team Handling</label>
+                    <Select
+                      value={teamHandling}
+                      onValueChange={(value) => setTeamHandling(value as TeamHandlingMode)}
+                    >
+                      <SelectTrigger data-testid="select-team-handling">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(TEAM_HANDLING_DESCRIPTIONS).map(([mode, { label, description }]) => (
+                          <SelectItem key={mode} value={mode}>
+                            <div>
+                              <div className="font-medium">{label}</div>
+                              <div className="text-xs text-gray-500">{description}</div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Advanced Options Toggle */}
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    >
+                      {showAdvancedOptions ? '▼' : '▶'} Advanced Options
+                    </button>
+                  </div>
+
+                  {/* Advanced Options Panel */}
+                  {showAdvancedOptions && (
+                    <div className="space-y-3 pl-4 border-l-2 border-gray-200">
+                      {athleteMode !== 'create_only' && importType === "athletes" && (
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={updateExisting}
+                            onChange={(e) => setUpdateExisting(e.target.checked)}
+                            className="text-primary focus:ring-primary rounded"
+                          />
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-700">Update Existing Athletes</div>
+                            <div className="text-xs text-gray-500">Update athlete info when matching</div>
+                          </div>
+                        </label>
+                      )}
+
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={skipDuplicates}
+                          onChange={(e) => setSkipDuplicates(e.target.checked)}
+                          className="text-primary focus:ring-primary rounded"
+                        />
+                        <div className="text-sm">
+                          <div className="font-medium text-gray-700">Skip Duplicates</div>
+                          <div className="text-xs text-gray-500">Skip rows that would create duplicate records</div>
+                        </div>
+                      </label>
                     </div>
                   )}
 

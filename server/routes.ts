@@ -3524,7 +3524,7 @@ export async function registerRoutes(app: Express) {
   app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
     try {
       const { type } = req.params;
-      const { createMissing, teamId, preview, confirmData } = req.body;
+      const { createMissing, teamId, preview, confirmData, options: optionsJson } = req.body;
       const file = req.file;
 
       if (!file) {
@@ -3535,10 +3535,27 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid import type. Use 'athletes' or 'measurements'" });
       }
 
+      // Parse import options
+      const options = optionsJson ? JSON.parse(optionsJson) : {
+        athleteMode: 'smart_import',
+        measurementMode: 'match_only',
+        teamHandling: 'auto_create_confirm',
+        updateExisting: true,
+        skipDuplicates: false
+      };
+
       const results: any[] = [];
       const errors: any[] = [];
       const warnings: any[] = [];
       let totalRows = 0;
+      let createdCount = 0;
+      let updatedCount = 0;
+      let matchedCount = 0;
+      let skippedCount = 0;
+
+      // Track created teams and athletes
+      const createdTeams = new Map<string, { id: string, name: string, athleteCount: number }>();
+      const createdAthletes: Array<{ id: string, name: string }> = [];
 
       // Parse CSV data
       const csvData: any[] = [];
@@ -3616,9 +3633,6 @@ export async function registerRoutes(app: Express) {
       }
 
       if (type === 'athletes') {
-        // Track created teams for reporting
-        const createdTeams = new Map<string, { id: string, name: string, athleteCount: number }>();
-
         // Process athletes import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
@@ -3708,18 +3722,19 @@ export async function registerRoutes(app: Express) {
 
               // Create team if it doesn't exist and user confirmed creation
               if (!team && parsedConfirmData.createMissingTeams && parsedConfirmData.organizationId) {
-                team = await storage.createTeam({
+                const newTeam = await storage.createTeam({
                   organizationId: parsedConfirmData.organizationId,
                   name: normalizedTeamName,
                   level: undefined,
                   notes: 'Created during athlete import'
                 });
+                team = newTeam as any; // Type assertion needed due to storage interface
 
                 // Track created team
                 if (!createdTeams.has(normalizedTeamName)) {
                   createdTeams.set(normalizedTeamName, {
-                    id: team.id,
-                    name: team.name,
+                    id: newTeam.id,
+                    name: newTeam.name,
                     athleteCount: 0
                   });
                 }
@@ -3968,6 +3983,12 @@ export async function registerRoutes(app: Express) {
 
       const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
 
+      // Count different action types for summary
+      createdCount = results.filter(r => r.action === 'created').length;
+      updatedCount = results.filter(r => r.action === 'updated').length;
+      matchedCount = results.filter(r => r.action === 'matched' || r.action === 'matched_and_deactivated').length;
+      skippedCount = results.filter(r => r.action === 'skipped').length;
+
       const response: ImportResult = {
         type,
         totalRows,
@@ -3975,16 +3996,26 @@ export async function registerRoutes(app: Express) {
         errors,
         warnings,
         summary: {
-          successful: results.filter(r => r.action === 'created' || r.action === 'matched').length,
+          successful: createdCount + updatedCount + matchedCount,
+          created: createdCount,
+          updated: updatedCount,
+          matched: matchedCount,
           failed: errors.length,
           warnings: warnings.length,
+          skipped: skippedCount,
           pendingReview: pendingReviewCount
-        }
+        },
+        options
       };
 
-      // Add created teams if any (only for athletes import)
-      if (type === 'athletes' && typeof createdTeams !== 'undefined') {
+      // Add created teams if any
+      if (createdTeams.size > 0) {
         response.createdTeams = Array.from(createdTeams.values());
+      }
+
+      // Add created athletes if any
+      if (createdAthletes.length > 0) {
+        response.createdAthletes = createdAthletes;
       }
 
       res.json(response);
