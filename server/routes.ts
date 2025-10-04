@@ -3309,17 +3309,29 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "No image file uploaded" });
       }
 
+      // Parse import options
+      const optionsJson = req.body.options;
+      const options = optionsJson ? JSON.parse(optionsJson) : {
+        measurementMode: 'match_only',
+        teamHandling: 'auto_create_confirm',
+        organizationId: undefined
+      };
+
+      const measurementMode = options.measurementMode || 'match_only';
+      const teamHandling = options.teamHandling || 'auto_create_confirm';
+
       // Debug logging removed for production: Processing OCR for file
 
       // Extract text and data using OCR
       const ocrResult = await ocrService.extractTextFromImage(file.buffer);
-      
+
       // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];
       const errors: any[] = [];
       const warnings: string[] = [...ocrResult.warnings];
+      const createdAthletes: any[] = [];
 
       for (let i = 0; i < ocrResult.extractedData.length; i++) {
         const extracted = ocrResult.extractedData[i];
@@ -3346,20 +3358,21 @@ export async function registerRoutes(app: Express) {
             continue;
           }
 
-          // Find or suggest creating the athlete
+          // Find or create the athlete
           const athletes = await storage.getAthletes({
             search: `${extracted.firstName} ${extracted.lastName}`
           });
 
           let userId: string | null = null;
-          
+          let athleteCreated = false;
+
           if (athletes.length > 0) {
             // Found existing athlete(s)
-            const exactMatch = athletes.find(a => 
+            const exactMatch = athletes.find(a =>
               a.firstName.toLowerCase() === extracted.firstName!.toLowerCase() &&
               a.lastName.toLowerCase() === extracted.lastName!.toLowerCase()
             );
-            
+
             if (exactMatch) {
               userId = exactMatch.id;
             } else {
@@ -3368,12 +3381,40 @@ export async function registerRoutes(app: Express) {
               warnings.push(`Using closest match for ${extracted.firstName} ${extracted.lastName}: ${athletes[0].firstName} ${athletes[0].lastName}`);
             }
           } else {
-            errors.push({ 
-              row: rowNum, 
-              error: `Athlete not found: ${extracted.firstName} ${extracted.lastName}. Please create the athlete first or use CSV import with createMissing=true.`,
-              data: extracted
-            });
-            continue;
+            // No match found - check if we should create
+            if (measurementMode === 'create_athletes') {
+              // Create the athlete (OCR doesn't extract team info currently)
+              const newAthlete = await storage.createUser({
+                firstName: extracted.firstName!,
+                lastName: extracted.lastName!,
+                emails: [`${extracted.firstName?.toLowerCase()}.${extracted.lastName?.toLowerCase()}@ocr-import.local`],
+                username: `${extracted.firstName?.toLowerCase()}_${extracted.lastName?.toLowerCase()}_${Date.now()}`,
+                role: 'athlete' as const,
+                password: 'INVITATION_PENDING',
+                isActive: false
+              });
+
+              userId = newAthlete.id;
+              athleteCreated = true;
+              createdAthletes.push({ id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` });
+
+              // Add to organization if specified
+              if (options.organizationId) {
+                try {
+                  await storage.addUserToOrganization(userId, options.organizationId, 'athlete');
+                } catch (error) {
+                  console.warn(`Could not add athlete ${userId} to organization ${options.organizationId}:`, error);
+                }
+              }
+            } else {
+              // Match-only mode - error if not found
+              errors.push({
+                row: rowNum,
+                error: `Athlete not found: ${extracted.firstName} ${extracted.lastName}. Enable "Create athletes if needed" to auto-create.`,
+                data: extracted
+              });
+              continue;
+            }
           }
 
           // Calculate age if not provided
@@ -3434,7 +3475,8 @@ export async function registerRoutes(app: Express) {
           extractedText: ocrResult.text,
           processedData,
           errors,
-          warnings
+          warnings,
+          createdAthletes: createdAthletes.length > 0 ? createdAthletes : undefined
         }
       });
 
