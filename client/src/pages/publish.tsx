@@ -1,13 +1,23 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Download, RotateCcw } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Download, RotateCcw, Trash2, AlertTriangle } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import jsPDF from "jspdf";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Publish() {
   const [filters, setFilters] = useState({
@@ -20,6 +30,12 @@ export default function Publish() {
     dateTo: "",
     gender: "all",  // Default to show all genders, user can filter as needed
   });
+
+  const [selectedMeasurements, setSelectedMeasurements] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
@@ -51,6 +67,45 @@ export default function Publish() {
       return response.json();
     },
     enabled: !!filters.metric,
+  });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (measurementIds: string[]) => {
+      const response = await fetch('/api/measurements/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ measurementIds }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete measurements');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Measurements Deleted",
+        description: data.message,
+      });
+      // Refresh measurements
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      // Clear selection and close dialog
+      setSelectedMeasurements(new Set());
+      setDeleteDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   // Get each athlete's best performance for the selected metric
@@ -104,6 +159,29 @@ export default function Publish() {
       gender: "all",  // Keep default to show all genders
     });
   };
+
+  // Selection handlers
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = new Set(sortedMeasurements.map((m: any) => m.id));
+      setSelectedMeasurements(allIds);
+    } else {
+      setSelectedMeasurements(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedMeasurements);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedMeasurements(newSelected);
+  };
+
+  const isAllSelected = sortedMeasurements.length > 0 && selectedMeasurements.size === sortedMeasurements.length;
+  const isSomeSelected = selectedMeasurements.size > 0 && selectedMeasurements.size < sortedMeasurements.length;
 
   const exportToPDF = () => {
     if (!sortedMeasurements || sortedMeasurements.length === 0) {
@@ -345,6 +423,40 @@ export default function Publish() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Toolbar */}
+      {selectedMeasurements.size > 0 && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-blue-900">
+                  {selectedMeasurements.size} measurement{selectedMeasurements.size !== 1 ? 's' : ''} selected
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedMeasurements(new Set())}
+                  className="text-blue-700 hover:text-blue-900 hover:bg-blue-100"
+                >
+                  Clear Selection
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Results */}
       <Card className="bg-white">
         <CardContent className="p-6">
@@ -368,6 +480,13 @@ export default function Publish() {
               <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="text-left text-sm font-medium text-gray-500 border-b">
+                    <th className="px-4 py-3 w-12">
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all measurements"
+                      />
+                    </th>
                     <th className="px-4 py-3">Rank</th>
                     <th className="px-4 py-3">Athlete</th>
                     <th className="px-4 py-3">Team(s)</th>
@@ -379,6 +498,13 @@ export default function Publish() {
                 <tbody className="text-sm divide-y divide-gray-100">
                   {sortedMeasurements.map((measurement: any, index: number) => (
                     <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <Checkbox
+                          checked={selectedMeasurements.has(measurement.id)}
+                          onCheckedChange={(checked) => handleSelectOne(measurement.id, checked as boolean)}
+                          aria-label={`Select measurement for ${measurement.user.fullName}`}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center">
                           <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
@@ -435,6 +561,54 @@ export default function Publish() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete {selectedMeasurements.size} Measurement{selectedMeasurements.size !== 1 ? 's' : ''}?
+            </DialogTitle>
+            <DialogDescription className="space-y-3">
+              <p>This action cannot be undone. The following measurements will be permanently deleted:</p>
+
+              <div className="bg-gray-50 rounded-md p-3 max-h-60 overflow-y-auto">
+                <ul className="space-y-2 text-sm">
+                  {sortedMeasurements
+                    .filter((m: any) => selectedMeasurements.has(m.id))
+                    .map((m: any) => (
+                      <li key={m.id} className="flex items-center justify-between py-1 border-b border-gray-200 last:border-0">
+                        <span className="font-medium text-gray-900">{m.user.fullName}</span>
+                        <span className="text-gray-600">
+                          {m.value}{getMetricUnits(filters.metric)} • {new Date(m.date).toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))
+                  }
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                bulkDeleteMutation.mutate(Array.from(selectedMeasurements));
+              }}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? 'Deleting...' : `Delete ${selectedMeasurements.size} Measurement${selectedMeasurements.size !== 1 ? 's' : ''}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

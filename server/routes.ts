@@ -2303,16 +2303,116 @@ export async function registerRoutes(app: Express) {
 
       // Delete measurement
       await storage.deleteMeasurement(id);
-      res.status(200).json({ 
-        success: true, 
-        message: "Measurement deleted successfully" 
+      res.status(200).json({
+        success: true,
+        message: "Measurement deleted successfully"
       });
     } catch (error) {
       console.error("Error deleting measurement:", error);
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: "Failed to delete measurement",
         error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Bulk delete measurements route (coaches and org admins only)
+  app.post("/api/measurements/bulk-delete", requireAuth, async (req, res) => {
+    try {
+      const { measurementIds } = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (!Array.isArray(measurementIds) || measurementIds.length === 0) {
+        return res.status(400).json({ message: "No measurement IDs provided" });
+      }
+
+      // Limit bulk operations to 100 measurements at once
+      if (measurementIds.length > 100) {
+        return res.status(400).json({ message: "Cannot delete more than 100 measurements at once" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      const userOrgs = !userIsSiteAdmin ? await storage.getUserOrganizations(currentUser.id) : [];
+      const userOrgIds = userOrgs.map(org => org.organizationId);
+
+      // Verify user has access to all measurements
+      const failedChecks: string[] = [];
+      const validIds: string[] = [];
+
+      for (const id of measurementIds) {
+        const measurement = await storage.getMeasurement(id);
+
+        if (!measurement) {
+          failedChecks.push(`Measurement ${id} not found`);
+          continue;
+        }
+
+        if (!userIsSiteAdmin) {
+          // Check if measurement's athlete is in user's organization
+          const athlete = await storage.getAthlete(measurement.userId);
+          if (!athlete) {
+            failedChecks.push(`Athlete not found for measurement ${id}`);
+            continue;
+          }
+
+          const athleteTeams = await storage.getAthleteTeams(measurement.userId);
+          const athleteOrganizations = athleteTeams.map(pt => pt.organization.id);
+
+          const hasAccess = athleteOrganizations.some(orgId => userOrgIds.includes(orgId));
+
+          if (!hasAccess) {
+            failedChecks.push(`No access to measurement ${id} (athlete outside your organization)`);
+            continue;
+          }
+
+          // Athletes cannot delete measurements
+          if (currentUser.role === "athlete") {
+            return res.status(403).json({ message: "Athletes cannot delete measurements" });
+          }
+        }
+
+        validIds.push(id);
+      }
+
+      if (failedChecks.length > 0) {
+        return res.status(403).json({
+          message: "Access denied for some measurements",
+          errors: failedChecks
+        });
+      }
+
+      // Delete all valid measurements
+      const results = {
+        deleted: 0,
+        failed: [] as string[]
+      };
+
+      for (const id of validIds) {
+        try {
+          await storage.deleteMeasurement(id);
+          results.deleted++;
+        } catch (error) {
+          results.failed.push(id);
+          console.error(`Failed to delete measurement ${id}:`, error);
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        deleted: results.deleted,
+        failed: results.failed.length,
+        failedIds: results.failed,
+        message: `Successfully deleted ${results.deleted} measurement${results.deleted !== 1 ? 's' : ''}${results.failed.length > 0 ? ` (${results.failed.length} failed)` : ''}`
+      });
+    } catch (error) {
+      console.error("Error bulk deleting measurements:", error);
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Failed to delete measurements"
       });
     }
   });
