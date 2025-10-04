@@ -3812,8 +3812,8 @@ export async function registerRoutes(app: Express) {
 
               } else {
                 // No existing athlete found
-                if (athleteMode === 'smart_import') {
-                  // Create new athlete
+                if (athleteMode === 'smart_import' || athleteMode === 'create_only') {
+                  // Create new athlete for smart_import and create_only modes
                   athlete = await storage.createUser(athleteData as any);
                   action = 'created';
                   createdAthletes.push({
@@ -3821,14 +3821,9 @@ export async function registerRoutes(app: Express) {
                     name: `${athlete.firstName} ${athlete.lastName}`
                   });
                 } else {
-                  // match_and_update or match_only - skip if not found
-                  if (options.skipDuplicates) {
-                    results.push({ action: 'skipped', athlete: { id: '', name: `${firstName} ${lastName}`, note: 'Not found, skipped' } });
-                    continue;
-                  } else {
-                    errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found (mode: ${athleteMode})` });
-                    continue;
-                  }
+                  // match_and_update or match_only - error if not found
+                  errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found (mode: ${athleteMode})` });
+                  continue;
                 }
               }
             }
