@@ -55,16 +55,23 @@ export function useAnalyticsDataLoader() {
   const { effectiveOrganizationId } = useAnalyticsPermissions();
   const { setAvailableTeams, setAvailableAthletes, setLoading, setError } = useAnalyticsActions();
 
-  const loadInitialData = useCallback(async () => {
+  // Clear error when organization ID becomes available
+  useEffect(() => {
     if (!effectiveOrganizationId) {
       devLog.warn('Cannot load analytics data: No organization ID available');
       setError('No organization selected. Please select an organization to view analytics.');
+    } else {
+      setError(null);
+    }
+  }, [effectiveOrganizationId, setError]);
+
+  const loadInitialData = useCallback(async () => {
+    if (!effectiveOrganizationId) {
       return;
     }
 
     try {
       setLoading(true);
-      setError(null);
       devLog.log('Loading initial data for organization:', effectiveOrganizationId);
 
       // Load teams and athletes in parallel
@@ -103,7 +110,7 @@ export function useAnalyticsDataLoader() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveOrganizationId, setAvailableTeams, setAvailableAthletes, setLoading, setError]);
+  }, [effectiveOrganizationId, setAvailableTeams, setAvailableAthletes, setLoading]);
 
   return { loadInitialData };
 }

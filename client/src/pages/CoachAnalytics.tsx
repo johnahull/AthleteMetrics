@@ -99,8 +99,8 @@ export function CoachAnalytics() {
     );
   }
 
-  // Determine the effective organization ID
-  const effectiveOrganizationId = organizationContext || (userOrganizations?.[0]?.organizationId) || undefined;
+  // Determine the effective organization ID (prioritize context, then fallback to first user org)
+  const effectiveOrganizationId = organizationContext || userOrganizations?.[0]?.organizationId;
 
   return (
     <BaseAnalyticsView
