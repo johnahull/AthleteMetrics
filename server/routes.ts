@@ -3970,16 +3970,20 @@ export async function registerRoutes(app: Express) {
               }
             }
 
+            // Add athlete to organization first (if we have one)
+            if (athlete && organizationId && action === 'created') {
+              try {
+                await storage.addUserToOrganization(athlete.id, organizationId, 'athlete');
+              } catch (error) {
+                // Organization membership might already exist, that's okay
+                console.warn(`Could not add athlete ${athlete.id} to organization ${organizationId}:`, error);
+              }
+            }
+
             // Add to team if specified
             if (targetTeamId && athlete) {
               try {
                 await storage.addUserToTeam(athlete.id, targetTeamId);
-
-                // Also add to organization as athlete
-                const team = await storage.getTeam(targetTeamId);
-                if (team?.organization?.id) {
-                  await storage.addUserToOrganization(athlete.id, team.organization.id, 'athlete');
-                }
               } catch (error) {
                 // Team membership might already exist, that's okay
                 console.warn(`Could not add athlete ${athlete.id} to team ${targetTeamId}:`, error);
