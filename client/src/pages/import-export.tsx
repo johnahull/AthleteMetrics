@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CloudUpload, Download, Copy, Info, AlertTriangle, Users } from "lucide-react";
+import { CloudUpload, Download, Copy, Info, AlertTriangle, Users, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { downloadCSV } from "@/lib/csv";
 import { PhotoUpload } from "@/components/photo-upload";
+import { ColumnMappingDialog } from "@/components/import/ColumnMappingDialog";
+import { PreviewTableDialog } from "@/components/import/PreviewTableDialog";
 import type { Team } from "@shared/schema";
-import type { ImportPreview } from "@shared/import-types";
+import type { ImportPreview, CSVParseResult, PreviewRow } from "@shared/import-types";
 import { useAuth } from "@/lib/auth";
 
 export default function ImportExport() {
@@ -22,12 +24,90 @@ export default function ImportExport() {
   const [previewData, setPreviewData] = useState<ImportPreview | null>(null);
   const [showTeamConfirmDialog, setShowTeamConfirmDialog] = useState(false);
   const [selectedOrgForTeams, setSelectedOrgForTeams] = useState("");
+  const [useColumnMapping, setUseColumnMapping] = useState(false);
+  const [csvParseResult, setCsvParseResult] = useState<CSVParseResult | null>(null);
+  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
+  const [showColumnMappingDialog, setShowColumnMappingDialog] = useState(false);
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const { toast } = useToast();
   const { user, userOrganizations } = useAuth();
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: Team[] };
+
+  // Parse CSV to get headers and suggested mappings
+  const parseCsvMutation = useMutation({
+    mutationFn: async ({ file, type }: { file: File; type: string }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
+
+      const response = await fetch('/api/import/parse-csv', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to parse CSV: ${errorText}`);
+      }
+
+      return response.json() as Promise<CSVParseResult>;
+    },
+    onSuccess: (data) => {
+      setCsvParseResult(data);
+      setShowColumnMappingDialog(true);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Parse Failed",
+        description: error instanceof Error ? error.message : "Failed to parse CSV file",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate preview with validation (simplified for now)
+  const generatePreviewRows = (parseResult: CSVParseResult, mappings: Record<string, string>): PreviewRow[] => {
+    return parseResult.rows.map((row, index) => {
+      const mappedData: Record<string, any> = {};
+      const validations: any[] = [];
+
+      // Apply column mappings
+      Object.entries(mappings).forEach(([csvColumn, systemField]) => {
+        if (systemField) {
+          mappedData[csvColumn] = row[csvColumn];
+
+          // Basic validation
+          const value = row[csvColumn];
+          if (!value && ['firstName', 'lastName', 'date', 'metric', 'value'].includes(systemField)) {
+            validations.push({
+              rowIndex: index,
+              field: systemField,
+              status: 'error',
+              message: 'Required field is empty'
+            });
+          } else if (value) {
+            validations.push({
+              rowIndex: index,
+              field: systemField,
+              status: 'valid'
+            });
+          }
+        }
+      });
+
+      return {
+        rowIndex: index,
+        data: mappedData,
+        validations,
+        matchStatus: importMode === 'create' ? 'will_create' : 'will_match',
+      };
+    });
+  };
 
   const previewMutation = useMutation({
     mutationFn: async ({ file, type }: { file: File; type: string }) => {
@@ -168,6 +248,15 @@ export default function ImportExport() {
       return;
     }
 
+    // If column mapping is enabled, start with CSV parsing
+    if (useColumnMapping) {
+      parseCsvMutation.mutate({
+        file: uploadFile,
+        type: importType,
+      });
+      return;
+    }
+
     // For athletes import in create mode, first preview to check for missing teams
     if (importType === "athletes" && importMode === "create") {
       previewMutation.mutate({
@@ -187,6 +276,47 @@ export default function ImportExport() {
 
       importMutation.mutate({
         file: uploadFile,
+        type: importType,
+        mode: importMode,
+        teamId: selectedTeamId,
+      });
+    }
+  };
+
+  const handleColumnMappingConfirm = (mappings: Record<string, string>) => {
+    setColumnMappings(mappings);
+    setShowColumnMappingDialog(false);
+
+    // Generate preview rows with validation
+    if (csvParseResult) {
+      const preview = generatePreviewRows(csvParseResult, mappings);
+      setPreviewRows(preview);
+      setShowPreviewDialog(true);
+    }
+  };
+
+  const handlePreviewConfirm = () => {
+    setShowPreviewDialog(false);
+
+    // Check for missing teams if in create mode
+    if (importType === "athletes" && importMode === "create") {
+      previewMutation.mutate({
+        file: uploadFile!,
+        type: importType,
+      });
+    } else {
+      // Proceed with import
+      if (importMode === "create" && !selectedTeamId) {
+        toast({
+          title: "Error",
+          description: "Please select a team for creating missing athletes",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      importMutation.mutate({
+        file: uploadFile!,
         type: importType,
         mode: importMode,
         teamId: selectedTeamId,
@@ -316,6 +446,27 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                 <h4 className="text-md font-medium text-gray-700 mb-4">Import Options</h4>
 
                 <div className="space-y-4">
+                  {/* Column Mapping Toggle */}
+                  <div className="pb-3 border-b">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useColumnMapping}
+                        onChange={(e) => setUseColumnMapping(e.target.checked)}
+                        className="text-primary focus:ring-primary rounded"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                          <Eye className="h-4 w-4" />
+                          Preview & Map Columns
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Map your CSV columns and preview data before importing
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Import Mode</label>
                     <div className="space-y-3">
@@ -672,6 +823,25 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Column Mapping Dialog */}
+        <ColumnMappingDialog
+          open={showColumnMappingDialog}
+          onOpenChange={setShowColumnMappingDialog}
+          parseResult={csvParseResult}
+          importType={importType}
+          onConfirm={handleColumnMappingConfirm}
+        />
+
+        {/* Preview Table Dialog */}
+        <PreviewTableDialog
+          open={showPreviewDialog}
+          onOpenChange={setShowPreviewDialog}
+          previewRows={previewRows}
+          columnMappings={columnMappings}
+          onConfirm={handlePreviewConfirm}
+          isLoading={importMutation.isPending}
+        />
       </div>
     </div>
   );
