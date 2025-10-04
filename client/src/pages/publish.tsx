@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ export default function Publish() {
   const [selectedMeasurements, setSelectedMeasurements] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showView, setShowView] = useState<"best_by_athlete" | "best_by_measurement" | "all">("best_by_athlete");
+  const [itemsPerPage, setItemsPerPage] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -121,6 +123,11 @@ export default function Publish() {
     },
   });
 
+  // Reset to page 1 when filters or view changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, showView]);
+
   // Get each athlete's best performance for the selected metric
   const bestMeasurements = measurements ? (() => {
     const athleteBest = new Map();
@@ -177,6 +184,12 @@ export default function Publish() {
     ? bestMeasurements
     : allMeasurementsSorted;
 
+  // Pagination logic
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(sortedMeasurements.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = itemsPerPage === -1 ? sortedMeasurements.length : startIndex + itemsPerPage;
+  const paginatedMeasurements = sortedMeasurements.slice(startIndex, endIndex);
+
   const resetFilters = () => {
     setFilters({
       teamIds: [],
@@ -190,14 +203,17 @@ export default function Publish() {
     });
   };
 
-  // Selection handlers
+  // Selection handlers (works with current page only)
   const handleSelectAll = (checked: boolean) => {
+    const newSelected = new Set(selectedMeasurements);
     if (checked) {
-      const allIds = new Set(sortedMeasurements.map((m: any) => m.id));
-      setSelectedMeasurements(allIds);
+      // Add all IDs from current page
+      paginatedMeasurements.forEach((m: any) => newSelected.add(m.id));
     } else {
-      setSelectedMeasurements(new Set());
+      // Remove all IDs from current page
+      paginatedMeasurements.forEach((m: any) => newSelected.delete(m.id));
     }
+    setSelectedMeasurements(newSelected);
   };
 
   const handleSelectOne = (id: string, checked: boolean) => {
@@ -210,8 +226,10 @@ export default function Publish() {
     setSelectedMeasurements(newSelected);
   };
 
-  const isAllSelected = sortedMeasurements.length > 0 && selectedMeasurements.size === sortedMeasurements.length;
-  const isSomeSelected = selectedMeasurements.size > 0 && selectedMeasurements.size < sortedMeasurements.length;
+  // Check if all items on current page are selected
+  const currentPageIds = paginatedMeasurements.map((m: any) => m.id);
+  const isAllSelected = currentPageIds.length > 0 && currentPageIds.every(id => selectedMeasurements.has(id));
+  const isSomeSelected = currentPageIds.some(id => selectedMeasurements.has(id)) && !isAllSelected;
 
   const exportToPDF = () => {
     if (!sortedMeasurements || sortedMeasurements.length === 0) {
@@ -514,11 +532,34 @@ export default function Publish() {
                 </Select>
               )}
             </div>
-            {sortedMeasurements && (
-              <span className="text-sm text-gray-500">
-                {sortedMeasurements.length} result{sortedMeasurements.length !== 1 ? 's' : ''}
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {sortedMeasurements && sortedMeasurements.length > 0 && (
+                <>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      const newValue = value === "-1" ? -1 : parseInt(value);
+                      setItemsPerPage(newValue);
+                      setCurrentPage(1); // Reset to page 1 when changing items per page
+                    }}
+                  >
+                    <SelectTrigger className="w-24 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="-1">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-gray-500">
+                    {sortedMeasurements.length} result{sortedMeasurements.length !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {!filters.metric ? (
@@ -526,8 +567,9 @@ export default function Publish() {
               <p>Please select a metric to view results.</p>
             </div>
           ) : sortedMeasurements && sortedMeasurements.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="text-left text-sm font-medium text-gray-500 border-b">
                     <th className="px-4 py-3 w-12">
@@ -546,27 +588,29 @@ export default function Publish() {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
-                  {sortedMeasurements.map((measurement: any, index: number) => (
-                    <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <Checkbox
-                          checked={selectedMeasurements.has(measurement.id)}
-                          onCheckedChange={(checked) => handleSelectOne(measurement.id, checked as boolean)}
-                          aria-label={`Select measurement for ${measurement.user.fullName}`}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center">
-                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                            index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                            index === 1 ? 'bg-gray-100 text-gray-600' :
-                            index === 2 ? 'bg-orange-100 text-orange-800' :
-                            'bg-gray-50 text-gray-500'
-                          }`}>
-                            {index + 1}
-                          </span>
-                        </div>
-                      </td>
+                  {paginatedMeasurements.map((measurement: any, index: number) => {
+                    const rank = startIndex + index + 1;
+                    return (
+                      <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <Checkbox
+                            checked={selectedMeasurements.has(measurement.id)}
+                            onCheckedChange={(checked) => handleSelectOne(measurement.id, checked as boolean)}
+                            aria-label={`Select measurement for ${measurement.user.fullName}`}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center">
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                              rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                              rank === 2 ? 'bg-gray-100 text-gray-600' :
+                              rank === 3 ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-50 text-gray-500'
+                            }`}>
+                              {rank}
+                            </span>
+                          </div>
+                        </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-900">
                           {measurement.user.fullName}
@@ -599,10 +643,42 @@ export default function Publish() {
                         {new Date(measurement.date).toLocaleDateString()}
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {itemsPerPage !== -1 && totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between border-t pt-4">
+                <div className="text-sm text-gray-600">
+                  Showing {startIndex + 1}-{Math.min(endIndex, sortedMeasurements.length)} of {sortedMeasurements.length} results
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    ← Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next →
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           ) : (
             <div className="text-center py-8 text-gray-500">
               <p>No measurements found matching the current filters.</p>
