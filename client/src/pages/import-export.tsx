@@ -37,15 +37,29 @@ export default function ImportExport() {
     queryKey: ["/api/teams"],
   }) as { data: Team[] };
 
-  // Parse CSV to get headers and suggested mappings
+  // Parse CSV and return headers with suggested mappings
   const parseCsvMutation = useMutation({
     mutationFn: async ({ file, type }: { file: File; type: string }) => {
+      // Fetch CSRF token first
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include',
+      });
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+
+      const { csrfToken } = await csrfResponse.json();
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('type', type);
 
       const response = await fetch('/api/import/parse-csv', {
         method: 'POST',
+        headers: {
+          'X-CSRF-Token': csrfToken
+        },
         body: formData,
         credentials: 'include',
       });
