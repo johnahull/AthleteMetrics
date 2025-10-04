@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useAnalyticsContext, useAnalyticsActions } from '@/contexts/AnalyticsContext';
 import { getRecommendedChartType } from '@/components/charts/ChartContainer';
+import { devLog } from '@/utils/dev-logger';
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -24,10 +25,12 @@ export function useAnalyticsPermissions() {
   return useMemo(() => {
     const getEffectiveOrganizationId = () => {
       if (organizationContext) return organizationContext;
+
       const isSiteAdmin = user?.isSiteAdmin || false;
       if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
         return userOrganizations[0].organizationId;
       }
+
       return null;
     };
 
@@ -37,8 +40,8 @@ export function useAnalyticsPermissions() {
       user,
       effectiveOrganizationId,
       isSiteAdmin: user?.isSiteAdmin || false,
-      hasCoachAccess: user?.role === 'coach' || user?.role === 'org_admin' || user?.isSiteAdmin,
-      hasAthleteAccess: user?.role === 'athlete' || user?.isSiteAdmin,
+      hasCoachAccess: !!(user?.role === 'coach' || user?.role === 'org_admin' || user?.isSiteAdmin),
+      hasAthleteAccess: !!(user?.role === 'athlete' || user?.isSiteAdmin),
       organizationContext,
       userOrganizations,
     };
@@ -50,17 +53,26 @@ export function useAnalyticsPermissions() {
  */
 export function useAnalyticsDataLoader() {
   const { effectiveOrganizationId } = useAnalyticsPermissions();
-  const { setAvailableTeams, setAvailableAthletes, setLoading } = useAnalyticsActions();
+  const { setAvailableTeams, setAvailableAthletes, setLoading, setError } = useAnalyticsActions();
+
+  // Clear error when organization ID becomes available
+  useEffect(() => {
+    if (!effectiveOrganizationId) {
+      devLog.warn('Cannot load analytics data: No organization ID available');
+      setError('No organization selected. Please select an organization to view analytics.');
+    } else {
+      setError(null);
+    }
+  }, [effectiveOrganizationId, setError]);
 
   const loadInitialData = useCallback(async () => {
     if (!effectiveOrganizationId) {
-      console.log('No effective organization ID found, skipping data load');
       return;
     }
 
     try {
       setLoading(true);
-      console.log('Loading initial data for organization:', effectiveOrganizationId);
+      devLog.log('Loading initial data for organization:', effectiveOrganizationId);
 
       // Load teams and athletes in parallel
       const [teamsResponse, athletesResponse] = await Promise.all([
@@ -76,7 +88,7 @@ export function useAnalyticsDataLoader() {
           name: team.name
         })));
       } else {
-        console.error('Teams request failed:', teamsResponse.status);
+        devLog.error('Teams request failed:', teamsResponse.status);
       }
 
       // Process athletes
@@ -91,10 +103,10 @@ export function useAnalyticsDataLoader() {
           teams: athlete.teams || []
         })));
       } else {
-        console.error('Athletes request failed:', athletesResponse.status);
+        devLog.error('Athletes request failed:', athletesResponse.status);
       }
     } catch (error) {
-      console.error('Failed to load initial data:', error);
+      devLog.error('Failed to load initial data:', error);
     } finally {
       setLoading(false);
     }
@@ -161,8 +173,8 @@ export function useAnalyticsDataFetcher() {
       }
 
       const data: AnalyticsResponse = await response.json();
-      
-      console.log('Analytics data received:', {
+
+      devLog.log('Analytics data received:', {
         hasData: !!data.data,
         dataLength: data.data?.length || 0,
         hasTrends: !!data.trends,
@@ -175,7 +187,7 @@ export function useAnalyticsDataFetcher() {
         totalAthletes: data.meta?.totalAthletes || 0,
         totalMeasurements: data.meta?.totalMeasurements || 0
       });
-      
+
       setAnalyticsData(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch analytics data';
@@ -307,20 +319,20 @@ export function useAnalyticsExport() {
 
   const handleExport = useCallback(async () => {
     if (!state.analyticsData) {
-      console.warn('No analytics data to export');
+      devLog.warn('No analytics data to export');
       return;
     }
 
     try {
       // TODO: Implement actual export logic
       // This could export to CSV, PDF, or other formats
-      console.log('Exporting analytics data:', state.analyticsData);
+      devLog.log('Exporting analytics data:', state.analyticsData);
 
       // Example CSV export implementation:
       // const csvData = convertAnalyticsDataToCSV(state.analyticsData);
       // downloadCSV(csvData, `analytics-${Date.now()}.csv`);
     } catch (error) {
-      console.error('Failed to export analytics data:', error);
+      devLog.error('Failed to export analytics data:', error);
     }
   }, [state.analyticsData]);
 
