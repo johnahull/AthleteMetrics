@@ -33,6 +33,7 @@ export default function Publish() {
 
   const [selectedMeasurements, setSelectedMeasurements] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [showView, setShowView] = useState<"best_by_athlete" | "best_by_measurement" | "all">("best_by_athlete");
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -157,7 +158,24 @@ export default function Publish() {
     });
   })() : [];
 
-  const sortedMeasurements = bestMeasurements;
+  // All measurements sorted (for both "best by measurement" and "all" views)
+  const allMeasurementsSorted = measurements ? (() => {
+    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
+    return [...measurements].sort((a: any, b: any) => {
+      const aValue = parseFloat(a.value);
+      const bValue = parseFloat(b.value);
+
+      if (isTimeBased) {
+        return aValue - bValue; // ascending for time (lower is better)
+      } else {
+        return bValue - aValue; // descending for others (higher is better)
+      }
+    });
+  })() : [];
+
+  const sortedMeasurements = showView === "best_by_athlete"
+    ? bestMeasurements
+    : allMeasurementsSorted;
 
   const resetFilters = () => {
     setFilters({
@@ -473,9 +491,29 @@ export default function Publish() {
       <Card className="bg-white">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Results {filters.metric ? `- ${getMetricDisplayName(filters.metric)}` : ""}
-            </h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Results {filters.metric ? `- ${getMetricDisplayName(filters.metric)}` : ""}
+              </h3>
+              {filters.metric && (
+                <Select
+                  value={showView}
+                  onValueChange={(value: "best_by_athlete" | "best_by_measurement" | "all") => {
+                    setShowView(value);
+                    setSelectedMeasurements(new Set()); // Clear selection when changing view
+                  }}
+                >
+                  <SelectTrigger className="w-48 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="best_by_athlete">Best by Athlete</SelectItem>
+                    <SelectItem value="best_by_measurement">Best by Measurement</SelectItem>
+                    <SelectItem value="all">All Measurements</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             {sortedMeasurements && (
               <span className="text-sm text-gray-500">
                 {sortedMeasurements.length} result{sortedMeasurements.length !== 1 ? 's' : ''}
