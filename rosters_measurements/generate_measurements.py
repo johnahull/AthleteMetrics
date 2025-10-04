@@ -4,12 +4,38 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ---- Config: metric specs ----
+# Center/SD are for adult male baseline; min/max expanded to accommodate all ages/genders
 METRICS = {
-    "FLY10_TIME": {"units": "s",  "better": "lower", "center": 1.22, "sd": 0.06, "drift_per_day": -0.0006, "min": 1.05, "max": 1.45, "flyInDistance": 20},
-    "VERTICAL_JUMP": {"units": "in", "better": "higher", "center": 23.5, "sd": 2.0, "drift_per_day": +0.008, "min": 16.0, "max": 30.0, "flyInDistance": ""},
-    "AGILITY_505": {"units": "s",  "better": "lower", "center": 2.55, "sd": 0.07, "drift_per_day": -0.0007, "min": 2.2, "max": 3.0, "flyInDistance": ""},
-    "RSI": {"units": "",           "better": "higher", "center": 2.4,  "sd": 0.25, "drift_per_day": +0.0009, "min": 1.2, "max": 4.0, "flyInDistance": ""},
-    "T_TEST": {"units": "s",       "better": "lower", "center": 9.8,  "sd": 0.4,  "drift_per_day": -0.0010, "min": 8.0, "max": 12.0, "flyInDistance": ""},
+    "FLY10_TIME": {"units": "s",  "better": "lower", "center": 1.22, "sd": 0.06, "drift_per_day": -0.0006, "min": 1.00, "max": 1.70, "flyInDistance": 20},
+    "VERTICAL_JUMP": {"units": "in", "better": "higher", "center": 23.5, "sd": 2.0, "drift_per_day": +0.008, "min": 12.0, "max": 32.0, "flyInDistance": ""},
+    "AGILITY_505": {"units": "s",  "better": "lower", "center": 2.55, "sd": 0.07, "drift_per_day": -0.0007, "min": 2.1, "max": 3.5, "flyInDistance": ""},
+    "RSI": {"units": "",           "better": "higher", "center": 2.4,  "sd": 0.25, "drift_per_day": +0.0009, "min": 1.0, "max": 4.5, "flyInDistance": ""},
+    "T_TEST": {"units": "s",       "better": "lower", "center": 9.8,  "sd": 0.4,  "drift_per_day": -0.0010, "min": 7.5, "max": 13.5, "flyInDistance": ""},
+}
+
+# Age bracket multipliers (baseline = college_plus at 1.00)
+AGE_BRACKETS = {
+    "middle_school": 0.80,  # ages <14
+    "young_hs": 0.88,       # ages 14-15
+    "older_hs": 0.95,       # ages 16-17
+    "college_plus": 1.00,   # ages 18+
+}
+
+# Age boundary constants for bracket determination
+AGE_MIDDLE_SCHOOL_MAX = 14
+AGE_YOUNG_HS_MAX = 16
+AGE_OLDER_HS_MAX = 18
+AGE_MIN_VALID = 0
+AGE_MAX_VALID = 100
+
+# Gender-specific adjustments per metric (multiplier applied to baseline)
+# Based on typical performance differences between male/female athletes
+GENDER_ADJUSTMENTS = {
+    "FLY10_TIME": {"Male": 1.00, "Female": 1.08},      # Females ~8% slower (times are inverted)
+    "VERTICAL_JUMP": {"Male": 1.00, "Female": 0.75},   # Females ~25% lower jump
+    "AGILITY_505": {"Male": 1.00, "Female": 1.05},     # Females ~5% slower
+    "RSI": {"Male": 1.00, "Female": 0.85},             # Females ~15% lower RSI
+    "T_TEST": {"Male": 1.00, "Female": 1.08},          # Females ~8% slower
 }
 
 def parse_args():
@@ -53,6 +79,57 @@ def age_on(birth_date_str, on_date):
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
+def get_age_bracket(age):
+    """Map age to performance bracket with validation."""
+    if age is None or age == "":
+        return "college_plus"  # default if age unknown
+
+    # Type conversion with error handling
+    try:
+        age = int(float(age))  # Handle both "18" and "18.5"
+    except (ValueError, TypeError):
+        return "college_plus"  # default for invalid values
+
+    # Sanity check for unrealistic ages
+    if age < AGE_MIN_VALID or age > AGE_MAX_VALID:
+        return "college_plus"  # default to adult baseline
+
+    if age < AGE_MIDDLE_SCHOOL_MAX:
+        return "middle_school"
+    elif age < AGE_YOUNG_HS_MAX:
+        return "young_hs"
+    elif age < AGE_OLDER_HS_MAX:
+        return "older_hs"
+    else:
+        return "college_plus"
+
+def get_adjustment_factor(age, gender, metric, metric_spec):
+    """Calculate combined age + gender adjustment factor for a metric."""
+    # Get age bracket multiplier
+    bracket = get_age_bracket(age)
+    age_mult = AGE_BRACKETS[bracket]
+
+    # Get gender multiplier - explicit fallback to Male baseline
+    # Use .get() to prevent KeyError if metric is added without gender adjustments
+    metric_adjustments = GENDER_ADJUSTMENTS.get(metric, {"Male": 1.00, "Female": 1.00})
+    if gender not in ["Male", "Female"]:
+        gender_mult = 1.00  # Default to Male baseline for unexpected/missing values
+    else:
+        gender_mult = metric_adjustments.get(gender, 1.00)
+
+    # For "better is lower" metrics (times), adjustments work differently
+    # Lower performance = higher times, so we multiply by the inverse relationship
+    if metric_spec["better"] == "lower":
+        # Age: younger athletes are slower (higher times), so inverse age_mult
+        # Gender: if female mult > 1.0 (slower), apply directly
+        # Safeguard against division by zero (though current constants are all > 0)
+        combined = (1.0 / age_mult if age_mult != 0 else 1.0) * gender_mult
+    else:
+        # For "better is higher" metrics (jumps, RSI), multiply directly
+        combined = age_mult * gender_mult
+
+    return combined
+
 def athlete_baseline_offsets(roster_rows):
     """Give each athlete a stable baseline offset per metric so their data is consistent across dates."""
     offsets = {}
@@ -65,10 +142,17 @@ def athlete_baseline_offsets(roster_rows):
         offsets[key] = per_metric
     return offsets
 
-def gen_value(spec, base_offset, day_index, jitter_sd):
+def gen_value(spec, base_offset, day_index, jitter_sd, age=None, gender=None, metric=None):
+    # Apply age and gender adjustments to center baseline
+    center = spec["center"]
+    # Explicitly check for None and empty string to handle all edge cases
+    if age is not None and age != "" and gender and metric:
+        adjustment = get_adjustment_factor(age, gender, metric, spec)
+        center = center * adjustment
+
     # Trend over time: drift_per_day * day_index, plus trial noise
     trend = spec["drift_per_day"] * day_index
-    v = random.gauss(spec["center"] + base_offset + trend, jitter_sd)
+    v = random.gauss(center + base_offset + trend, jitter_sd)
     return clamp(v, spec["min"], spec["max"])
 
 def main():
@@ -109,7 +193,7 @@ def main():
                     for trial in range(args.trials):
                         # Slightly higher within-session jitter than between-date drift
                         jitter_sd = spec["sd"] * 0.5
-                        val = gen_value(spec, per_metric_offset[metric], di, jitter_sd)
+                        val = gen_value(spec, per_metric_offset[metric], di, jitter_sd, age, gender, metric)
 
                         row = {
                             "firstName": key[0],
