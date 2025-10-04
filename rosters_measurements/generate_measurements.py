@@ -15,9 +15,9 @@ METRICS = {
 
 # Age bracket multipliers (baseline = college_plus at 1.00)
 AGE_BRACKETS = {
-    "middle_school": 0.80,  # ages 11-14
-    "young_hs": 0.88,       # ages 14-16
-    "older_hs": 0.95,       # ages 16-18
+    "middle_school": 0.80,  # ages <14
+    "young_hs": 0.88,       # ages 14-15
+    "older_hs": 0.95,       # ages 16-17
     "college_plus": 1.00,   # ages 18+
 }
 
@@ -73,10 +73,20 @@ def clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
 def get_age_bracket(age):
-    """Map age to performance bracket."""
+    """Map age to performance bracket with validation."""
     if age is None or age == "":
         return "college_plus"  # default if age unknown
-    age = int(age)
+
+    # Type conversion with error handling
+    try:
+        age = int(float(age))  # Handle both "18" and "18.5"
+    except (ValueError, TypeError):
+        return "college_plus"  # default for invalid values
+
+    # Sanity check for unrealistic ages
+    if age < 0 or age > 100:
+        return "college_plus"  # default to adult baseline
+
     if age < 14:
         return "middle_school"
     elif age < 16:
@@ -92,15 +102,19 @@ def get_adjustment_factor(age, gender, metric, metric_spec):
     bracket = get_age_bracket(age)
     age_mult = AGE_BRACKETS[bracket]
 
-    # Get gender multiplier (default to Male if not specified)
-    gender_mult = GENDER_ADJUSTMENTS[metric].get(gender, 1.00)
+    # Get gender multiplier - explicit fallback to Male baseline
+    if gender not in ["Male", "Female"]:
+        gender_mult = 1.00  # Default to Male baseline for unexpected/missing values
+    else:
+        gender_mult = GENDER_ADJUSTMENTS[metric][gender]
 
     # For "better is lower" metrics (times), adjustments work differently
     # Lower performance = higher times, so we multiply by the inverse relationship
     if metric_spec["better"] == "lower":
         # Age: younger athletes are slower (higher times), so inverse age_mult
         # Gender: if female mult > 1.0 (slower), apply directly
-        combined = (1.0 / age_mult) * gender_mult
+        # Safeguard against division by zero (though current constants are all > 0)
+        combined = (1.0 / age_mult if age_mult != 0 else 1.0) * gender_mult
     else:
         # For "better is higher" metrics (jumps, RSI), multiply directly
         combined = age_mult * gender_mult
