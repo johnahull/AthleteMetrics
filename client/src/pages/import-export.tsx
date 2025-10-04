@@ -52,6 +52,7 @@ export default function ImportExport() {
   const [fileRowCounts, setFileRowCounts] = useState<Map<string, number>>(new Map());
   const [importStartTime, setImportStartTime] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [cancelImport, setCancelImport] = useState(false);
   const [previewData, setPreviewData] = useState<ImportPreview | null>(null);
   const [showTeamConfirmDialog, setShowTeamConfirmDialog] = useState(false);
   const [selectedOrgForTeams, setSelectedOrgForTeams] = useState("");
@@ -459,8 +460,23 @@ export default function ImportExport() {
 
     const results = new Map<string, any>();
     setProcessingProgress({ current: 0, total: uploadFiles.length });
+    setCancelImport(false); // Reset cancel flag at start
 
     for (let i = 0; i < uploadFiles.length; i++) {
+      // Check if import was cancelled
+      if (cancelImport) {
+        // Mark remaining files as cancelled
+        for (let j = i; j < uploadFiles.length; j++) {
+          results.set(uploadFiles[j].name, {
+            success: false,
+            error: 'Import cancelled by user',
+            file: uploadFiles[j],
+            cancelled: true
+          });
+        }
+        break;
+      }
+
       const file = uploadFiles[i];
       setProcessingProgress({ current: i + 1, total: uploadFiles.length });
 
@@ -498,25 +514,34 @@ export default function ImportExport() {
     setProcessingProgress(null);
     setImportStartTime(null);
     setElapsedSeconds(0);
+    setCancelImport(false); // Reset cancel flag
 
     // Show summary toast
     const successCount = Array.from(results.values()).filter(r => r.success).length;
-    const failCount = results.size - successCount;
+    const cancelledCount = Array.from(results.values()).filter((r: any) => r.cancelled).length;
+    const failCount = results.size - successCount - cancelledCount;
 
     // Count total created teams across all files
     const totalCreatedTeams = Array.from(results.values())
       .filter(r => r.success)
       .reduce((sum, r) => sum + (r.data?.createdTeams?.length || 0), 0);
 
-    let description = `${successCount} file${successCount !== 1 ? 's' : ''} imported successfully${failCount > 0 ? `, ${failCount} failed` : ''}`;
+    let title = cancelledCount > 0 ? "Batch Import Cancelled" : "Batch Import Complete";
+    let description = `${successCount} file${successCount !== 1 ? 's' : ''} imported successfully`;
+    if (cancelledCount > 0) {
+      description += `, ${cancelledCount} cancelled`;
+    }
+    if (failCount > 0) {
+      description += `, ${failCount} failed`;
+    }
     if (totalCreatedTeams > 0) {
       description += `. ${totalCreatedTeams} team${totalCreatedTeams !== 1 ? 's' : ''} created automatically`;
     }
 
     toast({
-      title: "Batch Import Complete",
+      title,
       description,
-      variant: failCount > 0 ? "destructive" : "default",
+      variant: failCount > 0 ? "destructive" : cancelledCount > 0 ? "default" : "default",
     });
   };
 
@@ -1062,27 +1087,40 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                     </div>
                   )}
 
-                  <Button
-                    onClick={handleImport}
-                    disabled={uploadFiles.length === 0 || importMutation.isPending || processingProgress !== null}
-                    className="w-full"
-                    data-testid="button-import"
-                  >
-                    {processingProgress
-                      ? `Processing ${processingProgress.current}/${processingProgress.total}...`
-                      : importMutation.isPending && uploadFiles.length === 1
-                      ? (() => {
-                          const file = uploadFiles[0];
-                          const rowCount = file ? fileRowCounts.get(file.name) : undefined;
-                          if (rowCount && rowCount > 0) {
-                            return `Importing ${rowCount} rows${elapsedSeconds > 0 ? ` (${formatElapsedTime(elapsedSeconds)})` : '...'}`;
-                          }
-                          return `Importing${elapsedSeconds > 0 ? ` (${formatElapsedTime(elapsedSeconds)})` : '...'}`;
-                        })()
-                      : importMutation.isPending
-                      ? "Importing..."
-                      : `Import ${uploadFiles.length > 1 ? `${uploadFiles.length} Files` : 'Data'}`}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleImport}
+                      disabled={uploadFiles.length === 0 || importMutation.isPending || processingProgress !== null}
+                      className="flex-1"
+                      data-testid="button-import"
+                    >
+                      {processingProgress
+                        ? `Processing ${processingProgress.current}/${processingProgress.total}...`
+                        : importMutation.isPending && uploadFiles.length === 1
+                        ? (() => {
+                            const file = uploadFiles[0];
+                            const rowCount = file ? fileRowCounts.get(file.name) : undefined;
+                            if (rowCount && rowCount > 0) {
+                              return `Importing ${rowCount} rows${elapsedSeconds > 0 ? ` (${formatElapsedTime(elapsedSeconds)})` : '...'}`;
+                            }
+                            return `Importing${elapsedSeconds > 0 ? ` (${formatElapsedTime(elapsedSeconds)})` : '...'}`;
+                          })()
+                        : importMutation.isPending
+                        ? "Importing..."
+                        : `Import ${uploadFiles.length > 1 ? `${uploadFiles.length} Files` : 'Data'}`}
+                    </Button>
+
+                    {(processingProgress !== null || importMutation.isPending) && (
+                      <Button
+                        onClick={() => setCancelImport(true)}
+                        variant="outline"
+                        className="px-4"
+                        data-testid="button-cancel-import"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
