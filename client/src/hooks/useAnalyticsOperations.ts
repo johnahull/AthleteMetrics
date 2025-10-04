@@ -25,12 +25,12 @@ export function useAnalyticsPermissions() {
   return useMemo(() => {
     const getEffectiveOrganizationId = () => {
       if (organizationContext) return organizationContext;
-      
+
       const isSiteAdmin = user?.isSiteAdmin || false;
       if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
         return userOrganizations[0].organizationId;
       }
-      
+
       return null;
     };
 
@@ -40,8 +40,8 @@ export function useAnalyticsPermissions() {
       user,
       effectiveOrganizationId,
       isSiteAdmin: user?.isSiteAdmin || false,
-      hasCoachAccess: user?.role === 'coach' || user?.role === 'org_admin' || user?.isSiteAdmin,
-      hasAthleteAccess: user?.role === 'athlete' || user?.isSiteAdmin,
+      hasCoachAccess: !!(user?.role === 'coach' || user?.role === 'org_admin' || user?.isSiteAdmin),
+      hasAthleteAccess: !!(user?.role === 'athlete' || user?.isSiteAdmin),
       organizationContext,
       userOrganizations,
     };
@@ -53,15 +53,18 @@ export function useAnalyticsPermissions() {
  */
 export function useAnalyticsDataLoader() {
   const { effectiveOrganizationId } = useAnalyticsPermissions();
-  const { setAvailableTeams, setAvailableAthletes, setLoading } = useAnalyticsActions();
+  const { setAvailableTeams, setAvailableAthletes, setLoading, setError } = useAnalyticsActions();
 
   const loadInitialData = useCallback(async () => {
     if (!effectiveOrganizationId) {
+      devLog.warn('Cannot load analytics data: No organization ID available');
+      setError('No organization selected. Please select an organization to view analytics.');
       return;
     }
 
     try {
       setLoading(true);
+      setError(null);
       devLog.log('Loading initial data for organization:', effectiveOrganizationId);
 
       // Load teams and athletes in parallel
@@ -100,7 +103,7 @@ export function useAnalyticsDataLoader() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveOrganizationId, setAvailableTeams, setAvailableAthletes, setLoading]);
+  }, [effectiveOrganizationId, setAvailableTeams, setAvailableAthletes, setLoading, setError]);
 
   return { loadInitialData };
 }
