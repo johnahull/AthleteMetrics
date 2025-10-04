@@ -3787,6 +3787,12 @@ export async function registerRoutes(app: Express) {
               continue;
             }
 
+            // REQUIRE team assignment in CSV
+            if (!teamName || !teamName.trim()) {
+              errors.push({ row: rowNum, error: `Team name is required for ${firstName} ${lastName}. All athletes must be assigned to a team.` });
+              continue;
+            }
+
             // Validate gender field if provided
             let validatedGender: string | undefined;
             if (gender && gender.trim()) {
