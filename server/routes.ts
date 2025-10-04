@@ -463,11 +463,12 @@ export async function registerRoutes(app: Express) {
   });
 
   // Rate limiting for file upload endpoints
+  // SECURITY: Reduced from 10,000/hour to prevent abuse
   const uploadLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    limit: 10000, // Limit each IP to 10000 file uploads per hour
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: parseInt(process.env.UPLOAD_RATE_LIMIT || '20'), // Default: 20 uploads per 15 min
     message: {
-      error: "Too many file uploads, please try again in an hour"
+      error: "Too many file uploads, please try again in 15 minutes"
     },
     standardHeaders: true,
     legacyHeaders: false,
@@ -3699,6 +3700,22 @@ export async function registerRoutes(app: Express) {
       const createdTeams = new Map<string, { id: string, name: string, athleteCount: number }>();
       const createdAthletes: Array<{ id: string, name: string }> = [];
 
+      // SECURITY: Sanitize CSV values to prevent formula injection
+      const sanitizeCSVValue = (value: string): string => {
+        if (!value || typeof value !== 'string') return value;
+        // Remove leading formula characters that could be exploited in Excel/Sheets
+        // Formulas start with: = + - @ (and sometimes |, %, \t, \r)
+        const trimmed = value.trim();
+        if (trimmed.length === 0) return trimmed;
+
+        // If value starts with a formula character, prepend a single quote
+        // This makes Excel/Sheets treat it as text instead of a formula
+        if (/^[=+\-@|%\t\r]/.test(trimmed)) {
+          return `'${trimmed}`;
+        }
+        return trimmed;
+      };
+
       // Parse CSV data
       const csvData: any[] = [];
       const csvText = file.buffer.toString('utf-8');
@@ -3715,7 +3732,8 @@ export async function registerRoutes(app: Express) {
         const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] || '';
+          // Apply sanitization to prevent CSV formula injection
+          row[header] = sanitizeCSVValue(values[index] || '');
         });
         csvData.push(row);
         totalRows++;
@@ -3877,6 +3895,24 @@ export async function registerRoutes(app: Express) {
                     (options.teamHandling === 'auto_create_confirm' && confirmData)) {
                   // Create team automatically
                   if (organizationId) {
+                    // SECURITY: Verify user has permission to create teams in this organization
+                    const currentUser = req.session.user!;
+                    const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+                    if (!userIsSiteAdmin) {
+                      // Check if user belongs to the target organization
+                      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+                      const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
+
+                      if (!hasAccess) {
+                        errors.push({
+                          row: rowNum,
+                          error: `Unauthorized: Cannot create team "${normalizedTeamName}" in organization. User does not belong to this organization.`
+                        });
+                        continue;
+                      }
+                    }
+
                     const newTeam = await storage.createTeam({
                       organizationId,
                       name: normalizedTeamName,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -128,8 +128,11 @@ export default function Publish() {
     setCurrentPage(1);
   }, [filters, showView]);
 
+  // PERFORMANCE: Memoize expensive calculation to prevent recomputation on every render
   // Get each athlete's best performance for the selected metric
-  const bestMeasurements = measurements ? (() => {
+  const bestMeasurements = useMemo(() => {
+    if (!measurements) return [];
+
     const athleteBest = new Map();
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
 
@@ -163,10 +166,13 @@ export default function Publish() {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  })() : [];
+  }, [measurements, filters.metric]);
 
+  // PERFORMANCE: Memoize expensive sorting to prevent recomputation on every render
   // All measurements sorted (for both "best by measurement" and "all" views)
-  const allMeasurementsSorted = measurements ? (() => {
+  const allMeasurementsSorted = useMemo(() => {
+    if (!measurements) return [];
+
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
     return [...measurements].sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
@@ -178,7 +184,7 @@ export default function Publish() {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  })() : [];
+  }, [measurements, filters.metric]);
 
   const sortedMeasurements = showView === "best_by_athlete"
     ? bestMeasurements

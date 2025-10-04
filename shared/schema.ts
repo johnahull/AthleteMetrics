@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -25,7 +25,12 @@ export const teams = pgTable("teams", {
   season: text("season"), // "2024-Fall", "2025-Spring"
   isArchived: boolean("is_archived").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Unique constraint: team names must be unique within an organization
+  uniqueTeamPerOrg: unique().on(table.organizationId, table.name),
+  // Performance index for common queries
+  orgNameIndex: index("teams_org_name_idx").on(table.organizationId, table.name),
+}));
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -29,6 +29,11 @@ export function PreviewTableDialog({
   onConfirm,
   isLoading = false,
 }: PreviewTableDialogProps) {
+  // PERFORMANCE: Limit displayed rows to prevent browser freeze with large datasets
+  const MAX_DISPLAYED_ROWS = 100;
+  const displayedRows = previewRows.slice(0, MAX_DISPLAYED_ROWS);
+  const hasMoreRows = previewRows.length > MAX_DISPLAYED_ROWS;
+
   const getStatusIcon = (status?: 'will_create' | 'will_match' | 'duplicate' | 'error') => {
     switch (status) {
       case 'will_create':
@@ -86,9 +91,25 @@ export function PreviewTableDialog({
         <DialogHeader>
           <DialogTitle>Preview Import Data</DialogTitle>
           <DialogDescription>
-            Review the first {previewRows.length} rows before importing. Showing mapped columns only.
+            Review the data before importing. Showing mapped columns only.
+            {hasMoreRows && (
+              <span className="text-amber-600 font-medium">
+                {' '}Displaying first {MAX_DISPLAYED_ROWS} of {previewRows.length} rows for performance.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Performance Warning for Large Datasets */}
+        {hasMoreRows && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <p className="font-medium">Large dataset detected</p>
+              <p>Preview limited to {MAX_DISPLAYED_ROWS} rows for performance. All {previewRows.length} rows will be imported if you proceed.</p>
+            </div>
+          </div>
+        )}
 
         {/* Summary Stats */}
         <div className="grid grid-cols-5 gap-4 py-4 border-b">
@@ -158,7 +179,7 @@ export function PreviewTableDialog({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {previewRows.map((row) => {
+              {displayedRows.map((row) => {
                 const rowHasError = row.validations.some(v => v.status === 'error');
                 const rowHasWarning = row.validations.some(v => v.status === 'warning');
 

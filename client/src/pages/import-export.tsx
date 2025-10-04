@@ -70,10 +70,12 @@ export default function ImportExport() {
   }) as { data: Team[] };
 
   // Helper: Count rows in CSV file
+  // PERFORMANCE: Skip row counting for large files to avoid loading entire file into memory
   const countCSVRows = async (file: File): Promise<number> => {
-    // Skip row counting for large files (> 5MB) to avoid UI lag
-    if (file.size > 5 * 1024 * 1024) {
-      return 0;
+    // Skip row counting for files > 1MB to prevent performance issues
+    // For large files, we just won't show row count in the UI
+    if (file.size > 1 * 1024 * 1024) {
+      return 0; // Return 0 to indicate "not counted" rather than "0 rows"
     }
 
     return new Promise((resolve) => {
@@ -724,8 +726,17 @@ Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump tes
                 </div>
 
                 <div
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Upload ${importType} CSV file. Press Enter or Space to browse files, or drag and drop files here`}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
                   onClick={() => document.getElementById('file-upload')?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      document.getElementById('file-upload')?.click();
+                    }
+                  }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   data-testid="file-drop-zone"
