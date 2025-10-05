@@ -14,6 +14,18 @@ import { X, TrendingUp } from 'lucide-react';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
 
+// Mutually exclusive metrics - selecting one prevents selecting the other
+// FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
+// Using tuple approach to ensure symmetric mappings
+const MUTUALLY_EXCLUSIVE_PAIRS: Array<[string, string]> = [
+  ['FLY10_TIME', 'TOP_SPEED'],
+];
+
+// Generate symmetric mapping from pairs
+const MUTUALLY_EXCLUSIVE_METRICS: Record<string, string> = Object.fromEntries(
+  MUTUALLY_EXCLUSIVE_PAIRS.flatMap(([a, b]) => [[a, b], [b, a]])
+);
+
 interface MetricsSelectorProps {
   metrics: MetricSelection;
   onMetricsChange: (metrics: MetricSelection) => void;
@@ -49,7 +61,15 @@ export function MetricsSelector({
 
   const handlePrimaryMetricChange = (metric: string) => {
     // Remove from additional if it was there
-    const newAdditional = metrics.additional.filter(m => m !== metric);
+    let newAdditional = metrics.additional.filter(m => m !== metric);
+
+    // Check for mutually exclusive metric
+    const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
+    if (exclusiveMetric) {
+      // Remove the mutually exclusive metric from additional
+      newAdditional = newAdditional.filter(m => m !== exclusiveMetric);
+    }
+
     onMetricsChange({
       primary: metric,
       additional: newAdditional
@@ -62,6 +82,16 @@ export function MetricsSelector({
       if (metric === metrics.primary || metrics.additional.length >= maxAdditional) {
         return;
       }
+
+      // Check for mutual exclusion
+      const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
+      if (exclusiveMetric &&
+          (metrics.primary === exclusiveMetric ||
+           metrics.additional.includes(exclusiveMetric))) {
+        // Don't add if mutually exclusive metric is already selected
+        return;
+      }
+
       onMetricsChange({
         ...metrics,
         additional: [...metrics.additional, metric]
@@ -182,7 +212,17 @@ export function MetricsSelector({
               )
               .map((metric: string) => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-                const isDisabled = metrics.additional.length >= maxAdditional || isMultiGroupMode;
+
+                // Check if this metric is mutually exclusive with a selected metric
+                const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
+                const isExcluded = !!(exclusiveMetric &&
+                  (metrics.primary === exclusiveMetric ||
+                   metrics.additional.includes(exclusiveMetric)));
+
+                const isDisabled = metrics.additional.length >= maxAdditional ||
+                                   isMultiGroupMode ||
+                                   isExcluded;
+
                 return (
                   <div key={metric} className="flex items-start space-x-2">
                     <Checkbox
@@ -196,9 +236,13 @@ export function MetricsSelector({
                     />
                     <label
                       htmlFor={`metric-${metric}`}
-                      className="text-xs leading-tight cursor-pointer"
+                      className={`text-xs leading-tight cursor-pointer ${
+                        isExcluded ? 'text-muted-foreground' : ''
+                      }`}
+                      title={isExcluded ? `Cannot select with ${METRIC_CONFIG[exclusiveMetric as keyof typeof METRIC_CONFIG]?.label}` : undefined}
                     >
                       {config?.label || metric}
+                      {isExcluded && <span className="text-xs ml-1">(conflicts)</span>}
                     </label>
                   </div>
                 );

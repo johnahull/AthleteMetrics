@@ -26,6 +26,7 @@ import type {
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber } from '@shared/utils/number-conversion';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Constants for athlete name rendering
 const ATHLETE_NAME_CONSTANTS = {
@@ -483,9 +484,22 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           label: (context) => {
             const point = context.raw as any;
             if (!point) return ['No data'];
+
+            // Format x value with dual display for FLY10_TIME
+            let xDisplay = `${point.x}${scatterData?.xUnit}`;
+            if (scatterData?.xMetric && isFly10Metric(scatterData.xMetric) && point.x) {
+              xDisplay = formatFly10Dual(point.x, 'time-first');
+            }
+
+            // Format y value with dual display for FLY10_TIME
+            let yDisplay = `${point.y}${scatterData?.yUnit}`;
+            if (scatterData?.yMetric && isFly10Metric(scatterData.yMetric) && point.y) {
+              yDisplay = formatFly10Dual(point.y, 'time-first');
+            }
+
             return [
-              `${scatterData?.xLabel}: ${point.x}${scatterData?.xUnit}`,
-              `${scatterData?.yLabel}: ${point.y}${scatterData?.yUnit}`
+              `${scatterData?.xLabel}: ${xDisplay}`,
+              `${scatterData?.yLabel}: ${yDisplay}`
             ];
           },
           afterLabel: (context) => {
@@ -604,7 +618,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         position: 'bottom',
         title: {
           display: true,
-          text: `${scatterData?.xLabel} (${scatterData?.xUnit})`
+          text: scatterData?.xMetric && isFly10Metric(scatterData.xMetric)
+            ? `${scatterData?.xLabel} (s / mph)`
+            : `${scatterData?.xLabel} (${scatterData?.xUnit})`
         },
         grid: {
           display: true
@@ -614,7 +630,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         type: 'linear',
         title: {
           display: true,
-          text: `${scatterData?.yLabel} (${scatterData?.yUnit})`
+          text: scatterData?.yMetric && isFly10Metric(scatterData.yMetric)
+            ? `${scatterData?.yLabel} (s / mph)`
+            : `${scatterData?.yLabel} (${scatterData?.yUnit})`
         },
         grid: {
           display: true

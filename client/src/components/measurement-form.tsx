@@ -146,7 +146,7 @@ export default function MeasurementForm() {
 
   const metric = form.watch("metric");
   const date = form.watch("date");
-  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
+  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : metric === "TOP_SPEED" ? "mph" : "s";
 
   // Watch for date changes and refetch active teams
   useEffect(() => {
@@ -290,6 +290,7 @@ export default function MeasurementForm() {
                     <SelectItem value="T_TEST">T-Test</SelectItem>
                     <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
                     <SelectItem value="RSI">Reactive Strength Index</SelectItem>
+                    <SelectItem value="TOP_SPEED">Top Speed</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />

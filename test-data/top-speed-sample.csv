@@ -1,0 +1,7 @@
+First Name,Last Name,Date,Metric,Value,Units,Fly-In Distance,Team
+John,Doe,2024-01-15,TOP_SPEED,18.5,mph,10,
+Jane,Smith,2024-01-15,TOP_SPEED,20.2,mph,10,
+Mike,Johnson,2024-01-16,TOP_SPEED,17.8,mph,10,Team A
+Sarah,Williams,2024-01-16,TOP_SPEED,19.1,mph,10,Team A
+Chris,Brown,2024-01-17,FLY10_TIME,2.0,s,10,Team B
+Alex,Davis,2024-01-17,FLY10_TIME,1.95,s,10,Team B

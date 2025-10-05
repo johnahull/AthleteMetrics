@@ -262,6 +262,14 @@ export class MeasurementValidator {
           warnings.push('High RSI value - confirm measurement technique');
         }
         break;
+
+      case 'TOP_SPEED':
+        if (value < 12) {
+          warnings.push('Low top speed - verify measurement accuracy');
+        } else if (value > 22) {
+          warnings.push('Very high top speed - confirm measurement method');
+        }
+        break;
     }
 
     return warnings;

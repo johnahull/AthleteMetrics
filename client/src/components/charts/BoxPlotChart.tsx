@@ -28,6 +28,7 @@ import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conversion';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -390,6 +391,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   athleteName: indivPoint.athleteName,
                   teamName: indivPoint.teamName,
                   groupName: groupName,
+                  metric: metric,
                   isOutlier
                 };
               });
@@ -623,6 +625,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   athleteName: point.athleteName,
                   teamName: point.teamName,
                   groupName: group.name,
+                  metric: metric,
                   isOutlier
                 };
               })
@@ -877,6 +880,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 athleteId: point.athleteId,
                 athleteName: point.athleteName,
                 teamName: point.teamName,
+                metric: metric,
                 isOutlier
               };
             })
@@ -1153,21 +1157,30 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             return `${point.dataset.label}`;
           },
           label: (context) => {
-            const metric = Object.keys(statistics || {})[context.parsed.x];
-            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const rawData = context.raw as any;
+            // Get metric from rawData first, fallback to statistics keys
+            const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
+            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+            const value = context.parsed.y;
+
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = isFly10Metric(metric)
+              ? formatFly10Dual(value, 'time-first')
+              : `${value.toFixed(2)}${unit}`;
 
             // Enhanced label for individual athlete points
             if (rawData && rawData.athleteName) {
-              return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}: ${context.parsed.y.toFixed(2)}${unit}`;
+              const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric || 'Value';
+              return `${metricLabel}: ${formattedValue}`;
             }
 
-            return `Value: ${context.parsed.y.toFixed(2)}${unit}`;
+            return `Value: ${formattedValue}`;
           },
           afterLabel: (context) => {
-            const metric = Object.keys(statistics || {})[context.parsed.x];
-            const stats = statistics?.[metric];
             const rawData = context.raw as any;
+            // Get metric from rawData first, fallback to statistics keys
+            const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
+            const stats = statistics?.[metric];
             const result = [];
 
             // Add team and group info for individual athlete points
@@ -1186,8 +1199,18 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   .map(d => d.value)
                   .sort((a, b) => a - b);
                 const rank = allValues.filter(v => v < context.parsed.y).length;
-                const percentile = (rank / allValues.length) * 100;
-                result.push(`Percentile: ${percentile.toFixed(0)}%`);
+
+                // For "lower is better" metrics, invert percentile so high percentile = better performance
+                const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const rawPercentile = (rank / allValues.length) * 100;
+                const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
+
+                // Add clarifying label for percentile meaning
+                const percentileLabel = metricConfig?.lowerIsBetter
+                  ? `${percentile.toFixed(0)}th percentile (faster than ${percentile.toFixed(0)}%)`
+                  : `${percentile.toFixed(0)}th percentile (better than ${percentile.toFixed(0)}%)`;
+
+                result.push(`Performance: ${percentileLabel}`);
               }
             }
 
@@ -1251,7 +1274,19 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         beginAtZero: false,
         title: {
           display: true,
-          text: 'Value'
+          text: (() => {
+            const metrics = Object.keys(statistics || {});
+            if (metrics.length === 1) {
+              const metric = metrics[0];
+              if (isFly10Metric(metric)) {
+                return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || 'Value'} (s / mph)`;
+              }
+              const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+              const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || 'Value';
+              return unit ? `${label} (${unit})` : label;
+            }
+            return 'Value';
+          })()
         },
         ticks: {
           callback: (value) => {
@@ -1259,6 +1294,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const metrics = Object.keys(statistics || {});
             if (metrics.length === 1) {
               const metric = metrics[0];
+              if (isFly10Metric(metric)) {
+                return formatFly10Dual(Number(value), 'time-first');
+              }
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
               return `${Number(value).toFixed(2)}${unit}`;
             }

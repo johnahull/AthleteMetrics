@@ -386,7 +386,8 @@ export const METRIC_CONFIG = {
   AGILITY_5105: { label: '5-10-5 Agility', unit: 's', lowerIsBetter: true },
   T_TEST: { label: 'T-Test Agility', unit: 's', lowerIsBetter: true },
   DASH_40YD: { label: '40-Yard Dash', unit: 's', lowerIsBetter: true },
-  RSI: { label: 'Reactive Strength Index', unit: '', lowerIsBetter: false }
+  RSI: { label: 'Reactive Strength Index', unit: '', lowerIsBetter: false },
+  TOP_SPEED: { label: 'Top Speed', unit: 'mph', lowerIsBetter: false }
 } as const;
 
 // Color schemes for charts

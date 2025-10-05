@@ -66,7 +66,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   });
 
   const metric = form.watch("metric");
-  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : "s";
+  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : metric === "TOP_SPEED" ? "mph" : "s";
 
   const onSubmit = (data: InsertMeasurement) => {
     createMeasurementMutation.mutate({
@@ -133,6 +133,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                       <SelectItem value="T_TEST">T-Test</SelectItem>
                       <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
                       <SelectItem value="RSI">Reactive Strength Index</SelectItem>
+                      <SelectItem value="TOP_SPEED">Top Speed</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

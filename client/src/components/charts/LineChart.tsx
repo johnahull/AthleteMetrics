@@ -18,6 +18,7 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 
@@ -320,7 +321,12 @@ export function LineChart({
             const value = context.parsed.y;
             if (value === null) return '';
 
-            return `${context.dataset.label}: ${value.toFixed(2)}${lineData?.unit}`;
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = lineData?.metric && isFly10Metric(lineData.metric)
+              ? formatFly10Dual(value, 'time-first')
+              : `${value.toFixed(2)}${lineData?.unit}`;
+
+            return `${context.dataset.label}: ${formattedValue}`;
           },
           afterLabel: (context) => {
             const datasetIndex = context.datasetIndex;

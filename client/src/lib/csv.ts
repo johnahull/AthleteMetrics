@@ -235,7 +235,7 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
   }
   
   // Validate metric type
-  const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+  const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED'];
   if (!row.metric || !validMetrics.includes(row.metric)) {
     errors.push(`Metric must be one of: ${validMetrics.join(', ')}`);
   }
@@ -251,9 +251,9 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
   }
   
   // Validate units
-  const validUnits = ['s', 'in', ''];
+  const validUnits = ['s', 'in', 'mph', ''];
   if (row.units && !validUnits.includes(row.units)) {
-    errors.push('Units must be "s" for time, "in" for distance, or empty for dimensionless');
+    errors.push('Units must be "s" for time, "in" for distance, "mph" for speed, or empty for dimensionless');
   }
   
   // Validate flyInDistance if provided

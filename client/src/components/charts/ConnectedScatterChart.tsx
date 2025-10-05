@@ -36,6 +36,7 @@ import {
 } from '@/utils/data-safety';
 import { getChartColor, getChartBackgroundColor } from '@/utils/chart-colors';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Type definitions for chart data
 interface ScatterPoint {
@@ -453,9 +454,22 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           },
           label: (context) => {
             const point = context.raw as any;
+
+            // Format x value with dual display for FLY10_TIME
+            let xDisplay = `${point.x?.toFixed(2)}${scatterData?.xUnit}`;
+            if (scatterData?.xMetric && isFly10Metric(scatterData.xMetric) && point.x) {
+              xDisplay = formatFly10Dual(point.x, 'time-first');
+            }
+
+            // Format y value with dual display for FLY10_TIME
+            let yDisplay = `${point.y?.toFixed(2)}${scatterData?.yUnit}`;
+            if (scatterData?.yMetric && isFly10Metric(scatterData.yMetric) && point.y) {
+              yDisplay = formatFly10Dual(point.y, 'time-first');
+            }
+
             return [
-              `${scatterData?.xLabel}: ${point.x?.toFixed(2)}${scatterData?.xUnit}`,
-              `${scatterData?.yLabel}: ${point.y?.toFixed(2)}${scatterData?.yUnit}`
+              `${scatterData?.xLabel}: ${xDisplay}`,
+              `${scatterData?.yLabel}: ${yDisplay}`
             ];
           },
           afterLabel: (context) => {
@@ -588,7 +602,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         position: 'bottom',
         title: {
           display: true,
-          text: `${scatterData?.xLabel} (${scatterData?.xUnit})`
+          text: scatterData?.xMetric && isFly10Metric(scatterData.xMetric)
+            ? `${scatterData?.xLabel} (s / mph)`
+            : `${scatterData?.xLabel} (${scatterData?.xUnit})`
         },
         grid: {
           display: true
@@ -598,7 +614,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
         type: 'linear',
         title: {
           display: true,
-          text: `${scatterData?.yLabel} (${scatterData?.yUnit})`
+          text: scatterData?.yMetric && isFly10Metric(scatterData.yMetric)
+            ? `${scatterData?.yLabel} (s / mph)`
+            : `${scatterData?.yLabel} (${scatterData?.yUnit})`
         },
         grid: {
           display: true

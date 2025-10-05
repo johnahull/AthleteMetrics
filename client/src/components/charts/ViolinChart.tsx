@@ -9,6 +9,7 @@ import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefin
 import { devLog } from '@/utils/dev-logger';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { getDateKey } from '@/utils/date-utils';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 ChartJS.register(CategoryScale, LinearScale, Title, Tooltip, Legend);
 
@@ -767,7 +768,7 @@ export function ViolinChart({
       const value = globalMin + (valueRange * i) / numTicks;
       const y = valueToY(value);
 
-      // Format numbers nicely
+      // Format numbers nicely - use simple format for axis (dual format in tooltips)
       const displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
       ctx.fillText(displayValue, padding - 10, y + 4);
 
@@ -1022,8 +1023,9 @@ export function ViolinChart({
                 </span>
               )}
               <span className="font-bold">
-                {tooltip.value.toFixed(2)}
-                {tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG]?.unit}
+                {tooltip.metric && isFly10Metric(tooltip.metric)
+                  ? formatFly10Dual(tooltip.value, 'time-first')
+                  : `${tooltip.value.toFixed(2)}${tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG]?.unit || ''}`}
               </span>
             </div>
           </div>
@@ -1111,7 +1113,7 @@ export function ViolinChart({
 
       {metricConfig && (
         <p className="text-xs text-muted-foreground mt-2">
-          {metricConfig.label} ({metricConfig.unit})
+          {metricConfig.label} ({metric && isFly10Metric(metric) ? 's / mph' : metricConfig.unit})
           {metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
         </p>
       )}

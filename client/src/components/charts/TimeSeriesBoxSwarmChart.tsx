@@ -23,6 +23,7 @@ import { TIME_SERIES_CHART_CONSTANTS, ATHLETE_COLORS, BOX_PLOT_COLORS, PERSONAL_
 import { calculateBoxPlotStatistics, safeParseDate, generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelCollisions } from './utils/labelCollisionResolver';
 import type { AthleteDataPoint, ChartDataPoint, LabelPosition, ChartInstance, TooltipItem, ChartContext, ChartScale } from './types/timeSeriesChartTypes';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -341,8 +342,13 @@ export function TimeSeriesBoxSwarmChart({
               const value = context.parsed.y;
               const dataPoint = context.raw;
 
+              // Format value with dual display for FLY10_TIME
+              const formattedValue = isFly10Metric(metric)
+                ? formatFly10Dual(value, 'time-first')
+                : `${value}${unit}`;
+
               // Build the tooltip line with athlete name, value, and personal best indicator
-              let label = `${datasetLabel}: ${value}${unit}`;
+              let label = `${datasetLabel}: ${formattedValue}`;
               if (dataPoint && dataPoint.isPersonalBest) {
                 label += ' ⭐ (Personal Best)';
               }

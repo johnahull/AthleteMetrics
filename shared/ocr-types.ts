@@ -113,6 +113,7 @@ export const ocrConfigSchema = z.object({
       'AGILITY_5105': { min: 2.0, max: 6.0 },
       'T_TEST': { min: 7.0, max: 15.0 },
       'RSI': { min: 0.5, max: 5.0 },
+      'TOP_SPEED': { min: 10, max: 25 },
     }),
     nameMinLength: z.number().min(1).default(2),
     dateFormats: z.array(z.string()).default([

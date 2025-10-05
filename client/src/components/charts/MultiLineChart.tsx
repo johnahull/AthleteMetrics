@@ -37,6 +37,7 @@ import { LegendLine } from './components/LegendLine';
 import { CollapsibleLegend } from './components/CollapsibleLegend';
 import { ChartSkeleton } from './components/ChartSkeleton';
 import { useDebounce } from '@/hooks/useDebounce';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -351,6 +352,10 @@ export function MultiLineChart({
 
             if (point) {
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+              // Show dual format for FLY10_TIME
+              if (isFly10Metric(metric)) {
+                return [`Actual: ${formatFly10Dual(point.value, 'time-first')}`];
+              }
               return [`Actual: ${point.value.toFixed(2)}${unit}`];
             }
 
@@ -503,7 +508,12 @@ export function MultiLineChart({
                         dashPattern={[...style.dash]}
                       />
                       <span className="text-xs">
-                        <strong>{style.name}:</strong> {label} ({unit}) {isLowerBetter ? '↓' : '↑'}
+                        <strong>{style.name}:</strong> {label}
+                        {isFly10Metric(metric) ? (
+                          <> (s / mph) {isLowerBetter ? '↓' : '↑'}</>
+                        ) : (
+                          <> ({unit}) {isLowerBetter ? '↓' : '↑'}</>
+                        )}
                       </span>
                     </div>
                   </div>

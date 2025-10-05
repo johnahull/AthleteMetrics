@@ -18,6 +18,7 @@ import type {
   ChartDataPoint
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -83,7 +84,12 @@ export function RadarChart({
           // Calculate percentile rank if statistics are available
           if (statistics && statistics[point.metric]) {
             const stats = statistics[point.metric];
-            const percentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
+            const rawPercentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
+
+            // For "lower is better" metrics, invert percentile so high percentile = better performance
+            const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
+            const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
+
             athlete.percentileRanks[point.metric] = Math.max(0, Math.min(100, percentile));
           }
         }
@@ -244,8 +250,13 @@ export function RadarChart({
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
 
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = isFly10Metric(metric)
+              ? formatFly10Dual(actualValue, 'time-first')
+              : `${actualValue.toFixed(2)}${unit}`;
+
             return [
-              `${label}: ${actualValue.toFixed(2)}${unit}`,
+              `${label}: ${formattedValue}`,
               `Percentile: ${rawValue.toFixed(0)}%`
             ];
           }

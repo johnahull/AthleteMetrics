@@ -16,6 +16,7 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Helper function to get the best performance value based on metric type
 function getBestPerformanceValue(metric: string, values: number[]): number {
@@ -152,7 +153,13 @@ export function BarChart({
           },
           label: (context) => {
             const value = context.parsed.x;
-            return `${barData?.datasets[0].label}: ${value.toFixed(2)}${barData?.unit}`;
+
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = barData?.primaryMetric && isFly10Metric(barData.primaryMetric)
+              ? formatFly10Dual(value, 'time-first')
+              : `${value.toFixed(2)}${barData?.unit}`;
+
+            return `${barData?.datasets[0].label}: ${formattedValue}`;
           },
           afterLabel: (context) => {
             const athleteIndex = context.dataIndex;
@@ -166,13 +173,18 @@ export function BarChart({
               .filter(d => d.metric === barData?.primaryMetric)
               .map(d => d.value)
               .sort((a, b) => barData?.isLowerBetter ? a - b : b - a);
-            
+
             const rank = allValues.findIndex(v => v === athlete.value) + 1;
             const percentile = ((allValues.length - rank + 1) / allValues.length) * 100;
-            
+
+            // Add clarifying label for percentile meaning
+            const percentileLabel = barData?.isLowerBetter
+              ? `${percentile.toFixed(0)}th percentile (faster than ${percentile.toFixed(0)}%)`
+              : `${percentile.toFixed(0)}th percentile (better than ${percentile.toFixed(0)}%)`;
+
             return [
               `Rank: ${rank} of ${allValues.length}`,
-              `Percentile: ${percentile.toFixed(0)}%`,
+              `Performance: ${percentileLabel}`,
               `Team: ${athlete.teamName || 'Independent'}`
             ];
           }
