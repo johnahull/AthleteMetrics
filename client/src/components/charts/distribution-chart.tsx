@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { formatFly10Dual } from "@/utils/fly10-conversion";
 
 ChartJS.register(
   CategoryScale,
@@ -43,7 +44,10 @@ export default function DistributionChart({ data, title, metric }: DistributionC
       const end = min + (i + 1) * binSize;
       
       if (metric === "FLY10_TIME") {
-        labels.push(`${start.toFixed(2)}-${end.toFixed(2)}`);
+        // Show dual format for FLY10_TIME ranges
+        const startFormatted = formatFly10Dual(start, 'time-first');
+        const endFormatted = formatFly10Dual(end, 'time-first');
+        labels.push(`${startFormatted} to ${endFormatted}`);
       } else {
         labels.push(`${Math.round(start)}-${Math.round(end)}`);
       }
@@ -134,10 +138,14 @@ export default function DistributionChart({ data, title, metric }: DistributionC
           <div className="text-sm text-gray-600">
             <div className="flex justify-between">
               <span>
-                Range: {metric === "FLY10_TIME" ? `${stats.min.toFixed(2)}s - ${stats.max.toFixed(2)}s` : `${stats.min.toFixed(1)}in - ${stats.max.toFixed(1)}in`}
+                Range: {metric === "FLY10_TIME"
+                  ? `${formatFly10Dual(stats.min, 'time-first')} - ${formatFly10Dual(stats.max, 'time-first')}`
+                  : `${stats.min.toFixed(1)}in - ${stats.max.toFixed(1)}in`}
               </span>
               <span>
-                Mean: {metric === "FLY10_TIME" ? `${stats.mean.toFixed(2)}s` : `${stats.mean.toFixed(1)}in`}
+                Mean: {metric === "FLY10_TIME"
+                  ? formatFly10Dual(stats.mean, 'time-first')
+                  : `${stats.mean.toFixed(1)}in`}
               </span>
             </div>
           </div>

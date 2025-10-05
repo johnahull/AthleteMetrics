@@ -9,6 +9,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
+import { formatFly10Dual } from "@/utils/fly10-conversion";
 
 ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -90,7 +91,9 @@ export default function ScatterChart({ data }: ScatterChartProps) {
         callbacks: {
           label: function(context: any) {
             const point = context.raw;
-            return `${point.athleteName} (${point.teamName}): ${point.x}s, ${point.y}in`;
+            // Format FLY10_TIME (x-axis) with dual display
+            const fly10Display = formatFly10Dual(point.x, 'time-first');
+            return `${point.athleteName} (${point.teamName}): ${fly10Display}, ${point.y}in`;
           },
         },
       },

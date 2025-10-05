@@ -16,6 +16,7 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -182,7 +183,13 @@ export function SwarmChart({
           label: (context) => {
             const point = context.raw as any;
             const value = point.y || context.parsed.y;
-            return `${swarmData?.metricLabel}: ${value.toFixed(2)}${swarmData?.unit}`;
+
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = swarmData?.metric && isFly10Metric(swarmData.metric)
+              ? formatFly10Dual(value, 'time-first')
+              : `${value.toFixed(2)}${swarmData?.unit}`;
+
+            return `${swarmData?.metricLabel}: ${formattedValue}`;
           },
           afterLabel: (context) => {
             const point = context.raw as any;

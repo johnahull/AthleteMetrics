@@ -16,6 +16,7 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Helper function to get the best performance value based on metric type
 function getBestPerformanceValue(metric: string, values: number[]): number {
@@ -152,7 +153,13 @@ export function BarChart({
           },
           label: (context) => {
             const value = context.parsed.x;
-            return `${barData?.datasets[0].label}: ${value.toFixed(2)}${barData?.unit}`;
+
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = barData?.metric && isFly10Metric(barData.metric)
+              ? formatFly10Dual(value, 'time-first')
+              : `${value.toFixed(2)}${barData?.unit}`;
+
+            return `${barData?.datasets[0].label}: ${formattedValue}`;
           },
           afterLabel: (context) => {
             const athleteIndex = context.dataIndex;

@@ -16,6 +16,7 @@ import type {
   StatisticalSummary 
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -204,9 +205,17 @@ export const DistributionChart = React.memo(function DistributionChart({
           title: (context) => {
             const binIndex = context[0].dataIndex;
             const binData = distributionData?.binData[binIndex];
-            return binData ? 
-              `Range: ${binData.min.toFixed(2)} - ${binData.max.toFixed(2)}${distributionData?.unit}` : 
-              '';
+
+            if (!binData) return '';
+
+            // Format range with dual display for FLY10_TIME
+            if (distributionData?.metric && isFly10Metric(distributionData.metric)) {
+              const minFormatted = formatFly10Dual(binData.min, 'time-first');
+              const maxFormatted = formatFly10Dual(binData.max, 'time-first');
+              return `Range: ${minFormatted} - ${maxFormatted}`;
+            }
+
+            return `Range: ${binData.min.toFixed(2)} - ${binData.max.toFixed(2)}${distributionData?.unit}`;
           },
           label: (context) => {
             return `Athletes: ${context.parsed.y}`;
