@@ -209,7 +209,7 @@ export const DistributionChart = React.memo(function DistributionChart({
             if (!binData) return '';
 
             // Format range with dual display for FLY10_TIME
-            if (distributionData?.metric && isFly10Metric(distributionData.metric)) {
+            if (distributionData?.primaryMetric && isFly10Metric(distributionData.primaryMetric)) {
               const minFormatted = formatFly10Dual(binData.min, 'time-first');
               const maxFormatted = formatFly10Dual(binData.max, 'time-first');
               return `Range: ${minFormatted} - ${maxFormatted}`;

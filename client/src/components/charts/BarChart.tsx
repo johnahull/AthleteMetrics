@@ -155,7 +155,7 @@ export function BarChart({
             const value = context.parsed.x;
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = barData?.metric && isFly10Metric(barData.metric)
+            const formattedValue = barData?.primaryMetric && isFly10Metric(barData.primaryMetric)
               ? formatFly10Dual(value, 'time-first')
               : `${value.toFixed(2)}${barData?.unit}`;
 

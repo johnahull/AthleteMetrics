@@ -185,7 +185,7 @@ export function SwarmChart({
             const value = point.y || context.parsed.y;
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = swarmData?.metric && isFly10Metric(swarmData.metric)
+            const formattedValue = swarmData?.primaryMetric && isFly10Metric(swarmData.primaryMetric)
               ? formatFly10Dual(value, 'time-first')
               : `${value.toFixed(2)}${swarmData?.unit}`;
 
