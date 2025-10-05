@@ -1199,7 +1199,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   .map(d => d.value)
                   .sort((a, b) => a - b);
                 const rank = allValues.filter(v => v < context.parsed.y).length;
-                const percentile = (rank / allValues.length) * 100;
+
+                // For "lower is better" metrics, invert percentile so high percentile = better performance
+                const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const rawPercentile = (rank / allValues.length) * 100;
+                const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
+
                 result.push(`Percentile: ${percentile.toFixed(0)}%`);
               }
             }

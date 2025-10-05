@@ -201,8 +201,12 @@ export function SwarmChart({
             // Calculate percentile
             const allValues = swarmData?.swarmPoints.map(p => p.y).sort((a, b) => a - b) || [];
             const rank = allValues.filter(v => v < point.y).length;
-            const percentile = allValues.length > 0 ? (rank / allValues.length) * 100 : 0;
-            
+
+            // For "lower is better" metrics, invert percentile so high percentile = better performance
+            const metricConfig = swarmData?.primaryMetric ? METRIC_CONFIG[swarmData.primaryMetric as keyof typeof METRIC_CONFIG] : null;
+            const rawPercentile = allValues.length > 0 ? (rank / allValues.length) * 100 : 0;
+            const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
+
             return [
               `Team: ${point.teamName || 'Independent'}`,
               `Percentile: ${percentile.toFixed(0)}%`
