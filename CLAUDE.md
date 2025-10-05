@@ -25,7 +25,8 @@ When ENABLED:
 
 ### Available Specialized Agents
 
-#### Database Schema Agent (`database-schema-agent`)
+#### Database Schema Agent (`database-schema-agent`) 🔵
+**Color:** Blue
 **Auto-invoke when tasks involve:**
 - Modifying `shared/schema.ts`
 - Database migrations or `npm run db:push`
@@ -36,7 +37,8 @@ When ENABLED:
 
 **Keywords that trigger:** `schema`, `database`, `drizzle`, `migration`, `table`, `postgres`, `validation`, `measurements`, `users`, `teams`, `organizations`, `zod`, `relations`
 
-#### Analytics & Data Visualization Agent (`analytics-visualization-agent`)
+#### Analytics & Data Visualization Agent (`analytics-visualization-agent`) 🟢
+**Color:** Green
 **Auto-invoke when tasks involve:**
 - Chart components in `client/src/components/charts/`
 - Chart.js, react-chartjs-2, or statistical analysis
@@ -46,7 +48,8 @@ When ENABLED:
 
 **Keywords that trigger:** `chart`, `analytics`, `visualization`, `graph`, `plot`, `performance`, `statistics`, `box plot`, `line chart`, `scatter`, `swarm`, `percentile`, `MultiLineChart`, `BoxPlotChart`
 
-#### Security & Authentication Agent (`security-authentication-agent`)
+#### Security & Authentication Agent (`security-authentication-agent`) 🔴
+**Color:** Red
 **Auto-invoke when tasks involve:**
 - Authentication flows or `server/auth/` files
 - Permission systems or role-based access control
@@ -56,6 +59,102 @@ When ENABLED:
 - MFA, password policies, or security vulnerabilities
 
 **Keywords that trigger:** `auth`, `authentication`, `security`, `permission`, `role`, `rbac`, `session`, `mfa`, `password`, `login`, `admin`, `coach`, `athlete`, `organization`, `access control`
+
+#### OCR & Image Processing Agent (`ocr-image-processing-agent`) 🟡
+**Color:** Yellow
+**Auto-invoke when tasks involve:**
+- OCR service in `server/ocr/` directory
+- Image upload and processing workflows
+- Text extraction from athletic performance images
+- Measurement pattern recognition and parsing
+- Image preprocessing and validation
+- Photo upload components and OCR results display
+
+**Keywords that trigger:** `ocr`, `tesseract`, `image processing`, `text extraction`, `photo upload`, `image preprocessing`, `measurement patterns`, `data parser`, `OCR service`, `pattern recognition`
+
+#### Data Import/Export Agent (`data-import-export-agent`) 🟠
+**Color:** Orange
+**Auto-invoke when tasks involve:**
+- CSV import/export functionality
+- Bulk data operations and validation
+- Data transformation and athlete matching
+- Import preview and error handling
+- Files in `import-export.tsx` or bulk operation types
+- Data validation pipelines and error reporting
+
+**Keywords that trigger:** `csv`, `import`, `export`, `bulk`, `data transformation`, `athlete matching`, `validation`, `preview`, `bulk operations`, `data parsing`
+
+#### Form & Validation Agent (`form-validation-agent`) 🟣
+**Color:** Purple
+**Auto-invoke when tasks involve:**
+- React Hook Form implementations
+- Zod schema definitions and validation
+- Form components (athlete, team, measurement, user forms)
+- Input validation and error handling
+- Form state management and submission flows
+- Custom form components and validation patterns
+
+**Keywords that trigger:** `form`, `validation`, `zod`, `react hook form`, `input`, `schema validation`, `form state`, `field validation`, `submit`, `form errors`
+
+#### API & Route Architecture Agent (`api-route-architecture-agent`) ⚪
+**Color:** Gray
+**Auto-invoke when tasks involve:**
+- Express route definitions in `server/routes/`
+- REST API endpoint design and organization
+- Middleware implementation and error handling
+- Request/response patterns and API structure
+- Route parameter validation
+- API versioning and endpoint consolidation
+
+**Keywords that trigger:** `routes`, `api`, `endpoint`, `express`, `middleware`, `request`, `response`, `REST`, `route handler`, `API design`
+
+#### UI/UX Component Library Agent (`ui-component-library-agent`) 🔷
+**Color:** Cyan
+**Auto-invoke when tasks involve:**
+- shadcn/ui component usage and customization
+- Tailwind CSS styling and design system
+- Component composition and reusability patterns
+- Accessibility (a11y) best practices
+- Responsive design and mobile optimization
+- Design consistency across the application
+
+**Keywords that trigger:** `shadcn`, `tailwind`, `ui component`, `styling`, `accessibility`, `responsive`, `design system`, `component library`, `a11y`, `mobile`
+
+#### Performance Optimization Agent (`performance-optimization-agent`) 🟨
+**Color:** Gold
+**Auto-invoke when tasks involve:**
+- React Query optimization and caching strategies
+- Database query performance and indexing
+- Component render optimization (useMemo, useCallback)
+- Bundle size analysis and code splitting
+- Performance profiling and bottleneck identification
+- Lazy loading and data fetching optimization
+
+**Keywords that trigger:** `performance`, `optimization`, `slow`, `cache`, `query optimization`, `render`, `bundle size`, `lazy load`, `profiling`, `bottleneck`
+
+#### Testing & Quality Assurance Agent (`testing-qa-agent`) 🧪
+**Color:** Teal
+**Auto-invoke when tasks involve:**
+- Unit test creation and maintenance in `__tests__` directories
+- Integration testing strategies
+- Test coverage analysis and improvement
+- Mocking patterns for API and database calls
+- E2E testing scenarios
+- Bug fix verification and regression testing
+
+**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`
+
+#### Notification & Communication Agent (`notification-communication-agent`) 🩷
+**Color:** Pink
+**Auto-invoke when tasks involve:**
+- Email notification systems
+- User invitation workflows
+- Password reset communication flows
+- Alert and notification triggers
+- Communication templates and formatting
+- Delivery tracking and error handling
+
+**Keywords that trigger:** `email`, `notification`, `invitation`, `alert`, `communication`, `password reset`, `notify`, `message`, `template`, `send`
 
 ### Proactive Agent Usage Guidelines
 
@@ -76,6 +175,14 @@ For tasks spanning multiple domains, invoke relevant agents in parallel:
 // - database-schema-agent (optimize queries)
 // - security-authentication-agent (coach permissions)
 // - analytics-visualization-agent (dashboard charts)
+// - performance-optimization-agent (caching strategy)
+
+// Example: User requests "Add CSV import for measurements with OCR fallback"
+// Claude should automatically use multiple Task() calls in parallel:
+// - data-import-export-agent (CSV processing)
+// - ocr-image-processing-agent (OCR fallback)
+// - form-validation-agent (import form)
+// - database-schema-agent (bulk insert optimization)
 ```
 
 #### Context-Rich Prompts
@@ -113,9 +220,49 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Organization or team access → `security-authentication-agent`
 
 #### Cross-Cutting Features
-- New user types or roles → All three agents
-- Organization management → `database-schema-agent` + `security-authentication-agent`
-- Performance measurement features → All three agents
+- New user types or roles → `database-schema-agent` + `security-authentication-agent` + `form-validation-agent`
+- Organization management → `database-schema-agent` + `security-authentication-agent` + `api-route-architecture-agent`
+- Performance measurement features → `database-schema-agent` + `analytics-visualization-agent` + `form-validation-agent`
+
+#### OCR/Image Processing Work
+- Any file in `server/ocr/` → `ocr-image-processing-agent`
+- Photo upload features → `ocr-image-processing-agent` + `form-validation-agent`
+- Measurement extraction from images → `ocr-image-processing-agent` + `data-import-export-agent`
+
+#### Data Import/Export Work
+- CSV import/export features → `data-import-export-agent`
+- Bulk operations → `data-import-export-agent` + `database-schema-agent`
+- Import validation → `data-import-export-agent` + `form-validation-agent`
+
+#### Form Development
+- New forms or form components → `form-validation-agent`
+- Complex validation rules → `form-validation-agent` + `database-schema-agent`
+- Multi-step forms → `form-validation-agent` + `ui-component-library-agent`
+
+#### API/Route Development
+- New API endpoints → `api-route-architecture-agent`
+- Route refactoring → `api-route-architecture-agent` + `database-schema-agent`
+- Middleware changes → `api-route-architecture-agent` + `security-authentication-agent`
+
+#### UI/Design Work
+- Component library updates → `ui-component-library-agent`
+- Accessibility improvements → `ui-component-library-agent` + `form-validation-agent`
+- Design system consistency → `ui-component-library-agent`
+
+#### Performance Issues
+- Slow queries or rendering → `performance-optimization-agent`
+- Caching improvements → `performance-optimization-agent` + `database-schema-agent`
+- Bundle size optimization → `performance-optimization-agent`
+
+#### Testing & QA
+- Adding tests → `testing-qa-agent`
+- Bug fixes → `testing-qa-agent` + relevant domain agent
+- Coverage improvements → `testing-qa-agent`
+
+#### Notifications/Communications
+- Email features → `notification-communication-agent`
+- User invitations → `notification-communication-agent` + `security-authentication-agent`
+- Alert systems → `notification-communication-agent`
 
 ## Development Commands
 
