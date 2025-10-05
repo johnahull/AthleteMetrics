@@ -210,9 +210,9 @@ export function MetricsSelector({
 
                 // Check if this metric is mutually exclusive with a selected metric
                 const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
-                const isExcluded = exclusiveMetric &&
+                const isExcluded = !!(exclusiveMetric &&
                   (metrics.primary === exclusiveMetric ||
-                   metrics.additional.includes(exclusiveMetric));
+                   metrics.additional.includes(exclusiveMetric)));
 
                 const isDisabled = metrics.additional.length >= maxAdditional ||
                                    isMultiGroupMode ||
