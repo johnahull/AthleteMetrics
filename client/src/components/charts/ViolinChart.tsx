@@ -1028,8 +1028,9 @@ export function ViolinChart({
                 </span>
               )}
               <span className="font-bold">
-                {tooltip.value.toFixed(2)}
-                {tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG]?.unit}
+                {tooltip.metric && isFly10Metric(tooltip.metric)
+                  ? formatFly10Dual(tooltip.value, 'time-first')
+                  : `${tooltip.value.toFixed(2)}${tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG]?.unit || ''}`}
               </span>
             </div>
           </div>

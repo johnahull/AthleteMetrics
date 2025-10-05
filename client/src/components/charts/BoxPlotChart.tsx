@@ -391,6 +391,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   athleteName: indivPoint.athleteName,
                   teamName: indivPoint.teamName,
                   groupName: groupName,
+                  metric: metric,
                   isOutlier
                 };
               });
@@ -624,6 +625,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   athleteName: point.athleteName,
                   teamName: point.teamName,
                   groupName: group.name,
+                  metric: metric,
                   isOutlier
                 };
               })
@@ -878,6 +880,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 athleteId: point.athleteId,
                 athleteName: point.athleteName,
                 teamName: point.teamName,
+                metric: metric,
                 isOutlier
               };
             })
