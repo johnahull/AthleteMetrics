@@ -25,7 +25,8 @@ When ENABLED:
 
 ### Available Specialized Agents
 
-#### Database Schema Agent (`database-schema-agent`)
+#### Database Schema Agent (`database-schema-agent`) 🔵
+**Color:** Blue
 **Auto-invoke when tasks involve:**
 - Modifying `shared/schema.ts`
 - Database migrations or `npm run db:push`
@@ -36,7 +37,8 @@ When ENABLED:
 
 **Keywords that trigger:** `schema`, `database`, `drizzle`, `migration`, `table`, `postgres`, `validation`, `measurements`, `users`, `teams`, `organizations`, `zod`, `relations`
 
-#### Analytics & Data Visualization Agent (`analytics-visualization-agent`)
+#### Analytics & Data Visualization Agent (`analytics-visualization-agent`) 🟢
+**Color:** Green
 **Auto-invoke when tasks involve:**
 - Chart components in `client/src/components/charts/`
 - Chart.js, react-chartjs-2, or statistical analysis
@@ -46,7 +48,8 @@ When ENABLED:
 
 **Keywords that trigger:** `chart`, `analytics`, `visualization`, `graph`, `plot`, `performance`, `statistics`, `box plot`, `line chart`, `scatter`, `swarm`, `percentile`, `MultiLineChart`, `BoxPlotChart`
 
-#### Security & Authentication Agent (`security-authentication-agent`)
+#### Security & Authentication Agent (`security-authentication-agent`) 🔴
+**Color:** Red
 **Auto-invoke when tasks involve:**
 - Authentication flows or `server/auth/` files
 - Permission systems or role-based access control
