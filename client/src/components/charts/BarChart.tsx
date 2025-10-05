@@ -173,13 +173,18 @@ export function BarChart({
               .filter(d => d.metric === barData?.primaryMetric)
               .map(d => d.value)
               .sort((a, b) => barData?.isLowerBetter ? a - b : b - a);
-            
+
             const rank = allValues.findIndex(v => v === athlete.value) + 1;
             const percentile = ((allValues.length - rank + 1) / allValues.length) * 100;
-            
+
+            // Add clarifying label for percentile meaning
+            const percentileLabel = barData?.isLowerBetter
+              ? `${percentile.toFixed(0)}th percentile (faster than ${percentile.toFixed(0)}%)`
+              : `${percentile.toFixed(0)}th percentile (better than ${percentile.toFixed(0)}%)`;
+
             return [
               `Rank: ${rank} of ${allValues.length}`,
-              `Percentile: ${percentile.toFixed(0)}%`,
+              `Performance: ${percentileLabel}`,
               `Team: ${athlete.teamName || 'Independent'}`
             ];
           }

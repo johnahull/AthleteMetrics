@@ -1205,7 +1205,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 const rawPercentile = (rank / allValues.length) * 100;
                 const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
 
-                result.push(`Percentile: ${percentile.toFixed(0)}%`);
+                // Add clarifying label for percentile meaning
+                const percentileLabel = metricConfig?.lowerIsBetter
+                  ? `${percentile.toFixed(0)}th percentile (faster than ${percentile.toFixed(0)}%)`
+                  : `${percentile.toFixed(0)}th percentile (better than ${percentile.toFixed(0)}%)`;
+
+                result.push(`Performance: ${percentileLabel}`);
               }
             }
 

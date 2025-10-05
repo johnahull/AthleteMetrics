@@ -18,6 +18,7 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
 import { validateAnalyticsRequest } from "./validation/analytics-validation";
+import { METRIC_CONFIG } from "@shared/analytics-types";
 import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
@@ -149,6 +150,12 @@ const canAccessOrganization = async (user: SessionUser | null | undefined, organ
 
 const hasRole = (user: SessionUser | null | undefined, role: string): boolean => {
   return user?.role === role;
+};
+
+// Helper to get default unit for a metric from METRIC_CONFIG
+const getDefaultUnit = (metric: string): string => {
+  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  return config?.unit || 's'; // Default to seconds if metric not found
 };
 
 // Unified invitation permission checker
@@ -4323,7 +4330,7 @@ export async function registerRoutes(app: Express) {
               age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
               value: parseFloat(value),
-              units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : metric === 'TOP_SPEED' ? 'mph' : metric === 'RSI' ? '' : 's'),
+              units: units || getDefaultUnit(metric),
               flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
               notes: notes || undefined,
               isVerified: "false"
@@ -4459,7 +4466,7 @@ export async function registerRoutes(app: Express) {
               age: originalData.age && !isNaN(parseInt(originalData.age)) ? parseInt(originalData.age) : undefined,
               metric: originalData.metric,
               value: parseFloat(originalData.value),
-              units: originalData.units || (originalData.metric === 'FLY10_TIME' ? 's' : originalData.metric === 'VERTICAL_JUMP' ? 'in' : ''),
+              units: originalData.units || getDefaultUnit(originalData.metric),
               flyInDistance: originalData.flyInDistance && !isNaN(parseInt(originalData.flyInDistance)) ? parseInt(originalData.flyInDistance) : undefined,
               notes: originalData.notes || `Approved from review queue by ${currentUser.firstName} ${currentUser.lastName}`,
               isVerified: "false"

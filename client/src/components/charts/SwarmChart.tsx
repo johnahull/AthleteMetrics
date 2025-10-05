@@ -207,9 +207,14 @@ export function SwarmChart({
             const rawPercentile = allValues.length > 0 ? (rank / allValues.length) * 100 : 0;
             const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
 
+            // Add clarifying label for percentile meaning
+            const percentileLabel = metricConfig?.lowerIsBetter
+              ? `${percentile.toFixed(0)}th percentile (faster than ${percentile.toFixed(0)}%)`
+              : `${percentile.toFixed(0)}th percentile (better than ${percentile.toFixed(0)}%)`;
+
             return [
               `Team: ${point.teamName || 'Independent'}`,
-              `Percentile: ${percentile.toFixed(0)}%`
+              `Performance: ${percentileLabel}`
             ];
           }
         }

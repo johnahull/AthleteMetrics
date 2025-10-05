@@ -511,6 +511,100 @@ See the commit that adds TOP_SPEED as a reference implementation of this guide.
 
 ---
 
+## Database Migration Safety
+
+### Development Environment
+
+When adding a new metric, you'll need to update the database schema:
+
+```bash
+npm run db:push
+```
+
+**What this does:**
+- Generates SQL migration from `shared/schema.ts` changes
+- Applies changes to your development database
+- Updates type definitions
+
+**Safety checks:**
+- ✅ Always commit code changes BEFORE running `db:push`
+- ✅ Review generated SQL in console output
+- ✅ Test with sample data before deploying
+- ✅ Verify existing measurements are unaffected
+
+### Production Deployment
+
+**Pre-deployment checklist:**
+1. **Test in staging** - Apply migration to staging environment first
+2. **Backup database** - Create snapshot before migration
+3. **Review migration** - Check SQL for destructive operations
+4. **Plan rollback** - Know how to revert if needed
+5. **Low-traffic window** - Deploy during off-peak hours
+
+**Deployment process:**
+```bash
+# 1. SSH to production server
+ssh production-server
+
+# 2. Pull latest code
+git pull origin main
+
+# 3. Install dependencies
+npm install
+
+# 4. Apply migration (review SQL output carefully)
+npm run db:push
+
+# 5. Restart application
+npm run start
+```
+
+**Post-deployment verification:**
+- ✅ Check application logs for errors
+- ✅ Verify new metric appears in UI
+- ✅ Test creating measurements with new metric
+- ✅ Confirm existing data is intact
+
+### Rollback Strategy
+
+If migration causes issues:
+
+**Immediate rollback:**
+```bash
+# 1. Revert code to previous commit
+git revert HEAD
+git push origin main
+
+# 2. Restore database from backup
+# (Command depends on your database provider)
+pg_restore --clean --dbname=athletemetrics backup.dump
+```
+
+**Removing a metric safely:**
+1. Remove metric from `shared/schema.ts` enum
+2. Remove from `METRIC_CONFIG` in `shared/analytics-types.ts`
+3. Remove from all UI components
+4. Run `npm run db:push` - this WON'T delete existing data
+5. Existing measurements with old metric remain in database but won't appear in UI
+
+**Warning:** Database schema changes are ONE-WAY. Drizzle's `db:push` command doesn't automatically delete columns or data. To remove a metric completely from the database, you'd need to write a custom migration.
+
+### Common Migration Issues
+
+**Issue:** "Constraint violation" error
+- **Cause:** Existing data conflicts with new validation rules
+- **Fix:** Update data first, then apply schema changes
+
+**Issue:** "Type mismatch" error
+- **Cause:** Metric enum mismatch between code and database
+- **Fix:** Ensure `shared/schema.ts` is committed and `npm run db:push` completed
+
+**Issue:** New metric doesn't appear in dropdown
+- **Cause:** Frontend cache or missing METRIC_CONFIG entry
+- **Fix:** Hard refresh browser (Ctrl+Shift+R), verify METRIC_CONFIG updated
+
+---
+
 ## Questions?
 
 If you encounter issues or need clarification:

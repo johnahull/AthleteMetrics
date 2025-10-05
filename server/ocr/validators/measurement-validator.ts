@@ -264,11 +264,8 @@ export class MeasurementValidator {
         break;
 
       case 'TOP_SPEED':
-        if (value < 12) {
-          warnings.push('Low top speed - verify measurement accuracy');
-        } else if (value > 22) {
-          warnings.push('Very high top speed - confirm measurement method');
-        }
+        // Warnings are handled by automatic threshold calculation (10th-90th percentile)
+        // Range: 10-25 mph, so warnings at <11.5 mph and >23.5 mph
         break;
     }
 
