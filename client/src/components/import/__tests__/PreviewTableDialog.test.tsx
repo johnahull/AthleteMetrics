@@ -481,7 +481,86 @@ describe('PreviewTableDialog', () => {
     });
   });
 
-  describe('Performance Limits', () => {
+  describe('Performance and Scalability', () => {
+    it('should handle 10,000 row dataset without crashing', () => {
+      const largeDataset: PreviewRow[] = Array.from({ length: 10000 }, (_, i) => ({
+        rowIndex: i,
+        data: {
+          'First Name': `User${i}`,
+          'Last Name': `Test${i}`,
+          'Team': 'Large Team',
+        },
+        validations: [
+          { field: 'firstName', status: 'valid' as const, message: '' },
+          { field: 'lastName', status: 'valid' as const, message: '' },
+        ],
+        matchStatus: 'will_create' as const,
+      }));
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+        'Team': 'teamName',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={largeDataset}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should only render first 100 rows
+      const rows = screen.getAllByRole('row');
+      // +1 for header row
+      expect(rows.length).toBeLessThanOrEqual(101);
+
+      // Summary should show all 10,000 rows (appears in "Total Rows" and "Will Create")
+      const totalElements = screen.getAllByText('10000');
+      expect(totalElements.length).toBeGreaterThan(0);
+    });
+
+    it('should render large dataset in under 2 seconds', () => {
+      const largeDataset: PreviewRow[] = Array.from({ length: 1000 }, (_, i) => ({
+        rowIndex: i,
+        data: {
+          'First Name': `User${i}`,
+          'Last Name': `Test${i}`,
+        },
+        validations: [
+          { field: 'firstName', status: 'valid' as const, message: '' },
+          { field: 'lastName', status: 'valid' as const, message: '' },
+        ],
+        matchStatus: 'will_create' as const,
+      }));
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+      };
+
+      const startTime = performance.now();
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={largeDataset}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      const endTime = performance.now();
+      const renderTime = endTime - startTime;
+
+      // Rendering should be fast even with 1000 rows (only displays 100)
+      expect(renderTime).toBeLessThan(2000); // 2 seconds
+    });
+
     it('should limit display to MAX_DISPLAYED_ROWS (100) for large datasets', () => {
       // Create 200 mock rows
       const manyRows: PreviewRow[] = Array.from({ length: 200 }, (_, i) => ({
@@ -673,6 +752,139 @@ describe('PreviewTableDialog', () => {
       );
 
       expect(screen.getByText(/Displaying first 100 of 250 rows for performance/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Security Tests', () => {
+    it('should display potentially malicious CSV formula values safely', () => {
+      const maliciousRows: PreviewRow[] = [
+        {
+          rowIndex: 0,
+          data: {
+            'First Name': '=1+1',
+            'Last Name': '@SUM(A1:A10)',
+            'Notes': '+cmd|/c calc',
+          },
+          validations: [
+            { field: 'firstName', status: 'valid', message: '' },
+            { field: 'lastName', status: 'valid', message: '' },
+          ],
+          matchStatus: 'will_create',
+        },
+        {
+          rowIndex: 1,
+          data: {
+            'First Name': '-2+2',
+            'Last Name': '|echo "hacked"',
+            'Notes': '%COMSPEC%',
+          },
+          validations: [
+            { field: 'firstName', status: 'valid', message: '' },
+            { field: 'lastName', status: 'valid', message: '' },
+          ],
+          matchStatus: 'will_create',
+        },
+      ];
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+        'Notes': 'notes',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={maliciousRows}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Verify malicious values are displayed (should be sanitized by backend before display)
+      expect(screen.getByText('=1+1')).toBeInTheDocument();
+      expect(screen.getByText('@SUM(A1:A10)')).toBeInTheDocument();
+      expect(screen.getByText('+cmd|/c calc')).toBeInTheDocument();
+      expect(screen.getByText('-2+2')).toBeInTheDocument();
+      expect(screen.getByText('|echo "hacked"')).toBeInTheDocument();
+      expect(screen.getByText('%COMSPEC%')).toBeInTheDocument();
+    });
+
+    it('should handle XSS attempts in cell values', () => {
+      const xssRows: PreviewRow[] = [
+        {
+          rowIndex: 0,
+          data: {
+            'First Name': '<script>alert("xss")</script>',
+            'Last Name': '<img src=x onerror=alert(1)>',
+          },
+          validations: [
+            { field: 'firstName', status: 'valid', message: '' },
+            { field: 'lastName', status: 'valid', message: '' },
+          ],
+          matchStatus: 'will_create',
+        },
+      ];
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={xssRows}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // React's JSX auto-escapes text content, preventing XSS
+      // The text content should be escaped, not executed as HTML
+      const cells = screen.getAllByRole('cell');
+      const scriptCell = cells.find(cell => cell.textContent?.includes('script'));
+      expect(scriptCell).toBeTruthy();
+      // Verify script tag is not actually a script element
+      expect(scriptCell?.querySelector('script')).toBeNull();
+    });
+
+    it('should handle SQL injection attempts in cell values', () => {
+      const sqlInjectionRows: PreviewRow[] = [
+        {
+          rowIndex: 0,
+          data: {
+            'First Name': "'; DROP TABLE users; --",
+            'Last Name': "1' OR '1'='1",
+          },
+          validations: [
+            { field: 'firstName', status: 'valid', message: '' },
+            { field: 'lastName', status: 'valid', message: '' },
+          ],
+          matchStatus: 'will_create',
+        },
+      ];
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={sqlInjectionRows}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // SQL injection attempts should be displayed as plain text
+      expect(screen.getByText("'; DROP TABLE users; --")).toBeInTheDocument();
+      expect(screen.getByText("1' OR '1'='1")).toBeInTheDocument();
     });
   });
 
