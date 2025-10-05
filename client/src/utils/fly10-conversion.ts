@@ -36,6 +36,13 @@ export function formatFly10Dual(
 
 /**
  * Check if a metric is FLY10_TIME
+ *
+ * Note: This intentionally only returns true for FLY10_TIME, not TOP_SPEED.
+ * While both measure the same thing (speed over 10 yards), the dual display
+ * format (seconds + mph) is only appropriate when the primary unit is seconds.
+ *
+ * - FLY10_TIME charts show: "1.95s (10.5 mph)" - dual display makes sense
+ * - TOP_SPEED charts show: "10.5 mph" only - dual display would be confusing
  */
 export function isFly10Metric(metric: string): boolean {
   return metric === 'FLY10_TIME';

@@ -251,9 +251,9 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
   }
   
   // Validate units
-  const validUnits = ['s', 'in', ''];
+  const validUnits = ['s', 'in', 'mph', ''];
   if (row.units && !validUnits.includes(row.units)) {
-    errors.push('Units must be "s" for time, "in" for distance, or empty for dimensionless');
+    errors.push('Units must be "s" for time, "in" for distance, "mph" for speed, or empty for dimensionless');
   }
   
   // Validate flyInDistance if provided

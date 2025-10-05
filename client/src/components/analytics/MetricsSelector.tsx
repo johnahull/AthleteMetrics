@@ -5,13 +5,6 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-// Mutually exclusive metrics - selecting one prevents selecting the other
-// FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
-const MUTUALLY_EXCLUSIVE_METRICS: Record<string, string> = {
-  FLY10_TIME: 'TOP_SPEED',
-  TOP_SPEED: 'FLY10_TIME',
-};
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +13,13 @@ import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
+
+// Mutually exclusive metrics - selecting one prevents selecting the other
+// FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
+const MUTUALLY_EXCLUSIVE_METRICS: Record<string, string> = {
+  FLY10_TIME: 'TOP_SPEED',
+  TOP_SPEED: 'FLY10_TIME',
+};
 
 interface MetricsSelectorProps {
   metrics: MetricSelection;
