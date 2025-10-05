@@ -768,13 +768,8 @@ export function ViolinChart({
       const value = globalMin + (valueRange * i) / numTicks;
       const y = valueToY(value);
 
-      // Format numbers nicely - show dual format for FLY10_TIME
-      let displayValue: string;
-      if (metric && isFly10Metric(metric)) {
-        displayValue = formatFly10Dual(value, 'time-first');
-      } else {
-        displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
-      }
+      // Format numbers nicely - use simple format for axis (dual format in tooltips)
+      const displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
       ctx.fillText(displayValue, padding - 10, y + 4);
 
       // Tick marks
@@ -1118,7 +1113,7 @@ export function ViolinChart({
 
       {metricConfig && (
         <p className="text-xs text-muted-foreground mt-2">
-          {metricConfig.label} ({metricConfig.unit})
+          {metricConfig.label} ({metric && isFly10Metric(metric) ? 's / mph' : metricConfig.unit})
           {metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
         </p>
       )}
