@@ -243,8 +243,9 @@ The application runs as a **single-process Node.js server** without clustering:
 #### File Upload Security
 - `MAX_CSV_FILE_SIZE` - Maximum CSV file size in bytes (default: 5242880 / 5MB)
 - `MAX_IMAGE_FILE_SIZE` - Maximum image/PDF file size in bytes for OCR (default: 10485760 / 10MB)
+- `MAX_CSV_ROWS` - Maximum number of rows in CSV import (default: 10000)
 
-**Security Note**: File upload endpoints validate both MIME types and file extensions to prevent malicious file uploads. For production deployments, consider integrating virus scanning middleware (e.g., ClamAV).
+**Security Note**: File upload endpoints validate both MIME types and file extensions to prevent malicious file uploads. Row limits prevent memory exhaustion from large CSV files. For production deployments, consider integrating virus scanning middleware (e.g., ClamAV).
 
 #### Rate Limiting Bypass (Development Only)
 - `BYPASS_ANALYTICS_RATE_LIMIT` - Set to "true" to bypass analytics rate limiting for site admins (default: false)

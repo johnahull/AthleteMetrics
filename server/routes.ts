@@ -3746,6 +3746,14 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "CSV file is empty" });
       }
 
+      // SECURITY: Enforce row limit to prevent memory exhaustion
+      const MAX_CSV_ROWS = parseInt(process.env.MAX_CSV_ROWS || '10000');
+      if (lines.length - 1 > MAX_CSV_ROWS) {
+        return res.status(400).json({
+          message: `CSV file exceeds maximum row limit. Maximum ${MAX_CSV_ROWS} rows allowed, but file contains ${lines.length - 1} data rows.`
+        });
+      }
+
       const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
 
       for (let i = 1; i < lines.length; i++) {
@@ -3813,6 +3821,27 @@ export async function registerRoutes(app: Express) {
       }
 
       if (type === 'athletes') {
+        // PERFORMANCE: Pre-load all athletes to avoid N+1 query problem
+        // Instead of querying database for each CSV row, load all athletes once and use in-memory lookup
+        let organizationId: string | undefined = options.organizationId;
+        if (!organizationId) {
+          const currentUser = req.session.user!;
+          const userOrgs = await storage.getUserOrganizations(currentUser.id);
+          organizationId = userOrgs[0]?.organizationId;
+        }
+
+        const allAthletes = organizationId
+          ? await storage.getAthletes({ organizationId })
+          : await storage.getAthletes();
+
+        // Create fast lookup map: "firstname:lastname" => athlete
+        const athleteMap = new Map(
+          allAthletes.map(a => [
+            `${a.firstName.toLowerCase()}:${a.lastName.toLowerCase()}`,
+            a
+          ])
+        );
+
         // Process athletes import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
@@ -3920,35 +3949,69 @@ export async function registerRoutes(app: Express) {
                     const userIsSiteAdmin = isSiteAdmin(currentUser);
 
                     if (!userIsSiteAdmin) {
-                      // Check if user belongs to the target organization
+                      // Check if user belongs to the target organization AND has proper role
                       const userOrgs = await storage.getUserOrganizations(currentUser.id);
-                      const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
+                      const orgMembership = userOrgs.find(org => org.organizationId === organizationId);
 
-                      if (!hasAccess) {
+                      if (!orgMembership) {
                         errors.push({
                           row: rowNum,
-                          error: `Unauthorized: Cannot create team "${normalizedTeamName}" in organization. User does not belong to this organization.`
+                          error: `Unauthorized: Cannot create team "${normalizedTeamName}". User does not belong to this organization.`
+                        });
+                        continue;
+                      }
+
+                      // SECURITY: Only org_admin and coach roles can create teams
+                      if (!['org_admin', 'coach'].includes(orgMembership.role)) {
+                        errors.push({
+                          row: rowNum,
+                          error: `Unauthorized: Role '${orgMembership.role}' cannot create teams. Only organization admins and coaches can create teams.`
                         });
                         continue;
                       }
                     }
 
-                    const newTeam = await storage.createTeam({
-                      organizationId,
-                      name: normalizedTeamName,
-                      level: undefined,
-                      notes: 'Auto-created during athlete import'
-                    });
-                    team = newTeam as any;
-
-                    if (!createdTeams.has(normalizedTeamName)) {
-                      createdTeams.set(normalizedTeamName, {
-                        id: newTeam.id,
-                        name: newTeam.name,
-                        athleteCount: 0
+                    // CONCURRENCY: Handle race condition where another request creates the same team
+                    try {
+                      const newTeam = await storage.createTeam({
+                        organizationId,
+                        name: normalizedTeamName,
+                        level: undefined,
+                        notes: 'Auto-created during athlete import'
                       });
+                      team = newTeam as any;
+
+                      if (!createdTeams.has(normalizedTeamName)) {
+                        createdTeams.set(normalizedTeamName, {
+                          id: newTeam.id,
+                          name: newTeam.name,
+                          athleteCount: 0
+                        });
+                      }
+                      createdTeams.get(normalizedTeamName)!.athleteCount++;
+                    } catch (createError: any) {
+                      // Check if this is a unique constraint violation (team was created by concurrent request)
+                      if (createError.code === '23505' || createError.message?.includes('unique')) {
+                        // Re-fetch the team that was just created by another request
+                        const allTeams = await storage.getTeams();
+                        team = allTeams.find(t =>
+                          t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim() &&
+                          t.organization?.id === organizationId
+                        );
+
+                        if (!team) {
+                          // Team should exist but wasn't found - this is unexpected
+                          errors.push({
+                            row: rowNum,
+                            error: `Failed to create or find team "${normalizedTeamName}" after concurrent creation attempt`
+                          });
+                          continue;
+                        }
+                      } else {
+                        // Different error - rethrow
+                        throw createError;
+                      }
                     }
-                    createdTeams.get(normalizedTeamName)!.athleteCount++;
                   }
                 } else if (options.teamHandling === 'require_existing') {
                   errors.push({ row: rowNum, error: `Team "${normalizedTeamName}" does not exist and team creation is disabled` });
@@ -3977,16 +4040,9 @@ export async function registerRoutes(app: Express) {
               });
 
             } else {
-              // Try to find existing athlete
-              const existingAthletes = await storage.getAthletes({
-                search: `${firstName} ${lastName}`,
-                organizationId
-              });
-
-              const matchedAthlete = existingAthletes.find(p =>
-                p.firstName?.toLowerCase() === firstName.toLowerCase() &&
-                p.lastName?.toLowerCase() === lastName.toLowerCase()
-              );
+              // PERFORMANCE: Use pre-loaded athlete map instead of database query
+              const lookupKey = `${firstName.toLowerCase()}:${lastName.toLowerCase()}`;
+              const matchedAthlete = athleteMap.get(lookupKey);
 
               if (matchedAthlete) {
                 // Found existing athlete
@@ -4024,6 +4080,10 @@ export async function registerRoutes(app: Express) {
                     id: athlete.id,
                     name: `${athlete.firstName} ${athlete.lastName}`
                   });
+
+                  // PERFORMANCE: Add newly created athlete to map for future lookups in this import
+                  const newAthleteKey = `${athlete.firstName.toLowerCase()}:${athlete.lastName.toLowerCase()}`;
+                  athleteMap.set(newAthleteKey, athlete);
                 } else {
                   // match_and_update or match_only - error if not found
                   errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found (mode: ${athleteMode})` });
@@ -4476,8 +4536,11 @@ export async function registerRoutes(app: Express) {
           athlete.isActive,
           athlete.createdAt
         ].map(field => {
+          // SECURITY: Sanitize for formula injection, then escape for CSV format
+          let value = String(field || '');
+          value = sanitizeCSVValue(value);
+
           // Escape commas and quotes for CSV
-          const value = String(field || '');
           if (value.includes(',') || value.includes('"') || value.includes('\n')) {
             return `"${value.replace(/"/g, '""')}"`;
           }
@@ -4559,8 +4622,11 @@ export async function registerRoutes(app: Express) {
           measurement.isVerified,
           measurement.createdAt
         ].map(field => {
+          // SECURITY: Sanitize for formula injection, then escape for CSV format
+          let value = String(field || '');
+          value = sanitizeCSVValue(value);
+
           // Escape commas and quotes for CSV
-          const value = String(field || '');
           if (value.includes(',') || value.includes('"') || value.includes('\n')) {
             return `"${value.replace(/"/g, '""')}"`;
           }
