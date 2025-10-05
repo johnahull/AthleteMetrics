@@ -155,7 +155,8 @@ const hasRole = (user: SessionUser | null | undefined, role: string): boolean =>
 // Helper to get default unit for a metric from METRIC_CONFIG
 const getDefaultUnit = (metric: string): string => {
   const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  return config?.unit || 's'; // Default to seconds if metric not found
+  // Use nullish coalescing to allow empty string units (e.g., RSI)
+  return config?.unit ?? 's'; // Default to seconds if metric not found
 };
 
 // Unified invitation permission checker

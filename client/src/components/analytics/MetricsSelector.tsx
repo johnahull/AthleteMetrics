@@ -16,10 +16,15 @@ import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
 
 // Mutually exclusive metrics - selecting one prevents selecting the other
 // FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
-const MUTUALLY_EXCLUSIVE_METRICS: Record<string, string> = {
-  FLY10_TIME: 'TOP_SPEED',
-  TOP_SPEED: 'FLY10_TIME',
-};
+// Using tuple approach to ensure symmetric mappings
+const MUTUALLY_EXCLUSIVE_PAIRS: Array<[string, string]> = [
+  ['FLY10_TIME', 'TOP_SPEED'],
+];
+
+// Generate symmetric mapping from pairs
+const MUTUALLY_EXCLUSIVE_METRICS: Record<string, string> = Object.fromEntries(
+  MUTUALLY_EXCLUSIVE_PAIRS.flatMap(([a, b]) => [[a, b], [b, a]])
+);
 
 interface MetricsSelectorProps {
   metrics: MetricSelection;
