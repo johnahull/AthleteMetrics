@@ -19,6 +19,7 @@ import type {
 } from '@/types/chart-types';
 import { CHART_COLORS, CHART_CONFIG } from '@/constants/chart-config';
 import { getDateKey } from '@/utils/date-utils'; // Added this import
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // =============================================================================
 // PERFORMANCE QUADRANT CALCULATIONS
@@ -490,12 +491,25 @@ export function createTooltipTitleCallback() {
 /**
  * Create tooltip label callback for scatter plot charts
  */
-export function createTooltipLabelCallback(xLabel: string, yLabel: string, xUnit: string, yUnit: string) {
+export function createTooltipLabelCallback(xLabel: string, yLabel: string, xUnit: string, yUnit: string, xMetric?: string, yMetric?: string) {
   return (context: any) => {
     const point = context.raw as any;
+
+    // Format x value with dual display for FLY10_TIME
+    let xDisplay = `${point.x?.toFixed(2)}${xUnit}`;
+    if (xMetric && isFly10Metric(xMetric) && point.x) {
+      xDisplay = formatFly10Dual(point.x, 'time-first');
+    }
+
+    // Format y value with dual display for FLY10_TIME
+    let yDisplay = `${point.y?.toFixed(2)}${yUnit}`;
+    if (yMetric && isFly10Metric(yMetric) && point.y) {
+      yDisplay = formatFly10Dual(point.y, 'time-first');
+    }
+
     return [
-      `${xLabel}: ${point.x?.toFixed(2)}${xUnit}`,
-      `${yLabel}: ${point.y?.toFixed(2)}${yUnit}`
+      `${xLabel}: ${xDisplay}`,
+      `${yLabel}: ${yDisplay}`
     ];
   };
 }
@@ -534,10 +548,10 @@ export function createTooltipAfterLabelCallback() {
 /**
  * Create complete tooltip callbacks object for scatter plot charts
  */
-export function createTooltipCallbacks(xLabel: string, yLabel: string, xUnit: string, yUnit: string) {
+export function createTooltipCallbacks(xLabel: string, yLabel: string, xUnit: string, yUnit: string, xMetric?: string, yMetric?: string) {
   return {
     title: createTooltipTitleCallback(),
-    label: createTooltipLabelCallback(xLabel, yLabel, xUnit, yUnit),
+    label: createTooltipLabelCallback(xLabel, yLabel, xUnit, yUnit, xMetric, yMetric),
     afterLabel: createTooltipAfterLabelCallback()
   };
 }
@@ -1040,7 +1054,9 @@ export function createChartOptions(
           scatterData.xLabel,
           scatterData.yLabel,
           scatterData.xUnit,
-          scatterData.yUnit
+          scatterData.yUnit,
+          scatterData.xMetric,
+          scatterData.yMetric
         )
       },
       legend: {
@@ -1159,7 +1175,9 @@ export function createChartOptions(
         position: 'bottom',
         title: {
           display: true,
-          text: `${scatterData.xLabel} (${scatterData.xUnit})`
+          text: isFly10Metric(scatterData.xMetric)
+            ? `${scatterData.xLabel} (s / mph)`
+            : `${scatterData.xLabel} (${scatterData.xUnit})`
         },
         grid: {
           display: true,
@@ -1185,7 +1203,9 @@ export function createChartOptions(
         type: 'linear',
         title: {
           display: true,
-          text: `${scatterData.yLabel} (${scatterData.yUnit})`
+          text: isFly10Metric(scatterData.yMetric)
+            ? `${scatterData.yLabel} (s / mph)`
+            : `${scatterData.yLabel} (${scatterData.yUnit})`
         },
         grid: {
           display: true,

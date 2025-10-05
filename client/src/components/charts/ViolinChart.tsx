@@ -9,6 +9,7 @@ import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefin
 import { devLog } from '@/utils/dev-logger';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { getDateKey } from '@/utils/date-utils';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 ChartJS.register(CategoryScale, LinearScale, Title, Tooltip, Legend);
 
@@ -767,8 +768,13 @@ export function ViolinChart({
       const value = globalMin + (valueRange * i) / numTicks;
       const y = valueToY(value);
 
-      // Format numbers nicely
-      const displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
+      // Format numbers nicely - show dual format for FLY10_TIME
+      let displayValue: string;
+      if (metric && isFly10Metric(metric)) {
+        displayValue = formatFly10Dual(value, 'time-first');
+      } else {
+        displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
+      }
       ctx.fillText(displayValue, padding - 10, y + 4);
 
       // Tick marks

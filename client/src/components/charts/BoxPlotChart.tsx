@@ -28,6 +28,7 @@ import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conversion';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
+import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
 ChartJS.register(
@@ -1156,13 +1157,19 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const metric = Object.keys(statistics || {})[context.parsed.x];
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const rawData = context.raw as any;
+            const value = context.parsed.y;
+
+            // Format value with dual display for FLY10_TIME
+            const formattedValue = isFly10Metric(metric)
+              ? formatFly10Dual(value, 'time-first')
+              : `${value.toFixed(2)}${unit}`;
 
             // Enhanced label for individual athlete points
             if (rawData && rawData.athleteName) {
-              return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}: ${context.parsed.y.toFixed(2)}${unit}`;
+              return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}: ${formattedValue}`;
             }
 
-            return `Value: ${context.parsed.y.toFixed(2)}${unit}`;
+            return `Value: ${formattedValue}`;
           },
           afterLabel: (context) => {
             const metric = Object.keys(statistics || {})[context.parsed.x];
@@ -1251,7 +1258,19 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         beginAtZero: false,
         title: {
           display: true,
-          text: 'Value'
+          text: (() => {
+            const metrics = Object.keys(statistics || {});
+            if (metrics.length === 1) {
+              const metric = metrics[0];
+              if (isFly10Metric(metric)) {
+                return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || 'Value'} (s / mph)`;
+              }
+              const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+              const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || 'Value';
+              return unit ? `${label} (${unit})` : label;
+            }
+            return 'Value';
+          })()
         },
         ticks: {
           callback: (value) => {
@@ -1259,6 +1278,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const metrics = Object.keys(statistics || {});
             if (metrics.length === 1) {
               const metric = metrics[0];
+              if (isFly10Metric(metric)) {
+                return formatFly10Dual(Number(value), 'time-first');
+              }
               const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
               return `${Number(value).toFixed(2)}${unit}`;
             }
