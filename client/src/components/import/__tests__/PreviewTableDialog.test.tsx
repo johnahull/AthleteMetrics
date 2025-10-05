@@ -82,7 +82,7 @@ describe('PreviewTableDialog', () => {
       );
 
       expect(screen.getByText('Preview Import Data')).toBeInTheDocument();
-      expect(screen.getByText(/Review the first/i)).toBeInTheDocument();
+      expect(screen.getByText(/Review the data before importing/i)).toBeInTheDocument();
     });
 
     it('should not render when closed', () => {
@@ -112,7 +112,8 @@ describe('PreviewTableDialog', () => {
 
       expect(screen.getByText('John')).toBeInTheDocument();
       expect(screen.getByText('Jane')).toBeInTheDocument();
-      expect(screen.getByText('Error')).toBeInTheDocument();
+      // "Error" appears multiple times (as last name and as badge), so use getAllByText
+      expect(screen.getAllByText('Error').length).toBeGreaterThan(0);
     });
 
     it('should display mapped column headers', () => {
@@ -144,8 +145,9 @@ describe('PreviewTableDialog', () => {
         />
       );
 
-      expect(screen.getByText('Total Rows')).toBeInTheDocument();
-      expect(screen.getByText('3')).toBeInTheDocument();
+      const totalElement = screen.getByText('Total Rows').parentElement;
+      expect(totalElement).toHaveTextContent('3');
+      expect(totalElement).toHaveTextContent('Total Rows');
     });
 
     it('should display will create count', () => {
@@ -159,8 +161,12 @@ describe('PreviewTableDialog', () => {
         />
       );
 
-      expect(screen.getByText('Will Create')).toBeInTheDocument();
-      expect(screen.getByText('1')).toBeInTheDocument();
+      // "Will Create" appears multiple times (in summary and badges), find the summary one
+      const willCreateElements = screen.getAllByText('Will Create');
+      const summaryElement = willCreateElements.find(el =>
+        el.parentElement?.textContent?.includes('1') && el.className.includes('text-gray-600')
+      );
+      expect(summaryElement).toBeTruthy();
     });
 
     it('should display will match count', () => {
@@ -174,7 +180,12 @@ describe('PreviewTableDialog', () => {
         />
       );
 
-      expect(screen.getByText('Will Match')).toBeInTheDocument();
+      // "Will Match" appears multiple times (in summary and badges), find the summary one
+      const willMatchElements = screen.getAllByText('Will Match');
+      const summaryElement = willMatchElements.find(el =>
+        el.parentElement?.textContent?.includes('1') && el.className.includes('text-gray-600')
+      );
+      expect(summaryElement).toBeTruthy();
     });
 
     it('should display errors count when present', () => {
@@ -204,7 +215,9 @@ describe('PreviewTableDialog', () => {
         />
       );
 
-      expect(screen.getByText('Will Create')).toBeInTheDocument();
+      // "Will Create" appears in both summary and badge
+      const badges = screen.getAllByText('Will Create');
+      expect(badges.length).toBeGreaterThan(0);
     });
 
     it('should display will match badge with matched name', () => {
@@ -218,7 +231,9 @@ describe('PreviewTableDialog', () => {
         />
       );
 
-      expect(screen.getByText('Will Match')).toBeInTheDocument();
+      // "Will Match" appears in both summary and badge
+      const badges = screen.getAllByText('Will Match');
+      expect(badges.length).toBeGreaterThan(0);
       expect(screen.getByText('→ Jane Smith (existing)')).toBeInTheDocument();
     });
 
@@ -462,7 +477,202 @@ describe('PreviewTableDialog', () => {
       );
 
       expect(screen.getByText('Preview Import Data')).toBeInTheDocument();
-      expect(screen.getByText(/first 0 rows/i)).toBeInTheDocument();
+      expect(screen.getByText(/Review the data before importing/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Performance Limits', () => {
+    it('should limit display to MAX_DISPLAYED_ROWS (100) for large datasets', () => {
+      // Create 200 mock rows
+      const manyRows: PreviewRow[] = Array.from({ length: 200 }, (_, i) => ({
+        rowIndex: i,
+        data: {
+          'First Name': `Person${i}`,
+          'Last Name': `Last${i}`,
+          'Email': `person${i}@example.com`,
+        },
+        validations: [
+          { rowIndex: i, field: 'firstName', status: 'valid' },
+          { rowIndex: i, field: 'lastName', status: 'valid' },
+          { rowIndex: i, field: 'emails', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }));
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={manyRows}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should show first person
+      expect(screen.getByText('Person0')).toBeInTheDocument();
+
+      // Should show 99th person (index 99 = 100th row)
+      expect(screen.getByText('Person99')).toBeInTheDocument();
+
+      // Should NOT show 100th person (index 100, which would be 101st row)
+      expect(screen.queryByText('Person100')).not.toBeInTheDocument();
+
+      // Should NOT show last person
+      expect(screen.queryByText('Person199')).not.toBeInTheDocument();
+    });
+
+    it('should show large dataset warning for datasets over 100 rows', () => {
+      const manyRows: PreviewRow[] = Array.from({ length: 150 }, (_, i) => ({
+        rowIndex: i,
+        data: {
+          'First Name': `Person${i}`,
+          'Last Name': `Last${i}`,
+        },
+        validations: [
+          { rowIndex: i, field: 'firstName', status: 'valid' },
+          { rowIndex: i, field: 'lastName', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }));
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={manyRows}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      expect(screen.getByText('Large dataset detected')).toBeInTheDocument();
+      expect(screen.getByText(/Preview limited to 100 rows for performance/i)).toBeInTheDocument();
+      expect(screen.getByText(/All 150 rows will be imported/i)).toBeInTheDocument();
+    });
+
+    it('should NOT show large dataset warning for datasets under 100 rows', () => {
+      const smallRows: PreviewRow[] = Array.from({ length: 50 }, (_, i) => ({
+        rowIndex: i,
+        data: {
+          'First Name': `Person${i}`,
+          'Last Name': `Last${i}`,
+        },
+        validations: [
+          { rowIndex: i, field: 'firstName', status: 'valid' },
+          { rowIndex: i, field: 'lastName', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }));
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={smallRows}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      expect(screen.queryByText('Large dataset detected')).not.toBeInTheDocument();
+    });
+
+    it('should calculate summary statistics for all rows, not just displayed rows', () => {
+      // Create 200 rows with mixed statuses
+      const manyRows: PreviewRow[] = [
+        ...Array.from({ length: 50 }, (_, i) => ({
+          rowIndex: i,
+          data: { 'First Name': `Person${i}`, 'Last Name': `Last${i}` },
+          validations: [
+            { rowIndex: i, field: 'firstName', status: 'valid' as const },
+            { rowIndex: i, field: 'lastName', status: 'valid' as const },
+          ],
+          matchStatus: 'will_create' as const,
+        })),
+        ...Array.from({ length: 50 }, (_, i) => ({
+          rowIndex: i + 50,
+          data: { 'First Name': `Person${i + 50}`, 'Last Name': `Last${i + 50}` },
+          validations: [
+            { rowIndex: i + 50, field: 'firstName', status: 'valid' as const },
+            { rowIndex: i + 50, field: 'lastName', status: 'valid' as const },
+          ],
+          matchStatus: 'will_match' as const,
+          matchedAthleteName: `Person${i + 50} (existing)`,
+        })),
+        ...Array.from({ length: 50 }, (_, i) => ({
+          rowIndex: i + 100,
+          data: { 'First Name': `Person${i + 100}`, 'Last Name': `Last${i + 100}` },
+          validations: [
+            { rowIndex: i + 100, field: 'firstName', status: 'valid' as const },
+            { rowIndex: i + 100, field: 'lastName', status: 'valid' as const },
+          ],
+          matchStatus: 'duplicate' as const,
+        })),
+        ...Array.from({ length: 50 }, (_, i) => ({
+          rowIndex: i + 150,
+          data: { 'First Name': '', 'Last Name': `Last${i + 150}` },
+          validations: [
+            { rowIndex: i + 150, field: 'firstName', status: 'error' as const, message: 'Required' },
+            { rowIndex: i + 150, field: 'lastName', status: 'valid' as const },
+          ],
+          matchStatus: 'error' as const,
+        })),
+      ];
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={manyRows}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Summary should reflect ALL 200 rows, not just the 100 displayed
+      const totalElement = screen.getByText('Total Rows').parentElement;
+      expect(totalElement).toHaveTextContent('200');
+
+      // Check all status counts are accurate for full dataset
+      // These labels appear multiple times (in summary and badges), find the summary ones by class
+      const willCreateElements = screen.getAllByText('Will Create');
+      const willCreateSummary = willCreateElements.find(el => el.className.includes('text-gray-600'));
+      expect(willCreateSummary?.parentElement).toHaveTextContent('50');
+
+      const willMatchElements = screen.getAllByText('Will Match');
+      const willMatchSummary = willMatchElements.find(el => el.className.includes('text-gray-600'));
+      expect(willMatchSummary?.parentElement).toHaveTextContent('50');
+
+      const duplicatesElement = screen.getByText('Duplicates').parentElement;
+      expect(duplicatesElement).toHaveTextContent('50');
+
+      const errorsElement = screen.getByText('Errors').parentElement;
+      expect(errorsElement).toHaveTextContent('50');
+    });
+
+    it('should indicate in dialog description how many rows are being shown', () => {
+      const manyRows: PreviewRow[] = Array.from({ length: 250 }, (_, i) => ({
+        rowIndex: i,
+        data: { 'First Name': `Person${i}`, 'Last Name': `Last${i}` },
+        validations: [
+          { rowIndex: i, field: 'firstName', status: 'valid' },
+          { rowIndex: i, field: 'lastName', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }));
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={manyRows}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      expect(screen.getByText(/Displaying first 100 of 250 rows for performance/i)).toBeInTheDocument();
     });
   });
 });

@@ -4,13 +4,14 @@
  */
 
 import * as React from 'react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Check, AlertTriangle, X, Users, UserPlus } from 'lucide-react';
 import type { PreviewRow } from '@shared/import-types';
+import { IMPORT_CONFIG } from '@/config/import';
 
 interface PreviewTableDialogProps {
   open: boolean;
@@ -30,9 +31,8 @@ export function PreviewTableDialog({
   isLoading = false,
 }: PreviewTableDialogProps) {
   // PERFORMANCE: Limit displayed rows to prevent browser freeze with large datasets
-  const MAX_DISPLAYED_ROWS = 100;
-  const displayedRows = previewRows.slice(0, MAX_DISPLAYED_ROWS);
-  const hasMoreRows = previewRows.length > MAX_DISPLAYED_ROWS;
+  const displayedRows = previewRows.slice(0, IMPORT_CONFIG.MAX_DISPLAYED_ROWS);
+  const hasMoreRows = previewRows.length > IMPORT_CONFIG.MAX_DISPLAYED_ROWS;
 
   const getStatusIcon = (status?: 'will_create' | 'will_match' | 'duplicate' | 'error') => {
     switch (status) {
@@ -56,7 +56,7 @@ export function PreviewTableDialog({
       case 'will_match':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Will Match</Badge>;
       case 'duplicate':
-        return <Badge variant="destructive" className="bg-amber-100 text-amber-800 border-amber-200">Duplicate?</Badge>;
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Duplicate?</Badge>;
       case 'error':
         return <Badge variant="destructive">Error</Badge>;
       default:
@@ -64,26 +64,36 @@ export function PreviewTableDialog({
     }
   };
 
-  const hasErrors = previewRows.some(row =>
-    row.validations.some(v => v.status === 'error') || row.matchStatus === 'error'
+  // PERFORMANCE: Memoize expensive computations to prevent recalculation on every render
+  const hasErrors = useMemo(() =>
+    previewRows.some(row =>
+      row.validations.some(v => v.status === 'error') || row.matchStatus === 'error'
+    ),
+    [previewRows]
   );
 
-  const hasWarnings = previewRows.some(row =>
-    row.validations.some(v => v.status === 'warning') || row.matchStatus === 'duplicate'
+  const hasWarnings = useMemo(() =>
+    previewRows.some(row =>
+      row.validations.some(v => v.status === 'warning') || row.matchStatus === 'duplicate'
+    ),
+    [previewRows]
   );
 
   // Get list of mapped columns to display
-  const displayColumns = Object.entries(columnMappings)
-    .filter(([_, systemField]) => systemField)
-    .map(([csvColumn, systemField]) => ({ csvColumn, systemField }));
+  const displayColumns = useMemo(() =>
+    Object.entries(columnMappings)
+      .filter(([_, systemField]) => systemField)
+      .map(([csvColumn, systemField]) => ({ csvColumn, systemField })),
+    [columnMappings]
+  );
 
-  const summary = {
+  const summary = useMemo(() => ({
     total: previewRows.length,
     willCreate: previewRows.filter(r => r.matchStatus === 'will_create').length,
     willMatch: previewRows.filter(r => r.matchStatus === 'will_match').length,
     errors: previewRows.filter(r => r.matchStatus === 'error').length,
     duplicates: previewRows.filter(r => r.matchStatus === 'duplicate').length,
-  };
+  }), [previewRows]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,7 +104,7 @@ export function PreviewTableDialog({
             Review the data before importing. Showing mapped columns only.
             {hasMoreRows && (
               <span className="text-amber-600 font-medium">
-                {' '}Displaying first {MAX_DISPLAYED_ROWS} of {previewRows.length} rows for performance.
+                {' '}Displaying first {IMPORT_CONFIG.MAX_DISPLAYED_ROWS} of {previewRows.length} rows for performance.
               </span>
             )}
           </DialogDescription>
@@ -106,7 +116,7 @@ export function PreviewTableDialog({
             <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800">
               <p className="font-medium">Large dataset detected</p>
-              <p>Preview limited to {MAX_DISPLAYED_ROWS} rows for performance. All {previewRows.length} rows will be imported if you proceed.</p>
+              <p>Preview limited to {IMPORT_CONFIG.MAX_DISPLAYED_ROWS} rows for performance. All {previewRows.length} rows will be imported if you proceed.</p>
             </div>
           </div>
         )}

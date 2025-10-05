@@ -373,9 +373,13 @@ export async function registerRoutes(app: Express) {
     // - /login and /register: Pre-authentication endpoints
     // - /invitations/:token/accept: Public endpoint for new users without sessions
     //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
-    // - /import/*: File upload endpoints that use multipart/form-data
-    const skipCsrfPaths = ['/login', '/register', '/import/'];
-    const skipCsrfPatterns = [/^\/invitations\/[a-zA-Z0-9_-]+\/accept$/];
+    // - /import/photo, /import/parse-csv, /import/:type: File upload endpoints that use multipart/form-data
+    //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
+    const skipCsrfPaths = ['/login', '/register', '/import/photo', '/import/parse-csv'];
+    const skipCsrfPatterns = [
+      /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,
+      /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
+    ];
 
     if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
         skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
@@ -3360,33 +3364,49 @@ export async function registerRoutes(app: Express) {
     }
   });
 
-  // Configure multer for CSV file uploads
+  // SECURITY: Configure multer for CSV file uploads with strict validation
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-      fileSize: 5 * 1024 * 1024, // 5MB limit
+      fileSize: parseInt(process.env.MAX_CSV_FILE_SIZE || '5242880'), // Default 5MB (5 * 1024 * 1024)
+      files: 1, // Only allow single file uploads
     },
     fileFilter: (req, file, cb) => {
-      if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      // SECURITY: Strict file type validation - check both MIME type and extension
+      const allowedMimeTypes = ['text/csv', 'application/csv', 'text/plain'];
+      const hasValidMime = allowedMimeTypes.includes(file.mimetype);
+      const hasValidExtension = file.originalname.toLowerCase().endsWith('.csv');
+
+      if (hasValidMime && hasValidExtension) {
         cb(null, true);
       } else {
-        cb(new Error('Only CSV files are allowed'));
+        cb(new Error('Invalid file type. Only CSV files are allowed.'));
       }
     }
   });
+  // NOTE: For production deployments, consider adding virus scanning middleware
+  // (e.g., ClamAV integration) before processing uploaded files
 
-  // Configure multer for image uploads (OCR)
+  // SECURITY: Configure multer for image uploads (OCR) with strict validation
   const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB limit for images
+      fileSize: parseInt(process.env.MAX_IMAGE_FILE_SIZE || '10485760'), // Default 10MB (10 * 1024 * 1024)
+      files: 1, // Only allow single file uploads
     },
     fileFilter: (req, file, cb) => {
+      // SECURITY: Strict file type validation for images and PDFs
       const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-      if (allowedMimes.includes(file.mimetype)) {
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+      const fileExtension = file.originalname.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
+
+      const hasValidMime = allowedMimes.includes(file.mimetype);
+      const hasValidExtension = allowedExtensions.includes(fileExtension);
+
+      if (hasValidMime && hasValidExtension) {
         cb(null, true);
       } else {
-        cb(new Error('Only image files (JPG, PNG, WebP) and PDF files are allowed'));
+        cb(new Error('Invalid file type. Only image files (JPG, PNG, WebP) and PDF files are allowed.'));
       }
     }
   });

@@ -4,7 +4,7 @@
  */
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,7 +58,13 @@ export function ColumnMappingDialog({
         { value: 'gender', label: 'Gender', required: false },
       ];
 
-  // Initialize mappings from suggested mappings
+  // Serialize suggested mappings for stable dependency checking
+  const suggestedMappingsKey = useMemo(() =>
+    JSON.stringify(parseResult?.suggestedMappings || []),
+    [parseResult?.suggestedMappings]
+  );
+
+  // Initialize mappings from suggested mappings when parse result changes
   useEffect(() => {
     if (parseResult?.suggestedMappings) {
       const initialMappings: Record<string, string> = {};
@@ -67,7 +73,7 @@ export function ColumnMappingDialog({
       });
       setMappings(initialMappings);
     }
-  }, [parseResult]);
+  }, [suggestedMappingsKey]);
 
   const handleMappingChange = (csvColumn: string, systemField: string) => {
     setMappings((prev) => ({

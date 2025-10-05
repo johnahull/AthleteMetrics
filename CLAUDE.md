@@ -235,6 +235,17 @@ The application runs as a **single-process Node.js server** without clustering:
 - `ANALYTICS_RATE_LIMIT` - Maximum requests per window (default: 50)
 - `ANALYTICS_RATE_LIMIT_MESSAGE` - Custom rate limit message (default: "Too many analytics requests, please try again later.")
 
+#### Upload Rate Limiting
+- `UPLOAD_RATE_LIMIT` - Maximum file uploads per 15-minute window (default: 20)
+
+**Security Note**: Upload rate limiting protects against abuse of CSV import and photo upload endpoints. The default of 20 uploads per 15 minutes balances legitimate use with DoS protection.
+
+#### File Upload Security
+- `MAX_CSV_FILE_SIZE` - Maximum CSV file size in bytes (default: 5242880 / 5MB)
+- `MAX_IMAGE_FILE_SIZE` - Maximum image/PDF file size in bytes for OCR (default: 10485760 / 10MB)
+
+**Security Note**: File upload endpoints validate both MIME types and file extensions to prevent malicious file uploads. For production deployments, consider integrating virus scanning middleware (e.g., ClamAV).
+
 #### Rate Limiting Bypass (Development Only)
 - `BYPASS_ANALYTICS_RATE_LIMIT` - Set to "true" to bypass analytics rate limiting for site admins (default: false)
 - `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)
