@@ -121,7 +121,20 @@ export function PreviewTableDialog({
           </div>
         )}
 
+        {/* DEFENSIVE: Show error if no rows provided */}
+        {previewRows.length === 0 && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <p className="font-medium">No data to preview</p>
+              <p>The CSV file appears to be empty or contains no valid data rows.</p>
+            </div>
+          </div>
+        )}
+
         {/* Summary Stats */}
+        {previewRows.length > 0 && (
+        <>
         <div className="grid grid-cols-5 gap-4 py-4 border-b">
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-900">{summary.total}</div>
@@ -220,7 +233,8 @@ export function PreviewTableDialog({
                             {validation?.status === 'warning' && <AlertTriangle className="h-4 w-4 text-amber-600" />}
                             {validation?.status === 'error' && <X className="h-4 w-4 text-red-600" />}
                             <span className={validation?.status === 'error' ? 'text-red-600' : ''}>
-                              {value || <span className="text-gray-400 italic">empty</span>}
+                              {/* BUG FIX: Use nullish check to allow 0 and false as valid values */}
+                              {value !== null && value !== undefined && value !== '' ? value : <span className="text-gray-400 italic">empty</span>}
                             </span>
                           </div>
                           {validation?.message && (
@@ -235,6 +249,8 @@ export function PreviewTableDialog({
             </TableBody>
           </Table>
         </div>
+        </>
+        )}
 
         <DialogFooter>
           <Button

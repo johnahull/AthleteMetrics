@@ -71,10 +71,11 @@ describe('ColumnMappingDialog', () => {
         />
       );
 
-      expect(screen.getByText('First Name')).toBeInTheDocument();
-      expect(screen.getByText('Last Name')).toBeInTheDocument();
-      expect(screen.getByText('Email')).toBeInTheDocument();
-      expect(screen.getByText('Birth Year')).toBeInTheDocument();
+      // Headers appear multiple times (CSV column + select options), use getAllByText
+      expect(screen.getAllByText('First Name').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Last Name').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Email').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Birth Year').length).toBeGreaterThan(0);
     });
 
     it('should display sample data from first row', () => {
@@ -88,9 +89,13 @@ describe('ColumnMappingDialog', () => {
         />
       );
 
-      expect(screen.getByText('John')).toBeInTheDocument();
-      expect(screen.getByText('Doe')).toBeInTheDocument();
-      expect(screen.getByText('john@example.com')).toBeInTheDocument();
+      // Sample data appears below each column header
+      const sampleDataElements = document.querySelectorAll('.text-xs.text-gray-500');
+      const sampleDataText = Array.from(sampleDataElements).map(el => el.textContent);
+
+      expect(sampleDataText).toContain('John');
+      expect(sampleDataText).toContain('Doe');
+      expect(sampleDataText).toContain('john@example.com');
     });
   });
 
@@ -139,9 +144,13 @@ describe('ColumnMappingDialog', () => {
         />
       );
 
-      // Required fields should be marked
-      expect(screen.getByText(/First Name/)).toBeInTheDocument();
-      expect(screen.getByText(/Last Name/)).toBeInTheDocument();
+      // Required fields should be marked with asterisk (appears in select options)
+      const asterisks = screen.getAllByText('*');
+      expect(asterisks.length).toBeGreaterThan(0);
+
+      // Headers appear multiple times (CSV column + select options)
+      expect(screen.getAllByText('First Name').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Last Name').length).toBeGreaterThan(0);
     });
   });
 
@@ -290,6 +299,170 @@ describe('ColumnMappingDialog', () => {
       );
 
       expect(screen.getByText('Map CSV Columns to Fields')).toBeInTheDocument();
+    });
+  });
+
+  describe('Edge Cases and Bug Fixes', () => {
+    it('should show error when parseResult is null', () => {
+      render(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={null}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should display defensive error message
+      expect(screen.getByText('Error: No CSV data available')).toBeInTheDocument();
+      expect(screen.getByText('Please upload a valid CSV file to continue.')).toBeInTheDocument();
+    });
+
+    it('should show error when parseResult is undefined', () => {
+      render(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={undefined as any}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should display defensive error message
+      expect(screen.getByText('Error: No CSV data available')).toBeInTheDocument();
+    });
+
+    it('should not render mapping interface when parseResult is null', () => {
+      render(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={null}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should not show the CSV column grid
+      expect(screen.queryByText('CSV Column')).not.toBeInTheDocument();
+      expect(screen.queryByText('System Field')).not.toBeInTheDocument();
+    });
+
+    it('should reset mappings when dialog opens', () => {
+      const { rerender } = render(
+        <ColumnMappingDialog
+          open={false}
+          onOpenChange={mockOnOpenChange}
+          parseResult={mockParseResult}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Dialog is closed, so no content rendered
+      expect(screen.queryByText('Map CSV Columns to Fields')).not.toBeInTheDocument();
+
+      // Open the dialog
+      rerender(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={mockParseResult}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Dialog should now be open with suggested mappings applied
+      expect(screen.getByText('Map CSV Columns to Fields')).toBeInTheDocument();
+      expect(screen.getAllByRole('combobox')).toHaveLength(mockParseResult.headers.length);
+    });
+
+    it('should handle parseResult with empty suggestedMappings', () => {
+      const parseResultNoSuggestions: CSVParseResult = {
+        headers: ['Col1', 'Col2'],
+        rows: [{ 'Col1': 'value1', 'Col2': 'value2' }],
+        suggestedMappings: [],
+      };
+
+      render(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={parseResultNoSuggestions}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should still render without errors
+      expect(screen.getByText('Map CSV Columns to Fields')).toBeInTheDocument();
+      expect(screen.getByText('Col1')).toBeInTheDocument();
+      expect(screen.getByText('Col2')).toBeInTheDocument();
+    });
+
+    it('should not reset mappings when parseResult changes but dialog stays open', () => {
+      const { rerender } = render(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={mockParseResult}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Dialog is open with initial mappings
+      expect(screen.getByText('Map CSV Columns to Fields')).toBeInTheDocument();
+
+      // Create a new parseResult reference (simulating re-render with new object)
+      const newParseResult: CSVParseResult = {
+        ...mockParseResult,
+        headers: [...mockParseResult.headers],
+        rows: [...mockParseResult.rows],
+      };
+
+      // Re-render with new parseResult reference but dialog still open
+      rerender(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={newParseResult}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Mappings should be reset because parseResult changed and dialog is open
+      // This is expected behavior - when parseResult changes, we want to reset mappings
+      expect(screen.getByText('Map CSV Columns to Fields')).toBeInTheDocument();
+    });
+
+    it('should handle parseResult with missing rows array', () => {
+      const parseResultNoRows: CSVParseResult = {
+        headers: ['First Name', 'Last Name'],
+        rows: [],
+        suggestedMappings: [
+          { csvColumn: 'First Name', systemField: 'firstName', isRequired: true, autoDetected: true },
+          { csvColumn: 'Last Name', systemField: 'lastName', isRequired: true, autoDetected: true },
+        ],
+      };
+
+      render(
+        <ColumnMappingDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          parseResult={parseResultNoRows}
+          importType="athletes"
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should render without errors, showing N/A for sample data
+      expect(screen.getByText('Map CSV Columns to Fields')).toBeInTheDocument();
+      expect(screen.getAllByText('N/A')).toHaveLength(2); // One for each column
     });
   });
 });

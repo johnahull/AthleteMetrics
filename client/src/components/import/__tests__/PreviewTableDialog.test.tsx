@@ -675,4 +675,156 @@ describe('PreviewTableDialog', () => {
       expect(screen.getByText(/Displaying first 100 of 250 rows for performance/i)).toBeInTheDocument();
     });
   });
+
+  describe('Edge Cases and Bug Fixes', () => {
+    it('should display zero values correctly (not as empty)', () => {
+      const rowsWithZero: PreviewRow[] = [{
+        rowIndex: 0,
+        data: {
+          'First Name': 'John',
+          'Last Name': 'Doe',
+          'Value': '0', // Zero value
+        },
+        validations: [
+          { rowIndex: 0, field: 'firstName', status: 'valid' },
+          { rowIndex: 0, field: 'lastName', status: 'valid' },
+          { rowIndex: 0, field: 'value', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }];
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+        'Value': 'value',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={rowsWithZero}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should display "0" not "empty" in the value column
+      const cells = screen.getAllByRole('cell');
+      const valueCell = cells.find(cell => cell.textContent === '0');
+      expect(valueCell).toBeDefined();
+
+      // Verify no "empty" indicator is shown for the zero value
+      const table = screen.getByRole('table');
+      expect(table.textContent).toContain('0');
+      // The table should not have "empty" for the zero value
+      // (Note: there might be "empty" for truly empty cells, so we check the specific row)
+    });
+
+    it('should handle empty rows with warning message', () => {
+      const emptyRows: PreviewRow[] = [];
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={emptyRows}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should show "No data to preview" message
+      expect(screen.getByText('No data to preview')).toBeInTheDocument();
+      expect(screen.getByText(/CSV file appears to be empty/i)).toBeInTheDocument();
+    });
+
+    it('should handle empty string values correctly', () => {
+      const rowsWithEmptyStrings: PreviewRow[] = [{
+        rowIndex: 0,
+        data: {
+          'First Name': 'John',
+          'Last Name': '',  // Empty string
+          'Email': 'john@example.com',
+        },
+        validations: [
+          { rowIndex: 0, field: 'firstName', status: 'valid' },
+          { rowIndex: 0, field: 'lastName', status: 'warning', message: 'Last name is empty' },
+          { rowIndex: 0, field: 'emails', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }];
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+        'Email': 'emails',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={rowsWithEmptyStrings}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Empty string should show as "empty"
+      expect(screen.getAllByText(/empty/i).length).toBeGreaterThan(0);
+    });
+
+    it('should handle false boolean values correctly', () => {
+      const rowsWithFalse: PreviewRow[] = [{
+        rowIndex: 0,
+        data: {
+          'First Name': 'John',
+          'Last Name': 'Doe',
+          'Is Active': 'false',  // Boolean false as string
+        },
+        validations: [
+          { rowIndex: 0, field: 'firstName', status: 'valid' },
+          { rowIndex: 0, field: 'lastName', status: 'valid' },
+          { rowIndex: 0, field: 'isActive', status: 'valid' },
+        ],
+        matchStatus: 'will_create',
+      }];
+
+      const mappings = {
+        'First Name': 'firstName',
+        'Last Name': 'lastName',
+        'Is Active': 'isActive',
+      };
+
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={rowsWithFalse}
+          columnMappings={mappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Should display "false" not "empty"
+      expect(screen.getByText('false')).toBeInTheDocument();
+    });
+
+    it('should not render summary stats when no rows', () => {
+      render(
+        <PreviewTableDialog
+          open={true}
+          onOpenChange={mockOnOpenChange}
+          previewRows={[]}
+          columnMappings={mockColumnMappings}
+          onConfirm={mockOnConfirm}
+        />
+      );
+
+      // Summary stats should not be rendered
+      expect(screen.queryByText('Total Rows')).not.toBeInTheDocument();
+      expect(screen.queryByText('Will Create')).not.toBeInTheDocument();
+    });
+  });
 });

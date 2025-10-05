@@ -4,7 +4,7 @@
  */
 
 import * as React from 'react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,22 +58,17 @@ export function ColumnMappingDialog({
         { value: 'gender', label: 'Gender', required: false },
       ];
 
-  // Serialize suggested mappings for stable dependency checking
-  const suggestedMappingsKey = useMemo(() =>
-    JSON.stringify(parseResult?.suggestedMappings || []),
-    [parseResult?.suggestedMappings]
-  );
-
-  // Initialize mappings from suggested mappings when parse result changes
+  // Initialize mappings from suggested mappings when dialog opens
+  // PERFORMANCE: Reset on dialog open to avoid infinite loop from unstable dependencies
   useEffect(() => {
-    if (parseResult?.suggestedMappings) {
+    if (open && parseResult?.suggestedMappings) {
       const initialMappings: Record<string, string> = {};
       parseResult.suggestedMappings.forEach((mapping) => {
         initialMappings[mapping.csvColumn] = mapping.systemField;
       });
       setMappings(initialMappings);
     }
-  }, [suggestedMappingsKey]);
+  }, [open, parseResult]);
 
   const handleMappingChange = (csvColumn: string, systemField: string) => {
     setMappings((prev) => ({
@@ -113,7 +108,18 @@ export function ColumnMappingDialog({
         </DialogHeader>
 
         <div className="py-4">
-          {missingRequired.length > 0 && (
+          {/* DEFENSIVE: Show error if parseResult is missing */}
+          {!parseResult && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800">
+                <p className="font-medium">Error: No CSV data available</p>
+                <p>Please upload a valid CSV file to continue.</p>
+              </div>
+            </div>
+          )}
+
+          {missingRequired.length > 0 && parseResult && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
               <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-amber-800">
@@ -123,14 +129,15 @@ export function ColumnMappingDialog({
             </div>
           )}
 
-          <div className="space-y-3">
-            <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-700 pb-2 border-b">
-              <div className="col-span-5">CSV Column</div>
-              <div className="col-span-1 text-center">→</div>
-              <div className="col-span-6">System Field</div>
-            </div>
+          {parseResult && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-700 pb-2 border-b">
+                <div className="col-span-5">CSV Column</div>
+                <div className="col-span-1 text-center">→</div>
+                <div className="col-span-6">System Field</div>
+              </div>
 
-            {parseResult?.headers.map((header) => (
+              {parseResult.headers.map((header) => (
               <div key={header} className="grid grid-cols-12 gap-2 items-center">
                 <div className="col-span-5">
                   <div className="text-sm font-medium text-gray-900 truncate" title={header}>
@@ -182,7 +189,8 @@ export function ColumnMappingDialog({
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
