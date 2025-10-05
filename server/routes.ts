@@ -39,6 +39,7 @@ import {
 import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
 import { registerAllRoutes } from "./routes/index";
+import { csrfProtection } from "./routes/csrf-routes";
 
 // Session configuration
 declare module 'express-session' {
@@ -366,68 +367,9 @@ export async function registerRoutes(app: Express) {
     crossOriginEmbedderPolicy: false, // Allow for development
   }));
 
-  // CSRF protection setup
-  const csrfTokens = new csrf();
-
-  // CSRF protection middleware
-  const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
-    // Skip CSRF for GET requests (safe operations)
-    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
-      return next();
-    }
-
-    // Skip CSRF for certain API endpoints that use other authentication
-    // Note: req.path is relative to the mount point, so '/api' prefix is not included
-    // - /login and /register: Pre-authentication endpoints
-    // - /invitations/:token/accept: Public endpoint for new users without sessions
-    //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
-    // - /import/photo, /import/parse-csv, /import/:type: File upload endpoints that use multipart/form-data
-    //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
-    const skipCsrfPaths = ['/login', '/register', '/import/photo', '/import/parse-csv'];
-    const skipCsrfPatterns = [
-      /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,
-      /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
-    ];
-
-    if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
-        skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
-      return next();
-    }
-
-    // Check for CSRF token in headers or body
-    const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'] || req.body._csrf;
-
-    if (!token) {
-      return res.status(403).json({ error: 'CSRF token missing' });
-    }
-
-    // Validate CSRF token
-    const secret = (req.session as any)?.csrfSecret;
-    if (!secret) {
-      return res.status(403).json({ error: 'Invalid session' });
-    }
-
-    try {
-      if (!csrfTokens.verify(secret, token as string)) {
-        return res.status(403).json({ error: 'Invalid CSRF token' });
-      }
-    } catch (error) {
-      return res.status(403).json({ error: 'CSRF token validation failed' });
-    }
-
-    next();
-  };
-
-  // Generate CSRF token endpoint
-  app.get('/api/csrf-token', (req: Request, res: Response) => {
-    const secret = csrfTokens.secretSync();
-    const token = csrfTokens.create(secret);
-
-    // Store secret in session
-    (req.session as any).csrfSecret = secret;
-
-    res.json({ csrfToken: token });
-  });
+  // CSRF protection (migrated to server/routes/csrf-routes.ts)
+  // - CSRF token endpoint: GET /api/csrf-token
+  // - CSRF protection middleware: imported and applied below
 
   // Apply CSRF protection to state-changing routes
   app.use('/api', csrfProtection);
