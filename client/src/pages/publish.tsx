@@ -1,13 +1,23 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Download, RotateCcw } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Download, RotateCcw, Trash2, AlertTriangle } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import jsPDF from "jspdf";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Publish() {
   const [filters, setFilters] = useState({
@@ -21,6 +31,15 @@ export default function Publish() {
     gender: "all",  // Default to show all genders, user can filter as needed
   });
 
+  const [selectedMeasurements, setSelectedMeasurements] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [showView, setShowView] = useState<"best_by_athlete" | "best_by_measurement" | "all">("best_by_athlete");
+  const [itemsPerPage, setItemsPerPage] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: any[] };
@@ -30,7 +49,7 @@ export default function Publish() {
     queryFn: async () => {
       // Don't fetch if metric is not selected
       if (!filters.metric) return [];
-      
+
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
@@ -40,7 +59,7 @@ export default function Publish() {
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
-      
+
       const response = await fetch(`/api/measurements?${params}`, {
         credentials: 'include',
         headers: {
@@ -53,44 +72,129 @@ export default function Publish() {
     enabled: !!filters.metric,
   });
 
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (measurementIds: string[]) => {
+      // Fetch CSRF token first
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include',
+      });
+
+      if (!csrfResponse.ok) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+
+      const { csrfToken } = await csrfResponse.json();
+
+      const response = await fetch('/api/measurements/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ measurementIds }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete measurements');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Measurements Deleted",
+        description: data.message,
+      });
+      // Refresh measurements
+      queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
+      // Clear selection and close dialog
+      setSelectedMeasurements(new Set());
+      setDeleteDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reset to page 1 when filters or view changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, showView]);
+
+  // PERFORMANCE: Memoize expensive calculation to prevent recomputation on every render
   // Get each athlete's best performance for the selected metric
-  const bestMeasurements = measurements ? (() => {
+  const bestMeasurements = useMemo(() => {
+    if (!measurements) return [];
+
     const athleteBest = new Map();
     const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
-    
+
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
       const value = parseFloat(measurement.value);
-      
+
       if (!athleteBest.has(athleteId)) {
         athleteBest.set(athleteId, measurement);
       } else {
         const current = athleteBest.get(athleteId);
         const currentValue = parseFloat(current.value);
-        
+
         // For time-based metrics, lower is better; for others, higher is better
         const isBetter = isTimeBased ? value < currentValue : value > currentValue;
-        
+
         if (isBetter) {
           athleteBest.set(athleteId, measurement);
         }
       }
     });
-    
+
     // Convert to array and sort from best to worst
     return Array.from(athleteBest.values()).sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);
-      
+
       if (isTimeBased) {
         return aValue - bValue; // ascending for time (lower is better)
       } else {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  })() : [];
+  }, [measurements, filters.metric]);
 
-  const sortedMeasurements = bestMeasurements;
+  // PERFORMANCE: Memoize expensive sorting to prevent recomputation on every render
+  // All measurements sorted (for both "best by measurement" and "all" views)
+  const allMeasurementsSorted = useMemo(() => {
+    if (!measurements) return [];
+
+    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
+    return [...measurements].sort((a: any, b: any) => {
+      const aValue = parseFloat(a.value);
+      const bValue = parseFloat(b.value);
+
+      if (isTimeBased) {
+        return aValue - bValue; // ascending for time (lower is better)
+      } else {
+        return bValue - aValue; // descending for others (higher is better)
+      }
+    });
+  }, [measurements, filters.metric]);
+
+  const sortedMeasurements = showView === "best_by_athlete"
+    ? bestMeasurements
+    : allMeasurementsSorted;
+
+  // Pagination logic
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(sortedMeasurements.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = itemsPerPage === -1 ? sortedMeasurements.length : startIndex + itemsPerPage;
+  const paginatedMeasurements = sortedMeasurements.slice(startIndex, endIndex);
 
   const resetFilters = () => {
     setFilters({
@@ -105,6 +209,34 @@ export default function Publish() {
     });
   };
 
+  // Selection handlers (works with current page only)
+  const handleSelectAll = (checked: boolean) => {
+    const newSelected = new Set(selectedMeasurements);
+    if (checked) {
+      // Add all IDs from current page
+      paginatedMeasurements.forEach((m: any) => newSelected.add(m.id));
+    } else {
+      // Remove all IDs from current page
+      paginatedMeasurements.forEach((m: any) => newSelected.delete(m.id));
+    }
+    setSelectedMeasurements(newSelected);
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedMeasurements);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedMeasurements(newSelected);
+  };
+
+  // Check if all items on current page are selected
+  const currentPageIds = paginatedMeasurements.map((m: any) => m.id);
+  const isAllSelected = currentPageIds.length > 0 && currentPageIds.every(id => selectedMeasurements.has(id));
+  const isSomeSelected = currentPageIds.some(id => selectedMeasurements.has(id)) && !isAllSelected;
+
   const exportToPDF = () => {
     if (!sortedMeasurements || sortedMeasurements.length === 0) {
       alert("No data to export");
@@ -114,11 +246,11 @@ export default function Publish() {
     const pdf = new jsPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    
+
     // Title
     pdf.setFontSize(16);
     pdf.text(`${getMetricDisplayName(filters.metric)} Results`, pageWidth / 2, 20, { align: "center" });
-    
+
     // Date and filters info
     pdf.setFontSize(10);
     let yPos = 35;
@@ -136,9 +268,9 @@ export default function Publish() {
       pdf.text(`Birth Years: ${filters.birthYearFrom || "Any"} - ${filters.birthYearTo || "Any"}`, 20, yPos);
       yPos += 10;
     }
-    
+
     yPos += 10;
-    
+
     // Table headers
     pdf.setFontSize(12);
     pdf.text("Rank", 20, yPos);
@@ -146,9 +278,9 @@ export default function Publish() {
     pdf.text("Team(s)", 100, yPos);
     pdf.text("Value", 140, yPos);
     pdf.text("Date", 170, yPos);
-    
+
     yPos += 15;
-    
+
     // Table data
     pdf.setFontSize(10);
     sortedMeasurements.forEach((measurement: any, index: number) => {
@@ -156,20 +288,20 @@ export default function Publish() {
         pdf.addPage();
         yPos = 30;
       }
-      
+
       const teamNames = measurement.user.teams && measurement.user.teams.length > 0 
         ? measurement.user.teams.map((team: any) => team.name).join(", ")
         : "Independent";
-      
+
       pdf.text(`${index + 1}`, 20, yPos);
       pdf.text(measurement.user.fullName, 40, yPos);
       pdf.text(teamNames, 100, yPos);
       pdf.text(`${measurement.value}${getMetricUnits(filters.metric)}`, 140, yPos);
       pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
-      
+
       yPos += 12;
     });
-    
+
     // Save the PDF
     const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
     const fileName = `${getMetricDisplayName(filters.metric)}_Results_${dateStr}.pdf`;
@@ -345,18 +477,95 @@ export default function Publish() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Toolbar */}
+      {selectedMeasurements.size > 0 && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-blue-900">
+                  {selectedMeasurements.size} measurement{selectedMeasurements.size !== 1 ? 's' : ''} selected
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedMeasurements(new Set())}
+                  className="text-blue-700 hover:text-blue-900 hover:bg-blue-100"
+                >
+                  Clear Selection
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Results */}
       <Card className="bg-white">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Results {filters.metric ? `- ${getMetricDisplayName(filters.metric)}` : ""}
-            </h3>
-            {sortedMeasurements && (
-              <span className="text-sm text-gray-500">
-                {sortedMeasurements.length} result{sortedMeasurements.length !== 1 ? 's' : ''}
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Results {filters.metric ? `- ${getMetricDisplayName(filters.metric)}` : ""}
+              </h3>
+              {filters.metric && (
+                <Select
+                  value={showView}
+                  onValueChange={(value: "best_by_athlete" | "best_by_measurement" | "all") => {
+                    setShowView(value);
+                    setSelectedMeasurements(new Set()); // Clear selection when changing view
+                  }}
+                >
+                  <SelectTrigger className="w-48 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="best_by_athlete">Best by Athlete</SelectItem>
+                    <SelectItem value="best_by_measurement">Best by Measurement</SelectItem>
+                    <SelectItem value="all">All Measurements</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {sortedMeasurements && sortedMeasurements.length > 0 && (
+                <>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      const newValue = value === "-1" ? -1 : parseInt(value);
+                      setItemsPerPage(newValue);
+                      setCurrentPage(1); // Reset to page 1 when changing items per page
+                    }}
+                  >
+                    <SelectTrigger className="w-24 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="-1">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-gray-500">
+                    {sortedMeasurements.length} result{sortedMeasurements.length !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {!filters.metric ? (
@@ -364,10 +573,18 @@ export default function Publish() {
               <p>Please select a metric to view results.</p>
             </div>
           ) : sortedMeasurements && sortedMeasurements.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
                 <thead>
                   <tr className="text-left text-sm font-medium text-gray-500 border-b">
+                    <th className="px-4 py-3 w-12">
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all measurements"
+                      />
+                    </th>
                     <th className="px-4 py-3">Rank</th>
                     <th className="px-4 py-3">Athlete</th>
                     <th className="px-4 py-3">Team(s)</th>
@@ -377,20 +594,29 @@ export default function Publish() {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
-                  {sortedMeasurements.map((measurement: any, index: number) => (
-                    <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center">
-                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                            index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                            index === 1 ? 'bg-gray-100 text-gray-600' :
-                            index === 2 ? 'bg-orange-100 text-orange-800' :
-                            'bg-gray-50 text-gray-500'
-                          }`}>
-                            {index + 1}
-                          </span>
-                        </div>
-                      </td>
+                  {paginatedMeasurements.map((measurement: any, index: number) => {
+                    const rank = startIndex + index + 1;
+                    return (
+                      <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <Checkbox
+                            checked={selectedMeasurements.has(measurement.id)}
+                            onCheckedChange={(checked) => handleSelectOne(measurement.id, checked as boolean)}
+                            aria-label={`Select measurement for ${measurement.user.fullName}`}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center">
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                              rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                              rank === 2 ? 'bg-gray-100 text-gray-600' :
+                              rank === 3 ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-50 text-gray-500'
+                            }`}>
+                              {rank}
+                            </span>
+                          </div>
+                        </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-900">
                           {measurement.user.fullName}
@@ -423,10 +649,42 @@ export default function Publish() {
                         {new Date(measurement.date).toLocaleDateString()}
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {itemsPerPage !== -1 && totalPages > 1 && (
+              <div className="mt-4 flex items-center justify-between border-t pt-4">
+                <div className="text-sm text-gray-600">
+                  Showing {startIndex + 1}-{Math.min(endIndex, sortedMeasurements.length)} of {sortedMeasurements.length} results
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    ← Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next →
+                  </Button>
+                </div>
+              </div>
+            )}
+            </>
           ) : (
             <div className="text-center py-8 text-gray-500">
               <p>No measurements found matching the current filters.</p>
@@ -435,6 +693,54 @@ export default function Publish() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete {selectedMeasurements.size} Measurement{selectedMeasurements.size !== 1 ? 's' : ''}?
+            </DialogTitle>
+            <DialogDescription className="space-y-3">
+              <p>This action cannot be undone. The following measurements will be permanently deleted:</p>
+
+              <div className="bg-gray-50 rounded-md p-3 max-h-60 overflow-y-auto">
+                <ul className="space-y-2 text-sm">
+                  {sortedMeasurements
+                    .filter((m: any) => selectedMeasurements.has(m.id))
+                    .map((m: any) => (
+                      <li key={m.id} className="flex items-center justify-between py-1 border-b border-gray-200 last:border-0">
+                        <span className="font-medium text-gray-900">{m.user.fullName}</span>
+                        <span className="text-gray-600">
+                          {m.value}{getMetricUnits(filters.metric)} • {new Date(m.date).toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))
+                  }
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                bulkDeleteMutation.mutate(Array.from(selectedMeasurements));
+              }}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? 'Deleting...' : `Delete ${selectedMeasurements.size} Measurement${selectedMeasurements.size !== 1 ? 's' : ''}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

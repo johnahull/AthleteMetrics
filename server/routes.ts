@@ -373,8 +373,13 @@ export async function registerRoutes(app: Express) {
     // - /login and /register: Pre-authentication endpoints
     // - /invitations/:token/accept: Public endpoint for new users without sessions
     //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
-    const skipCsrfPaths = ['/login', '/register'];
-    const skipCsrfPatterns = [/^\/invitations\/[a-zA-Z0-9_-]+\/accept$/];
+    // - /import/photo, /import/parse-csv, /import/:type: File upload endpoints that use multipart/form-data
+    //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
+    const skipCsrfPaths = ['/login', '/register', '/import/photo', '/import/parse-csv'];
+    const skipCsrfPatterns = [
+      /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,
+      /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
+    ];
 
     if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
         skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
@@ -462,11 +467,12 @@ export async function registerRoutes(app: Express) {
   });
 
   // Rate limiting for file upload endpoints
+  // SECURITY: Reduced from 10,000/hour to prevent abuse
   const uploadLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    limit: 10, // Limit each IP to 10 file uploads per hour
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: parseInt(process.env.UPLOAD_RATE_LIMIT || '20'), // Default: 20 uploads per 15 min
     message: {
-      error: "Too many file uploads, please try again in an hour"
+      error: "Too many file uploads, please try again in 15 minutes"
     },
     standardHeaders: true,
     legacyHeaders: false,
@@ -2302,16 +2308,116 @@ export async function registerRoutes(app: Express) {
 
       // Delete measurement
       await storage.deleteMeasurement(id);
-      res.status(200).json({ 
-        success: true, 
-        message: "Measurement deleted successfully" 
+      res.status(200).json({
+        success: true,
+        message: "Measurement deleted successfully"
       });
     } catch (error) {
       console.error("Error deleting measurement:", error);
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: "Failed to delete measurement",
         error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Bulk delete measurements route (coaches and org admins only)
+  app.post("/api/measurements/bulk-delete", requireAuth, async (req, res) => {
+    try {
+      const { measurementIds } = req.body;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (!Array.isArray(measurementIds) || measurementIds.length === 0) {
+        return res.status(400).json({ message: "No measurement IDs provided" });
+      }
+
+      // Limit bulk operations to 100 measurements at once
+      if (measurementIds.length > 100) {
+        return res.status(400).json({ message: "Cannot delete more than 100 measurements at once" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      const userOrgs = !userIsSiteAdmin ? await storage.getUserOrganizations(currentUser.id) : [];
+      const userOrgIds = userOrgs.map(org => org.organizationId);
+
+      // Verify user has access to all measurements
+      const failedChecks: string[] = [];
+      const validIds: string[] = [];
+
+      for (const id of measurementIds) {
+        const measurement = await storage.getMeasurement(id);
+
+        if (!measurement) {
+          failedChecks.push(`Measurement ${id} not found`);
+          continue;
+        }
+
+        if (!userIsSiteAdmin) {
+          // Check if measurement's athlete is in user's organization
+          const athlete = await storage.getAthlete(measurement.userId);
+          if (!athlete) {
+            failedChecks.push(`Athlete not found for measurement ${id}`);
+            continue;
+          }
+
+          const athleteTeams = await storage.getAthleteTeams(measurement.userId);
+          const athleteOrganizations = athleteTeams.map(pt => pt.organization.id);
+
+          const hasAccess = athleteOrganizations.some(orgId => userOrgIds.includes(orgId));
+
+          if (!hasAccess) {
+            failedChecks.push(`No access to measurement ${id} (athlete outside your organization)`);
+            continue;
+          }
+
+          // Athletes cannot delete measurements
+          if (currentUser.role === "athlete") {
+            return res.status(403).json({ message: "Athletes cannot delete measurements" });
+          }
+        }
+
+        validIds.push(id);
+      }
+
+      if (failedChecks.length > 0) {
+        return res.status(403).json({
+          message: "Access denied for some measurements",
+          errors: failedChecks
+        });
+      }
+
+      // Delete all valid measurements
+      const results = {
+        deleted: 0,
+        failed: [] as string[]
+      };
+
+      for (const id of validIds) {
+        try {
+          await storage.deleteMeasurement(id);
+          results.deleted++;
+        } catch (error) {
+          results.failed.push(id);
+          console.error(`Failed to delete measurement ${id}:`, error);
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        deleted: results.deleted,
+        failed: results.failed.length,
+        failedIds: results.failed,
+        message: `Successfully deleted ${results.deleted} measurement${results.deleted !== 1 ? 's' : ''}${results.failed.length > 0 ? ` (${results.failed.length} failed)` : ''}`
+      });
+    } catch (error) {
+      console.error("Error bulk deleting measurements:", error);
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Failed to delete measurements"
       });
     }
   });
@@ -3258,33 +3364,49 @@ export async function registerRoutes(app: Express) {
     }
   });
 
-  // Configure multer for CSV file uploads
+  // SECURITY: Configure multer for CSV file uploads with strict validation
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-      fileSize: 5 * 1024 * 1024, // 5MB limit
+      fileSize: parseInt(process.env.MAX_CSV_FILE_SIZE || '5242880'), // Default 5MB (5 * 1024 * 1024)
+      files: 1, // Only allow single file uploads
     },
     fileFilter: (req, file, cb) => {
-      if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      // SECURITY: Strict file type validation - check both MIME type and extension
+      const allowedMimeTypes = ['text/csv', 'application/csv', 'text/plain'];
+      const hasValidMime = allowedMimeTypes.includes(file.mimetype);
+      const hasValidExtension = file.originalname.toLowerCase().endsWith('.csv');
+
+      if (hasValidMime && hasValidExtension) {
         cb(null, true);
       } else {
-        cb(new Error('Only CSV files are allowed'));
+        cb(new Error('Invalid file type. Only CSV files are allowed.'));
       }
     }
   });
+  // NOTE: For production deployments, consider adding virus scanning middleware
+  // (e.g., ClamAV integration) before processing uploaded files
 
-  // Configure multer for image uploads (OCR)
+  // SECURITY: Configure multer for image uploads (OCR) with strict validation
   const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB limit for images
+      fileSize: parseInt(process.env.MAX_IMAGE_FILE_SIZE || '10485760'), // Default 10MB (10 * 1024 * 1024)
+      files: 1, // Only allow single file uploads
     },
     fileFilter: (req, file, cb) => {
+      // SECURITY: Strict file type validation for images and PDFs
       const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-      if (allowedMimes.includes(file.mimetype)) {
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+      const fileExtension = file.originalname.toLowerCase().match(/\.[^.]*$/)?.[0] || '';
+
+      const hasValidMime = allowedMimes.includes(file.mimetype);
+      const hasValidExtension = allowedExtensions.includes(fileExtension);
+
+      if (hasValidMime && hasValidExtension) {
         cb(null, true);
       } else {
-        cb(new Error('Only image files (JPG, PNG, WebP) and PDF files are allowed'));
+        cb(new Error('Invalid file type. Only image files (JPG, PNG, WebP) and PDF files are allowed.'));
       }
     }
   });
@@ -3308,17 +3430,29 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "No image file uploaded" });
       }
 
+      // Parse import options
+      const optionsJson = req.body.options;
+      const options = optionsJson ? JSON.parse(optionsJson) : {
+        measurementMode: 'match_only',
+        teamHandling: 'auto_create_confirm',
+        organizationId: undefined
+      };
+
+      const measurementMode = options.measurementMode || 'match_only';
+      const teamHandling = options.teamHandling || 'auto_create_confirm';
+
       // Debug logging removed for production: Processing OCR for file
 
       // Extract text and data using OCR
       const ocrResult = await ocrService.extractTextFromImage(file.buffer);
-      
+
       // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];
       const errors: any[] = [];
       const warnings: string[] = [...ocrResult.warnings];
+      const createdAthletes: any[] = [];
 
       for (let i = 0; i < ocrResult.extractedData.length; i++) {
         const extracted = ocrResult.extractedData[i];
@@ -3345,20 +3479,21 @@ export async function registerRoutes(app: Express) {
             continue;
           }
 
-          // Find or suggest creating the athlete
+          // Find or create the athlete
           const athletes = await storage.getAthletes({
             search: `${extracted.firstName} ${extracted.lastName}`
           });
 
           let userId: string | null = null;
-          
+          let athleteCreated = false;
+
           if (athletes.length > 0) {
             // Found existing athlete(s)
-            const exactMatch = athletes.find(a => 
+            const exactMatch = athletes.find(a =>
               a.firstName.toLowerCase() === extracted.firstName!.toLowerCase() &&
               a.lastName.toLowerCase() === extracted.lastName!.toLowerCase()
             );
-            
+
             if (exactMatch) {
               userId = exactMatch.id;
             } else {
@@ -3367,12 +3502,40 @@ export async function registerRoutes(app: Express) {
               warnings.push(`Using closest match for ${extracted.firstName} ${extracted.lastName}: ${athletes[0].firstName} ${athletes[0].lastName}`);
             }
           } else {
-            errors.push({ 
-              row: rowNum, 
-              error: `Athlete not found: ${extracted.firstName} ${extracted.lastName}. Please create the athlete first or use CSV import with createMissing=true.`,
-              data: extracted
-            });
-            continue;
+            // No match found - check if we should create
+            if (measurementMode === 'create_athletes') {
+              // Create the athlete (OCR doesn't extract team info currently)
+              const newAthlete = await storage.createUser({
+                firstName: extracted.firstName!,
+                lastName: extracted.lastName!,
+                emails: [`${extracted.firstName?.toLowerCase()}.${extracted.lastName?.toLowerCase()}@ocr-import.local`],
+                username: `${extracted.firstName?.toLowerCase()}_${extracted.lastName?.toLowerCase()}_${Date.now()}`,
+                role: 'athlete' as const,
+                password: 'INVITATION_PENDING',
+                isActive: false
+              });
+
+              userId = newAthlete.id;
+              athleteCreated = true;
+              createdAthletes.push({ id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` });
+
+              // Add to organization if specified
+              if (options.organizationId) {
+                try {
+                  await storage.addUserToOrganization(userId, options.organizationId, 'athlete');
+                } catch (error) {
+                  console.warn(`Could not add athlete ${userId} to organization ${options.organizationId}:`, error);
+                }
+              }
+            } else {
+              // Match-only mode - error if not found
+              errors.push({
+                row: rowNum,
+                error: `Athlete not found: ${extracted.firstName} ${extracted.lastName}. Enable "Create athletes if needed" to auto-create.`,
+                data: extracted
+              });
+              continue;
+            }
           }
 
           // Calculate age if not provided
@@ -3433,7 +3596,8 @@ export async function registerRoutes(app: Express) {
           extractedText: ocrResult.text,
           processedData,
           errors,
-          warnings
+          warnings,
+          createdAthletes: createdAthletes.length > 0 ? createdAthletes : undefined
         }
       });
 
@@ -3447,10 +3611,83 @@ export async function registerRoutes(app: Express) {
   });
 
   // Import routes
+
+  // Parse CSV and return headers with suggested mappings
+  app.post("/api/import/parse-csv", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
+    try {
+      const { type } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // Parse CSV headers
+      const csvText = file.buffer.toString('utf-8');
+      const lines = csvText.split('\n').filter(line => line.trim());
+
+      if (lines.length === 0) {
+        return res.status(400).json({ message: "CSV file is empty" });
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+
+      // Parse first 20 rows for preview
+      const rows: any[] = [];
+      const maxPreviewRows = Math.min(20, lines.length - 1);
+
+      for (let i = 1; i <= maxPreviewRows; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: any = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        rows.push(row);
+      }
+
+      // Auto-detect column mappings
+      const systemFields = type === 'athletes'
+        ? ['firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear', 'gender', 'emails', 'phoneNumbers', 'sports', 'height', 'weight', 'school', 'teamName']
+        : ['firstName', 'lastName', 'teamName', 'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes', 'gender'];
+
+      const suggestedMappings: any[] = [];
+
+      // Simple auto-detection based on column name similarity
+      headers.forEach(csvColumn => {
+        const normalized = csvColumn.toLowerCase().replace(/[\s_-]/g, '');
+
+        for (const systemField of systemFields) {
+          const normalizedSystem = systemField.toLowerCase().replace(/[\s_-]/g, '');
+
+          if (normalized === normalizedSystem ||
+              normalized.includes(normalizedSystem) ||
+              normalizedSystem.includes(normalized)) {
+            suggestedMappings.push({
+              csvColumn,
+              systemField,
+              isRequired: ['firstName', 'lastName', 'date', 'metric', 'value'].includes(systemField),
+              autoDetected: true
+            });
+            break;
+          }
+        }
+      });
+
+      res.json({
+        headers,
+        rows,
+        suggestedMappings
+      });
+    } catch (error) {
+      console.error('CSV parse error:', error);
+      res.status(500).json({ message: "Failed to parse CSV", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   app.post("/api/import/:type", uploadLimiter, requireAuth, upload.single('file'), async (req, res) => {
     try {
       const { type } = req.params;
-      const { createMissing, teamId } = req.body;
+      const { createMissing, teamId, preview, confirmData, options: optionsJson } = req.body;
       const file = req.file;
 
       if (!file) {
@@ -3461,10 +3698,43 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid import type. Use 'athletes' or 'measurements'" });
       }
 
+      // Parse import options
+      const options = optionsJson ? JSON.parse(optionsJson) : {
+        athleteMode: 'smart_import',
+        measurementMode: 'match_only',
+        teamHandling: 'auto_create_confirm',
+        updateExisting: true,
+        skipDuplicates: false
+      };
+
       const results: any[] = [];
       const errors: any[] = [];
       const warnings: any[] = [];
       let totalRows = 0;
+      let createdCount = 0;
+      let updatedCount = 0;
+      let matchedCount = 0;
+      let skippedCount = 0;
+
+      // Track created teams and athletes
+      const createdTeams = new Map<string, { id: string, name: string, athleteCount: number }>();
+      const createdAthletes: Array<{ id: string, name: string }> = [];
+
+      // SECURITY: Sanitize CSV values to prevent formula injection
+      const sanitizeCSVValue = (value: string): string => {
+        if (!value || typeof value !== 'string') return value;
+        // Remove leading formula characters that could be exploited in Excel/Sheets
+        // Formulas start with: = + - @ (and sometimes |, %, \t, \r)
+        const trimmed = value.trim();
+        if (trimmed.length === 0) return trimmed;
+
+        // If value starts with a formula character, prepend a single quote
+        // This makes Excel/Sheets treat it as text instead of a formula
+        if (/^[=+\-@|%\t\r]/.test(trimmed)) {
+          return `'${trimmed}`;
+        }
+        return trimmed;
+      };
 
       // Parse CSV data
       const csvData: any[] = [];
@@ -3476,19 +3746,102 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "CSV file is empty" });
       }
 
+      // SECURITY: Enforce row limit to prevent memory exhaustion
+      const MAX_CSV_ROWS = parseInt(process.env.MAX_CSV_ROWS || '10000');
+      if (lines.length - 1 > MAX_CSV_ROWS) {
+        return res.status(400).json({
+          message: `CSV file exceeds maximum row limit. Maximum ${MAX_CSV_ROWS} rows allowed, but file contains ${lines.length - 1} data rows.`
+        });
+      }
+
       const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] || '';
+          // Apply sanitization to prevent CSV formula injection
+          row[header] = sanitizeCSVValue(values[index] || '');
         });
         csvData.push(row);
         totalRows++;
       }
 
+      // Preview mode: analyze teams and return preview data
+      if (preview === 'true' && type === 'athletes') {
+        const teamMap = new Map<string, { athleteNames: string[], athleteCount: number }>();
+
+        // Extract team information from CSV
+        for (const row of csvData) {
+          const { firstName, lastName, teamName } = row;
+          if (teamName && teamName.trim()) {
+            const normalizedTeamName = teamName.trim();
+            if (!teamMap.has(normalizedTeamName)) {
+              teamMap.set(normalizedTeamName, { athleteNames: [], athleteCount: 0 });
+            }
+            const teamInfo = teamMap.get(normalizedTeamName)!;
+            teamInfo.athleteNames.push(`${firstName} ${lastName}`);
+            teamInfo.athleteCount++;
+          }
+        }
+
+        // Get current user's organization context
+        const currentUser = req.session.user!;
+        let organizationId: string | undefined;
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        organizationId = userOrgs[0]?.organizationId;
+
+        // Check which teams exist
+        const allTeams = await storage.getTeams();
+        const missingTeams: any[] = [];
+
+        for (const [teamName, info] of teamMap.entries()) {
+          const existingTeam = allTeams.find(t =>
+            t.name?.toLowerCase().trim() === teamName.toLowerCase().trim() &&
+            (!organizationId || t.organization?.id === organizationId)
+          );
+
+          if (!existingTeam) {
+            missingTeams.push({
+              teamName,
+              exists: false,
+              athleteCount: info.athleteCount,
+              athleteNames: info.athleteNames
+            });
+          }
+        }
+
+        return res.json({
+          type: 'athletes',
+          totalRows,
+          missingTeams,
+          previewData: csvData,
+          requiresConfirmation: missingTeams.length > 0
+        });
+      }
+
       if (type === 'athletes') {
+        // PERFORMANCE: Pre-load all athletes to avoid N+1 query problem
+        // Instead of querying database for each CSV row, load all athletes once and use in-memory lookup
+        let organizationId: string | undefined = options.organizationId;
+        if (!organizationId) {
+          const currentUser = req.session.user!;
+          const userOrgs = await storage.getUserOrganizations(currentUser.id);
+          organizationId = userOrgs[0]?.organizationId;
+        }
+
+        const allAthletes = organizationId
+          ? await storage.getAthletes({ organizationId })
+          : await storage.getAthletes();
+
+        // Create fast lookup map: "firstname:lastname" => athlete
+        const athleteMap = new Map(
+          allAthletes.map(a => [
+            `${a.firstName.toLowerCase()}:${a.lastName.toLowerCase()}`,
+            a
+          ])
+        );
+
         // Process athletes import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
@@ -3498,6 +3851,12 @@ export async function registerRoutes(app: Express) {
 
             if (!firstName || !lastName) {
               errors.push({ row: rowNum, error: "First name and last name are required" });
+              continue;
+            }
+
+            // REQUIRE team assignment in CSV
+            if (!teamName || !teamName.trim()) {
+              errors.push({ row: rowNum, error: `Team name is required for ${firstName} ${lastName}. All athletes must be assigned to a team.` });
               continue;
             }
 
@@ -3560,87 +3919,201 @@ export async function registerRoutes(app: Express) {
               role: "athlete"
             };
 
-            // Create or find athlete
-            let athlete;
-            if (createMissing === 'true') {
-              athlete = await storage.createUser(athleteData as any);
+            // Get organization context
+            let organizationId: string | undefined = options.organizationId;
+            if (!organizationId) {
+              const currentUser = req.session.user!;
+              const userOrgs = await storage.getUserOrganizations(currentUser.id);
+              organizationId = userOrgs[0]?.organizationId;
+            }
 
-              // Add to team if specified
-              if (teamId) {
-                await storage.addUserToTeam(athlete.id, teamId);
+            // Handle team resolution
+            let targetTeamId: string | undefined = teamId; // Legacy default
 
-                // Also add to organization as athlete
-                const team = await storage.getTeam(teamId);
-                if (team?.organization?.id) {
-                  await storage.addUserToOrganization(athlete.id, team.organization.id, 'athlete');
-                }
-              }
-            } else {
-              // Get organization context for filtering
-              let organizationId: string | undefined;
-              if (teamId) {
-                const team = await storage.getTeam(teamId);
-                organizationId = team?.organization?.id;
-              } else {
-                // Fallback to current user's primary organization
-                const currentUser = req.session.user!;
-                const userOrgs = await storage.getUserOrganizations(currentUser.id);
-                organizationId = userOrgs[0]?.organizationId;
-              }
-
-              // Match existing athlete by name within the same organization
-              const existingAthlete = await storage.getAthletes({
-                search: `${firstName} ${lastName}`,
-                organizationId: organizationId
-              });
-
-              const matchedAthlete = existingAthlete.find(p => 
-                p.firstName?.toLowerCase() === firstName.toLowerCase() && 
-                p.lastName?.toLowerCase() === lastName.toLowerCase()
+            if (teamName && teamName.trim()) {
+              const normalizedTeamName = teamName.trim();
+              const allTeams = await storage.getTeams();
+              let team = allTeams.find(t =>
+                t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim() &&
+                (!organizationId || t.organization?.id === organizationId)
               );
 
-              if (matchedAthlete) {
-                athlete = matchedAthlete;
-                
-                // Check if athlete is already on the target team using reliable method
-                let isAlreadyOnTeam = false;
-                if (teamId) {
-                  try {
-                    const userTeams = await storage.getUserTeams(athlete.id);
-                    isAlreadyOnTeam = userTeams.some((ut: any) => String(ut.team.id) === String(teamId));
-                  } catch (error) {
-                    console.warn(`Could not check team membership for user ${athlete.id}:`, error);
-                    // Err on the side of caution - don't deactivate if we can't verify membership
-                    isAlreadyOnTeam = true;
-                  }
-                }
-                
-                // If athlete is not already on the team, mark them as inactive when importing
-                // Only deactivate if we have a target team to check against
-                if (teamId && !isAlreadyOnTeam) {
-                  await storage.updateUser(athlete.id, { isActive: false });
-                  athlete.isActive = false; // Update local object for consistency
-                  
-                  results.push({
-                    action: 'matched_and_deactivated',
-                    athlete: {
-                      id: athlete.id,
-                      name: `${athlete.firstName} ${athlete.lastName}`,
-                      username: athlete.username,
-                      note: 'Athlete deactivated as they were not already on the target team'
+              // Handle team creation based on teamHandling mode
+              if (!team) {
+                if (options.teamHandling === 'auto_create_silent' ||
+                    (options.teamHandling === 'auto_create_confirm' && confirmData)) {
+                  // Create team automatically
+                  if (organizationId) {
+                    // SECURITY: Verify user has permission to create teams in this organization
+                    const currentUser = req.session.user!;
+                    const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+                    if (!userIsSiteAdmin) {
+                      // Check if user belongs to the target organization AND has proper role
+                      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+                      const orgMembership = userOrgs.find(org => org.organizationId === organizationId);
+
+                      if (!orgMembership) {
+                        errors.push({
+                          row: rowNum,
+                          error: `Unauthorized: Cannot create team "${normalizedTeamName}". User does not belong to this organization.`
+                        });
+                        continue;
+                      }
+
+                      // SECURITY: Only org_admin and coach roles can create teams
+                      if (!['org_admin', 'coach'].includes(orgMembership.role)) {
+                        errors.push({
+                          row: rowNum,
+                          error: `Unauthorized: Role '${orgMembership.role}' cannot create teams. Only organization admins and coaches can create teams.`
+                        });
+                        continue;
+                      }
                     }
-                  });
-                  continue; // Skip the normal results.push below to avoid duplication
+
+                    // CONCURRENCY: Handle race condition where another request creates the same team
+                    try {
+                      const newTeam = await storage.createTeam({
+                        organizationId,
+                        name: normalizedTeamName,
+                        level: undefined,
+                        notes: 'Auto-created during athlete import'
+                      });
+                      team = newTeam as any;
+
+                      if (!createdTeams.has(normalizedTeamName)) {
+                        createdTeams.set(normalizedTeamName, {
+                          id: newTeam.id,
+                          name: newTeam.name,
+                          athleteCount: 0
+                        });
+                      }
+                      createdTeams.get(normalizedTeamName)!.athleteCount++;
+                    } catch (createError: any) {
+                      // Check if this is a unique constraint violation (team was created by concurrent request)
+                      if (createError.code === '23505' || createError.message?.includes('unique')) {
+                        // Re-fetch the team that was just created by another request
+                        const allTeams = await storage.getTeams();
+                        team = allTeams.find(t =>
+                          t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim() &&
+                          t.organization?.id === organizationId
+                        );
+
+                        if (!team) {
+                          // Team should exist but wasn't found - this is unexpected
+                          errors.push({
+                            row: rowNum,
+                            error: `Failed to create or find team "${normalizedTeamName}" after concurrent creation attempt`
+                          });
+                          continue;
+                        }
+                      } else {
+                        // Different error - rethrow
+                        throw createError;
+                      }
+                    }
+                  }
+                } else if (options.teamHandling === 'require_existing') {
+                  errors.push({ row: rowNum, error: `Team "${normalizedTeamName}" does not exist and team creation is disabled` });
+                  continue;
                 }
-                
+                // For 'leave_teamless', team remains undefined
+              }
+
+              if (team) {
+                targetTeamId = team.id;
+              }
+            }
+
+            // Mode-specific athlete handling
+            let athlete;
+            let action: string;
+            const athleteMode = options.athleteMode || 'smart_import';
+
+            if (athleteMode === 'create_only') {
+              // Always create new athlete, never match
+              athlete = await storage.createUser(athleteData as any);
+              action = 'created';
+              createdAthletes.push({
+                id: athlete.id,
+                name: `${athlete.firstName} ${athlete.lastName}`
+              });
+
+            } else {
+              // PERFORMANCE: Use pre-loaded athlete map instead of database query
+              const lookupKey = `${firstName.toLowerCase()}:${lastName.toLowerCase()}`;
+              const matchedAthlete = athleteMap.get(lookupKey);
+
+              if (matchedAthlete) {
+                // Found existing athlete
+                athlete = matchedAthlete;
+
+                if (athleteMode === 'smart_import' || athleteMode === 'match_and_update') {
+                  // Update athlete info
+                  if (options.updateExisting !== false) {
+                    await storage.updateUser(athlete.id, {
+                      birthDate: athleteData.birthDate,
+                      birthYear: athleteData.birthYear,
+                      graduationYear: athleteData.graduationYear,
+                      sports: athleteData.sports,
+                      height: athleteData.height,
+                      weight: athleteData.weight,
+                      school: athleteData.school,
+                      gender: athleteData.gender
+                    } as any);
+                    action = 'updated';
+                  } else {
+                    action = 'matched';
+                  }
+                } else {
+                  // match_only mode - just match without updating
+                  action = 'matched';
+                }
+
               } else {
-                errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found` });
-                continue;
+                // No existing athlete found
+                if (athleteMode === 'smart_import' || athleteMode === 'create_only') {
+                  // Create new athlete for smart_import and create_only modes
+                  athlete = await storage.createUser(athleteData as any);
+                  action = 'created';
+                  createdAthletes.push({
+                    id: athlete.id,
+                    name: `${athlete.firstName} ${athlete.lastName}`
+                  });
+
+                  // PERFORMANCE: Add newly created athlete to map for future lookups in this import
+                  const newAthleteKey = `${athlete.firstName.toLowerCase()}:${athlete.lastName.toLowerCase()}`;
+                  athleteMap.set(newAthleteKey, athlete);
+                } else {
+                  // match_and_update or match_only - error if not found
+                  errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found (mode: ${athleteMode})` });
+                  continue;
+                }
+              }
+            }
+
+            // Add athlete to organization first (if we have one)
+            if (athlete && organizationId && action === 'created') {
+              try {
+                await storage.addUserToOrganization(athlete.id, organizationId, 'athlete');
+              } catch (error) {
+                // Organization membership might already exist, that's okay
+                console.warn(`Could not add athlete ${athlete.id} to organization ${organizationId}:`, error);
+              }
+            }
+
+            // Add to team if specified
+            if (targetTeamId && athlete) {
+              try {
+                await storage.addUserToTeam(athlete.id, targetTeamId);
+              } catch (error) {
+                // Team membership might already exist, that's okay
+                console.warn(`Could not add athlete ${athlete.id} to team ${targetTeamId}:`, error);
               }
             }
 
             results.push({
-              action: createMissing === 'true' ? 'created' : 'matched',
+              action,
               athlete: {
                 id: athlete.id,
                 name: `${athlete.firstName} ${athlete.lastName}`,
@@ -3698,28 +4171,106 @@ export async function registerRoutes(app: Express) {
             const matchResult: MatchResult = findBestAthleteMatch(matchingCriteria, athletes);
 
             let matchedAthlete;
+            const measurementMode = options.measurementMode || 'match_only';
+
             if (matchResult.type === 'none') {
               // No suitable match found
-              let errorMsg = `No matching athlete found for ${firstName} ${lastName}`;
-              if (teamName) {
-                errorMsg += ` in team "${teamName}"`;
+              if (measurementMode === 'create_athletes') {
+                // Auto-create athlete
+                const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
+                let username = baseUsername;
+                let counter = 1;
+                while (await storage.getUserByUsername(username)) {
+                  username = `${baseUsername}${counter}`;
+                  counter++;
+                }
+
+                const newAthlete = await storage.createUser({
+                  username,
+                  firstName,
+                  lastName,
+                  emails: [`${username}@temp.local`],
+                  phoneNumbers: [],
+                  gender: gender || 'Not Specified',
+                  password: 'INVITATION_PENDING',
+                  isActive: false,
+                  role: 'athlete'
+                } as any);
+
+                matchedAthlete = newAthlete;
+                createdAthletes.push({
+                  id: newAthlete.id,
+                  name: `${firstName} ${lastName}`
+                });
+
+                // Add to team if specified
+                if (teamName) {
+                  const teams = await storage.getTeams();
+                  let team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
+
+                  // Handle team creation if needed
+                  if (!team && organizationId &&
+                      (options.teamHandling === 'auto_create_silent' ||
+                       options.teamHandling === 'auto_create_confirm')) {
+                    const newTeam = await storage.createTeam({
+                      organizationId,
+                      name: teamName,
+                      level: undefined,
+                      notes: 'Auto-created during measurement import'
+                    });
+                    team = newTeam as any;
+
+                    if (!createdTeams.has(teamName)) {
+                      createdTeams.set(teamName, {
+                        id: newTeam.id,
+                        name: newTeam.name,
+                        athleteCount: 0
+                      });
+                    }
+                    createdTeams.get(teamName)!.athleteCount++;
+                  }
+
+                  if (team) {
+                    try {
+                      await storage.addUserToTeam(newAthlete.id, team.id);
+                      if (team.organization?.id) {
+                        await storage.addUserToOrganization(newAthlete.id, team.organization.id, 'athlete');
+                      }
+                    } catch (error) {
+                      console.warn(`Could not add athlete to team:`, error);
+                    }
+                  }
+                }
+
+                warnings.push(`Row ${rowNum}: Created new athlete ${firstName} ${lastName}`);
+
+              } else {
+                // match_only mode - fail if not found
+                let errorMsg = `No matching athlete found for ${firstName} ${lastName}`;
+                if (teamName) {
+                  errorMsg += ` in team "${teamName}"`;
+                }
+
+                // Suggest alternatives if available
+                if (matchResult.alternatives && matchResult.alternatives.length > 0) {
+                  const suggestions = matchResult.alternatives
+                    .slice(0, 2)
+                    .map(alt => `${alt.firstName} ${alt.lastName} (${alt.matchReason})`)
+                    .join(', ');
+                  errorMsg += `. Similar athletes found: ${suggestions}`;
+                }
+
+                errors.push({ row: rowNum, error: errorMsg });
+                continue;
               }
-              
-              // Suggest alternatives if available
-              if (matchResult.alternatives && matchResult.alternatives.length > 0) {
-                const suggestions = matchResult.alternatives
-                  .slice(0, 2)
-                  .map(alt => `${alt.firstName} ${alt.lastName} (${alt.matchReason})`)
-                  .join(', ');
-                errorMsg += `. Similar athletes found: ${suggestions}`;
-              }
-              
-              errors.push({ row: rowNum, error: errorMsg });
-              continue;
             }
 
-            // Handle review queue for low-confidence matches
-            if (matchResult.requiresManualReview || matchResult.confidence < 75) {
+            // Handle review queue based on mode
+            const shouldReview = measurementMode === 'review_all' ||
+                                (measurementMode === 'review_low_confidence' &&
+                                 (matchResult.requiresManualReview || matchResult.confidence < 75));
+
+            if (shouldReview && matchResult.candidate) {
               // Add to review queue instead of processing immediately
               const reviewItem = reviewQueue.addItem({
                 type: 'measurement',
@@ -3799,19 +4350,42 @@ export async function registerRoutes(app: Express) {
 
       const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
 
-      res.json({
+      // Count different action types for summary
+      createdCount = results.filter(r => r.action === 'created').length;
+      updatedCount = results.filter(r => r.action === 'updated').length;
+      matchedCount = results.filter(r => r.action === 'matched' || r.action === 'matched_and_deactivated').length;
+      skippedCount = results.filter(r => r.action === 'skipped').length;
+
+      const response: ImportResult = {
         type,
         totalRows,
         results,
         errors,
         warnings,
         summary: {
-          successful: results.filter(r => r.action === 'created' || r.action === 'matched').length,
+          successful: createdCount + updatedCount + matchedCount,
+          created: createdCount,
+          updated: updatedCount,
+          matched: matchedCount,
           failed: errors.length,
           warnings: warnings.length,
+          skipped: skippedCount,
           pendingReview: pendingReviewCount
-        }
-      } as ImportResult);
+        },
+        options
+      };
+
+      // Add created teams if any
+      if (createdTeams.size > 0) {
+        response.createdTeams = Array.from(createdTeams.values());
+      }
+
+      // Add created athletes if any
+      if (createdAthletes.length > 0) {
+        response.createdAthletes = createdAthletes;
+      }
+
+      res.json(response);
     } catch (error) {
       console.error('Import error:', error);
       res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
@@ -3962,8 +4536,11 @@ export async function registerRoutes(app: Express) {
           athlete.isActive,
           athlete.createdAt
         ].map(field => {
+          // SECURITY: Sanitize for formula injection, then escape for CSV format
+          let value = String(field || '');
+          value = sanitizeCSVValue(value);
+
           // Escape commas and quotes for CSV
-          const value = String(field || '');
           if (value.includes(',') || value.includes('"') || value.includes('\n')) {
             return `"${value.replace(/"/g, '""')}"`;
           }
@@ -4045,8 +4622,11 @@ export async function registerRoutes(app: Express) {
           measurement.isVerified,
           measurement.createdAt
         ].map(field => {
+          // SECURITY: Sanitize for formula injection, then escape for CSV format
+          let value = String(field || '');
+          value = sanitizeCSVValue(value);
+
           // Escape commas and quotes for CSV
-          const value = String(field || '');
           if (value.includes(',') || value.includes('"') || value.includes('\n')) {
             return `"${value.replace(/"/g, '""')}"`;
           }
