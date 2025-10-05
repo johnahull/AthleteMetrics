@@ -1154,9 +1154,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             return `${point.dataset.label}`;
           },
           label: (context) => {
-            const metric = Object.keys(statistics || {})[context.parsed.x];
-            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const rawData = context.raw as any;
+            // Get metric from rawData first, fallback to statistics keys
+            const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
+            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
             const value = context.parsed.y;
 
             // Format value with dual display for FLY10_TIME
@@ -1166,15 +1167,17 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // Enhanced label for individual athlete points
             if (rawData && rawData.athleteName) {
-              return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric}: ${formattedValue}`;
+              const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric || 'Value';
+              return `${metricLabel}: ${formattedValue}`;
             }
 
             return `Value: ${formattedValue}`;
           },
           afterLabel: (context) => {
-            const metric = Object.keys(statistics || {})[context.parsed.x];
-            const stats = statistics?.[metric];
             const rawData = context.raw as any;
+            // Get metric from rawData first, fallback to statistics keys
+            const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
+            const stats = statistics?.[metric];
             const result = [];
 
             // Add team and group info for individual athlete points
