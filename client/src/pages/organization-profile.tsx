@@ -594,7 +594,7 @@ export default function OrganizationProfile() {
       }
       setLoadingTeams(true);
       try {
-        const response = await fetch(`/api/organizations/${id}/teams`);
+        const response = await fetch(`/api/teams?organizationId=${id}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch teams: ${response.statusText}`);
         }
