@@ -74,6 +74,8 @@ export interface IStorage {
     expiresAt: Date;
   }): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
+  getInvitationById(id: string): Promise<Invitation | undefined>;
+  getInvitationByToken(token: string): Promise<Invitation | undefined>;
   updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 
@@ -920,6 +922,18 @@ export class DatabaseStorage implements IStorage {
         eq(invitations.isUsed, false),
         gte(invitations.expiresAt, new Date())
       ));
+    return invitation || undefined;
+  }
+
+  async getInvitationById(id: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.id, id));
+    return invitation || undefined;
+  }
+
+  async getInvitationByToken(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.token, token));
     return invitation || undefined;
   }
 

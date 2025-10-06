@@ -2609,14 +2609,10 @@ export async function registerRoutes(app: Express) {
       const { email, firstName, lastName, role, organizationId, teamIds, athleteId } = req.body;
 
       // Get current user info for invitedBy
-      let invitedById = req.session.user?.id;
-      if (!invitedById && req.session.admin) {
-        const siteAdmin = await storage.getUserByUsername("admin");
-        invitedById = siteAdmin?.id;
-      }
+      const invitedById = req.session.user?.id;
 
       if (!invitedById) {
-        return res.status(400).json({ message: "Unable to determine current user" });
+        return res.status(401).json({ message: "Authentication required" });
       }
 
       // Handle athlete invitation (send to all their emails)
@@ -2626,10 +2622,29 @@ export async function registerRoutes(app: Express) {
           return res.status(404).json({ message: "Athlete not found" });
         }
 
+        // Validate organization exists
+        const org = await storage.getOrganization(organizationId);
+        if (!org) {
+          return res.status(400).json({ message: "Invalid organization ID" });
+        }
+
         // Check permissions using unified function
         const permissionCheck = await checkInvitationPermissions(invitedById, 'general', role, organizationId);
         if (!permissionCheck.allowed) {
           return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
+        }
+
+        // Validate team IDs if provided
+        if (teamIds && Array.isArray(teamIds) && teamIds.length > 0) {
+          for (const teamId of teamIds) {
+            const team = await storage.getTeam(teamId);
+            if (!team) {
+              return res.status(400).json({ message: `Team with ID ${teamId} not found` });
+            }
+            if (team.organizationId !== organizationId) {
+              return res.status(400).json({ message: `Team ${teamId} does not belong to organization ${organizationId}` });
+            }
+          }
         }
 
         // Send invitations to all athlete's email addresses
@@ -2738,6 +2753,19 @@ export async function registerRoutes(app: Express) {
         return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
       }
 
+      // Validate team IDs if provided
+      if (teamIds && Array.isArray(teamIds) && teamIds.length > 0) {
+        for (const teamId of teamIds) {
+          const team = await storage.getTeam(teamId);
+          if (!team) {
+            return res.status(400).json({ message: `Team with ID ${teamId} not found` });
+          }
+          if (team.organizationId !== organizationId) {
+            return res.status(400).json({ message: `Team ${teamId} does not belong to organization ${organizationId}` });
+          }
+        }
+      }
+
       const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
       const invitation = await storage.createInvitation({
         email,
@@ -2815,8 +2843,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Get the invitation
-      const allInvitations = await storage.getInvitations();
-      const invitation = allInvitations.find(inv => inv.id === invitationId);
+      const invitation = await storage.getInvitationById(invitationId);
 
       if (!invitation) {
         return res.status(404).json({ message: "Invitation not found" });
@@ -2916,8 +2943,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Get the invitation
-      const allInvitations = await storage.getInvitations();
-      const invitation = allInvitations.find(inv => inv.id === invitationId);
+      const invitation = await storage.getInvitationById(invitationId);
 
       if (!invitation) {
         return res.status(404).json({ message: "Invitation not found" });
@@ -3235,8 +3261,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Get invitation (without the isUsed check to track failed attempts)
-      const allInvitations = await storage.getInvitations();
-      const invitation = allInvitations.find(inv => inv.token === token);
+      const invitation = await storage.getInvitationByToken(token);
 
       if (!invitation) {
         console.error("Invitation not found for token:", token);
@@ -3372,8 +3397,7 @@ export async function registerRoutes(app: Express) {
       const { token } = req.params;
       if (token) {
         try {
-          const allInvitations = await storage.getInvitations();
-          const invitation = allInvitations.find(inv => inv.token === token);
+          const invitation = await storage.getInvitationByToken(token);
           if (invitation && !invitation.isUsed) {
             await storage.updateInvitation(invitation.id, {
               lastAttemptAt: new Date(),

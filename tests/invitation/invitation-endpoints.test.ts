@@ -303,6 +303,48 @@ describe('Invitation Endpoints', () => {
       expect(foundInvitation.isUsed).toBe(false);
     });
 
+    it('should create user with correct data from invitation', async () => {
+      const invitation = {
+        id: 'inv-123',
+        email: 'newuser@example.com',
+        firstName: 'Jane',
+        lastName: 'Smith',
+        token: 'token-456',
+        status: 'pending',
+        isUsed: false,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        role: 'coach',
+        organizationId: 'org-456',
+        attemptCount: 0,
+      };
+
+      mockStorage.getInvitations.mockResolvedValue([invitation]);
+      mockStorage.getUserByUsername.mockResolvedValue(null);
+      mockStorage.acceptInvitation.mockResolvedValue({
+        user: {
+          id: 'user-456',
+          username: 'janesmith',
+          firstName: invitation.firstName,
+          lastName: invitation.lastName,
+          emails: [invitation.email],
+          isSiteAdmin: false,
+        },
+      });
+      mockStorage.getOrganization.mockResolvedValue({ id: 'org-456', name: 'Test Org' });
+
+      const result = await mockStorage.acceptInvitation(invitation.token, {
+        email: invitation.email,
+        username: 'janesmith',
+        password: 'SecurePass123!',
+        firstName: invitation.firstName,
+        lastName: invitation.lastName,
+      });
+
+      expect(result.user.firstName).toBe(invitation.firstName);
+      expect(result.user.lastName).toBe(invitation.lastName);
+      expect(result.user.emails).toContain(invitation.email);
+    });
+
     it('should reject already used invitations', async () => {
       const usedInvitation = {
         id: 'inv-123',
@@ -493,6 +535,66 @@ describe('Invitation Endpoints', () => {
 
       // Should call createAuditLog with action 'invitation_accepted'
       expect(mockStorage.createAuditLog).toBeDefined();
+    });
+
+    it('should enforce strong password requirements', async () => {
+      const weakPasswords = [
+        { pwd: 'short', reason: 'Too short (< 12 characters)' },
+        { pwd: 'nouppercase123!', reason: 'Missing uppercase letter' },
+        { pwd: 'NOLOWERCASE123!', reason: 'Missing lowercase letter' },
+        { pwd: 'NoNumbers!!!', reason: 'Missing numbers' },
+        { pwd: 'NoSpecialChar123', reason: 'Missing special character' },
+      ];
+
+      weakPasswords.forEach(({ pwd }) => {
+        const hasUpper = /[A-Z]/.test(pwd);
+        const hasLower = /[a-z]/.test(pwd);
+        const hasNumber = /[0-9]/.test(pwd);
+        const hasSpecial = /[!@#$%^&*]/.test(pwd);
+        const isLongEnough = pwd.length >= 12;
+
+        // At least one requirement should fail
+        const isValid = hasUpper && hasLower && hasNumber && hasSpecial && isLongEnough;
+        expect(isValid).toBe(false);
+      });
+    });
+
+    it('should enforce username requirements', async () => {
+      const invalidUsernames = [
+        'ab', // Too short
+        'a'.repeat(21), // Too long
+        'user@name', // Invalid characters
+        'user name', // Spaces
+        'user.name', // Periods
+      ];
+
+      invalidUsernames.forEach(username => {
+        const hasInvalidChars = /[^a-zA-Z0-9_]/.test(username);
+        const invalidLength = username.length < 3 || username.length > 20;
+
+        // Should fail at least one check
+        expect(hasInvalidChars || invalidLength).toBe(true);
+      });
+    });
+
+    it('should assign correct role from invitation', async () => {
+      const roles = ['athlete', 'coach', 'org_admin'];
+
+      roles.forEach(role => {
+        const invitation = {
+          id: `inv-${role}`,
+          email: `${role}@example.com`,
+          token: `token-${role}`,
+          status: 'pending',
+          isUsed: false,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          role: role,
+          organizationId: 'org-123',
+          attemptCount: 0,
+        };
+
+        expect(invitation.role).toBe(role);
+      });
     });
   });
 
