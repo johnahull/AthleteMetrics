@@ -936,73 +936,158 @@ export default function OrganizationProfile() {
         </CardContent>
       </Card>
 
-      {/* Athletes Section */}
+      {/* Athletes Section - Visible to all authorized users */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Athletes ({totalAthletes})</CardTitle>
-            {canEdit && (
-              <Button onClick={() => setIsAddAthleteOpen(true)}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add Athlete
-              </Button>
-            )}
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Athletes ({organization.athletes?.length ?? 0})
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {loadingAthletes ? (
-            <LoadingSpinner text="Loading athletes..." />
-          ) : athletesError ? (
-            <div className="text-destructive">Error loading athletes: {athletesError.message}</div>
-          ) : athletes && athletes.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {athletes.map((athlete) => (
-                <Card key={athlete.id}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">
-                      {athlete.firstName} {athlete.lastName}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="font-medium">Email:</span> {athlete.email || 'Not provided'}
+          <div className="space-y-3">
+            {/* Pending Athlete Invitations Section */}
+            {organization.invitations && organization.invitations.filter(inv => inv.role === 'athlete').length > 0 && (
+              <div className="border-b pb-3 mb-3">
+                <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  Pending Invitations ({organization.invitations.filter(inv => inv.role === 'athlete').length})
+                </h4>
+                <div className="space-y-2">
+                  {organization.invitations.filter(inv => inv.role === 'athlete').map((invitation) => {
+                    const isExpired = isInvitationExpired(invitation.expiresAt);
+                    return (
+                      <div key={invitation.id} className={`flex items-center justify-between p-2 rounded-lg border ${isExpired ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                          <div className="space-y-1">
+                            <p className="text-xs text-gray-600">
+                              Invited {new Date(invitation.createdAt).toLocaleDateString()}
+                            </p>
+                            <p className={`text-xs ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                              {formatExpirationDate(invitation.expiresAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            Athlete {isExpired ? '(Expired)' : '(Pending)'}
+                          </Badge>
+                          <div className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                            {isExpired ? (
+                              <>
+                                <AlertCircle className="h-3 w-3" />
+                                <span>Expired</span>
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="h-3 w-3" />
+                                <span>Awaiting response</span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Action buttons for pending invitations - visible to admins and coaches */}
+                          {(user?.isSiteAdmin || isOrgAdmin || isCoach) && (
+                            <div className="flex items-center gap-1 ml-2">
+                              {/* Resend invitation button for expired invitations */}
+                              {isExpired && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => resendInvitation(invitation.email, invitation.role)}
+                                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  data-testid={`resend-invitation-${invitation.id}`}
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                </Button>
+                              )}
+
+                              {/* Copy invitation URL button (only for non-expired) */}
+                              {!isExpired && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
+                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  data-testid={`copy-invitation-${invitation.id}`}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              )}
+
+                              {/* Delete pending invitation button - only admins */}
+                              {(user?.isSiteAdmin || isOrgAdmin) && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      data-testid={`delete-invitation-${invitation.id}`}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Pending Invitation</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete the invitation for {invitation.email}? This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => deletePendingUser(invitation.id, invitation.email)}
+                                        className="bg-red-600 hover:bg-red-700"
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {athlete.dateOfBirth && (
-                        <div>
-                          <span className="font-medium">Date of Birth:</span>{' '}
-                          {new Date(athlete.dateOfBirth).toLocaleDateString()}
-                        </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Active Athletes */}
+            {organization.athletes && organization.athletes.length > 0 ? (
+              organization.athletes.map((athlete) => (
+                <div key={athlete.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                  <div className="flex-1">
+                    <Link
+                      to={`/athletes/${athlete.id}`}
+                      className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                    >
+                      {athlete.firstName} {athlete.lastName}
+                    </Link>
+                    <div className="text-sm text-gray-600">
+                      {athlete.sports && athlete.sports.length > 0 && (
+                        <span>{athlete.sports.join(', ')}</span>
                       )}
-                      {athlete.gender && (
-                        <div>
-                          <span className="font-medium">Gender:</span> {athlete.gender}
-                        </div>
-                      )}
-                      {athlete.teams && athlete.teams.length > 0 && (
-                        <div>
-                          <span className="font-medium">Teams:</span>{' '}
-                          {athlete.teams.map(t => t.name).join(', ')}
-                        </div>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => window.location.href = `/athletes/${athlete.id}`}
-                      >
-                        View Profile
-                      </Button>
+                      {athlete.school && <span> • {athlete.school}</span>}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No athletes found. Add your first athlete to get started.
-            </div>
-          )}
+                    {athlete.emails && athlete.emails.length > 0 && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Mail className="h-3 w-3" />
+                        <span>{athlete.emails[0]}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-sm py-4">No athletes in this organization yet</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
