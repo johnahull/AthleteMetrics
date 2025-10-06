@@ -448,8 +448,8 @@ export function getRecommendedChartType(
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
-      // 3+ metrics
-      return 'radar_chart';
+      // 3+ metrics: radar chart only for "best" performance snapshots, not trends
+      return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   }
 }

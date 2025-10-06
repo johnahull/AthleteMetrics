@@ -572,16 +572,10 @@ export class AnalyticsService {
     } else if (metricCount === 2) {
       return ['scatter_plot', 'connected_scatter'] as ChartType[];
     } else {
-      // 3+ metrics
-      if (analysisType === 'individual') {
-        // Individual analysis: radar chart only for "best" performance, not trends
-        return timeframeType === 'best'
-          ? ['radar_chart', 'multi_line'] as ChartType[]
-          : ['multi_line'] as ChartType[];
-      } else {
-        // Group analysis: always show radar chart
-        return ['radar_chart'] as ChartType[];
-      }
+      // 3+ metrics: radar chart only for "best" performance snapshots, not trends
+      return timeframeType === 'best'
+        ? ['radar_chart', 'multi_line'] as ChartType[]
+        : ['multi_line'] as ChartType[];
     }
   }
 }
