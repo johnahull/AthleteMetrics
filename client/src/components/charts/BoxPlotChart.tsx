@@ -69,6 +69,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
   const [isStatsExpanded, setIsStatsExpanded] = useState(false);
 
+  // Sync local state when parent prop changes
+  useEffect(() => {
+    setLocalShowAthleteNames(showAthleteNames);
+  }, [showAthleteNames]);
+
 
   // Memoized label positions cache to prevent recalculation on every render
   const labelPositionsCache = useRef<Map<string, LabelPosition[]>>(new Map());

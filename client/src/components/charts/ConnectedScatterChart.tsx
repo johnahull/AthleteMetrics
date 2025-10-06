@@ -781,13 +781,21 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
     </div>
   );
 }, (prevProps, nextProps) => {
+  // Helper function for shallow array comparison
+  const arraysEqual = (a?: string[], b?: string[]) => {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    return a.every((val, idx) => val === b[idx]);
+  };
+
   // Optimize re-renders by comparing critical props
   return (
     prevProps.data === nextProps.data &&
     prevProps.config === nextProps.config &&
     prevProps.statistics === nextProps.statistics &&
     prevProps.highlightAthlete === nextProps.highlightAthlete &&
-    JSON.stringify(prevProps.selectedAthleteIds) === JSON.stringify(nextProps.selectedAthleteIds) &&
+    arraysEqual(prevProps.selectedAthleteIds, nextProps.selectedAthleteIds) &&
     prevProps.maxAthletes === nextProps.maxAthletes &&
     prevProps.onAthleteSelectionChange === nextProps.onAthleteSelectionChange
   );
