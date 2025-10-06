@@ -541,6 +541,16 @@ export default function OrganizationProfile() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  // Get user's organizations to check if they're an org admin
+  const { data: userOrganizations = [] } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache at all
+    refetchOnMount: true,
+    refetchOnWindowFocus: true, // Enable refetch on focus
+  }) as { data: any[] };
+
   // State for teams and athletes
   const [teams, setTeams] = useState<any[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
@@ -555,17 +565,6 @@ export default function OrganizationProfile() {
   const canEdit = user?.isSiteAdmin || (Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin"));
   const handleEdit = () => { /* implement edit logic */ };
   const totalAthletes = athletes?.length || 0;
-
-
-  // Get user's organizations to check if they're an org admin
-  const { data: userOrganizations = [] } = useQuery({
-    queryKey: ["/api/auth/me/organizations"],
-    enabled: !!user?.id && !user?.isSiteAdmin,
-    staleTime: 0, // Always fetch fresh data
-    gcTime: 0, // Don't cache at all
-    refetchOnMount: true,
-    refetchOnWindowFocus: true, // Enable refetch on focus
-  }) as { data: any[] };
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
