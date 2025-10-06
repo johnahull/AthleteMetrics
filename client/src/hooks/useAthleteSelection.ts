@@ -102,14 +102,18 @@ export function useAthleteSelection({
   const togglesRef = useRef<Record<string, boolean>>({});
   togglesRef.current = athleteToggles;
 
+  // Use ref for callback to prevent race conditions when callback changes frequently
+  const onChangeRef = useRef(onAthleteSelectionChange);
+  onChangeRef.current = onAthleteSelectionChange;
+
   // Create debounced version of external selection change callback
-  // Wrap in useCallback to ensure stable reference when callback changes
+  // Using ref prevents debounce recreation when callback changes
   const debouncedOnAthleteSelectionChange = useDebouncedCallback(
     useCallback((athleteIds: string[]) => {
-      if (onAthleteSelectionChange) {
-        onAthleteSelectionChange(athleteIds);
+      if (onChangeRef.current) {
+        onChangeRef.current(athleteIds);
       }
-    }, [onAthleteSelectionChange]),
+    }, []),
     debounceDelay
   );
 
@@ -119,29 +123,38 @@ export function useAthleteSelection({
   // Use external selectedAthleteIds if provided, otherwise use internal state
   const effectiveSelectedAthleteIds = selectedAthleteIds || internalSelectedAthleteIds;
 
+  // Track initialization to prevent resetting user selections
+  const hasInitialized = useRef(false);
+
   // Initialize selections when athletes or external state changes
   useEffect(() => {
     if (athleteIds.length > 0) {
-      if (!selectedAthleteIds) {
-        // Use internal state - select first few athletes by default
-        const defaultSelected = athleteIds.slice(0, Math.min(DEFAULT_SELECTION_COUNT, validatedMaxAthletes));
-        setInternalSelectedAthleteIds(defaultSelected);
+      const existingSelections = Object.keys(athleteToggles).filter(id => athleteToggles[id]);
 
-        const defaultToggles = athletes.reduce((acc, athlete) => {
-          acc[athlete.id] = defaultSelected.includes(athlete.id);
-          return acc;
-        }, {} as Record<string, boolean>);
-        setAthleteToggles(defaultToggles);
+      if (!selectedAthleteIds) {
+        // Uncontrolled mode: Only initialize if no current selections or first mount
+        if (existingSelections.length === 0 || !hasInitialized.current) {
+          const defaultSelected = athleteIds.slice(0, Math.min(DEFAULT_SELECTION_COUNT, validatedMaxAthletes));
+          setInternalSelectedAthleteIds(defaultSelected);
+
+          const defaultToggles = athletes.reduce((acc, athlete) => {
+            acc[athlete.id] = defaultSelected.includes(athlete.id);
+            return acc;
+          }, {} as Record<string, boolean>);
+          setAthleteToggles(defaultToggles);
+          hasInitialized.current = true;
+        }
       } else {
-        // Use external state
+        // Controlled mode: Always sync with external state
         const toggles = athletes.reduce((acc, athlete) => {
           acc[athlete.id] = selectedAthleteIds.includes(athlete.id);
           return acc;
         }, {} as Record<string, boolean>);
         setAthleteToggles(toggles);
+        hasInitialized.current = true;
       }
     }
-  }, [athleteIds, athletes, selectedAthleteIds, validatedMaxAthletes]);
+  }, [athleteIds, athletes, selectedAthleteIds, validatedMaxAthletes, athleteToggles]);
 
   // Handle athlete toggle with optimized dependencies
   const handleToggleAthlete = useCallback((athleteId: string) => {
