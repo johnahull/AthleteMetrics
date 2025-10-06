@@ -100,7 +100,7 @@ export function LineChart({
     }
   }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
 
-  // Get athletes that should be displayed (either selected or first N for backwards compatibility)
+  // Get athletes that should be displayed on chart (filtered by selection)
   const displayedAthletes = useMemo(() => {
     if (effectiveSelectedIds.length > 0) {
       // Use selected athletes in selection order
@@ -114,14 +114,14 @@ export function LineChart({
     }
   }, [allAthletes, effectiveSelectedIds, maxAthletes]);
 
-  // Initialize toggles with displayed athletes enabled by default
+  // Initialize toggles with all athletes (first maxAthletes enabled by default)
   React.useEffect(() => {
     const initialToggles: Record<string, boolean> = {};
-    displayedAthletes.forEach(athlete => {
-      initialToggles[athlete.id] = true;
+    allAthletes.forEach((athlete, index) => {
+      initialToggles[athlete.id] = index < maxAthletes;
     });
     setAthleteToggles(initialToggles);
-  }, [displayedAthletes]);
+  }, [allAthletes, maxAthletes]);
 
   // Transform trend data for line chart
   const lineData = useMemo(() => {
@@ -130,15 +130,7 @@ export function LineChart({
     // Filter based on highlighted athlete or toggle states
     const trendsToShow = highlightAthlete
       ? data.filter(trend => trend.athleteId === highlightAthlete)
-      : data.filter(trend => {
-          const isInDisplayedAthletes = displayedAthletes.some(a => a.id === trend.athleteId);
-          // If athleteToggles is empty (initial state), show all displayed athletes
-          // Otherwise, respect the toggle state
-          const isToggleEnabled = Object.keys(athleteToggles).length === 0
-            ? true
-            : athleteToggles[trend.athleteId];
-          return isInDisplayedAthletes && isToggleEnabled;
-        });
+      : data.filter(trend => athleteToggles[trend.athleteId] === true);
 
     if (trendsToShow.length === 0) return null;
 
@@ -384,23 +376,33 @@ export function LineChart({
 
   // Helper functions for athlete toggles
   const toggleAthlete = (athleteId: string) => {
-    setAthleteToggles(prev => ({
-      ...prev,
-      [athleteId]: !prev[athleteId]
-    }));
+    setAthleteToggles(prev => {
+      const isCurrentlySelected = prev[athleteId];
+      const currentSelectedCount = Object.values(prev).filter(Boolean).length;
+
+      // If trying to select and already at limit, don't allow
+      if (!isCurrentlySelected && currentSelectedCount >= maxAthletes) {
+        return prev; // Don't change state
+      }
+
+      return {
+        ...prev,
+        [athleteId]: !prev[athleteId]
+      };
+    });
   };
 
   const selectAllAthletes = () => {
-    const allEnabled: Record<string, boolean> = {};
-    displayedAthletes.forEach(athlete => {
-      allEnabled[athlete.id] = true;
+    const newToggles: Record<string, boolean> = {};
+    allAthletes.forEach((athlete, index) => {
+      newToggles[athlete.id] = index < maxAthletes;
     });
-    setAthleteToggles(allEnabled);
+    setAthleteToggles(newToggles);
   };
 
   const clearAllAthletes = () => {
     const allDisabled: Record<string, boolean> = {};
-    displayedAthletes.forEach(athlete => {
+    allAthletes.forEach(athlete => {
       allDisabled[athlete.id] = false;
     });
     setAthleteToggles(allDisabled);
@@ -427,7 +429,7 @@ export function LineChart({
             className="flex items-center justify-between w-full"
           >
             <span>
-              Select Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
+              Select Athletes ({visibleAthleteCount} of {allAthletes.length} visible, max {maxAthletes})
             </span>
             {isSelectionExpanded ? (
               <ChevronUpIcon className="h-4 w-4" />
@@ -440,16 +442,17 @@ export function LineChart({
             <div className="mt-2 p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-gray-900">
-                  Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
+                  Athletes ({visibleAthleteCount} of {allAthletes.length} visible, max {maxAthletes})
                 </h3>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={selectAllAthletes}
-                    disabled={visibleAthleteCount === displayedAthletes.length}
+                    disabled={visibleAthleteCount >= maxAthletes}
+                    title={`Select first ${maxAthletes} athletes`}
                   >
-                    Select All
+                    Select {maxAthletes}
                   </Button>
                   <Button
                     variant="outline"
@@ -464,7 +467,7 @@ export function LineChart({
 
               {/* Athletes Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
-                {displayedAthletes.map(athlete => {
+                {allAthletes.map(athlete => {
                   const colors = [
                     'rgba(59, 130, 246, 1)',    // Blue
                     'rgba(16, 185, 129, 1)',    // Green
