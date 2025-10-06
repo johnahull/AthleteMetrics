@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -115,14 +115,23 @@ export function LineChart({
     }
   }, [allAthletes, effectiveSelectedIds, maxAthletes]);
 
+  // Track if toggles have been initialized to prevent unnecessary resets
+  const hasInitialized = useRef(false);
+  const lastAthleteCount = useRef(0);
+
   // Initialize toggles with all athletes (first maxAthletes enabled by default)
   React.useEffect(() => {
-    const initialToggles: Record<string, boolean> = {};
-    allAthletes.forEach((athlete, index) => {
-      initialToggles[athlete.id] = index < maxAthletes;
-    });
-    setAthleteToggles(initialToggles);
-  }, [allAthletes, maxAthletes]);
+    // Only re-initialize if the athlete count changes or first initialization
+    if (!hasInitialized.current || lastAthleteCount.current !== allAthletes.length) {
+      const initialToggles: Record<string, boolean> = {};
+      allAthletes.forEach((athlete, index) => {
+        initialToggles[athlete.id] = index < maxAthletes;
+      });
+      setAthleteToggles(initialToggles);
+      hasInitialized.current = true;
+      lastAthleteCount.current = allAthletes.length;
+    }
+  }, [allAthletes.length, maxAthletes]);
 
   // Transform trend data for line chart
   // Memoize selected athlete IDs to prevent unnecessary re-renders when toggles object changes
