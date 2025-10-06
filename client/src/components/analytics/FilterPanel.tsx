@@ -216,7 +216,7 @@ export function FilterPanel({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="any">Any</SelectItem>
-                          {Array.from({ length: 25 }, (_, i) => 2010 - i).map(year => (
+                          {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
                             <SelectItem key={year} value={year.toString()}>
                               {year}
                             </SelectItem>
@@ -238,7 +238,7 @@ export function FilterPanel({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="any">Any</SelectItem>
-                          {Array.from({ length: 25 }, (_, i) => 2010 - i).map(year => (
+                          {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
                             <SelectItem key={year} value={year.toString()}>
                               {year}
                             </SelectItem>

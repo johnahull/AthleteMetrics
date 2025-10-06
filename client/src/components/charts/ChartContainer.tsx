@@ -255,9 +255,13 @@ export function ChartContainer({
 
   // Use larger height for radar chart due to additional controls, violin plot and box+swarm for better visibility
   // Box+swarm: 1100px for multi-group (more data), 700px for individual/multi-athlete
+  // Connected scatter: 910px (30% taller than default 700px)
+  // Multi-line: 805px (15% taller than default 700px)
   const isMultiGroup = selectedGroups && selectedGroups.length > 0;
   const cardHeight = chartType === 'radar_chart' ? 'h-[900px]'
     : chartType === 'violin_plot' ? 'h-[910px]'
+    : chartType === 'connected_scatter' ? 'h-[910px]'
+    : chartType === 'multi_line' ? 'h-[805px]'
     : (chartType === 'box_swarm_combo' || chartType === 'time_series_box_swarm')
       ? (isMultiGroup ? 'h-[1100px]' : 'h-[700px]')
     : 'h-[700px]';
@@ -434,8 +438,8 @@ export function getRecommendedChartType(
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
-      // 3+ metrics
-      return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
+      // 3+ metrics - always use multi_line for individual athlete trends
+      return 'multi_line';
     }
   } else {
     // Group analysis (intra_group or multi_group)

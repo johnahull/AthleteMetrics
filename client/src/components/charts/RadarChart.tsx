@@ -375,8 +375,8 @@ export function RadarChart({
         </div>
 
         {highlightAthlete && (
-          <div className="grid grid-cols-3 gap-4 text-center">
-            {radarData.metrics.slice(0, 3).map((metric, index) => {
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-center">
+            {radarData.metrics.map((metric, index) => {
               const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
               const percentile = athlete?.percentileRanks?.[metric];

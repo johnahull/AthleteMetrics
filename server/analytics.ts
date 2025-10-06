@@ -70,7 +70,7 @@ export class AnalyticsService {
     const groupings = await this.createGroupings(data, filters);
 
     // Calculate metadata
-    const meta = await this.calculateMeta(data, filters);
+    const meta = await this.calculateMeta(data, filters, analysisType, timeframe);
 
     return {
       data,
@@ -402,7 +402,9 @@ export class AnalyticsService {
    */
   private async calculateMeta(
     data: ChartDataPoint[],
-    filters: AnalyticsFilters
+    filters: AnalyticsFilters,
+    analysisType: AnalysisType,
+    timeframe: TimeframeConfig
   ) {
     const uniqueAthletes = new Set(data.map(d => d.athleteId));
     const dates = data.map(d => d.date).sort();
@@ -415,7 +417,7 @@ export class AnalyticsService {
         end: dates[dates.length - 1] || new Date()
       },
       appliedFilters: filters,
-      recommendedCharts: this.getRecommendedCharts(data, filters)
+      recommendedCharts: this.getRecommendedCharts(data, filters, analysisType, timeframe.type)
     };
   }
 
@@ -556,16 +558,30 @@ export class AnalyticsService {
     }
   }
 
-  private getRecommendedCharts(data: ChartDataPoint[], filters: AnalyticsFilters): ChartType[] {
+  private getRecommendedCharts(
+    data: ChartDataPoint[],
+    filters: AnalyticsFilters,
+    analysisType: AnalysisType,
+    timeframeType: string
+  ): ChartType[] {
     const uniqueMetrics = new Set(data.map(d => d.metric));
     const metricCount = uniqueMetrics.size;
-    
+
     if (metricCount === 1) {
       return ['box_swarm_combo', 'distribution', 'bar_chart'] as ChartType[];
     } else if (metricCount === 2) {
       return ['scatter_plot', 'connected_scatter'] as ChartType[];
     } else {
-      return ['radar_chart', 'multi_line'] as ChartType[];
+      // 3+ metrics
+      if (analysisType === 'individual') {
+        // Individual analysis: radar chart only for "best" performance, not trends
+        return timeframeType === 'best'
+          ? ['radar_chart', 'multi_line'] as ChartType[]
+          : ['multi_line'] as ChartType[];
+      } else {
+        // Group analysis: always show radar chart
+        return ['radar_chart'] as ChartType[];
+      }
     }
   }
 }
