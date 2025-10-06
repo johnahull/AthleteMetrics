@@ -3,11 +3,13 @@
  *
  * Extracted component for managing athlete selection in multi-athlete charts.
  * Provides checkboxes for toggling athlete visibility and bulk actions.
+ * Supports collapsible mode to stay out of the way when not in use.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import { getAthleteColor } from '@/utils/chart-constants';
 
 interface Athlete {
@@ -35,6 +37,10 @@ interface AthleteSelectorProps {
   maxAthletes?: number;
   /** Additional CSS classes to apply */
   className?: string;
+  /** Whether the selector should be collapsible */
+  collapsible?: boolean;
+  /** Whether the selector is collapsed by default (only applies if collapsible is true) */
+  defaultCollapsed?: boolean;
 }
 
 
@@ -47,15 +53,118 @@ export const AthleteSelector = React.memo(function AthleteSelector({
   onClearAll,
   onToggleGroupAverage,
   maxAthletes,
-  className = ''
+  className = '',
+  collapsible = false,
+  defaultCollapsed = true
 }: AthleteSelectorProps) {
+  const [isExpanded, setIsExpanded] = useState(!collapsible || !defaultCollapsed);
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
   const isLimitedByMax = maxAthletes && maxAthletes < athletes.length;
   const selectAllText = isLimitedByMax ? `Select ${maxAthletes}` : 'Select All';
   const selectAllTitle = isLimitedByMax ? `Select up to ${maxAthletes} athletes` : 'Select all athletes';
 
+  const toggleExpanded = () => {
+    if (collapsible) {
+      setIsExpanded(!isExpanded);
+    }
+  };
+
+  // Header content for collapsible version
+  if (collapsible) {
+    return (
+      <div className={`mb-4 ${className}`}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleExpanded}
+          className="flex items-center justify-between w-full p-3 h-auto text-sm font-medium bg-gray-50 rounded-lg border hover:bg-gray-100"
+          aria-expanded={isExpanded}
+          aria-controls="athlete-selector-content"
+        >
+          <span>
+            Select Athletes ({visibleAthleteCount} of {athletes.length} selected{maxAthletes ? `, max ${maxAthletes}` : ''})
+          </span>
+          {isExpanded ? (
+            <ChevronUpIcon className="h-4 w-4 ml-2" />
+          ) : (
+            <ChevronDownIcon className="h-4 w-4 ml-2" />
+          )}
+        </Button>
+
+        {isExpanded && (
+          <div
+            id="athlete-selector-content"
+            className="mt-2 p-4 bg-gray-50 rounded-lg border"
+          >
+            <AthleteSelectorContent
+              athletes={athletes}
+              athleteToggles={athleteToggles}
+              showGroupAverage={showGroupAverage}
+              onToggleAthlete={onToggleAthlete}
+              onSelectAll={onSelectAll}
+              onClearAll={onClearAll}
+              onToggleGroupAverage={onToggleGroupAverage}
+              maxAthletes={maxAthletes}
+              visibleAthleteCount={visibleAthleteCount}
+              selectAllText={selectAllText}
+              selectAllTitle={selectAllTitle}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Non-collapsible version (original behavior)
   return (
     <div className={`mb-4 p-4 bg-gray-50 rounded-lg border ${className}`}>
+      <AthleteSelectorContent
+        athletes={athletes}
+        athleteToggles={athleteToggles}
+        showGroupAverage={showGroupAverage}
+        onToggleAthlete={onToggleAthlete}
+        onSelectAll={onSelectAll}
+        onClearAll={onClearAll}
+        onToggleGroupAverage={onToggleGroupAverage}
+        maxAthletes={maxAthletes}
+        visibleAthleteCount={visibleAthleteCount}
+        selectAllText={selectAllText}
+        selectAllTitle={selectAllTitle}
+      />
+    </div>
+  );
+});
+
+// Extracted content component to avoid duplication
+interface AthleteSelectorContentProps {
+  athletes: Athlete[];
+  athleteToggles: Record<string, boolean>;
+  showGroupAverage?: boolean;
+  onToggleAthlete: (athleteId: string) => void;
+  onSelectAll: () => void;
+  onClearAll: () => void;
+  onToggleGroupAverage?: (checked: boolean) => void;
+  maxAthletes?: number;
+  visibleAthleteCount: number;
+  selectAllText: string;
+  selectAllTitle: string;
+}
+
+const AthleteSelectorContent = React.memo(function AthleteSelectorContent({
+  athletes,
+  athleteToggles,
+  showGroupAverage,
+  onToggleAthlete,
+  onSelectAll,
+  onClearAll,
+  onToggleGroupAverage,
+  maxAthletes,
+  visibleAthleteCount,
+  selectAllText,
+  selectAllTitle
+}: AthleteSelectorContentProps) {
+  return (
+    <>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-900">
           Athletes ({visibleAthleteCount} of {athletes.length} visible{maxAthletes ? `, max ${maxAthletes}` : ''})
@@ -133,7 +242,7 @@ export const AthleteSelector = React.memo(function AthleteSelector({
           </label>
         </div>
       )}
-    </div>
+    </>
   );
 });
 
