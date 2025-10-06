@@ -551,15 +551,10 @@ export default function OrganizationProfile() {
     refetchOnWindowFocus: true, // Enable refetch on focus
   }) as { data: any[] };
 
-  // State for teams and athletes
-  const [teams, setTeams] = useState<any[]>([]);
-  const [loadingTeams, setLoadingTeams] = useState(true);
-  const [teamsError, setTeamsError] = useState<Error | null>(null);
+  // State for athletes
   const [athletes, setAthletes] = useState<OrganizationProfile["athletes"]>([]);
   const [loadingAthletes, setLoadingAthletes] = useState(true);
   const [athletesError, setAthletesError] = useState<Error | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<any>(null);
-  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false);
 
   const canEdit = user?.isSiteAdmin || (Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin"));
@@ -584,32 +579,6 @@ export default function OrganizationProfile() {
     refetchInterval: false, // Disable automatic polling
     retry: 2, // Retry failed requests
   });
-
-  // Fetch teams data
-  useEffect(() => {
-    const fetchTeams = async () => {
-      if (!id || !userHasAccessToOrg) {
-        setLoadingTeams(false);
-        return;
-      }
-      setLoadingTeams(true);
-      try {
-        const response = await fetch(`/api/teams?organizationId=${id}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch teams: ${response.statusText}`);
-        }
-        const data = await response.json();
-        setTeams(data);
-        setTeamsError(null);
-      } catch (err: any) {
-        setTeamsError(err);
-        setTeams([]);
-      } finally {
-        setLoadingTeams(false);
-      }
-    };
-    fetchTeams();
-  }, [id, userHasAccessToOrg]);
 
   // Fetch athletes data
   useEffect(() => {
@@ -964,60 +933,6 @@ export default function OrganizationProfile() {
             isLoading={isLoading}
             error={error}
           />
-        </CardContent>
-      </Card>
-
-      {/* Teams Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Teams ({teams?.length || 0})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loadingTeams ? (
-            <LoadingSpinner text="Loading teams..." />
-          ) : teamsError ? (
-            <div className="text-destructive">Error loading teams: {teamsError.message}</div>
-          ) : teams && teams.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {teams.map((team) => (
-                <Card key={team.id}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{team.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <span className="font-medium">Sport:</span> {team.sport || 'Not specified'}
-                      </div>
-                      <div>
-                        <span className="font-medium">Season:</span> {team.season || 'Not specified'}
-                      </div>
-                      {team.year && (
-                        <div>
-                          <span className="font-medium">Year:</span> {team.year}
-                        </div>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => {
-                          setSelectedTeam(team);
-                          setIsTeamModalOpen(true);
-                        }}
-                      >
-                        View Athletes
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No teams found. Create your first team to get started.
-            </div>
-          )}
         </CardContent>
       </Card>
 
