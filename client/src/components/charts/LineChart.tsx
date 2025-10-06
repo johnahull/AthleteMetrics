@@ -21,6 +21,7 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 
 // Register Chart.js components
 ChartJS.register(
@@ -56,6 +57,7 @@ export function LineChart({
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
   const [showGroupAverage, setShowGroupAverage] = useState(true);
+  const [isSelectionExpanded, setIsSelectionExpanded] = useState(false);
 
   // Smart default selection for athletes when not controlled by parent
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -418,82 +420,101 @@ export function LineChart({
     <div className="w-full h-full">
       {/* Athlete Controls Panel - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-900">
-              Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
-            </h3>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAllAthletes}
-                disabled={visibleAthleteCount === displayedAthletes.length}
-              >
-                Select All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAllAthletes}
-                disabled={visibleAthleteCount === 0}
-              >
-                Clear All
-              </Button>
-            </div>
-          </div>
+        <div className="mb-4">
+          <Button
+            variant="outline"
+            onClick={() => setIsSelectionExpanded(!isSelectionExpanded)}
+            className="flex items-center justify-between w-full"
+          >
+            <span>
+              Select Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
+            </span>
+            {isSelectionExpanded ? (
+              <ChevronUpIcon className="h-4 w-4" />
+            ) : (
+              <ChevronDownIcon className="h-4 w-4" />
+            )}
+          </Button>
 
-          {/* Athletes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
-            {displayedAthletes.map(athlete => {
-              const colors = [
-                'rgba(59, 130, 246, 1)',    // Blue
-                'rgba(16, 185, 129, 1)',    // Green
-                'rgba(239, 68, 68, 1)',     // Red
-                'rgba(245, 158, 11, 1)',    // Amber
-                'rgba(139, 92, 246, 1)',    // Purple
-                'rgba(236, 72, 153, 1)',    // Pink
-                'rgba(20, 184, 166, 1)',    // Teal
-                'rgba(251, 146, 60, 1)',    // Orange
-                'rgba(124, 58, 237, 1)',    // Violet
-                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-              ];
-              const athleteColor = colors[athlete.color % colors.length];
-
-              return (
-                <div key={athlete.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`athlete-${athlete.id}`}
-                    checked={athleteToggles[athlete.id] || false}
-                    onCheckedChange={() => toggleAthlete(athlete.id)}
-                  />
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: athleteColor }}
-                  />
-                  <label
-                    htmlFor={`athlete-${athlete.id}`}
-                    className="text-sm cursor-pointer flex-1 truncate"
+          {isSelectionExpanded && (
+            <div className="mt-2 p-4 bg-gray-50 rounded-lg border">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-900">
+                  Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
+                </h3>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllAthletes}
+                    disabled={visibleAthleteCount === displayedAthletes.length}
                   >
-                    {athlete.name}
-                  </label>
+                    Select All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllAthletes}
+                    disabled={visibleAthleteCount === 0}
+                  >
+                    Clear All
+                  </Button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          {/* Group Average Toggle */}
-          <div className="flex items-center space-x-2 pt-2 border-t">
-            <Checkbox
-              id="group-average"
-              checked={showGroupAverage}
-              onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
-            />
-            <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
-            <label htmlFor="group-average" className="text-sm cursor-pointer">
-              Group Average
-            </label>
-          </div>
+              {/* Athletes Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
+                {displayedAthletes.map(athlete => {
+                  const colors = [
+                    'rgba(59, 130, 246, 1)',    // Blue
+                    'rgba(16, 185, 129, 1)',    // Green
+                    'rgba(239, 68, 68, 1)',     // Red
+                    'rgba(245, 158, 11, 1)',    // Amber
+                    'rgba(139, 92, 246, 1)',    // Purple
+                    'rgba(236, 72, 153, 1)',    // Pink
+                    'rgba(20, 184, 166, 1)',    // Teal
+                    'rgba(251, 146, 60, 1)',    // Orange
+                    'rgba(124, 58, 237, 1)',    // Violet
+                    'rgba(34, 197, 94, 1)'      // Emerald - 10th color
+                  ];
+                  const athleteColor = colors[athlete.color % colors.length];
+
+                  return (
+                    <div key={athlete.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`athlete-${athlete.id}`}
+                        checked={athleteToggles[athlete.id] || false}
+                        onCheckedChange={() => toggleAthlete(athlete.id)}
+                      />
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: athleteColor }}
+                      />
+                      <label
+                        htmlFor={`athlete-${athlete.id}`}
+                        className="text-sm cursor-pointer flex-1 truncate"
+                      >
+                        {athlete.name}
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Group Average Toggle */}
+              <div className="flex items-center space-x-2 pt-2 border-t">
+                <Checkbox
+                  id="group-average"
+                  checked={showGroupAverage}
+                  onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
+                />
+                <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
+                <label htmlFor="group-average" className="text-sm cursor-pointer">
+                  Group Average
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
