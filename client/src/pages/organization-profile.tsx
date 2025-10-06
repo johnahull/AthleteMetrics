@@ -1065,26 +1065,27 @@ export default function OrganizationProfile() {
               <div className="text-destructive">Error loading athletes: {athletesError.message}</div>
             ) : athletes && athletes.length > 0 ? (
               athletes.map((athlete) => (
-                <div key={athlete.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                  <div className="flex-1">
-                    <Link
-                      to={`/athletes/${athlete.id}`}
-                      className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                    >
-                      {athlete.firstName} {athlete.lastName}
-                    </Link>
-                    <div className="text-sm text-gray-600">
-                      {athlete.sports && athlete.sports.length > 0 && (
-                        <span>{athlete.sports.join(', ')}</span>
+                <div key={athlete.id} className="p-3 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <Link
+                        to={`/athletes/${athlete.id}`}
+                        className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                      >
+                        {athlete.firstName} {athlete.lastName}
+                      </Link>
+                      {athlete.emails && athlete.emails.length > 0 && (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Mail className="h-3 w-3" />
+                          <span>{athlete.emails[0]}</span>
+                        </div>
                       )}
-                      {athlete.school && <span> • {athlete.school}</span>}
+                      {athlete.teams && athlete.teams.length > 0 && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          <span className="font-medium">Team:</span> {athlete.teams.map(t => t.name).join(', ')}
+                        </div>
+                      )}
                     </div>
-                    {athlete.emails && athlete.emails.length > 0 && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Mail className="h-3 w-3" />
-                        <span>{athlete.emails[0]}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               ))
