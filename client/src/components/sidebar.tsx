@@ -49,6 +49,7 @@ const NAVIGATION_CONFIGS = {
   ],
   coach: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "My Organization", href: "/organizations", icon: Building2 },
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
@@ -88,8 +89,8 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     navigation.unshift({ name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound });
   }
   
-  // Update org admin organization link with specific ID
-  if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
+  // Update org admin and coach organization link with specific ID
+  if ((role === "org_admin" || role === "coach") && userOrganizations?.[0]?.organizationId) {
     const orgIndex = navigation.findIndex(item => item.name === "My Organization");
     if (orgIndex !== -1) {
       navigation[orgIndex].href = `/organizations/${userOrganizations[0].organizationId}`;

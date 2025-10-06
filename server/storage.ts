@@ -925,12 +925,6 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
-  async getInvitationById(id: string): Promise<Invitation | undefined> {
-    const [invitation] = await db.select().from(invitations)
-      .where(eq(invitations.id, id));
-    return invitation || undefined;
-  }
-
   async getInvitationByToken(token: string): Promise<Invitation | undefined> {
     const [invitation] = await db.select().from(invitations)
       .where(eq(invitations.token, token));
@@ -939,7 +933,7 @@ export class DatabaseStorage implements IStorage {
 
   async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
     // Use database transaction with row-level locking to prevent race conditions
-    return await db.transaction(async (tx) => {
+    return await db.transaction(async (tx: any) => {
       // Lock the invitation row with SELECT FOR UPDATE
       // This prevents concurrent acceptance attempts
       const [invitation] = await tx.select()

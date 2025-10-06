@@ -10,7 +10,7 @@ import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { sanitizeCSVValue } from "./utils/csv-utils";
-import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
+import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema, type Invitation } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { z, ZodError } from "zod";
 import bcrypt from "bcrypt";
@@ -2797,8 +2797,11 @@ export async function registerRoutes(app: Express) {
         expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       });
 
+      // Generate invite link
+      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+
       // Send invitation email using shared helper
-      await sendInvitationEmailWithTracking(invitation, invitedById, req);
+      const emailSent = await sendInvitationEmailWithTracking(invitation, invitedById, req);
 
       // Audit log
       await storage.createAuditLog({
@@ -2848,12 +2851,29 @@ export async function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Invitation not found" });
       }
 
-      // Check if user has permission (must be in the same organization)
+      // Check if user has permission (must be in the same organization with appropriate role)
       const userOrgs = await storage.getUserOrganizations(userId);
-      const hasPermission = userOrgs.some(org => org.organizationId === invitation.organizationId);
+      const currentUser = req.session.user;
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      if (!hasPermission && !req.session.user?.isSiteAdmin) {
-        return res.status(403).json({ message: "Insufficient permissions" });
+      // Find user's role in the invitation's organization
+      const userOrgRole = userOrgs.find(org => org.organizationId === invitation.organizationId);
+
+      if (!userOrgRole && !userIsSiteAdmin) {
+        return res.status(403).json({ message: "Insufficient permissions - you are not a member of this organization" });
+      }
+
+      // Check role-based permissions
+      const isOrgAdmin = userOrgRole?.role === "org_admin";
+      const isCoach = userOrgRole?.role === "coach";
+
+      // Site admins can resend any invitation
+      // Org admins can resend any invitation in their org
+      // Coaches can only resend athlete invitations
+      if (!userIsSiteAdmin && !isOrgAdmin) {
+        if (!isCoach || invitation.role !== 'athlete') {
+          return res.status(403).json({ message: "Insufficient permissions to resend this invitation" });
+        }
       }
 
       // Check if invitation is still pending
@@ -2876,7 +2896,7 @@ export async function registerRoutes(app: Express) {
       }
 
       // Send invitation email using shared helper
-      await sendInvitationEmailWithTracking(invitation, userId, req);
+      const emailSent = await sendInvitationEmailWithTracking(invitation, userId, req);
 
       // Audit log
       await storage.createAuditLog({
@@ -2924,12 +2944,29 @@ export async function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Invitation not found" });
       }
 
-      // Check if user has permission (must be in the same organization)
+      // Check if user has permission (must be in the same organization with appropriate role)
       const userOrgs = await storage.getUserOrganizations(userId);
-      const hasPermission = userOrgs.some(org => org.organizationId === invitation.organizationId);
+      const currentUser = req.session.user;
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      if (!hasPermission && !req.session.user?.isSiteAdmin) {
-        return res.status(403).json({ message: "Insufficient permissions" });
+      // Find user's role in the invitation's organization
+      const userOrgRole = userOrgs.find(org => org.organizationId === invitation.organizationId);
+
+      if (!userOrgRole && !userIsSiteAdmin) {
+        return res.status(403).json({ message: "Insufficient permissions - you are not a member of this organization" });
+      }
+
+      // Check role-based permissions
+      const isOrgAdmin = userOrgRole?.role === "org_admin";
+      const isCoach = userOrgRole?.role === "coach";
+
+      // Site admins can cancel any invitation
+      // Org admins can cancel any invitation in their org
+      // Coaches can only cancel athlete invitations
+      if (!userIsSiteAdmin && !isOrgAdmin) {
+        if (!isCoach || invitation.role !== 'athlete') {
+          return res.status(403).json({ message: "Insufficient permissions to cancel this invitation" });
+        }
       }
 
       // Check if invitation is already used or cancelled
@@ -3057,6 +3094,7 @@ export async function registerRoutes(app: Express) {
   app.get("/api/invitations", requireAuth, async (req, res) => {
     try {
       const userId = req.session.user?.id;
+      const currentUser = req.session.user;
 
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });
@@ -3069,15 +3107,38 @@ export async function registerRoutes(app: Express) {
         return res.json([]);
       }
 
+      // Check role-based authorization
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      const isOrgAdmin = userOrgs.some(org => org.role === "org_admin");
+      const isCoach = userOrgs.some(org => org.role === "coach");
+
+      // Only Site Admins, Org Admins, and Coaches can view invitations
+      if (!userIsSiteAdmin && !isOrgAdmin && !isCoach) {
+        return res.status(403).json({ message: "Insufficient permissions to view invitations" });
+      }
+
       // Get all invitations for these organizations
       const allInvitations = await storage.getInvitations();
       const userInvitations = allInvitations.filter(invitation =>
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
 
+      // Filter invitations based on role
+      const filteredInvitations = userInvitations.filter(invitation => {
+        // Site admins and org admins see all invitations
+        if (userIsSiteAdmin || isOrgAdmin) {
+          return true;
+        }
+        // Coaches only see athlete invitations
+        if (isCoach) {
+          return invitation.role === 'athlete';
+        }
+        return false;
+      });
+
       // Enrich with additional data
       const enrichedInvitations = await Promise.all(
-        userInvitations.map(async (invitation) => {
+        filteredInvitations.map(async (invitation) => {
           const inviter = await storage.getUser(invitation.invitedBy);
           const organization = await storage.getOrganization(invitation.organizationId);
 
@@ -3178,6 +3239,12 @@ export async function registerRoutes(app: Express) {
   app.delete("/api/invitations/:id", requireAuth, async (req, res) => {
     try {
       const { id: invitationId } = req.params;
+      const userId = req.session.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
       const invitation = await storage.getInvitationById(invitationId);
 
       if (!invitation) {
@@ -3187,10 +3254,14 @@ export async function registerRoutes(app: Express) {
       const currentUser = req.session.user;
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Check if current user has permission to delete the invitation
-      if (!userIsSiteAdmin && currentUser?.id !== invitation.invitedBy) {
-        // If not site admin, they must be the one who sent the invitation
-        return res.status(403).json({ message: "Access denied. You can only delete invitations you sent." });
+      // Check if user has permission (Site Admin or Org Admin only)
+      const userOrgs = await storage.getUserOrganizations(userId);
+      const userOrgRole = userOrgs.find(org => org.organizationId === invitation.organizationId);
+      const isOrgAdmin = userOrgRole?.role === "org_admin";
+
+      // Only Site Admins and Org Admins can delete invitations
+      if (!userIsSiteAdmin && !isOrgAdmin) {
+        return res.status(403).json({ message: "Insufficient permissions - only site admins and organization admins can delete invitations" });
       }
 
       // If the invited user is already in the organization, remove them first
