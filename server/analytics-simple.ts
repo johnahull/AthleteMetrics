@@ -350,6 +350,75 @@ export class AnalyticsService {
     return multiMetricData;
   }
 
+  /**
+   * Get count of measurements per metric for given filters
+   * Used to show data availability in metric selector
+   */
+  async getMetricsAvailability(organizationId: string, teamIds?: string[], athleteIds?: string[], dateRange?: { start?: Date; end?: Date }): Promise<Record<string, number>> {
+    const conditions = [
+      eq(measurements.isVerified, true),
+      eq(userOrganizations.organizationId, organizationId)
+    ];
+
+    // Apply team filter - filter by athlete team membership
+    if (teamIds && teamIds.length > 0) {
+      conditions.push(
+        exists(
+          db.select().from(userTeams)
+            .where(
+              and(
+                eq(userTeams.userId, users.id),
+                inArray(userTeams.teamId, teamIds),
+                eq(userTeams.isActive, true)
+              )
+            )
+        )
+      );
+    }
+
+    // Apply athlete filter
+    if (athleteIds && athleteIds.length > 0) {
+      conditions.push(inArray(measurements.userId, athleteIds));
+    }
+
+    // Apply date range filter
+    if (dateRange) {
+      if (dateRange.start) {
+        conditions.push(gte(measurements.date, formatDateForDatabase(dateRange.start)));
+      }
+      if (dateRange.end) {
+        conditions.push(lte(measurements.date, formatDateForDatabase(dateRange.end)));
+      }
+    }
+
+    // Query measurement counts per metric
+    const results = await db
+      .select({
+        metric: measurements.metric,
+        count: sql<number>`count(*)::int`
+      })
+      .from(measurements)
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...conditions))
+      .groupBy(measurements.metric);
+
+    // Convert to Record<string, number>
+    const metricsAvailability: Record<string, number> = {};
+
+    // Initialize all metrics to 0
+    Object.keys(METRIC_CONFIG).forEach(metric => {
+      metricsAvailability[metric] = 0;
+    });
+
+    // Fill in actual counts
+    results.forEach((row: { metric: string; count: number }) => {
+      metricsAvailability[row.metric] = row.count;
+    });
+
+    return metricsAvailability;
+  }
+
   async getAnalyticsData(request: AnalyticsRequest): Promise<AnalyticsResponse> {
     try {
       // Validate request
@@ -517,6 +586,15 @@ export class AnalyticsService {
         multiMetricLength: multiMetric.length
       });
 
+      // Get metrics availability for metric selector
+      // Note: We don't pass date range here because we want to show ALL available data
+      // regardless of the current timeframe selection
+      const metricsAvailability = await this.getMetricsAvailability(
+        request.filters.organizationId,
+        request.filters.teams,
+        request.filters.athleteIds
+      );
+
       return {
         data: chartData,
         trends,
@@ -536,7 +614,8 @@ export class AnalyticsService {
           },
           appliedFilters: request.filters,
           recommendedCharts: recommendedCharts as any
-        }
+        },
+        metricsAvailability
       };
     } catch (error) {
       console.error('Analytics service error:', error);
