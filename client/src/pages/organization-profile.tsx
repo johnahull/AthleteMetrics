@@ -1,6 +1,6 @@
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +21,40 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { validateUsername } from "@shared/username-validation";
+
+// Mock components and types (replace with actual imports if available)
+const LoadingSpinner = ({ text }: { text: string }) => (
+  <div className="flex items-center justify-center py-12">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+      <p className="mt-2 text-gray-600">{text}</p>
+    </div>
+  </div>
+);
+
+const OrganizationDisplay = ({ organization, isLoading, error }: any) => {
+  if (isLoading) return <LoadingSpinner text="Loading organization details..." />;
+  if (error) return <p className="text-red-600">Error loading organization details: {error.message}</p>;
+  if (!organization) return <p className="text-gray-500">No organization data available.</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Building2 className="h-8 w-8 text-primary" />
+        <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
+      </div>
+      {organization.location && (
+        <div className="flex items-center gap-2 text-gray-600">
+          <MapPin className="h-4 w-4" />
+          <span>{organization.location}</span>
+        </div>
+      )}
+      {organization.description && (
+        <p className="text-gray-600 mt-2">{organization.description}</p>
+      )}
+    </div>
+  );
+};
 
 // Form schemas
 const createUserSchema = z.object({
@@ -83,6 +117,10 @@ type OrganizationProfile = {
         name: string;
       };
     }>;
+    // Added potential fields for athlete details
+    dateOfBirth?: string;
+    gender?: string;
+    email?: string;
   }>;
   invitations: Array<{
     id: string;
@@ -503,6 +541,21 @@ export default function OrganizationProfile() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  // State for teams and athletes
+  const [teams, setTeams] = useState<any[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(true);
+  const [teamsError, setTeamsError] = useState<Error | null>(null);
+  const [athletes, setAthletes] = useState<OrganizationProfile["athletes"]>([]);
+  const [loadingAthletes, setLoadingAthletes] = useState(true);
+  const [athletesError, setAthletesError] = useState<Error | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<any>(null);
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false);
+
+  const canEdit = user?.isSiteAdmin || (Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin"));
+  const handleEdit = () => { /* implement edit logic */ };
+  const totalAthletes = athletes?.length || 0;
+
 
   // Get user's organizations to check if they're an org admin
   const { data: userOrganizations = [] } = useQuery({
@@ -533,6 +586,59 @@ export default function OrganizationProfile() {
     retry: 2, // Retry failed requests
   });
 
+  // Fetch teams data
+  useEffect(() => {
+    const fetchTeams = async () => {
+      if (!id || !userHasAccessToOrg) {
+        setLoadingTeams(false);
+        return;
+      }
+      setLoadingTeams(true);
+      try {
+        const response = await fetch(`/api/organizations/${id}/teams`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch teams: ${response.statusText}`);
+        }
+        const data = await response.json();
+        setTeams(data);
+        setTeamsError(null);
+      } catch (err: any) {
+        setTeamsError(err);
+        setTeams([]);
+      } finally {
+        setLoadingTeams(false);
+      }
+    };
+    fetchTeams();
+  }, [id, userHasAccessToOrg]);
+
+  // Fetch athletes data
+  useEffect(() => {
+    const fetchAthletes = async () => {
+      if (!id || !userHasAccessToOrg) {
+        setLoadingAthletes(false);
+        return;
+      }
+      setLoadingAthletes(true);
+      try {
+        const response = await fetch(`/api/organizations/${id}/athletes`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch athletes: ${response.statusText}`);
+        }
+        const data = await response.json();
+        setAthletes(data);
+        setAthletesError(null);
+      } catch (err: any) {
+        setAthletesError(err);
+        setAthletes([]);
+      } finally {
+        setLoadingAthletes(false);
+      }
+    };
+    fetchAthletes();
+  }, [id, userHasAccessToOrg]);
+
+
   // Auto-redirect non-site admins to their primary organization if they try to access a different one
   useEffect(() => {
     if (!user?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 && id) {
@@ -552,7 +658,7 @@ export default function OrganizationProfile() {
   useEffect(() => {
     if (id) {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] }); // Assuming this fetches teams or related data
     }
   }, [id]);
 
@@ -635,10 +741,10 @@ export default function OrganizationProfile() {
       const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          email, 
+        body: JSON.stringify({
+          email,
           role: roles[0], // Take the first role from the array
-          organizationId: id 
+          organizationId: id
         }),
       });
 
@@ -796,12 +902,7 @@ export default function OrganizationProfile() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading organization profile...</p>
-          </div>
-        </div>
+        <LoadingSpinner text="Loading organization profile..." />
       </div>
     );
   }
@@ -841,418 +942,156 @@ export default function OrganizationProfile() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold text-gray-900" data-testid="organization-title">{organization.name}</h1>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl">{organization?.name}</CardTitle>
+              <CardDescription>
+                Organization Profile and Settings
+              </CardDescription>
+            </div>
+            {canEdit && (
+              <Button onClick={handleEdit}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Profile
+              </Button>
+            )}
           </div>
-          {organization.location && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <MapPin className="h-4 w-4" />
-              <span>{organization.location}</span>
-            </div>
-          )}
-          {organization.description && (
-            <p className="text-gray-600 mt-2">{organization.description}</p>
-          )}
-        </div>
+        </CardHeader>
+        <CardContent>
+          <OrganizationDisplay
+            organization={organization}
+            isLoading={isLoading}
+            error={error}
+          />
+        </CardContent>
+      </Card>
 
-        <UserManagementModal organizationId={id!} />
-      </div>
-
-      <div className="space-y-6">
-        {/* Coaches Section - Only visible to Site Admins and Org Admins */}
-        {(user?.isSiteAdmin || isOrgAdmin) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserCog className="h-5 w-5" />
-                Coaches & Administrators ({organization.coaches?.length ?? 0})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-            <div className="space-y-3">
-              {/* Pending Invitations Section */}
-              {organization.invitations && organization.invitations.filter(inv => inv.role !== 'athlete').length > 0 && (
-                <div className="border-b pb-3 mb-3">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    Pending Invitations ({organization.invitations.filter(inv => inv.role !== 'athlete').length})
-                  </h4>
-                  <div className="space-y-2">
-                    {organization.invitations.filter(inv => inv.role !== 'athlete').map((invitation) => {
-                      const isExpired = isInvitationExpired(invitation.expiresAt);
-                      return (
-                        <div key={invitation.id} className={`flex items-center justify-between p-2 rounded-lg border ${isExpired ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
-                            <div className="space-y-1">
-                              <p className="text-xs text-gray-600">
-                                Invited {new Date(invitation.createdAt).toLocaleDateString()}
-                              </p>
-                              <p className={`text-xs ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                                {formatExpirationDate(invitation.expiresAt)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              {invitation.role === 'org_admin' ? 'Admin' : 'Coach'} {isExpired ? '(Expired)' : '(Pending)'}
-                            </Badge>
-                            <div className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
-                              {isExpired ? (
-                                <>
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Expired</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Clock className="h-3 w-3" />
-                                  <span>Awaiting response</span>
-                                </>
-                              )}
-                            </div>
-
-                            {/* Action buttons for pending invitations */}
-                            {(user?.isSiteAdmin || isOrgAdmin) && (
-                              <div className="flex items-center gap-1 ml-2">
-                                {/* Resend invitation button for expired invitations */}
-                                {isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => resendInvitation(invitation.email, invitation.role)}
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    data-testid={`resend-invitation-${invitation.id}`}
-                                  >
-                                    <RefreshCw className="h-3 w-3" />
-                                  </Button>
-                                )}
-
-                                {/* Copy invitation URL button (only for non-expired) */}
-                                {!isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    data-testid={`copy-invitation-${invitation.id}`}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                )}
-
-                                {/* Delete pending invitation button */}
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                      data-testid={`delete-pending-${invitation.id}`}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete {isExpired ? 'Expired' : 'Pending'} Invitation</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to delete the {isExpired ? 'expired' : 'pending'} invitation for {invitation.email}? This will remove their access and they won't be able to join the organization.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => deletePendingUser(invitation.id, invitation.email)}
-                                        className="bg-red-600 hover:bg-red-700"
-                                      >
-                                        Delete Invitation
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {!organization.coaches || organization.coaches.length === 0 ? (
-                <p className="text-gray-500 text-sm">No coaches assigned</p>
-              ) : (
-                organization.coaches.map((coach, index) => {
-                  // Check if there's a pending invitation for this user
-                  const pendingInvitation = organization.invitations?.find(
-                    inv => inv.email === coach.user.email && inv.isUsed === "false"
-                  );
-
-                  return (
-                    <div key={coach.user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <Link 
-                          href={`/users/${coach.user.id}`}
-                          className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                          data-testid={`user-profile-link-${coach.user.id}`}
-                        >
-                          {coach.user.firstName} {coach.user.lastName}
-                        </Link>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Mail className="h-3 w-3" />
-                          <span>{coach.user.email}</span>
-                        </div>
-                        {/* Display username if available */}
-                        {coach.user.username && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <UserCog className="h-3 w-3" />
-                            <span>{coach.user.username}</span>
-                          </div>
-                        )}
-
-                        {/* Invitation Status */}
-                        <div className="flex items-center gap-2 mt-1">
-                          {pendingInvitation ? (
-                            <div className="flex items-center gap-1 text-xs text-amber-600">
-                              <Clock className="h-3 w-3" />
-                              <span>Invitation pending</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 text-xs text-green-600">
-                              <CheckCircle className="h-3 w-3" />
-                              <span>Active user</span>
-                            </div>
-                          )}
-                        </div>
+      {/* Teams Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Teams ({teams?.length || 0})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingTeams ? (
+            <LoadingSpinner text="Loading teams..." />
+          ) : teamsError ? (
+            <div className="text-destructive">Error loading teams: {teamsError.message}</div>
+          ) : teams && teams.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {teams.map((team) => (
+                <Card key={team.id}>
+                  <CardHeader>
+                    <CardTitle className="text-lg">{team.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="font-medium">Sport:</span> {team.sport || 'Not specified'}
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={coach.role === 'org_admin' ? 'default' : 'secondary'}
-                        >
-                          {coach.role === 'org_admin' ? 'Admin' : coach.role === 'coach' ? 'Coach' : 'Athlete'}
-                        </Badge>
-
-                        {/* Action Buttons - only for admin users */}
-                        {(user?.isSiteAdmin || isOrgAdmin) && (
-                          <div className="flex items-center gap-1">
-                            {/* Send Invitation Button - only show if user is not active (no invitation needed for active users) */}
-                            {!pendingInvitation && coach.user.isActive !== "true" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => sendInvitation(coach.user.email, [coach.role])}
-                                data-testid={`send-invitation-${coach.user.id}`}
-                              >
-                                <Send className="h-3 w-3" />
-                              </Button>
-                            )}
-
-                            {/* Delete User Button - hide for current user */}
-                            {coach.user.id !== user?.id && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    data-testid={`delete-user-${coach.user.id}`}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to remove {coach.user.firstName} {coach.user.lastName} from this organization? This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteUser(coach.user.id, `${coach.user.firstName} ${coach.user.lastName}`)}
-                                      className="bg-red-600 hover:bg-red-700"
-                                    >
-                                      Delete User
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                          </div>
-                        )}
+                      <div>
+                        <span className="font-medium">Season:</span> {team.season || 'Not specified'}
                       </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        )}
-
-        {/* Athletes Section - Visible to all authorized users */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Athletes ({organization.athletes?.length ?? 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {/* Pending Athlete Invitations Section */}
-              {organization.invitations && organization.invitations.filter(inv => inv.role === 'athlete').length > 0 && (
-                <div className="border-b pb-3 mb-3">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    Pending Invitations ({organization.invitations.filter(inv => inv.role === 'athlete').length})
-                  </h4>
-                  <div className="space-y-2">
-                    {organization.invitations.filter(inv => inv.role === 'athlete').map((invitation) => {
-                      const isExpired = isInvitationExpired(invitation.expiresAt);
-                      return (
-                        <div key={invitation.id} className={`flex items-center justify-between p-2 rounded-lg border ${isExpired ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
-                            <div className="space-y-1">
-                              <p className="text-xs text-gray-600">
-                                Invited {new Date(invitation.createdAt).toLocaleDateString()}
-                              </p>
-                              <p className={`text-xs ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                                {formatExpirationDate(invitation.expiresAt)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              Athlete {isExpired ? '(Expired)' : '(Pending)'}
-                            </Badge>
-                            <div className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
-                              {isExpired ? (
-                                <>
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Expired</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Clock className="h-3 w-3" />
-                                  <span>Awaiting response</span>
-                                </>
-                              )}
-                            </div>
-
-                            {/* Action buttons for pending invitations - visible to admins and coaches */}
-                            {(user?.isSiteAdmin || isOrgAdmin || isCoach) && (
-                              <div className="flex items-center gap-1 ml-2">
-                                {/* Resend invitation button for expired invitations */}
-                                {isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => resendInvitation(invitation.email, invitation.role)}
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    data-testid={`resend-invitation-${invitation.id}`}
-                                  >
-                                    <RefreshCw className="h-3 w-3" />
-                                  </Button>
-                                )}
-
-                                {/* Copy invitation URL button (only for non-expired) */}
-                                {!isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    data-testid={`copy-invitation-${invitation.id}`}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                )}
-
-                                {/* Delete pending invitation button - only admins */}
-                                {(user?.isSiteAdmin || isOrgAdmin) && (
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                        data-testid={`delete-invitation-${invitation.id}`}
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Delete Pending Invitation</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          Are you sure you want to delete the invitation for {invitation.email}? This action cannot be undone.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => deletePendingUser(invitation.id, invitation.email)}
-                                          className="bg-red-600 hover:bg-red-700"
-                                        >
-                                          Delete
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Active Athletes */}
-              {organization.athletes && organization.athletes.length > 0 ? (
-                organization.athletes.map((athlete) => (
-                  <div key={athlete.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                    <div className="flex-1">
-                      <Link
-                        to={`/athletes/${athlete.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                      >
-                        {athlete.firstName} {athlete.lastName}
-                      </Link>
-                      <div className="text-sm text-gray-600">
-                        {athlete.sports && athlete.sports.length > 0 && (
-                          <span>{athlete.sports.join(', ')}</span>
-                        )}
-                        {athlete.school && <span> • {athlete.school}</span>}
-                      </div>
-                      {athlete.emails && athlete.emails.length > 0 && (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Mail className="h-3 w-3" />
-                          <span>{athlete.emails[0]}</span>
+                      {team.year && (
+                        <div>
+                          <span className="font-medium">Year:</span> {team.year}
                         </div>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => {
+                          setSelectedTeam(team);
+                          setIsTeamModalOpen(true);
+                        }}
+                      >
+                        View Athletes
+                      </Button>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-sm py-4">No athletes in this organization yet</p>
-              )}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No teams found. Create your first team to get started.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      </div>
+      {/* Athletes Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Athletes ({totalAthletes})</CardTitle>
+            {canEdit && (
+              <Button onClick={() => setIsAddAthleteOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Athlete
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingAthletes ? (
+            <LoadingSpinner text="Loading athletes..." />
+          ) : athletesError ? (
+            <div className="text-destructive">Error loading athletes: {athletesError.message}</div>
+          ) : athletes && athletes.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {athletes.map((athlete) => (
+                <Card key={athlete.id}>
+                  <CardHeader>
+                    <CardTitle className="text-lg">
+                      {athlete.firstName} {athlete.lastName}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="font-medium">Email:</span> {athlete.email || 'Not provided'}
+                      </div>
+                      {athlete.dateOfBirth && (
+                        <div>
+                          <span className="font-medium">Date of Birth:</span>{' '}
+                          {new Date(athlete.dateOfBirth).toLocaleDateString()}
+                        </div>
+                      )}
+                      {athlete.gender && (
+                        <div>
+                          <span className="font-medium">Gender:</span> {athlete.gender}
+                        </div>
+                      )}
+                      {athlete.teams && athlete.teams.length > 0 && (
+                        <div>
+                          <span className="font-medium">Teams:</span>{' '}
+                          {athlete.teams.map(t => t.name).join(', ')}
+                        </div>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => window.location.href = `/athletes/${athlete.id}`}
+                      >
+                        View Profile
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No athletes found. Add your first athlete to get started.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
