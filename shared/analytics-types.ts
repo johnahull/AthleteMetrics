@@ -191,6 +191,7 @@ export interface AnalyticsResponse {
     appliedFilters: AnalyticsFilters;
     recommendedCharts: ChartType[];
   };
+  metricsAvailability?: Record<string, number>;
 }
 
 // Dashboard layout configuration

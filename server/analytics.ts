@@ -17,7 +17,8 @@ import type {
   MultiMetricData,
   TimeframeConfig,
   MetricSelection,
-  ChartType
+  ChartType,
+  AnalysisType
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 
@@ -72,13 +73,17 @@ export class AnalyticsService {
     // Calculate metadata
     const meta = await this.calculateMeta(data, filters, analysisType, timeframe);
 
+    // Get metrics availability for metric selector
+    const metricsAvailability = await this.getMetricsAvailability(filters);
+
     return {
       data,
       trends,
       multiMetric,
       statistics,
       groupings,
-      meta
+      meta,
+      metricsAvailability
     };
   }
 
@@ -577,5 +582,68 @@ export class AnalyticsService {
         ? ['radar_chart', 'multi_line'] as ChartType[]
         : ['multi_line'] as ChartType[];
     }
+  }
+
+  /**
+   * Get count of measurements per metric for given filters
+   * Used to show data availability in metric selector
+   */
+  async getMetricsAvailability(filters: AnalyticsFilters): Promise<Record<string, number>> {
+    const conditions = [
+      eq(measurements.isVerified, true),
+      eq(userOrganizations.organizationId, filters.organizationId)
+    ];
+
+    // Apply athlete filter
+    if (filters.athleteIds && filters.athleteIds.length > 0) {
+      conditions.push(inArray(measurements.userId, filters.athleteIds));
+    }
+
+    // Apply team filter
+    if (filters.teams && filters.teams.length > 0) {
+      conditions.push(inArray(measurements.teamId, filters.teams));
+    }
+
+    // Apply gender filter
+    if (filters.genders && filters.genders.length > 0) {
+      conditions.push(inArray(users.gender, filters.genders));
+    }
+
+    // Apply date range filter
+    if (filters.dateRange) {
+      if (filters.dateRange.start) {
+        conditions.push(gte(measurements.date, filters.dateRange.start));
+      }
+      if (filters.dateRange.end) {
+        conditions.push(lte(measurements.date, filters.dateRange.end));
+      }
+    }
+
+    // Query measurement counts per metric
+    const results = await db
+      .select({
+        metric: measurements.metric,
+        count: sql<number>`count(*)::int`
+      })
+      .from(measurements)
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...conditions))
+      .groupBy(measurements.metric);
+
+    // Convert to Record<string, number>
+    const metricsAvailability: Record<string, number> = {};
+
+    // Initialize all metrics to 0
+    Object.keys(METRIC_CONFIG).forEach(metric => {
+      metricsAvailability[metric] = 0;
+    });
+
+    // Fill in actual counts
+    results.forEach(row => {
+      metricsAvailability[row.metric] = row.count;
+    });
+
+    return metricsAvailability;
   }
 }
