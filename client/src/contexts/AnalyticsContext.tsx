@@ -348,6 +348,9 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       };
 
     case 'SET_ANALYTICS_DATA':
+      console.log('AnalyticsContext - SET_ANALYTICS_DATA');
+      console.log('  - payload:', action.payload);
+      console.log('  - metricsAvailability:', action.payload?.metricsAvailability);
       return {
         ...state,
         analyticsData: action.payload,

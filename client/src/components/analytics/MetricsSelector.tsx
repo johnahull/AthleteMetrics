@@ -68,8 +68,12 @@ export function MetricsSelector({
 
   // Calculate max count for dot level calculation
   const maxCount = useMemo(() => {
+    console.log('MetricsSelector - metricsAvailability prop:', metricsAvailability);
     const counts = Object.values(metricsAvailability);
-    return counts.length > 0 ? Math.max(...counts) : 0;
+    console.log('MetricsSelector - counts:', counts);
+    const max = counts.length > 0 ? Math.max(...counts) : 0;
+    console.log('MetricsSelector - maxCount:', max);
+    return max;
   }, [metricsAvailability]);
 
   const handlePrimaryMetricChange = (metric: string) => {

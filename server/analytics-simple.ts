@@ -355,6 +355,8 @@ export class AnalyticsService {
    * Used to show data availability in metric selector
    */
   async getMetricsAvailability(organizationId: string, teamIds?: string[], athleteIds?: string[], dateRange?: { start?: Date; end?: Date }): Promise<Record<string, number>> {
+    console.log('getMetricsAvailability called with:', { organizationId, teamIds, athleteIds, dateRange });
+
     const conditions = [
       eq(measurements.isVerified, true),
       eq(userOrganizations.organizationId, organizationId)
@@ -412,10 +414,12 @@ export class AnalyticsService {
     });
 
     // Fill in actual counts
+    console.log('getMetricsAvailability - query results:', results);
     results.forEach((row: { metric: string; count: number }) => {
       metricsAvailability[row.metric] = row.count;
     });
 
+    console.log('getMetricsAvailability - returning:', metricsAvailability);
     return metricsAvailability;
   }
 
@@ -589,13 +593,25 @@ export class AnalyticsService {
       // Get metrics availability for metric selector
       // Note: We don't pass date range here because we want to show ALL available data
       // regardless of the current timeframe selection
-      const metricsAvailability = await this.getMetricsAvailability(
-        request.filters.organizationId,
-        request.filters.teams,
-        request.filters.athleteIds
-      );
+      console.log('💡 About to call getMetricsAvailability with org:', request.filters.organizationId);
+      let metricsAvailability: Record<string, number> = {};
+      try {
+        console.log('💡 Calling getMetricsAvailability NOW...');
+        metricsAvailability = await this.getMetricsAvailability(
+          request.filters.organizationId,
+          request.filters.teams,
+          request.filters.athleteIds
+        );
+        console.log('Analytics - metricsAvailability for org:', request.filters.organizationId, metricsAvailability);
+      } catch (error) {
+        console.error('ERROR in getMetricsAvailability:', error);
+        // Initialize with zeros if there's an error
+        Object.keys(METRIC_CONFIG).forEach(metric => {
+          metricsAvailability[metric] = 0;
+        });
+      }
 
-      return {
+      const result = {
         data: chartData,
         trends,
         multiMetric,
@@ -617,6 +633,12 @@ export class AnalyticsService {
         },
         metricsAvailability
       };
+
+      console.log('RETURNING ANALYTICS DATA - metricsAvailability keys:', Object.keys(metricsAvailability));
+      console.log('RETURNING ANALYTICS DATA - has metricsAvailability?', 'metricsAvailability' in result);
+      console.log('RETURNING ANALYTICS DATA - metricsAvailability value:', result.metricsAvailability);
+
+      return result;
     } catch (error) {
       console.error('Analytics service error:', error);
       throw error;
