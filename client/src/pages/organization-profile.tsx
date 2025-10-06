@@ -941,7 +941,7 @@ export default function OrganizationProfile() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Athletes ({organization.athletes?.length ?? 0})
+            Athletes ({athletes?.length ?? 0})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1059,8 +1059,12 @@ export default function OrganizationProfile() {
             )}
 
             {/* Active Athletes */}
-            {organization.athletes && organization.athletes.length > 0 ? (
-              organization.athletes.map((athlete) => (
+            {loadingAthletes ? (
+              <LoadingSpinner text="Loading athletes..." />
+            ) : athletesError ? (
+              <div className="text-destructive">Error loading athletes: {athletesError.message}</div>
+            ) : athletes && athletes.length > 0 ? (
+              athletes.map((athlete) => (
                 <div key={athlete.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
                   <div className="flex-1">
                     <Link
