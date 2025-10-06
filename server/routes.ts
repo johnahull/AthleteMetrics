@@ -9,6 +9,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
+import { sanitizeCSVValue } from "./utils/csv-utils";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { z, ZodError } from "zod";
@@ -4167,22 +4168,6 @@ export async function registerRoutes(app: Express) {
       const createdTeams = new Map<string, { id: string, name: string, athleteCount: number }>();
       const createdAthletes: Array<{ id: string, name: string }> = [];
 
-      // SECURITY: Sanitize CSV values to prevent formula injection
-      const sanitizeCSVValue = (value: string): string => {
-        if (!value || typeof value !== 'string') return value;
-        // Remove leading formula characters that could be exploited in Excel/Sheets
-        // Formulas start with: = + - @ (and sometimes |, %, \t, \r)
-        const trimmed = value.trim();
-        if (trimmed.length === 0) return trimmed;
-
-        // If value starts with a formula character, prepend a single quote
-        // This makes Excel/Sheets treat it as text instead of a formula
-        if (/^[=+\-@|%\t\r]/.test(trimmed)) {
-          return `'${trimmed}`;
-        }
-        return trimmed;
-      };
-
       // Parse CSV data
       const csvData: any[] = [];
       const csvText = file.buffer.toString('utf-8');
@@ -4530,7 +4515,7 @@ export async function registerRoutes(app: Express) {
 
                   // PERFORMANCE: Add newly created athlete to map for future lookups in this import
                   const newAthleteKey = `${athlete.firstName.toLowerCase()}:${athlete.lastName.toLowerCase()}`;
-                  athleteMap.set(newAthleteKey, athlete);
+                  athleteMap.set(newAthleteKey, { ...athlete, teams: [] });
                 } else {
                   // match_and_update or match_only - error if not found
                   errors.push({ row: rowNum, error: `Athlete ${firstName} ${lastName} not found (mode: ${athleteMode})` });

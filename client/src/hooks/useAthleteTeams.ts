@@ -74,9 +74,6 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
     gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for 10 minutes after last use
     retry: 2, // Retry failed requests twice
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
-    onError: (err) => {
-      console.error('Error fetching athlete teams:', err);
-    },
   });
 
   const teams = data || [];

@@ -1,6 +1,12 @@
+---
+name: security-authentication-agent
+description: Authentication flows, permission systems, role-based access control, security hardening, rate limiting, session management, and organization-based data isolation
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
+---
+
 # Security & Authentication Agent
 
-**Agent Type**: security-authentication-agent
 **Specialization**: Authentication flows, RBAC, security hardening, and access control for AthleteMetrics
 
 ## Core Expertise

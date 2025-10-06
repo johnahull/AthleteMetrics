@@ -120,12 +120,12 @@ export function registerUserRoutes(app: Express) {
         return res.json(users);
       }
 
-      const userOrgs = await userService.getUserOrganizations(currentUser.id);
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
       if (userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization access" });
       }
 
-      const targetOrgId = organizationId || userOrgs[0].organizationId;
+      const targetOrgId = String(organizationId || userOrgs[0].organizationId);
       let orgUsers = await userService.getUsersByOrganization(targetOrgId, currentUser.id);
 
       // Filter by role if specified (e.g., role=athlete for players only)
@@ -169,9 +169,9 @@ export function registerUserRoutes(app: Express) {
         // Use optimized method that fetches users and team memberships in efficient queries
         const filters = {
           search: sanitizedSearch,
-          role: role as string | undefined,
-          excludeTeam: excludeTeam as string | undefined,
-          season: season as string | undefined
+          role: typeof role === 'string' ? role : undefined,
+          excludeTeam: typeof excludeTeam === 'string' ? excludeTeam : undefined,
+          season: typeof season === 'string' ? season : undefined
         };
 
         const usersWithTeams = await storage.getUsersWithTeamMembershipsByOrganization(

@@ -1,6 +1,12 @@
+---
+name: database-schema-agent
+description: Database migrations, table modifications, Drizzle ORM queries, schema validation, data integrity, and performance measurement schema changes
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
+---
+
 # Database Schema Agent
 
-**Agent Type**: database-schema-agent
 **Specialization**: Drizzle ORM schema management, PostgreSQL operations, and data integrity for AthleteMetrics
 
 ## Core Expertise

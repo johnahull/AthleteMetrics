@@ -174,10 +174,9 @@ export interface IStorage {
   markPasswordResetTokenUsed(token: string): Promise<void>;
   updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
   updatePasswordChangedAt(userId: string): Promise<void>;
-  createEmailVerificationToken(token: any): Promise<void>;
-  findEmailVerificationToken(token: string): Promise<any>;
-  markEmailAsVerified(userId: string, email: string): Promise<void>;
-  markEmailVerificationTokenUsed(token: string): Promise<void>;
+  createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
+  getEmailVerificationToken(token: string): Promise<any>;
+  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
   getUserRole(userId: string, organizationId: string): Promise<string | null>;
   getUserRoles(userId: string, organizationId?: string): Promise<string[]>;
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
@@ -2054,28 +2053,6 @@ export class DatabaseStorage implements IStorage {
       .set({ lastLoginAt: new Date() }) // Using lastLoginAt as placeholder
       .where(eq(users.id, userId));
   }
-
-  async createEmailVerificationToken(token: any): Promise<void> {
-    // Would need emailVerificationTokens table implementation
-    console.log('Creating email verification token for user:', token.userId);
-  }
-
-  async findEmailVerificationToken(token: string): Promise<any> {
-    // Would need emailVerificationTokens table implementation
-    return null;
-  }
-
-  async markEmailAsVerified(userId: string, email: string): Promise<void> {
-    await db.update(users)
-      .set({ isEmailVerified: true })
-      .where(eq(users.id, userId));
-  }
-
-  async markEmailVerificationTokenUsed(token: string): Promise<void> {
-    // Would need emailVerificationTokens table implementation
-    console.log('Marking email verification token as used:', token);
-  }
-
 
   async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
     try {

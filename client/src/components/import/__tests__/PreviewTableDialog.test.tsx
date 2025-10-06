@@ -491,8 +491,8 @@ describe('PreviewTableDialog', () => {
           'Team': 'Large Team',
         },
         validations: [
-          { field: 'firstName', status: 'valid' as const, message: '' },
-          { field: 'lastName', status: 'valid' as const, message: '' },
+          { rowIndex: i, field: 'firstName', status: 'valid' as const, message: '' },
+          { rowIndex: i, field: 'lastName', status: 'valid' as const, message: '' },
         ],
         matchStatus: 'will_create' as const,
       }));
@@ -531,8 +531,8 @@ describe('PreviewTableDialog', () => {
           'Last Name': `Test${i}`,
         },
         validations: [
-          { field: 'firstName', status: 'valid' as const, message: '' },
-          { field: 'lastName', status: 'valid' as const, message: '' },
+          { rowIndex: i, field: 'firstName', status: 'valid' as const, message: '' },
+          { rowIndex: i, field: 'lastName', status: 'valid' as const, message: '' },
         ],
         matchStatus: 'will_create' as const,
       }));
@@ -766,8 +766,8 @@ describe('PreviewTableDialog', () => {
             'Notes': '+cmd|/c calc',
           },
           validations: [
-            { field: 'firstName', status: 'valid', message: '' },
-            { field: 'lastName', status: 'valid', message: '' },
+            { rowIndex: 0, field: 'firstName', status: 'valid', message: '' },
+            { rowIndex: 0, field: 'lastName', status: 'valid', message: '' },
           ],
           matchStatus: 'will_create',
         },
@@ -779,8 +779,8 @@ describe('PreviewTableDialog', () => {
             'Notes': '%COMSPEC%',
           },
           validations: [
-            { field: 'firstName', status: 'valid', message: '' },
-            { field: 'lastName', status: 'valid', message: '' },
+            { rowIndex: 1, field: 'firstName', status: 'valid', message: '' },
+            { rowIndex: 1, field: 'lastName', status: 'valid', message: '' },
           ],
           matchStatus: 'will_create',
         },
@@ -820,8 +820,8 @@ describe('PreviewTableDialog', () => {
             'Last Name': '<img src=x onerror=alert(1)>',
           },
           validations: [
-            { field: 'firstName', status: 'valid', message: '' },
-            { field: 'lastName', status: 'valid', message: '' },
+            { rowIndex: 0, field: 'firstName', status: 'valid', message: '' },
+            { rowIndex: 0, field: 'lastName', status: 'valid', message: '' },
           ],
           matchStatus: 'will_create',
         },
@@ -860,8 +860,8 @@ describe('PreviewTableDialog', () => {
             'Last Name': "1' OR '1'='1",
           },
           validations: [
-            { field: 'firstName', status: 'valid', message: '' },
-            { field: 'lastName', status: 'valid', message: '' },
+            { rowIndex: 0, field: 'firstName', status: 'valid', message: '' },
+            { rowIndex: 0, field: 'lastName', status: 'valid', message: '' },
           ],
           matchStatus: 'will_create',
         },

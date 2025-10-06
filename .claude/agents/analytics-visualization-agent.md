@@ -1,6 +1,12 @@
+---
+name: analytics-visualization-agent
+description: Chart components, Chart.js, react-chartjs-2, statistical analysis, performance analytics, data visualization, and chart optimization
+tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
+---
+
 # Analytics & Data Visualization Agent
 
-**Agent Type**: analytics-visualization-agent
 **Specialization**: Chart.js visualization, statistical analysis, and performance analytics for AthleteMetrics
 
 ## Core Expertise

@@ -189,17 +189,8 @@ export class PasswordResetService {
     userAgent?: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      // Generate verification token
-      const token = AuthSecurity.generateSecureToken();
-      const expiresAt = new Date(Date.now() + this.EMAIL_VERIFICATION_EXPIRY);
-
-      // Store verification token
-      await storage.createEmailVerificationToken({
-        userId,
-        email,
-        token,
-        expiresAt,
-      });
+      // Store verification token (returns token and expiresAt)
+      const { token, expiresAt } = await storage.createEmailVerificationToken(userId, email);
 
       // Log verification request
       await AuthSecurity.logSecurityEvent({
@@ -242,27 +233,25 @@ export class PasswordResetService {
     userAgent?: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const verificationToken = await storage.findEmailVerificationToken(token);
-      
-      if (!verificationToken || verificationToken.isUsed === 'true') {
-        return { success: false, message: 'Invalid or already used verification token' };
+      const result = await storage.verifyEmailToken(token);
+
+      if (!result.success) {
+        return { success: false, message: 'Invalid or expired verification token' };
       }
 
-      if (new Date() > new Date(verificationToken.expiresAt)) {
-        return { success: false, message: 'Verification token has expired. Please request a new one.' };
-      }
+      const { userId, email } = result;
 
-      // Mark email as verified
-      await storage.markEmailAsVerified(verificationToken.userId, verificationToken.email);
-      await storage.markEmailVerificationTokenUsed(token);
+      if (!userId || !email) {
+        return { success: false, message: 'Invalid verification token' };
+      }
 
       // Log successful verification
       await AuthSecurity.logSecurityEvent({
-        userId: verificationToken.userId,
+        userId,
         eventType: 'email_verified',
-        eventData: JSON.stringify({ 
-          email: verificationToken.email,
-          ipAddress 
+        eventData: JSON.stringify({
+          email,
+          ipAddress
         }),
         ipAddress,
         userAgent,
