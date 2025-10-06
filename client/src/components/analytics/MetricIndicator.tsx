@@ -46,7 +46,11 @@ export function MetricIndicator({ count, maxCount, className = '' }: MetricIndic
       </span>
 
       {/* Count badge */}
-      <Badge variant="outline" className="text-xs px-1 py-0 h-auto font-normal">
+      <Badge
+        variant="outline"
+        className="text-xs px-1 py-0 h-auto font-normal"
+        aria-label={`${count} measurements available`}
+      >
         {count}
       </Badge>
     </span>

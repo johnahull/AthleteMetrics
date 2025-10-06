@@ -21,6 +21,7 @@ import type {
   AnalysisType
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
+import { formatDateForDatabase } from "@shared/analytics-utils";
 
 // Type for the database query result from buildBaseQuery
 type QueryResult = {
@@ -599,24 +600,24 @@ export class AnalyticsService {
       conditions.push(inArray(measurements.userId, filters.athleteIds));
     }
 
-    // Apply team filter
+    // Apply team filter with organization validation
     if (filters.teams && filters.teams.length > 0) {
-      conditions.push(inArray(measurements.teamId, filters.teams));
+      conditions.push(
+        sql`EXISTS (
+          SELECT 1 FROM ${userTeams}
+          INNER JOIN ${teams} ON ${userTeams.teamId} = ${teams.id}
+          WHERE ${userTeams.userId} = ${users.id}
+            AND ${inArray(userTeams.teamId, filters.teams)}
+            AND ${eq(teams.organizationId, filters.organizationId)}
+            AND ${eq(userTeams.isActive, true)}
+        )`
+      );
     }
 
-    // Apply gender filter
+    // Apply gender filter (exclude null values)
     if (filters.genders && filters.genders.length > 0) {
+      conditions.push(sql`${users.gender} IS NOT NULL`);
       conditions.push(inArray(users.gender, filters.genders));
-    }
-
-    // Apply date range filter
-    if (filters.dateRange) {
-      if (filters.dateRange.start) {
-        conditions.push(gte(measurements.date, filters.dateRange.start));
-      }
-      if (filters.dateRange.end) {
-        conditions.push(lte(measurements.date, filters.dateRange.end));
-      }
     }
 
     // Query measurement counts per metric
