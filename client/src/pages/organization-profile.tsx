@@ -589,7 +589,7 @@ export default function OrganizationProfile() {
       }
       setLoadingAthletes(true);
       try {
-        const response = await fetch(`/api/organizations/${id}/athletes`);
+        const response = await fetch(`/api/athletes?organizationId=${id}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch athletes: ${response.statusText}`);
         }
