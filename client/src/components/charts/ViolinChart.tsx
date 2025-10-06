@@ -3,13 +3,15 @@
  * Combines box plot statistics with kernel density estimation
  */
 
-import React, { useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { getDateKey } from '@/utils/date-utils';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { Button } from '@/components/ui/button';
+import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 
 ChartJS.register(CategoryScale, LinearScale, Title, Tooltip, Legend);
 
@@ -78,6 +80,7 @@ export function ViolinChart({
   const chartRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [resizeKey, setResizeKey] = React.useState(0); // Used to trigger re-render on resize
+  const [isStatsExpanded, setIsStatsExpanded] = useState(true);
   const [tooltip, setTooltip] = React.useState<{
     visible: boolean;
     x: number;
@@ -1059,6 +1062,23 @@ export function ViolinChart({
       {/* Statistical summary by team */}
       {processedData.length > 0 && metricConfig && (
         <div className="mt-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsStatsExpanded(!isStatsExpanded)}
+            className="flex items-center justify-between w-full p-3 h-auto text-sm font-medium bg-gray-50 rounded-lg border hover:bg-gray-100 mb-3"
+            aria-expanded={isStatsExpanded}
+            aria-controls="violin-stats-content"
+          >
+            <span>Group Statistics Summary</span>
+            {isStatsExpanded ? (
+              <ChevronUpIcon className="h-4 w-4 ml-2" />
+            ) : (
+              <ChevronDownIcon className="h-4 w-4 ml-2" />
+            )}
+          </Button>
+
+          {isStatsExpanded && (
           <div className="grid gap-4 text-sm" style={{ gridTemplateColumns: `auto repeat(${processedData.length}, 1fr)` }}>
             {/* Header row */}
             <div className="font-medium"></div>
@@ -1108,6 +1128,7 @@ export function ViolinChart({
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
