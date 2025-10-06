@@ -103,12 +103,13 @@ export function useAthleteSelection({
   togglesRef.current = athleteToggles;
 
   // Create debounced version of external selection change callback
+  // Wrap in useCallback to ensure stable reference when callback changes
   const debouncedOnAthleteSelectionChange = useDebouncedCallback(
-    (athleteIds: string[]) => {
+    useCallback((athleteIds: string[]) => {
       if (onAthleteSelectionChange) {
         onAthleteSelectionChange(athleteIds);
       }
-    },
+    }, [onAthleteSelectionChange]),
     debounceDelay
   );
 

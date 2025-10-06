@@ -6,7 +6,7 @@
  * Supports collapsible mode to stay out of the way when not in use.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
@@ -58,6 +58,7 @@ export const AthleteSelector = React.memo(function AthleteSelector({
   defaultCollapsed = true
 }: AthleteSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(!collapsible || !defaultCollapsed);
+  const contentRef = useRef<HTMLDivElement>(null);
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
   const isLimitedByMax = maxAthletes && maxAthletes < athletes.length;
   const selectAllText = isLimitedByMax ? `Select ${maxAthletes}` : 'Select All';
@@ -68,6 +69,20 @@ export const AthleteSelector = React.memo(function AthleteSelector({
       setIsExpanded(!isExpanded);
     }
   };
+
+  // Focus management: when expanding, focus the first interactive element
+  useEffect(() => {
+    if (isExpanded && contentRef.current && collapsible) {
+      // Find first button (Select All/Clear All) or checkbox in the content
+      const firstButton = contentRef.current.querySelector('button');
+      if (firstButton) {
+        // Use setTimeout to ensure DOM is fully rendered
+        setTimeout(() => {
+          firstButton.focus();
+        }, 0);
+      }
+    }
+  }, [isExpanded, collapsible]);
 
   // Header content for collapsible version
   if (collapsible) {
@@ -94,6 +109,7 @@ export const AthleteSelector = React.memo(function AthleteSelector({
         {isExpanded && (
           <div
             id="athlete-selector-content"
+            ref={contentRef}
             className="mt-2 p-4 bg-gray-50 rounded-lg border"
           >
             <AthleteSelectorContent
