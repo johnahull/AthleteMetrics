@@ -938,65 +938,80 @@ export class DatabaseStorage implements IStorage {
   }
 
   async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
-    const invitation = await this.getInvitation(token);
-    if (!invitation) throw new Error("Invalid or expired invitation");
+    // Use database transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx) => {
+      // Lock the invitation row with SELECT FOR UPDATE
+      // This prevents concurrent acceptance attempts
+      const [invitation] = await tx.select()
+        .from(invitations)
+        .where(and(
+          eq(invitations.token, token),
+          eq(invitations.isUsed, false),
+          gte(invitations.expiresAt, new Date())
+        ))
+        .for('update');
 
-    // Always create a new user - email addresses are not unique identifiers for athletes
-    // Note: role is also stored in user_organizations for organization-specific roles
-    const createUserData = {
-      username: userInfo.username,
-      emails: [invitation.email],
-      password: userInfo.password,
-      firstName: userInfo.firstName,
-      lastName: userInfo.lastName,
-      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
-    };
+      if (!invitation) {
+        throw new Error("Invalid or expired invitation");
+      }
 
-    console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+      // Always create a new user - email addresses are not unique identifiers for athletes
+      // Note: role is also stored in user_organizations for organization-specific roles
+      const createUserData = {
+        username: userInfo.username,
+        emails: [invitation.email],
+        password: userInfo.password,
+        firstName: userInfo.firstName,
+        lastName: userInfo.lastName,
+        role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+      };
 
-    // Validate user data against schema before creating user
-    try {
-      insertUserSchema.parse(createUserData);
-    } catch (error) {
-      console.error("User data validation failed:", error);
-      throw error;
-    }
+      console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
 
-    let user;
-    try {
-      user = await this.createUser(createUserData);
-      console.log("User created successfully:", user.id);
-    } catch (error) {
-      console.error("Error creating user:", error);
-      throw error;
-    }
+      // Validate user data against schema before creating user
+      try {
+        insertUserSchema.parse(createUserData);
+      } catch (error) {
+        console.error("User data validation failed:", error);
+        throw error;
+      }
 
-    // Add user to organization with the invitation role (this will remove any existing roles first)
-    await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+      let user;
+      try {
+        user = await this.createUser(createUserData);
+        console.log("User created successfully:", user.id);
+      } catch (error) {
+        console.error("Error creating user:", error);
+        throw error;
+      }
 
-    // Add user to teams if specified
-    if (invitation.teamIds && invitation.teamIds.length > 0) {
-      for (const teamId of invitation.teamIds) {
-        try {
-          await this.addUserToTeam(user.id, teamId);
-        } catch (error) {
-          // May already be in team - that's okay
-          console.log("User may already be in team:", error);
+      // Add user to organization with the invitation role (this will remove any existing roles first)
+      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+
+      // Add user to teams if specified
+      if (invitation.teamIds && invitation.teamIds.length > 0) {
+        for (const teamId of invitation.teamIds) {
+          try {
+            await this.addUserToTeam(user.id, teamId);
+          } catch (error) {
+            // May already be in team - that's okay
+            console.log("User may already be in team:", error);
+          }
         }
       }
-    }
 
-    // Mark the invitation as used and accepted
-    await db.update(invitations)
-      .set({
-        isUsed: true,
-        status: 'accepted',
-        acceptedAt: new Date(),
-        acceptedBy: user.id
-      })
-      .where(eq(invitations.token, token));
+      // Mark the invitation as used and accepted (using transaction connection)
+      await tx.update(invitations)
+        .set({
+          isUsed: true,
+          status: 'accepted',
+          acceptedAt: new Date(),
+          acceptedBy: user.id
+        })
+        .where(eq(invitations.token, token));
 
-    return { user };
+      return { user };
+    });
   }
 
   // Email Verification

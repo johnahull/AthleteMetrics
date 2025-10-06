@@ -2602,6 +2602,44 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  // Helper function to send invitation email and track status
+  async function sendInvitationEmailWithTracking(
+    invitation: Invitation,
+    invitedById: string,
+    req: any
+  ): Promise<boolean> {
+    try {
+      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+      const inviter = await storage.getUser(invitedById);
+      const organization = await storage.getOrganization(invitation.organizationId);
+      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+
+      const emailSent = await emailService.sendInvitation(invitation.email, {
+        recipientName: invitation.firstName && invitation.lastName
+          ? `${invitation.firstName} ${invitation.lastName}`
+          : invitation.email,
+        inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
+        organizationName: organization?.name || 'the organization',
+        invitationLink: inviteLink,
+        expiryDays,
+        role: invitation.role === 'org_admin' ? 'Organization Admin' : invitation.role === 'coach' ? 'Coach' : 'Athlete'
+      });
+
+      // Update invitation with email sent status
+      if (emailSent) {
+        await storage.updateInvitation(invitation.id, {
+          emailSent: true,
+          emailSentAt: new Date()
+        });
+      }
+
+      return emailSent;
+    } catch (error) {
+      console.error(`Failed to send invitation email to ${invitation.email}:`, error);
+      return false;
+    }
+  }
+
   // Invitation routes
   // Unified invitation endpoint - handles all invitation types
   app.post("/api/invitations", createLimiter, requireAuth, async (req, res) => {
@@ -2681,33 +2719,14 @@ export async function registerRoutes(app: Express) {
         // Generate invite links and send emails
         const inviteLinks = [];
         const emailResults = [];
-        const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
-        const inviter = await storage.getUser(invitedById);
-        const organization = await storage.getOrganization(organizationId);
 
         for (const inv of invitations) {
           const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${inv.token}`;
           inviteLinks.push(inviteLink);
 
-          // Send invitation email
-          const emailSent = await emailService.sendInvitation(inv.email, {
-            recipientName: `${athlete.firstName} ${athlete.lastName}`,
-            inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
-            organizationName: organization?.name || 'the organization',
-            invitationLink: inviteLink,
-            expiryDays,
-            role: 'Athlete'
-          });
-
+          // Send invitation email using shared helper
+          const emailSent = await sendInvitationEmailWithTracking(inv, invitedById, req);
           emailResults.push({ email: inv.email, sent: emailSent });
-
-          // Update invitation with email sent status
-          if (emailSent) {
-            await storage.updateInvitation(inv.id, {
-              emailSent: true,
-              emailSentAt: new Date()
-            });
-          }
         }
 
         return res.status(201).json({
@@ -2778,28 +2797,8 @@ export async function registerRoutes(app: Express) {
         expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       });
 
-      // Generate invite link for email sending
-      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
-
-      // Send invitation email
-      const inviter = await storage.getUser(invitedById);
-      const organization = await storage.getOrganization(organizationId);
-      const emailSent = await emailService.sendInvitation(email, {
-        recipientName: firstName && lastName ? `${firstName} ${lastName}` : email,
-        inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
-        organizationName: organization?.name || 'the organization',
-        invitationLink: inviteLink,
-        expiryDays,
-        role: role === 'org_admin' ? 'Organization Admin' : role === 'coach' ? 'Coach' : 'Athlete'
-      });
-
-      // Update invitation with email sent status
-      if (emailSent) {
-        await storage.updateInvitation(invitation.id, {
-          emailSent: true,
-          emailSentAt: new Date()
-        });
-      }
+      // Send invitation email using shared helper
+      await sendInvitationEmailWithTracking(invitation, invitedById, req);
 
       // Audit log
       await storage.createAuditLog({
@@ -2876,32 +2875,8 @@ export async function registerRoutes(app: Express) {
         });
       }
 
-      // Generate invite link
-      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
-
-      // Send invitation email
-      const inviter = await storage.getUser(userId);
-      const organization = await storage.getOrganization(invitation.organizationId);
-      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
-
-      const emailSent = await emailService.sendInvitation(invitation.email, {
-        recipientName: invitation.firstName && invitation.lastName
-          ? `${invitation.firstName} ${invitation.lastName}`
-          : invitation.email,
-        inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'AthleteMetrics Team',
-        organizationName: organization?.name || 'the organization',
-        invitationLink: inviteLink,
-        expiryDays,
-        role: invitation.role === 'org_admin' ? 'Organization Admin' : invitation.role === 'coach' ? 'Coach' : 'Athlete'
-      });
-
-      // Update invitation with email sent status
-      if (emailSent) {
-        await storage.updateInvitation(invitationId, {
-          emailSent: true,
-          emailSentAt: new Date()
-        });
-      }
+      // Send invitation email using shared helper
+      await sendInvitationEmailWithTracking(invitation, userId, req);
 
       // Audit log
       await storage.createAuditLog({
@@ -3256,6 +3231,11 @@ export async function registerRoutes(app: Express) {
       // Check if username already exists
       // Use generic message to prevent username enumeration
       const existingUser = await storage.getUserByUsername(username);
+
+      // Add constant-time delay to prevent timing-based username enumeration
+      // Always delay 100ms regardless of whether username exists
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       if (existingUser) {
         return res.status(400).json({ message: "Username unavailable. Please choose a different username." });
       }
