@@ -15,6 +15,8 @@ import {
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 import { sanitizeCanvasText, sanitizeTeamName } from '@/utils/text-sanitization';
 import type {
   ChartDataPoint,
@@ -65,6 +67,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 }: BoxPlotChartProps) {
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
+  const [isStatsExpanded, setIsStatsExpanded] = useState(false);
+
+  // Sync local state when parent prop changes
+  useEffect(() => {
+    setLocalShowAthleteNames(showAthleteNames);
+  }, [showAthleteNames]);
 
 
   // Memoized label positions cache to prevent recalculation on every render
@@ -1488,7 +1496,23 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         {/* Statistics Summary Grid for Multi-Group Comparison */}
         {multiGroupStats && (
           <div className="mt-6 pb-4">
-            <div className="text-sm font-medium text-muted-foreground mb-3 px-2">Group Statistics Summary</div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsStatsExpanded(!isStatsExpanded)}
+              className="flex items-center justify-between w-full p-3 h-auto text-sm font-medium bg-gray-50 rounded-lg border hover:bg-gray-100 mb-3"
+              aria-expanded={isStatsExpanded}
+              aria-controls="group-stats-content"
+            >
+              <span>Group Statistics Summary</span>
+              {isStatsExpanded ? (
+                <ChevronUpIcon className="h-4 w-4 ml-2" />
+              ) : (
+                <ChevronDownIcon className="h-4 w-4 ml-2" />
+              )}
+            </Button>
+
+            {isStatsExpanded && (
             <div className="grid gap-4 text-sm" style={{ gridTemplateColumns: `auto repeat(${multiGroupStats.groupsWithStats.length}, 1fr)` }}>
               {/* Header row */}
               <div className="font-medium"></div>
@@ -1562,9 +1586,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 </div>
               ))}
             </div>
+            )}
 
             {/* Metric context */}
-            {multiGroupStats.metricConfig && (
+            {isStatsExpanded && multiGroupStats.metricConfig && (
               <p className="text-xs text-muted-foreground mt-2">
                 {multiGroupStats.metricConfig.label} ({multiGroupStats.metricConfig.unit})
                 {multiGroupStats.metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}

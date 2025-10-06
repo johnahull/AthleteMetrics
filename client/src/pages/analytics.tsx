@@ -382,7 +382,7 @@ export default function Analytics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 13 }, (_, i) => 2008 + i).map(year => (
+                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
@@ -396,7 +396,7 @@ export default function Analytics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 13 }, (_, i) => 2008 + i).map(year => (
+                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>

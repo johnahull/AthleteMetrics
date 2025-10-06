@@ -19,6 +19,15 @@ import type {
 import { devLog } from '@/utils/dev-logger';
 import { getChartDataForType } from './chartDataUtils';
 
+// Chart height constants for consistent sizing across chart types
+// Heights are optimized for each chart type's specific display needs
+const CHART_HEIGHT_DEFAULT = 'h-[700px]';  // Standard single-metric charts (bar, scatter, distribution)
+const CHART_HEIGHT_RADAR = 'h-[900px]';    // Radar charts need extra space for axis labels radiating outward
+const CHART_HEIGHT_VIOLIN = 'h-[910px]';   // Violin plots need vertical space for distribution visualization
+const CHART_HEIGHT_SCATTER = 'h-[910px]';  // Connected scatter plots with legend and annotations
+const CHART_HEIGHT_MULTI_LINE = 'h-[925px]'; // Multi-metric trend lines with separate Y-axes
+const CHART_HEIGHT_MULTI_GROUP = 'h-[1100px]'; // Multiple group comparisons need significant vertical space
+
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
 
@@ -168,7 +177,7 @@ export function ChartContainer({
   }, [chartType, data, trends, multiMetric]);
 
   if (isLoading) {
-    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+    const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
@@ -183,7 +192,7 @@ export function ChartContainer({
   }
 
   if (error) {
-    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+    const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
@@ -205,7 +214,7 @@ export function ChartContainer({
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
   const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'violin_plot'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
-    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+    const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
@@ -231,8 +240,8 @@ export function ChartContainer({
       dataType: typeof chartData,
       selectedGroups: selectedGroups?.length || 0
     });
-    
-    const cardHeight = chartType === 'radar_chart' ? 'h-[900px]' : 'h-[700px]';
+
+    const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
         <CardHeader className="flex-shrink-0">
@@ -253,14 +262,15 @@ export function ChartContainer({
     );
   }
 
-  // Use larger height for radar chart due to additional controls, violin plot and box+swarm for better visibility
-  // Box+swarm: 1100px for multi-group (more data), 700px for individual/multi-athlete
+  // Apply appropriate height based on chart type and display mode
   const isMultiGroup = selectedGroups && selectedGroups.length > 0;
-  const cardHeight = chartType === 'radar_chart' ? 'h-[900px]'
-    : chartType === 'violin_plot' ? 'h-[910px]'
+  const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR
+    : chartType === 'violin_plot' ? CHART_HEIGHT_VIOLIN
+    : chartType === 'connected_scatter' ? CHART_HEIGHT_SCATTER
+    : chartType === 'multi_line' ? CHART_HEIGHT_MULTI_LINE
     : (chartType === 'box_swarm_combo' || chartType === 'time_series_box_swarm')
-      ? (isMultiGroup ? 'h-[1100px]' : 'h-[700px]')
-    : 'h-[700px]';
+      ? (isMultiGroup ? CHART_HEIGHT_MULTI_GROUP : CHART_HEIGHT_DEFAULT)
+    : CHART_HEIGHT_DEFAULT;
 
   return (
     <Card className={`${className} ${cardHeight} flex flex-col`}>
@@ -434,8 +444,8 @@ export function getRecommendedChartType(
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
-      // 3+ metrics
-      return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
+      // 3+ metrics - always use multi_line for individual athlete trends
+      return 'multi_line';
     }
   } else {
     // Group analysis (intra_group or multi_group)
@@ -444,8 +454,8 @@ export function getRecommendedChartType(
     } else if (metricCount === 2) {
       return timeframeType === 'best' ? 'scatter_plot' : 'connected_scatter';
     } else {
-      // 3+ metrics
-      return 'radar_chart';
+      // 3+ metrics: radar chart only for "best" performance snapshots, not trends
+      return timeframeType === 'best' ? 'radar_chart' : 'multi_line';
     }
   }
 }

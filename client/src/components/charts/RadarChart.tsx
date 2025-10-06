@@ -19,6 +19,9 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { AthleteSelector } from './components/AthleteSelector';
+import { useAthleteSelection } from '@/hooks/useAthleteSelection';
+import { getAthleteColor } from '@/utils/chart-constants';
 
 // Register Chart.js components
 ChartJS.register(
@@ -48,8 +51,56 @@ export function RadarChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes
+  maxAthletes = 5
 }: RadarChartProps) {
+  // Get available athletes for selection
+  const availableAthletes = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const isMultiMetric = data.length > 0 && 'metrics' in data[0];
+
+    if (isMultiMetric) {
+      const multiMetricData = data as MultiMetricData[];
+      return multiMetricData.map((athlete, index) => ({
+        id: athlete.athleteId,
+        name: athlete.athleteName,
+        color: index
+      }));
+    } else {
+      const chartData = data as unknown as ChartDataPoint[];
+      const athleteMap = new Map<string, { id: string; name: string; color: number }>();
+
+      chartData.forEach(point => {
+        if (!athleteMap.has(point.athleteId)) {
+          athleteMap.set(point.athleteId, {
+            id: point.athleteId,
+            name: point.athleteName,
+            color: athleteMap.size
+          });
+        }
+      });
+
+      return Array.from(athleteMap.values());
+    }
+  }, [data]);
+
+  // Use athlete selection hook
+  const {
+    athleteToggles,
+    handleToggleAthlete,
+    handleSelectAll,
+    handleClearAll
+  } = useAthleteSelection({
+    athletes: availableAthletes,
+    selectedAthleteIds,
+    onAthleteSelectionChange,
+    maxAthletes
+  });
+
+  // Get effective selection
+  const effectiveSelectedAthleteIds = selectedAthleteIds ||
+    Object.keys(athleteToggles).filter(id => athleteToggles[id]);
+
   // Transform data for radar chart
   const radarData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -161,10 +212,10 @@ export function RadarChart({
       pointRadius: 4
     });
 
-    // Individual athlete datasets
-    const athletesToShow = highlightAthlete ? 
+    // Individual athlete datasets - filter by selection
+    const athletesToShow = highlightAthlete ?
       processedData.filter(athlete => athlete.athleteId === highlightAthlete) :
-      processedData.slice(0, 5); // Show top 5 if no specific athlete
+      processedData.filter(athlete => effectiveSelectedAthleteIds.includes(athlete.athleteId));
 
     const colors = [
       { bg: 'rgba(59, 130, 246, 0.3)', border: 'rgba(59, 130, 246, 1)' },
@@ -203,7 +254,7 @@ export function RadarChart({
       groupAverages,
       data: processedData // Added for context in the tooltip logic
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds]);
 
   // Chart options
   const options: ChartOptions<'radar'> = {
@@ -366,6 +417,21 @@ export function RadarChart({
 
   return (
     <div className="w-full h-full">
+      {/* Athlete Selector - only show for multi-athlete scenarios */}
+      {availableAthletes.length > 1 && !highlightAthlete && (
+        <AthleteSelector
+          athletes={availableAthletes}
+          athleteToggles={athleteToggles}
+          onToggleAthlete={handleToggleAthlete}
+          onSelectAll={handleSelectAll}
+          onClearAll={handleClearAll}
+          maxAthletes={maxAthletes}
+          collapsible={true}
+          defaultCollapsed={true}
+          className="mb-4"
+        />
+      )}
+
       <Radar data={radarData} options={options} />
 
       {/* Performance summary */}
@@ -375,8 +441,8 @@ export function RadarChart({
         </div>
 
         {highlightAthlete && (
-          <div className="grid grid-cols-3 gap-4 text-center">
-            {radarData.metrics.slice(0, 3).map((metric, index) => {
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-center">
+            {radarData.metrics.map((metric, index) => {
               const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
               const percentile = athlete?.percentileRanks?.[metric];

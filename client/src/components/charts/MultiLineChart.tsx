@@ -441,6 +441,8 @@ export function MultiLineChart({
           onSelectAll={handleSelectAll}
           onClearAll={handleClearAll}
           maxAthletes={validatedMaxAthletes}
+          collapsible={true}
+          defaultCollapsed={true}
           className="mb-4"
         />
       )}

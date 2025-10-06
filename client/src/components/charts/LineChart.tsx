@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -21,6 +21,8 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
+import { getAthleteColor } from '@/utils/chart-constants';
 
 // Register Chart.js components
 ChartJS.register(
@@ -56,6 +58,7 @@ export function LineChart({
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
   const [showGroupAverage, setShowGroupAverage] = useState(true);
+  const [isSelectionExpanded, setIsSelectionExpanded] = useState(false);
 
   // Smart default selection for athletes when not controlled by parent
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
@@ -98,7 +101,7 @@ export function LineChart({
     }
   }, [allAthletes, maxAthletes, selectedAthleteIds, effectiveSelectedIds.length]);
 
-  // Get athletes that should be displayed (either selected or first N for backwards compatibility)
+  // Get athletes that should be displayed on chart (filtered by selection)
   const displayedAthletes = useMemo(() => {
     if (effectiveSelectedIds.length > 0) {
       // Use selected athletes in selection order
@@ -112,31 +115,38 @@ export function LineChart({
     }
   }, [allAthletes, effectiveSelectedIds, maxAthletes]);
 
-  // Initialize toggles with displayed athletes enabled by default
+  // Track if toggles have been initialized to prevent unnecessary resets
+  const hasInitialized = useRef(false);
+  const lastAthleteCount = useRef(0);
+
+  // Initialize toggles with all athletes (first maxAthletes enabled by default)
   React.useEffect(() => {
-    const initialToggles: Record<string, boolean> = {};
-    displayedAthletes.forEach(athlete => {
-      initialToggles[athlete.id] = true;
-    });
-    setAthleteToggles(initialToggles);
-  }, [displayedAthletes]);
+    // Only re-initialize if the athlete count changes or first initialization
+    if (!hasInitialized.current || lastAthleteCount.current !== allAthletes.length) {
+      const initialToggles: Record<string, boolean> = {};
+      allAthletes.forEach((athlete, index) => {
+        initialToggles[athlete.id] = index < maxAthletes;
+      });
+      setAthleteToggles(initialToggles);
+      hasInitialized.current = true;
+      lastAthleteCount.current = allAthletes.length;
+    }
+  }, [allAthletes.length, maxAthletes]);
 
   // Transform trend data for line chart
+  // Memoize selected athlete IDs to prevent unnecessary re-renders when toggles object changes
+  const selectedAthleteIdsSet = useMemo(
+    () => new Set(Object.keys(athleteToggles).filter(id => athleteToggles[id])),
+    [athleteToggles]
+  );
+
   const lineData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
     // Filter based on highlighted athlete or toggle states
     const trendsToShow = highlightAthlete
       ? data.filter(trend => trend.athleteId === highlightAthlete)
-      : data.filter(trend => {
-          const isInDisplayedAthletes = displayedAthletes.some(a => a.id === trend.athleteId);
-          // If athleteToggles is empty (initial state), show all displayed athletes
-          // Otherwise, respect the toggle state
-          const isToggleEnabled = Object.keys(athleteToggles).length === 0
-            ? true
-            : athleteToggles[trend.athleteId];
-          return isInDisplayedAthletes && isToggleEnabled;
-        });
+      : data.filter(trend => selectedAthleteIdsSet.has(trend.athleteId));
 
     if (trendsToShow.length === 0) return null;
 
@@ -158,19 +168,6 @@ export function LineChart({
       });
     });
 
-    const colors = [
-      'rgba(59, 130, 246, 1)',    // Blue
-      'rgba(16, 185, 129, 1)',    // Green
-      'rgba(239, 68, 68, 1)',     // Red
-      'rgba(245, 158, 11, 1)',    // Amber
-      'rgba(139, 92, 246, 1)',    // Purple
-      'rgba(236, 72, 153, 1)',    // Pink
-      'rgba(20, 184, 166, 1)',    // Teal
-      'rgba(251, 146, 60, 1)',    // Orange
-      'rgba(124, 58, 237, 1)',    // Violet
-      'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-    ];
-
     const datasets = trendsToShow.map((trend) => {
       // Create data points for each date
       const trendData = sortedDates.map(dateStr => {
@@ -184,7 +181,7 @@ export function LineChart({
       // Find displayed athlete index for consistent color mapping
       const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId);
       const safeIndex = displayedIndex >= 0 ? displayedIndex : 0;
-      const color = colors[safeIndex % colors.length] || 'rgba(59, 130, 246, 1)'; // Fallback to blue
+      const color = getAthleteColor(safeIndex); // Use shared color constants
       const isHighlighted = trend.athleteId === highlightAthlete;
 
       return {
@@ -251,7 +248,7 @@ export function LineChart({
       metricLabel,
       sortedDates
     };
-  }, [data, highlightAthlete, athleteToggles, showGroupAverage]);
+  }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage]);
 
   // Find personal bests
   const personalBests = useMemo(() => {
@@ -382,26 +379,61 @@ export function LineChart({
 
   // Helper functions for athlete toggles
   const toggleAthlete = (athleteId: string) => {
-    setAthleteToggles(prev => ({
-      ...prev,
-      [athleteId]: !prev[athleteId]
-    }));
+    const isCurrentlySelected = athleteToggles[athleteId];
+    const currentSelectedCount = Object.values(athleteToggles).filter(Boolean).length;
+
+    // If trying to select and already at limit, don't allow
+    if (!isCurrentlySelected && currentSelectedCount >= maxAthletes) {
+      return; // Don't change state
+    }
+
+    const newToggles = {
+      ...athleteToggles,
+      [athleteId]: !athleteToggles[athleteId]
+    };
+    setAthleteToggles(newToggles);
+
+    // Call parent callback for controlled mode
+    if (onAthleteSelectionChange) {
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      onAthleteSelectionChange(newSelected);
+    } else {
+      // Update internal state for uncontrolled mode
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      handleSelectionChange(newSelected);
+    }
   };
 
   const selectAllAthletes = () => {
-    const allEnabled: Record<string, boolean> = {};
-    displayedAthletes.forEach(athlete => {
-      allEnabled[athlete.id] = true;
+    const newToggles: Record<string, boolean> = {};
+    allAthletes.forEach((athlete, index) => {
+      newToggles[athlete.id] = index < maxAthletes;
     });
-    setAthleteToggles(allEnabled);
+    setAthleteToggles(newToggles);
+
+    // Call parent callback for controlled mode
+    if (onAthleteSelectionChange) {
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      onAthleteSelectionChange(newSelected);
+    } else {
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      handleSelectionChange(newSelected);
+    }
   };
 
   const clearAllAthletes = () => {
     const allDisabled: Record<string, boolean> = {};
-    displayedAthletes.forEach(athlete => {
+    allAthletes.forEach(athlete => {
       allDisabled[athlete.id] = false;
     });
     setAthleteToggles(allDisabled);
+
+    // Call parent callback for controlled mode
+    if (onAthleteSelectionChange) {
+      onAthleteSelectionChange([]);
+    } else {
+      handleSelectionChange([]);
+    }
   };
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;
@@ -418,82 +450,102 @@ export function LineChart({
     <div className="w-full h-full">
       {/* Athlete Controls Panel - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-900">
-              Athletes ({visibleAthleteCount} of {displayedAthletes.length} visible)
-            </h3>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAllAthletes}
-                disabled={visibleAthleteCount === displayedAthletes.length}
-              >
-                Select All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAllAthletes}
-                disabled={visibleAthleteCount === 0}
-              >
-                Clear All
-              </Button>
-            </div>
-          </div>
+        <div className="mb-4">
+          <Button
+            variant="outline"
+            onClick={() => setIsSelectionExpanded(!isSelectionExpanded)}
+            className="flex items-center justify-between w-full"
+          >
+            <span>
+              Select Athletes ({visibleAthleteCount} of {allAthletes.length} visible, max {maxAthletes})
+            </span>
+            {isSelectionExpanded ? (
+              <ChevronUpIcon className="h-4 w-4" />
+            ) : (
+              <ChevronDownIcon className="h-4 w-4" />
+            )}
+          </Button>
 
-          {/* Athletes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
-            {displayedAthletes.map(athlete => {
-              const colors = [
-                'rgba(59, 130, 246, 1)',    // Blue
-                'rgba(16, 185, 129, 1)',    // Green
-                'rgba(239, 68, 68, 1)',     // Red
-                'rgba(245, 158, 11, 1)',    // Amber
-                'rgba(139, 92, 246, 1)',    // Purple
-                'rgba(236, 72, 153, 1)',    // Pink
-                'rgba(20, 184, 166, 1)',    // Teal
-                'rgba(251, 146, 60, 1)',    // Orange
-                'rgba(124, 58, 237, 1)',    // Violet
-                'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-              ];
-              const athleteColor = colors[athlete.color % colors.length];
-
-              return (
-                <div key={athlete.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`athlete-${athlete.id}`}
-                    checked={athleteToggles[athlete.id] || false}
-                    onCheckedChange={() => toggleAthlete(athlete.id)}
-                  />
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: athleteColor }}
-                  />
-                  <label
-                    htmlFor={`athlete-${athlete.id}`}
-                    className="text-sm cursor-pointer flex-1 truncate"
+          {isSelectionExpanded && (
+            <div className="mt-2 p-4 bg-gray-50 rounded-lg border">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-900">
+                  Athletes ({visibleAthleteCount} of {allAthletes.length} visible, max {maxAthletes})
+                </h3>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllAthletes}
+                    disabled={visibleAthleteCount >= maxAthletes}
+                    title={`Select first ${maxAthletes} athletes`}
                   >
-                    {athlete.name}
-                  </label>
+                    Select {maxAthletes}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllAthletes}
+                    disabled={visibleAthleteCount === 0}
+                  >
+                    Clear All
+                  </Button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
 
-          {/* Group Average Toggle */}
-          <div className="flex items-center space-x-2 pt-2 border-t">
-            <Checkbox
-              id="group-average"
-              checked={showGroupAverage}
-              onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
-            />
-            <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
-            <label htmlFor="group-average" className="text-sm cursor-pointer">
-              Group Average
-            </label>
-          </div>
+              {/* Athletes Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
+                {allAthletes.map(athlete => {
+                  const colors = [
+                    'rgba(59, 130, 246, 1)',    // Blue
+                    'rgba(16, 185, 129, 1)',    // Green
+                    'rgba(239, 68, 68, 1)',     // Red
+                    'rgba(245, 158, 11, 1)',    // Amber
+                    'rgba(139, 92, 246, 1)',    // Purple
+                    'rgba(236, 72, 153, 1)',    // Pink
+                    'rgba(20, 184, 166, 1)',    // Teal
+                    'rgba(251, 146, 60, 1)',    // Orange
+                    'rgba(124, 58, 237, 1)',    // Violet
+                    'rgba(34, 197, 94, 1)'      // Emerald - 10th color
+                  ];
+                  const athleteColor = colors[athlete.color % colors.length];
+
+                  return (
+                    <div key={athlete.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`athlete-${athlete.id}`}
+                        checked={athleteToggles[athlete.id] || false}
+                        onCheckedChange={() => toggleAthlete(athlete.id)}
+                      />
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: athleteColor }}
+                      />
+                      <label
+                        htmlFor={`athlete-${athlete.id}`}
+                        className="text-sm cursor-pointer flex-1 truncate"
+                      >
+                        {athlete.name}
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Group Average Toggle */}
+              <div className="flex items-center space-x-2 pt-2 border-t">
+                <Checkbox
+                  id="group-average"
+                  checked={showGroupAverage}
+                  onCheckedChange={(checked) => setShowGroupAverage(checked === true)}
+                />
+                <div className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400" />
+                <label htmlFor="group-average" className="text-sm cursor-pointer">
+                  Group Average
+                </label>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
