@@ -67,7 +67,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 }: BoxPlotChartProps) {
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
-  const [isStatsExpanded, setIsStatsExpanded] = useState(true);
+  const [isStatsExpanded, setIsStatsExpanded] = useState(false);
 
 
   // Memoized label positions cache to prevent recalculation on every render

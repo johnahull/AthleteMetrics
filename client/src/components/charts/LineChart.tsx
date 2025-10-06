@@ -22,6 +22,7 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
+import { getAthleteColor } from '@/utils/chart-constants';
 
 // Register Chart.js components
 ChartJS.register(
@@ -124,13 +125,19 @@ export function LineChart({
   }, [allAthletes, maxAthletes]);
 
   // Transform trend data for line chart
+  // Memoize selected athlete IDs to prevent unnecessary re-renders when toggles object changes
+  const selectedAthleteIdsSet = useMemo(
+    () => new Set(Object.keys(athleteToggles).filter(id => athleteToggles[id])),
+    [athleteToggles]
+  );
+
   const lineData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
     // Filter based on highlighted athlete or toggle states
     const trendsToShow = highlightAthlete
       ? data.filter(trend => trend.athleteId === highlightAthlete)
-      : data.filter(trend => athleteToggles[trend.athleteId] === true);
+      : data.filter(trend => selectedAthleteIdsSet.has(trend.athleteId));
 
     if (trendsToShow.length === 0) return null;
 
@@ -152,19 +159,6 @@ export function LineChart({
       });
     });
 
-    const colors = [
-      'rgba(59, 130, 246, 1)',    // Blue
-      'rgba(16, 185, 129, 1)',    // Green
-      'rgba(239, 68, 68, 1)',     // Red
-      'rgba(245, 158, 11, 1)',    // Amber
-      'rgba(139, 92, 246, 1)',    // Purple
-      'rgba(236, 72, 153, 1)',    // Pink
-      'rgba(20, 184, 166, 1)',    // Teal
-      'rgba(251, 146, 60, 1)',    // Orange
-      'rgba(124, 58, 237, 1)',    // Violet
-      'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-    ];
-
     const datasets = trendsToShow.map((trend) => {
       // Create data points for each date
       const trendData = sortedDates.map(dateStr => {
@@ -178,7 +172,7 @@ export function LineChart({
       // Find displayed athlete index for consistent color mapping
       const displayedIndex = displayedAthletes.findIndex(a => a.id === trend.athleteId);
       const safeIndex = displayedIndex >= 0 ? displayedIndex : 0;
-      const color = colors[safeIndex % colors.length] || 'rgba(59, 130, 246, 1)'; // Fallback to blue
+      const color = getAthleteColor(safeIndex); // Use shared color constants
       const isHighlighted = trend.athleteId === highlightAthlete;
 
       return {
@@ -245,7 +239,7 @@ export function LineChart({
       metricLabel,
       sortedDates
     };
-  }, [data, highlightAthlete, athleteToggles, showGroupAverage]);
+  }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage]);
 
   // Find personal bests
   const personalBests = useMemo(() => {
@@ -376,20 +370,29 @@ export function LineChart({
 
   // Helper functions for athlete toggles
   const toggleAthlete = (athleteId: string) => {
-    setAthleteToggles(prev => {
-      const isCurrentlySelected = prev[athleteId];
-      const currentSelectedCount = Object.values(prev).filter(Boolean).length;
+    const isCurrentlySelected = athleteToggles[athleteId];
+    const currentSelectedCount = Object.values(athleteToggles).filter(Boolean).length;
 
-      // If trying to select and already at limit, don't allow
-      if (!isCurrentlySelected && currentSelectedCount >= maxAthletes) {
-        return prev; // Don't change state
-      }
+    // If trying to select and already at limit, don't allow
+    if (!isCurrentlySelected && currentSelectedCount >= maxAthletes) {
+      return; // Don't change state
+    }
 
-      return {
-        ...prev,
-        [athleteId]: !prev[athleteId]
-      };
-    });
+    const newToggles = {
+      ...athleteToggles,
+      [athleteId]: !athleteToggles[athleteId]
+    };
+    setAthleteToggles(newToggles);
+
+    // Call parent callback for controlled mode
+    if (onAthleteSelectionChange) {
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      onAthleteSelectionChange(newSelected);
+    } else {
+      // Update internal state for uncontrolled mode
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      handleSelectionChange(newSelected);
+    }
   };
 
   const selectAllAthletes = () => {
@@ -398,6 +401,15 @@ export function LineChart({
       newToggles[athlete.id] = index < maxAthletes;
     });
     setAthleteToggles(newToggles);
+
+    // Call parent callback for controlled mode
+    if (onAthleteSelectionChange) {
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      onAthleteSelectionChange(newSelected);
+    } else {
+      const newSelected = Object.keys(newToggles).filter(id => newToggles[id]);
+      handleSelectionChange(newSelected);
+    }
   };
 
   const clearAllAthletes = () => {
@@ -406,6 +418,13 @@ export function LineChart({
       allDisabled[athlete.id] = false;
     });
     setAthleteToggles(allDisabled);
+
+    // Call parent callback for controlled mode
+    if (onAthleteSelectionChange) {
+      onAthleteSelectionChange([]);
+    } else {
+      handleSelectionChange([]);
+    }
   };
 
   const visibleAthleteCount = Object.values(athleteToggles).filter(Boolean).length;

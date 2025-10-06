@@ -164,7 +164,7 @@ export function useAthleteSelection({
     } else {
       setInternalSelectedAthleteIds(newSelected);
     }
-  }, [validatedMaxAthletes, onAthleteSelectionChange]);
+  }, [validatedMaxAthletes, onAthleteSelectionChange, debouncedOnAthleteSelectionChange]);
 
   // Handle select all with optimized dependencies
   const handleSelectAll = useCallback(() => {
@@ -180,7 +180,7 @@ export function useAthleteSelection({
     } else {
       setInternalSelectedAthleteIds(idsToSelect);
     }
-  }, [athletes, validatedMaxAthletes, onAthleteSelectionChange]);
+  }, [athletes, validatedMaxAthletes, onAthleteSelectionChange, debouncedOnAthleteSelectionChange]);
 
   // Handle clear all with optimized dependencies
   const handleClearAll = useCallback(() => {
@@ -195,7 +195,7 @@ export function useAthleteSelection({
     } else {
       setInternalSelectedAthleteIds([]);
     }
-  }, [athletes, onAthleteSelectionChange]);
+  }, [athletes, onAthleteSelectionChange, debouncedOnAthleteSelectionChange]);
 
   // Calculate derived state
   const selectedCount = Object.values(athleteToggles).filter(Boolean).length;

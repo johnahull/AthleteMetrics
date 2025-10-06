@@ -80,7 +80,7 @@ export function ViolinChart({
   const chartRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [resizeKey, setResizeKey] = React.useState(0); // Used to trigger re-render on resize
-  const [isStatsExpanded, setIsStatsExpanded] = useState(true);
+  const [isStatsExpanded, setIsStatsExpanded] = useState(false);
   const [tooltip, setTooltip] = React.useState<{
     visible: boolean;
     x: number;
