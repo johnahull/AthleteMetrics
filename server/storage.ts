@@ -1105,7 +1105,9 @@ export class DatabaseStorage implements IStorage {
       }
 
       const result = await db
-        .select()
+        .select({
+          users: users
+        })
         .from(users)
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .where(and(
@@ -1142,8 +1144,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get athletes first with optimized batched query approach
+    // IMPORTANT: Explicitly select user fields to ensure array fields (emails, phoneNumbers, sports) are properly serialized
     const athleteQuery = db
-      .select()
+      .select({
+        users: users
+      })
       .from(users)
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
@@ -1151,6 +1156,23 @@ export class DatabaseStorage implements IStorage {
 
     const athleteResults = await athleteQuery;
     const athletes = athleteResults.map((row: { users: User }) => row.users);
+
+    // Debug logging to verify database returns emails
+    if (athletes.length > 0) {
+      const sampleUser = athletes[0];
+      console.log('\n========================================');
+      console.log('[STORAGE DEBUG] Sample user from DB query:');
+      console.log('ID:', sampleUser.id);
+      console.log('Name:', sampleUser.firstName, sampleUser.lastName);
+      console.log('Has emails?:', !!sampleUser.emails);
+      console.log('Emails type:', Array.isArray(sampleUser.emails) ? 'array' : typeof sampleUser.emails);
+      console.log('Emails length:', Array.isArray(sampleUser.emails) ? sampleUser.emails.length : 'N/A');
+      console.log('Emails value:', sampleUser.emails);
+      console.log('Phone numbers:', sampleUser.phoneNumbers);
+      console.log('Sports:', sampleUser.sports);
+      console.log('All user keys:', Object.keys(sampleUser).sort());
+      console.log('========================================\n');
+    }
 
     // If no athletes found, return empty array
     if (athletes.length === 0) {

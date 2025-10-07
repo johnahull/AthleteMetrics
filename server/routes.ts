@@ -1827,19 +1827,37 @@ export async function registerRoutes(app: Express) {
       const athletes = await storage.getAthletes(filters);
 
       // Transform athletes to match the expected athlete format
+      // IMPORTANT: Explicitly include emails to ensure they're sent to frontend
       const athletesList = athletes.map((athlete) => ({
         ...athlete,
+        emails: athlete.emails || [], // Explicitly include emails field
+        phoneNumbers: athlete.phoneNumbers || [],
         teams: athlete.teams,
         hasLogin: athlete.password !== "INVITATION_PENDING",
         isActive: athlete.isActive === true
       }));
 
-      // Athletes retrieved - debug logging removed for production
+      // Debug logging to verify emails field is present
+      if (athletesList.length > 0) {
+        const sampleAthlete = athletesList[0];
+        console.log('\n========================================');
+        console.log('[SERVER DEBUG] Sample athlete data from /api/athletes:');
+        console.log('ID:', sampleAthlete.id);
+        console.log('Name:', sampleAthlete.firstName, sampleAthlete.lastName);
+        console.log('Has emails?:', !!sampleAthlete.emails);
+        console.log('Emails type:', Array.isArray(sampleAthlete.emails) ? 'array' : typeof sampleAthlete.emails);
+        console.log('Emails length:', Array.isArray(sampleAthlete.emails) ? sampleAthlete.emails.length : 'N/A');
+        console.log('Emails value:', sampleAthlete.emails);
+        console.log('All athlete keys:', Object.keys(sampleAthlete).sort());
+        console.log('========================================\n');
+      }
 
-      // Add cache-busting headers to ensure fresh data
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      // Stronger cache-busting headers and disable ETags
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
+      res.setHeader('Last-Modified', new Date().toUTCString());
+      res.removeHeader('ETag'); // Remove ETag to prevent 304 responses
       res.json(athletesList);
     } catch (error) {
       console.error("Error fetching athletes:", error);
@@ -3179,29 +3197,34 @@ export async function registerRoutes(app: Express) {
       const allInvitations = await storage.getInvitations();
       const athleteInvitations = allInvitations.filter(invitation =>
         invitation.role === 'athlete' &&
-        invitation.isUsed === false &&
+        !invitation.isUsed &&
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
 
-      // Enrich with athlete data
+      // Enrich with athlete data - handle errors gracefully
       const enrichedInvitations = await Promise.all(
         athleteInvitations.map(async (invitation) => {
-          if (invitation.playerId) {
-            const athlete = await storage.getAthlete(invitation.playerId);
-            return {
-              ...invitation,
-              firstName: athlete?.firstName,
-              lastName: athlete?.lastName
-            };
+          try {
+            if (invitation.playerId) {
+              const athlete = await storage.getAthlete(invitation.playerId);
+              return {
+                ...invitation,
+                firstName: invitation.firstName || athlete?.firstName,
+                lastName: invitation.lastName || athlete?.lastName
+              };
+            }
+            return invitation;
+          } catch (athleteError) {
+            console.error(`Error fetching athlete for invitation ${invitation.id}:`, athleteError);
+            return invitation;
           }
-          return invitation;
         })
       );
 
       res.json(enrichedInvitations);
     } catch (error) {
       console.error("Error fetching athlete invitations:", error);
-      res.status(500).json({ error: "Failed to fetch athlete invitations" });
+      res.status(500).json({ message: "Failed to fetch athlete invitations", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 

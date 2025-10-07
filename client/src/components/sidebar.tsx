@@ -49,7 +49,6 @@ const NAVIGATION_CONFIGS = {
   ],
   coach: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "My Organization", href: "/organizations", icon: Building2 },
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
