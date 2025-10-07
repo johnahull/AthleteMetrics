@@ -172,8 +172,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
 
       // Redirect to the specified URL or default to dashboard
-      setLocation(data.redirectUrl || '/');
-      return { success: true, redirectUrl: data.redirectUrl || '/' };
+      setLocation(data.redirectUrl || '/dashboard');
+      return { success: true, redirectUrl: data.redirectUrl || '/dashboard' };
     } catch (error) {
       return { success: false, message: 'Network error occurred' };
     } finally {

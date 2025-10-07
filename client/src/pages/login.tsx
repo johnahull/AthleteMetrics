@@ -42,17 +42,14 @@ export default function Login() {
       <Card className="w-full max-w-md mx-4">
         <CardContent className="pt-6">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-primary rounded-xl flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
               <BarChart3 className="h-8 w-8 text-white" />
             </div>
             <div className="flex items-center justify-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">Athlete Performance Hub</h1>
-              <span className="px-2 py-1 text-xs font-semibold bg-orange-100 text-orange-800 rounded-full border border-orange-200">
-                BETA
-              </span>
+              <h1 className="text-2xl font-bold text-gray-900">AthleteMetrics</h1>
             </div>
             <p className="text-gray-600 text-center mt-2">
-              Sign in to access the analytics platform
+              Sign in to access your performance dashboard
             </p>
           </div>
 
