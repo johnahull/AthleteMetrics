@@ -184,6 +184,42 @@ When ENABLED:
 
 **Keywords that trigger:** `email`, `notification`, `invitation`, `alert`, `communication`, `password reset`, `notify`, `message`, `template`, `send`
 
+#### UI Testing Agent (`ui-testing-agent`) 🎭
+**Color:** Theater Masks
+**Auto-invoke when tasks involve:**
+- End-to-end testing with Playwright MCP
+- Complete user flow verification
+- Browser-based integration testing
+- Visual regression testing with screenshots
+- Console error monitoring
+- Network request inspection
+
+**Keywords that trigger:** `e2e`, `end-to-end`, `user flow`, `browser test`, `playwright`, `visual test`, `integration test`, `screenshot verification`
+
+#### Visual Design Review Agent (`visual-design-review-agent`) 🎨
+**Color:** Artist Palette
+**Auto-invoke when tasks involve:**
+- UI/UX quality assurance and design review
+- WCAG 2.1 AA accessibility compliance
+- Responsive design verification (7 viewports)
+- Interactive state testing (hover, focus, etc.)
+- Design system consistency checks
+- Visual regression detection
+
+**Keywords that trigger:** `design review`, `accessibility`, `wcag`, `responsive`, `ui review`, `visual qa`, `design consistency`, `a11y audit`
+
+#### UI Development Agent (`ui-development-agent`) 🎯
+**Color:** Target
+**Auto-invoke when tasks involve:**
+- Building UI components with live visual feedback
+- Component development with Playwright verification
+- Real-time responsive testing during development
+- Visual iteration and debugging
+- Dark mode verification
+- Accessibility checks during build
+
+**Keywords that trigger:** `build component`, `create ui`, `visual feedback`, `develop component`, `ui development`, `live testing`, `component iteration`
+
 ### Proactive Agent Usage Guidelines
 
 #### Autonomous Feature Development
@@ -316,6 +352,14 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Email features → `notification-communication-agent`
 - User invitations → `notification-communication-agent` + `security-authentication-agent`
 - Alert systems → `notification-communication-agent`
+
+#### UI/Visual Testing (NEW)
+- E2E user flows → `ui-testing-agent`
+- Design review/QA → `visual-design-review-agent`
+- Component development → `ui-development-agent`
+- Accessibility audits → `visual-design-review-agent`
+- Responsive testing → `visual-design-review-agent` or `ui-development-agent`
+- Visual regression → `ui-testing-agent` + `visual-design-review-agent`
 
 ## Development Commands
 
