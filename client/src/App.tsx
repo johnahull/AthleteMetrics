@@ -37,6 +37,9 @@ const Analytics = React.lazy(() => import("./pages/analytics"));
 const CoachAnalytics = React.lazy(() => import("./pages/CoachAnalytics"));
 const AthleteAnalytics = React.lazy(() => import("./pages/AthleteAnalytics"));
 
+// Lazy load welcome page
+const Welcome = React.lazy(() => import("./pages/welcome"));
+
 function Router() {
   return (
     <Switch>
@@ -122,11 +125,19 @@ function Router() {
           <Profile />
         </RouteWrapper>
       </Route>
-      <Route path="/">
+      {/* Welcome page (/) must come after /dashboard to avoid route conflicts
+          The Welcome component handles authenticated user redirect to /dashboard internally */}
+      <Route path="/dashboard">
         <RouteWrapper loadingText="Loading Dashboard...">
           <Dashboard />
         </RouteWrapper>
       </Route>
+      <Route path="/">
+        <RouteWrapper loadingText="Loading...">
+          <Welcome />
+        </RouteWrapper>
+      </Route>
+      {/* 404 Not Found - must be last (catch-all route) */}
       <Route component={NotFound} />
     </Switch>
   );

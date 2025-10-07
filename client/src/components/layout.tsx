@@ -11,15 +11,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Don't redirect to login for invitation pages
-  const isInvitationPage = location.startsWith('/accept-invitation') || location.startsWith('/register');
-  const isLoginPage = location === '/login';
+  // Public routes that don't require authentication
+  const PUBLIC_ROUTES = [
+    '/',
+    '/login',
+    '/accept-invitation',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-email',
+    '/enhanced-login'
+  ];
+
+  const isPublicRoute = PUBLIC_ROUTES.some(route =>
+    route === location || location.startsWith(route + '/')
+  );
 
   useEffect(() => {
-    if (!isLoading && !user && !isInvitationPage && !isLoginPage) {
+    if (!isLoading && !user && !isPublicRoute) {
       setLocation("/login");
     }
-  }, [user, isLoading, location, setLocation, isInvitationPage, isLoginPage]);
+  }, [user, isLoading, location, setLocation, isPublicRoute]);
 
   if (isLoading) {
     return (
@@ -32,8 +44,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // For invitation and login pages, render without sidebar
-  if (isInvitationPage || isLoginPage || !user) {
+  // For public routes, render without sidebar
+  if (isPublicRoute || !user) {
     return <div className="min-h-screen bg-background">{children}</div>;
   }
 
