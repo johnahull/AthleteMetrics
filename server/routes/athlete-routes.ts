@@ -136,17 +136,26 @@ export function registerAthleteRoutes(app: Express) {
           return res.status(403).json({ message: "Access denied - no organization access" });
         }
 
-        // Get the athlete's teams to determine organization
+        // Get the athlete's organization assignments (primary check)
+        const athleteOrgs = await storage.getUserOrganizations(athleteId);
+
+        // Also check athlete's teams for backward compatibility
         const athleteTeams = await storage.getUserTeams(athleteId);
-        if (athleteTeams.length === 0) {
-          return res.status(403).json({ message: "Athlete has no team assignments" });
+
+        // Athlete must belong to at least one organization OR have team assignments
+        if (athleteOrgs.length === 0 && athleteTeams.length === 0) {
+          return res.status(403).json({ message: "Athlete has no organization or team assignments" });
         }
 
-        // Check if user has access to any of the athlete's team organizations
+        // Check if user has access to any of the athlete's organizations
         const userOrgIds = userOrgs.map(org => org.organizationId);
-        const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+        const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
+        const athleteTeamOrgIds = athleteTeams.map(team => team.team.organizationId);
 
-        const hasOrganizationAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+        // Combine both organization sources
+        const allAthleteOrgIds = [...new Set([...athleteOrgIds, ...athleteTeamOrgIds])];
+
+        const hasOrganizationAccess = allAthleteOrgIds.some(orgId => userOrgIds.includes(orgId));
         if (!hasOrganizationAccess) {
           return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
         }
@@ -192,9 +201,38 @@ export function registerAthleteRoutes(app: Express) {
    */
   app.post("/api/athletes", athleteLimiter, requireAuth, requireAthleteManagementPermission, async (req, res) => {
     try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       // Validate request body using Zod schema
       const validatedData = insertAthleteSchema.parse(req.body);
+
+      // Get the user's organization context to assign the athlete
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+
+      if (!isSiteAdmin(currentUser) && userOrgs.length === 0) {
+        return res.status(403).json({ message: "No organization context found. Athletes must belong to an organization." });
+      }
+
+      // Create the athlete
       const athlete = await storage.createAthlete(validatedData);
+
+      // Assign athlete to the user's organization
+      // For site admins with no org context, or users with an org, add them to the first org
+      if (userOrgs.length > 0) {
+        const organizationId = userOrgs[0].organizationId;
+
+        try {
+          await storage.addUserToOrganization(athlete.id, organizationId, "athlete");
+          console.log(`[CREATE ATHLETE] Assigned athlete ${athlete.id} to organization ${organizationId}`);
+        } catch (error) {
+          console.error(`[CREATE ATHLETE] Failed to assign athlete to organization:`, error);
+          // Don't fail the request, but log the error
+        }
+      }
+
       res.status(201).json(athlete);
     } catch (error) {
       console.error("Create athlete error:", error);
@@ -382,11 +420,14 @@ export function registerAthleteRoutes(app: Express) {
             try {
               await storage.createInvitation({
                 email,
+                firstName: athlete.firstName,
+                lastName: athlete.lastName,
                 role: "athlete",
                 organizationId,
                 teamIds: [],
-                createdBy: currentUser.id,
-                athleteId: athleteId,
+                invitedBy: currentUser.id,
+                playerId: athleteId,
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Expires in 7 days
               });
               invitedCount++;
             } catch (error) {

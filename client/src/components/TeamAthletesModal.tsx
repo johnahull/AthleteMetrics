@@ -47,7 +47,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [selectedCurrentAthleteIds, setSelectedCurrentAthleteIds] = useState<string[]>([]);
   const [showOnlyAvailable, setShowOnlyAvailable] = useState(true);
-  const [selectedSeason, setSelectedSeason] = useState<string>("");
+  const [selectedSeason, setSelectedSeason] = useState<string>("all");
 
   // Pagination state
   const [currentPageCurrent, setCurrentPageCurrent] = useState(1);
@@ -170,7 +170,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       params.append('page', currentPageAvailable.toString());
       params.append('limit', ITEMS_PER_PAGE.toString());
       if (searchTerm) params.append('search', searchTerm);
-      if (selectedSeason) params.append('season', selectedSeason);
+      if (selectedSeason && selectedSeason !== 'all') params.append('season', selectedSeason);
       if (showOnlyAvailable && team?.id) {
         params.append('excludeTeam', team.id);
       }
@@ -299,8 +299,8 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   // Add athletes mutation with optimistic updates
   const addAthletesMutation = useMutation({
     mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
-      const response = await apiRequest("POST", `/api/teams/${team!.id}/add-players`, {
-        playerIds: athleteIds
+      const response = await apiRequest("POST", `/api/teams/${team!.id}/add-athletes`, {
+        athleteIds: athleteIds
       });
       return response.json();
     },
@@ -978,7 +978,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                       Filter athletes by season. Current selection: {selectedSeason || "All seasons"}
                     </div>
                     <SelectContent>
-                      <SelectItem value="">All seasons</SelectItem>
+                      <SelectItem value="all">All seasons</SelectItem>
                       {availableSeasons.map(season => (
                         <SelectItem key={season} value={season}>
                           {formatSeasonForDisplay(season)}
