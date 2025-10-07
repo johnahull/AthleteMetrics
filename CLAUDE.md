@@ -360,6 +360,7 @@ The application runs as a **single-process Node.js server** without clustering:
 - UI components are from shadcn/ui - check existing patterns before creating new ones
 - Authentication state is managed through React Context in `lib/auth.tsx`
 - Database connection uses Neon serverless with WebSocket support
+- **Before writing custom code, always search for and suggest relevant open-source libraries or packages that could solve the problem.**
 
 ### Performance Metrics Supported
 - FLY10_TIME (10-yard fly time in seconds)
