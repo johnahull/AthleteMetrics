@@ -1047,33 +1047,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }> {
-    const [verificationToken] = await db.select()
-      .from(emailVerificationTokens)
-      .where(and(
-        eq(emailVerificationTokens.token, token),
-        eq(emailVerificationTokens.isUsed, false),
-        gte(emailVerificationTokens.expiresAt, new Date())
-      ));
+    // Use transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx: any) => {
+      // Lock the row for update to prevent concurrent verification attempts
+      const [verificationToken] = await tx.select()
+        .from(emailVerificationTokens)
+        .where(and(
+          eq(emailVerificationTokens.token, token),
+          eq(emailVerificationTokens.isUsed, false),
+          gte(emailVerificationTokens.expiresAt, new Date())
+        ))
+        .for('update'); // Row-level lock
 
-    if (!verificationToken) {
-      return { success: false };
-    }
+      if (!verificationToken) {
+        return { success: false };
+      }
 
-    // Mark token as used
-    await db.update(emailVerificationTokens)
-      .set({ isUsed: true })
-      .where(eq(emailVerificationTokens.token, token));
+      // Mark token as used (within same transaction)
+      await tx.update(emailVerificationTokens)
+        .set({ isUsed: true })
+        .where(eq(emailVerificationTokens.token, token));
 
-    // Mark user's email as verified
-    await db.update(users)
-      .set({ isEmailVerified: true })
-      .where(eq(users.id, verificationToken.userId));
+      // Mark user's email as verified (within same transaction)
+      await tx.update(users)
+        .set({ isEmailVerified: true })
+        .where(eq(users.id, verificationToken.userId));
 
-    return {
-      success: true,
-      userId: verificationToken.userId,
-      email: verificationToken.email
-    };
+      return {
+        success: true,
+        userId: verificationToken.userId,
+        email: verificationToken.email
+      };
+    });
   }
 
   async getEmailVerificationToken(token: string): Promise<typeof emailVerificationTokens.$inferSelect | undefined> {

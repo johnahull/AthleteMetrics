@@ -385,9 +385,11 @@ export async function registerRoutes(app: Express) {
     //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
     // - /import/photo, /import/parse-csv, /import/:type: File upload endpoints that use multipart/form-data
     //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
+    // - /invitations/:token/accept: New user registration endpoint (no session yet)
+    //   SECURITY: Protected by: (1) single-use token, (2) SameSite cookies, (3) Referer header check, (4) rate limiting
     const skipCsrfPaths = ['/login', '/register', '/import/photo', '/import/parse-csv'];
     const skipCsrfPatterns = [
-      /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,
+      /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,  // Invitation acceptance for new users
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
     ];
 
@@ -1854,21 +1856,6 @@ export async function registerRoutes(app: Express) {
         isActive: athlete.isActive === true
       }));
 
-      // Debug logging to verify emails field is present
-      if (athletesList.length > 0) {
-        const sampleAthlete = athletesList[0];
-        console.log('\n========================================');
-        console.log('[SERVER DEBUG] Sample athlete data from /api/athletes:');
-        console.log('ID:', sampleAthlete.id);
-        console.log('Name:', sampleAthlete.firstName, sampleAthlete.lastName);
-        console.log('Has emails?:', !!sampleAthlete.emails);
-        console.log('Emails type:', Array.isArray(sampleAthlete.emails) ? 'array' : typeof sampleAthlete.emails);
-        console.log('Emails length:', Array.isArray(sampleAthlete.emails) ? sampleAthlete.emails.length : 'N/A');
-        console.log('Emails value:', sampleAthlete.emails);
-        console.log('All athlete keys:', Object.keys(sampleAthlete).sort());
-        console.log('========================================\n');
-      }
-
       // Stronger cache-busting headers and disable ETags
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
       res.setHeader('Pragma', 'no-cache');
@@ -2681,8 +2668,6 @@ export async function registerRoutes(app: Express) {
     try {
       const { email, firstName, lastName, role, organizationId, teamIds, athleteId } = req.body;
 
-      console.log('[INVITATION DEBUG] Request body:', { email, firstName, lastName, role, organizationId, teamIds, athleteId });
-
       // Get current user info for invitedBy
       const invitedById = req.session.user?.id;
 
@@ -2692,13 +2677,10 @@ export async function registerRoutes(app: Express) {
 
       // Handle athlete invitation (send to all their emails)
       if (athleteId && role === "athlete") {
-        console.log('[INVITATION DEBUG] Fetching athlete:', athleteId);
         const athlete = await storage.getAthlete(athleteId);
         if (!athlete) {
-          console.error('[INVITATION DEBUG] Athlete not found:', athleteId);
           return res.status(404).json({ message: "Athlete not found" });
         }
-        console.log('[INVITATION DEBUG] Athlete found:', { id: athlete.id, emails: athlete.emails });
 
         // Validate organization exists
         const org = await storage.getOrganization(organizationId);
@@ -2729,15 +2711,28 @@ export async function registerRoutes(app: Express) {
         const invitations = [];
         const athleteEmails = athlete.emails || [];
 
-        console.log('[INVITATION DEBUG] Athlete emails:', athleteEmails);
-
         if (athleteEmails.length === 0) {
           return res.status(400).json({ message: "Athlete has no email addresses on file" });
         }
 
         for (const athleteEmail of athleteEmails) {
           try {
-            console.log('[INVITATION DEBUG] Creating invitation for email:', athleteEmail);
+            // Check for existing pending invitations to prevent duplicates
+            const existingInvitations = await storage.getInvitations();
+            const existingInvitation = existingInvitations.find(inv =>
+              inv.email === athleteEmail &&
+              inv.organizationId === organizationId &&
+              !inv.isUsed &&
+              inv.status !== 'cancelled' &&
+              inv.status !== 'expired' &&
+              new Date(inv.expiresAt) > new Date()
+            );
+
+            if (existingInvitation) {
+              // Skip this email, it already has a pending invitation
+              continue;
+            }
+
             const invitation = await storage.createInvitation({
               email: athleteEmail,
               firstName: athlete.firstName,
@@ -2749,16 +2744,15 @@ export async function registerRoutes(app: Express) {
               playerId: athlete.id,
               expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
             });
-            console.log('[INVITATION DEBUG] Created invitation:', invitation.id);
             invitations.push(invitation);
           } catch (error) {
-            console.error(`[INVITATION DEBUG] Failed to create invitation for ${athleteEmail}:`, error);
+            console.error('Failed to create athlete invitation');
             throw error; // Re-throw to catch in outer handler
           }
         }
 
         if (invitations.length === 0) {
-          return res.status(500).json({ message: "Failed to create any invitations" });
+          return res.status(400).json({ message: "All email addresses already have pending invitations" });
         }
 
         // Generate invite links and send emails
@@ -2931,15 +2925,14 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invitation has been cancelled" });
       }
 
-      // Check if expired - if so, extend the expiration
-      const now = new Date();
-      if (invitation.expiresAt && invitation.expiresAt < now) {
-        const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
-        await storage.updateInvitation(invitationId, {
-          expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000),
-          status: 'pending'
-        });
-      }
+      // Extend expiration regardless of current state (atomic update)
+      // This prevents race conditions and ensures the invitation is valid when resent
+      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+      const newExpiration = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
+      await storage.updateInvitation(invitationId, {
+        expiresAt: newExpiration,
+        status: 'pending'
+      });
 
       // Send invitation email using shared helper
       const emailSent = await sendInvitationEmailWithTracking(invitation, userId, req);
@@ -3104,7 +3097,7 @@ export async function registerRoutes(app: Express) {
   /**
    * Verify email token
    */
-  app.post("/api/auth/verify-email/:token", async (req, res) => {
+  app.post("/api/auth/verify-email/:token", authLimiter, async (req, res) => {
     try {
       const { token } = req.params;
 
@@ -3210,32 +3203,25 @@ export async function registerRoutes(app: Express) {
 
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
     try {
-      console.log('[ATHLETE INVITATIONS DEBUG] Starting fetch');
       const user = (req as any).session.user;
 
       if (!user || !user.id) {
-        console.log('[ATHLETE INVITATIONS DEBUG] No user in session');
         return res.json([]);
       }
 
-      console.log('[ATHLETE INVITATIONS DEBUG] User ID:', user.id);
       const userOrgs = await storage.getUserOrganizations(user.id);
-      console.log('[ATHLETE INVITATIONS DEBUG] User orgs:', userOrgs.length);
 
       if (userOrgs.length === 0) {
         return res.json([]);
       }
 
-      console.log('[ATHLETE INVITATIONS DEBUG] Fetching all invitations');
       const allInvitations = await storage.getInvitations();
-      console.log('[ATHLETE INVITATIONS DEBUG] Total invitations:', allInvitations.length);
 
       const athleteInvitations = allInvitations.filter(invitation =>
         invitation.role === 'athlete' &&
         !invitation.isUsed &&
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
-      console.log('[ATHLETE INVITATIONS DEBUG] Filtered athlete invitations:', athleteInvitations.length);
 
       // Enrich with athlete data - handle errors gracefully
       const enrichedInvitations = await Promise.all(
@@ -3356,6 +3342,18 @@ export async function registerRoutes(app: Express) {
       const { token } = req.params;
       const { password, firstName, lastName, username } = req.body;
 
+      // CSRF-like protection: Verify request came from same origin (Referer header check)
+      // This provides defense-in-depth even though we can't use CSRF tokens for new users
+      const referer = req.headers.referer || req.headers.origin;
+      const host = req.headers.host;
+      if (referer && host) {
+        const refererHost = new URL(referer).host;
+        if (refererHost !== host) {
+          console.warn(`Invitation acceptance blocked: Referer mismatch. Expected: ${host}, Got: ${refererHost}`);
+          return res.status(403).json({ message: "Invalid request origin" });
+        }
+      }
+
       // Validate username using shared validation
       const { validateUsername } = await import('@shared/username-validation');
       const usernameValidation = validateUsername(username);
@@ -3426,14 +3424,6 @@ export async function registerRoutes(app: Express) {
         });
         return res.status(429).json({ message: "Too many failed attempts. This invitation has been locked." });
       }
-
-      console.log("Accepting invitation:", {
-        invitationId: invitation.id,
-        email: invitation.email,
-        role: invitation.role,
-        organizationId: invitation.organizationId,
-        username
-      });
 
       const result = await storage.acceptInvitation(token, {
         email: invitation.email,
