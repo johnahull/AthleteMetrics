@@ -14,6 +14,7 @@ interface InvitationData {
   email: string;
   role: string;
   organizationId: string;
+  playerId?: string; // ID of existing athlete/user if updating
   athleteId?: string;
   athleteData?: {
     id: string;
@@ -77,8 +78,10 @@ export default function AcceptInvitation() {
       }
       
       const data = await response.json();
+      console.log('[INVITATION FETCH] Received invitation data:', data);
+      console.log('[INVITATION FETCH] playerId:', data.playerId);
       setInvitation(data);
-      
+
       // Pre-populate form with existing athlete data if available
       if (data.athleteData) {
         setFormData(prev => ({
@@ -180,9 +183,16 @@ export default function AcceptInvitation() {
     setUsernameError('');
 
     try {
-      const response = await fetch(`/api/users/check-username?username=${encodeURIComponent(username)}`);
+      // If this is an existing athlete (playerId present), exclude their user ID from the check
+      const excludeParam = invitation?.playerId ? `&excludeUserId=${encodeURIComponent(invitation.playerId)}` : '';
+      console.log('[USERNAME CHECK] invitation.playerId:', invitation?.playerId);
+      console.log('[USERNAME CHECK] Checking URL:', `/api/users/check-username?username=${encodeURIComponent(username)}${excludeParam}`);
+
+      const response = await fetch(`/api/users/check-username?username=${encodeURIComponent(username)}${excludeParam}`);
       const data = await response.json();
-      
+
+      console.log('[USERNAME CHECK] Response:', data);
+
       if (!data.available) {
         setUsernameError('Username already taken. Please choose a different username.');
       }

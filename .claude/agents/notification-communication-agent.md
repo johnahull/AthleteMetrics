@@ -12,7 +12,7 @@ model: sonnet
 ## Core Expertise
 
 ### AthleteMetrics Communication Stack
-- **Email Service**: Resend API integration for transactional emails
+- **Email Service**: SendGrid API integration for transactional emails
 - **Invitation System**: Secure token-based user invitations
 - **Password Reset**: Email-based password recovery workflow
 - **Notification Types**: Welcome emails, invitations, password resets, alerts
@@ -33,7 +33,7 @@ shared/schema.ts - Invitation and notification models
 ### 1. Email Service Management
 ```typescript
 // Email service patterns:
-- Resend API integration
+- SendGrid API integration
 - Email template rendering
 - Delivery tracking and error handling
 - Rate limiting for email sends
@@ -137,12 +137,12 @@ interface EmailTemplate {
 
 ## Email Service Integration
 
-### Resend API Configuration
+### SendGrid API Configuration
 ```typescript
 // From server/services/email-service.ts:
-import { Resend } from 'resend';
+import sgMail from '@sendgrid/mail';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+sgMail.setApiKey(process.env.SENDGRID_API_KEY || '');
 
 async function sendEmail({
   to,
@@ -151,22 +151,19 @@ async function sendEmail({
   text
 }: EmailOptions) {
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'AthleteMetrics <noreply@athletemetrics.com>',
+    await sgMail.send({
+      from: process.env.FROM_EMAIL || 'noreply@athletemetrics.com',
       to,
       subject,
       html,
       text,
     });
 
-    if (error) {
-      // Log and handle error
-      throw new Error(`Email send failed: ${error.message}`);
-    }
-
-    return data;
+    return { success: true };
   } catch (err) {
     // Error tracking and retry logic
+    console.error('SendGrid error:', err);
+    throw new Error(`Email send failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
 }
 ```
@@ -325,7 +322,7 @@ For security reasons, we recommend:
 ### Environment Variables
 ```typescript
 // Required email configuration:
-RESEND_API_KEY - Resend API key for sending emails
+SENDGRID_API_KEY - SendGrid API key for sending emails
 FROM_EMAIL - Default sender email address
 SUPPORT_EMAIL - Support contact email
 APP_URL - Base URL for invitation/reset links

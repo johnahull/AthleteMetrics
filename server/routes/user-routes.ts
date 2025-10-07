@@ -377,16 +377,20 @@ export function registerUserRoutes(app: Express) {
 
   /**
    * Check username availability
+   * Optional: Pass excludeUserId to allow checking if username is available for updating a specific user
    */
   app.get("/api/users/check-username", usernameCheckLimiter, async (req, res) => {
     try {
-      const { username } = req.query;
-      
+      const { username, excludeUserId } = req.query;
+
       if (!username || typeof username !== 'string') {
         return res.status(400).json({ message: "Username is required" });
       }
 
-      const isAvailable = await userService.checkUsernameAvailability(username);
+      const isAvailable = await userService.checkUsernameAvailability(
+        username,
+        excludeUserId && typeof excludeUserId === 'string' ? excludeUserId : undefined
+      );
       res.json({ available: isAvailable });
     } catch (error) {
       console.error("Check username error:", error);

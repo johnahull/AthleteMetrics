@@ -12,10 +12,10 @@ model: sonnet
 ## Core Expertise
 
 ### AthleteMetrics Import/Export Stack
-- **CSV Parsing**: PapaParse for robust CSV handling
+- **CSV Parsing**: Custom string-split parsing (client/src/lib/csv.ts)
 - **File Upload**: Multer with validation (MAX_CSV_FILE_SIZE = 5MB, MAX_CSV_ROWS = 10000)
 - **Data Validation**: Zod schemas for comprehensive validation
-- **Athlete Matching**: Fuzzy matching for existing athlete identification
+- **Athlete Matching**: Levenshtein distance algorithm for fuzzy name matching
 - **Bulk Operations**: Efficient batch database operations with Drizzle ORM
 - **Preview System**: Multi-step import with user confirmation
 
@@ -36,7 +36,7 @@ shared/schema.ts - Import validation schemas
 // Complete import workflow:
 1. User uploads CSV file
 2. Validate file size and format
-3. Parse CSV with PapaParse
+3. Parse CSV with custom string-split parser
 4. Validate column headers
 5. Match athletes (existing vs new)
 6. Preview import with warnings
@@ -59,8 +59,27 @@ shared/schema.ts - Import validation schemas
 
 ### 3. Athlete Matching
 ```typescript
-// Intelligent athlete matching:
-import Fuse from 'fuse.js';
+// Intelligent athlete matching using Levenshtein distance:
+
+function levenshteinDistance(a: string, b: string): number {
+  const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+
+  for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
+  for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+
+  for (let j = 1; j <= b.length; j++) {
+    for (let i = 1; i <= a.length; i++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1,
+        matrix[j - 1][i] + 1,
+        matrix[j - 1][i - 1] + cost
+      );
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
 
 async function matchAthlete(
   firstName: string,
@@ -79,20 +98,31 @@ async function matchAthlete(
 
   if (exactMatch) return { match: exactMatch, confidence: 1.0 };
 
-  // Fuzzy match on name
+  // Fuzzy match using Levenshtein distance
   const allAthletes = await db.query.users.findMany({
     where: eq(users.organizationId, organizationId)
   });
 
-  const fuse = new Fuse(allAthletes, {
-    keys: ['firstName', 'lastName'],
-    threshold: 0.3, // 70% similarity
-  });
+  const searchName = `${firstName} ${lastName}`.toLowerCase();
+  let bestMatch = null;
+  let bestDistance = Infinity;
 
-  const results = fuse.search(`${firstName} ${lastName}`);
+  for (const athlete of allAthletes) {
+    const athleteName = `${athlete.firstName} ${athlete.lastName}`.toLowerCase();
+    const distance = levenshteinDistance(searchName, athleteName);
+    const maxLen = Math.max(searchName.length, athleteName.length);
+    const similarity = 1 - (distance / maxLen);
 
-  if (results.length > 0 && results[0].score < 0.3) {
-    return { match: results[0].item, confidence: 1 - results[0].score };
+    if (similarity >= 0.7 && distance < bestDistance) {
+      bestDistance = distance;
+      bestMatch = athlete;
+    }
+  }
+
+  if (bestMatch) {
+    const maxLen = Math.max(searchName.length, `${bestMatch.firstName} ${bestMatch.lastName}`.toLowerCase().length);
+    const confidence = 1 - (bestDistance / maxLen);
+    return { match: bestMatch, confidence };
   }
 
   return { match: null, confidence: 0 };
@@ -394,7 +424,9 @@ async function partialImport(data: any[], skipErrors: boolean = true) {
 
 ### CSV Export
 ```typescript
-// Export measurements to CSV:
+// Export measurements to CSV using custom arrayToCSV:
+import { arrayToCSV } from '@/lib/csv';
+
 async function exportMeasurements(filters: ExportFilters) {
   const measurements = await db.query.measurements.findMany({
     where: and(
@@ -420,30 +452,54 @@ async function exportMeasurements(filters: ExportFilters) {
     age: m.age
   }));
 
-  return Papa.unparse(csvData);
+  return arrayToCSV(csvData);
 }
 ```
 
 ### Export Templates
 ```typescript
-// Provide CSV templates for import:
+// Provide CSV templates for import using arrayToCSV:
+import { arrayToCSV } from '@/lib/csv';
+
 function generateTemplate(type: 'measurements' | 'athletes' | 'teams') {
   const templates = {
-    measurements: [
-      ['firstName', 'lastName', 'birthDate', 'metric', 'value', 'date', 'email', 'teamName'],
-      ['John', 'Doe', '2005-03-15', 'FLY10_TIME', '1.85', '2024-10-05', 'john@example.com', 'Varsity Soccer']
-    ],
-    athletes: [
-      ['firstName', 'lastName', 'birthDate', 'email', 'role', 'teamName'],
-      ['Jane', 'Smith', '2004-08-22', 'jane@example.com', 'athlete', 'JV Basketball']
-    ],
-    teams: [
-      ['name', 'level', 'season', 'organizationId'],
-      ['Varsity Soccer', 'HS', '2024-Fall', 'your-org-id']
-    ]
+    measurements: {
+      headers: ['firstName', 'lastName', 'birthDate', 'metric', 'value', 'date', 'email', 'teamName'],
+      data: [{
+        firstName: 'John',
+        lastName: 'Doe',
+        birthDate: '2005-03-15',
+        metric: 'FLY10_TIME',
+        value: '1.85',
+        date: '2024-10-05',
+        email: 'john@example.com',
+        teamName: 'Varsity Soccer'
+      }]
+    },
+    athletes: {
+      headers: ['firstName', 'lastName', 'birthDate', 'email', 'role', 'teamName'],
+      data: [{
+        firstName: 'Jane',
+        lastName: 'Smith',
+        birthDate: '2004-08-22',
+        email: 'jane@example.com',
+        role: 'athlete',
+        teamName: 'JV Basketball'
+      }]
+    },
+    teams: {
+      headers: ['name', 'level', 'season', 'organizationId'],
+      data: [{
+        name: 'Varsity Soccer',
+        level: 'HS',
+        season: '2024-Fall',
+        organizationId: 'your-org-id'
+      }]
+    }
   };
 
-  return Papa.unparse(templates[type]);
+  const template = templates[type];
+  return arrayToCSV(template.data, template.headers);
 }
 ```
 
@@ -451,34 +507,28 @@ function generateTemplate(type: 'measurements' | 'athletes' | 'teams') {
 
 ### Large File Handling
 ```typescript
-// Stream processing for large CSVs:
-import { parse } from 'csv-parse';
-import { createReadStream } from 'fs';
+// CSV parsing with custom parseCSV function:
+import { parseCSV } from '@/lib/csv';
 
-async function streamCSV(filePath: string) {
-  const parser = createReadStream(filePath).pipe(
-    parse({
-      columns: true,
-      skip_empty_lines: true,
-      trim: true
-    })
-  );
+async function handleLargeCSV(csvText: string) {
+  // Parse entire CSV using string-split approach
+  const rows = parseCSV(csvText);
 
-  const batches = [];
-  let batch = [];
-
-  for await (const row of parser) {
-    batch.push(row);
-
-    if (batch.length >= 100) {
-      await processBatch(batch);
-      batch = [];
-    }
+  if (rows.length > MAX_CSV_ROWS) {
+    throw new Error(`CSV exceeds maximum ${MAX_CSV_ROWS} rows`);
   }
 
-  if (batch.length > 0) {
-    await processBatch(batch);
+  // Process in batches to avoid memory issues
+  const BATCH_SIZE = 100;
+  const results = [];
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const processed = await processBatch(batch);
+    results.push(...processed);
   }
+
+  return results;
 }
 ```
 

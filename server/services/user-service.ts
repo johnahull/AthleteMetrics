@@ -283,11 +283,31 @@ export class UserService extends BaseService {
 
   /**
    * Check if username is available
+   * @param username - Username to check
+   * @param excludeUserId - Optional user ID to exclude from the check (for updating existing user)
    */
-  async checkUsernameAvailability(username: string): Promise<boolean> {
+  async checkUsernameAvailability(username: string, excludeUserId?: string): Promise<boolean> {
     try {
+      console.log('[USERNAME CHECK] Checking username:', username, 'excludeUserId:', excludeUserId);
       const existingUser = await this.storage.getUserByUsername(username);
-      return !existingUser;
+
+      // If no user found with this username, it's available
+      if (!existingUser) {
+        console.log('[USERNAME CHECK] No existing user, available');
+        return true;
+      }
+
+      console.log('[USERNAME CHECK] Found existing user:', existingUser.id, 'username:', existingUser.username);
+
+      // If a user is found but it's the excluded user, it's still available
+      if (excludeUserId && existingUser.id === excludeUserId) {
+        console.log('[USERNAME CHECK] User is excluded, available');
+        return true;
+      }
+
+      // Username is taken by another user
+      console.log('[USERNAME CHECK] Username taken by different user');
+      return false;
     } catch (error) {
       console.error("UserService.checkUsernameAvailability:", error);
       return false;
