@@ -130,7 +130,15 @@ export default function Athletes() {
         params.append('organizationId', effectiveOrganizationId);
       }
 
-      const response = await fetch(`/api/athletes?${params}`);
+      // Add cache-busting parameter to force fresh request
+      params.append('_t', Date.now().toString());
+
+      const response = await fetch(`/api/athletes?${params}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) throw new Error('Failed to fetch athletes');
       const data = await response.json();
 
