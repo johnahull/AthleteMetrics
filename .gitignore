@@ -41,3 +41,9 @@ replit.nix
 
 # Attached assets (screenshots, temporary files)
 attached_assets/image_*.png
+
+# Debugging and utility scripts (should not be committed)
+check-*.ts
+fix-*.ts
+test-*.ts
+update-*.ts

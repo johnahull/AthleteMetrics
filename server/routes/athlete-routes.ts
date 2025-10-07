@@ -325,6 +325,11 @@ export function registerAthleteRoutes(app: Express) {
         return res.status(400).json({ message: "athleteIds must be a non-empty array" });
       }
 
+      // Limit bulk operations to prevent DoS
+      if (athleteIds.length > 100) {
+        return res.status(400).json({ message: "Cannot delete more than 100 athletes at once" });
+      }
+
       const currentUser = req.session.user;
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
@@ -389,6 +394,11 @@ export function registerAthleteRoutes(app: Express) {
         return res.status(400).json({ message: "athleteIds must be a non-empty array" });
       }
 
+      // Limit bulk operations to prevent DoS
+      if (athleteIds.length > 100) {
+        return res.status(400).json({ message: "Cannot invite more than 100 athletes at once" });
+      }
+
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
       }
@@ -396,6 +406,18 @@ export function registerAthleteRoutes(app: Express) {
       const currentUser = req.session.user;
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // Verify user has permission for the organization
+      if (!userIsSiteAdmin) {
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasOrgAccess = userOrgs.some(org => org.organizationId === organizationId);
+
+        if (!hasOrgAccess) {
+          return res.status(403).json({ message: "You don't have permission to invite athletes to this organization" });
+        }
       }
 
       let invitedCount = 0;
