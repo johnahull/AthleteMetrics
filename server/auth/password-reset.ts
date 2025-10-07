@@ -346,27 +346,28 @@ export class PasswordResetService {
   static generateTemporaryPassword(length: number = 16): string {
     const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
     let password = '';
-    
+
+    // Use cryptographically secure random instead of Math.random()
     for (let i = 0; i < length; i++) {
-      password += charset.charAt(Math.floor(Math.random() * charset.length));
+      password += charset.charAt(crypto.randomInt(0, charset.length));
     }
-    
+
     // Ensure it meets requirements by adding required character types
     const requiredChars = [
       'ABCDEFGHJKLMNPQRSTUVWXYZ',     // Uppercase
-      'abcdefghijkmnpqrstuvwxyz',     // Lowercase  
+      'abcdefghijkmnpqrstuvwxyz',     // Lowercase
       '23456789',                     // Numbers
       '!@#$%^&*'                      // Special characters
     ];
-    
-    // Replace first 4 characters with required types
+
+    // Replace first 4 characters with required types using crypto.randomInt()
     for (let i = 0; i < 4; i++) {
       const charSet = requiredChars[i];
-      password = password.substring(0, i) + 
-                charSet.charAt(Math.floor(Math.random() * charSet.length)) + 
+      password = password.substring(0, i) +
+                charSet.charAt(crypto.randomInt(0, charSet.length)) +
                 password.substring(i + 1);
     }
-    
+
     return password;
   }
 }

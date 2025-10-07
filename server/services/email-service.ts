@@ -5,6 +5,20 @@
 
 import sgMail from '@sendgrid/mail';
 
+/**
+ * HTML escape function to prevent XSS in email templates
+ * Escapes characters that have special meaning in HTML
+ */
+function escapeHtml(unsafe: string | undefined | null): string {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Initialize SendGrid
 const apiKey = process.env.SENDGRID_API_KEY;
 if (apiKey) {
@@ -187,11 +201,11 @@ export class EmailService {
               </h2>
 
               <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                Hi ${data.recipientName},
+                Hi ${escapeHtml(data.recipientName)},
               </p>
 
               <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                <strong>${data.inviterName}</strong> has invited you to join <strong>${data.organizationName}</strong> on AthleteMetrics${data.role ? ` as a <strong>${data.role}</strong>` : ''}.
+                <strong>${escapeHtml(data.inviterName)}</strong> has invited you to join <strong>${escapeHtml(data.organizationName)}</strong> on AthleteMetrics${data.role ? ` as a <strong>${escapeHtml(data.role)}</strong>` : ''}.
               </p>
 
               <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
@@ -266,15 +280,15 @@ export class EmailService {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                Hi ${data.userName},
+                Hi ${escapeHtml(data.userName)},
               </p>
 
               <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                Welcome to <strong>${data.organizationName}</strong> on AthleteMetrics! Your account has been successfully created.
+                Welcome to <strong>${escapeHtml(data.organizationName)}</strong> on AthleteMetrics! Your account has been successfully created.
               </p>
 
               <p style="margin: 0 0 24px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                You can now start tracking and analyzing performance data. Your role is: <strong>${data.role}</strong>.
+                You can now start tracking and analyzing performance data. Your role is: <strong>${escapeHtml(data.role)}</strong>.
               </p>
 
               <p style="margin: 0; color: #718096; font-size: 14px; line-height: 1.6;">
@@ -325,7 +339,7 @@ export class EmailService {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                Hi ${data.userName},
+                Hi ${escapeHtml(data.userName)},
               </p>
 
               <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
@@ -398,7 +412,7 @@ export class EmailService {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
-                Hi ${data.userName},
+                Hi ${escapeHtml(data.userName)},
               </p>
 
               <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">

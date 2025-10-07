@@ -537,6 +537,23 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for invitation operations (resend/cancel)
+  const invitationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 10, // Limit each IP to 10 invitation operations per 15 minutes
+    message: {
+      error: "Too many invitation operations, please try again later."
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || bypassForDev;
+    }
+  });
+
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
 
@@ -2864,7 +2881,7 @@ export async function registerRoutes(app: Express) {
   /**
    * Resend invitation email
    */
-  app.post("/api/invitations/:invitationId/resend", requireAuth, async (req, res) => {
+  app.post("/api/invitations/:invitationId/resend", invitationLimiter, requireAuth, async (req, res) => {
     try {
       const { invitationId } = req.params;
       const userId = req.session.user?.id;
@@ -2957,7 +2974,7 @@ export async function registerRoutes(app: Express) {
   /**
    * Cancel invitation
    */
-  app.post("/api/invitations/:invitationId/cancel", requireAuth, async (req, res) => {
+  app.post("/api/invitations/:invitationId/cancel", invitationLimiter, requireAuth, async (req, res) => {
     try {
       const { invitationId } = req.params;
       const userId = req.session.user?.id;
