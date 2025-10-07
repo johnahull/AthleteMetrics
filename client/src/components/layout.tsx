@@ -11,15 +11,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Don't redirect to login for invitation pages
+  // Don't redirect to login for invitation pages, login page, or welcome page
   const isInvitationPage = location.startsWith('/accept-invitation') || location.startsWith('/register');
   const isLoginPage = location === '/login';
+  const isWelcomePage = location === '/';
+  const isForgotPasswordPage = location === '/forgot-password';
+  const isResetPasswordPage = location === '/reset-password';
+  const isVerifyEmailPage = location === '/verify-email';
 
   useEffect(() => {
-    if (!isLoading && !user && !isInvitationPage && !isLoginPage) {
+    if (!isLoading && !user && !isInvitationPage && !isLoginPage && !isWelcomePage && !isForgotPasswordPage && !isResetPasswordPage && !isVerifyEmailPage) {
       setLocation("/login");
     }
-  }, [user, isLoading, location, setLocation, isInvitationPage, isLoginPage]);
+  }, [user, isLoading, location, setLocation, isInvitationPage, isLoginPage, isWelcomePage, isForgotPasswordPage, isResetPasswordPage, isVerifyEmailPage]);
 
   if (isLoading) {
     return (
@@ -32,8 +36,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // For invitation and login pages, render without sidebar
-  if (isInvitationPage || isLoginPage || !user) {
+  // For invitation, login, welcome, and password pages, render without sidebar
+  if (isInvitationPage || isLoginPage || isWelcomePage || isForgotPasswordPage || isResetPasswordPage || isVerifyEmailPage || !user) {
     return <div className="min-h-screen bg-background">{children}</div>;
   }
 
