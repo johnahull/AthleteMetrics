@@ -1,5 +1,5 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   insertUserSchema
@@ -949,34 +949,57 @@ export class DatabaseStorage implements IStorage {
         throw new Error("Invalid or expired invitation");
       }
 
-      // Always create a new user - email addresses are not unique identifiers for athletes
-      // Note: role is also stored in user_organizations for organization-specific roles
-      const createUserData = {
-        username: userInfo.username,
-        emails: [invitation.email],
-        password: userInfo.password,
-        firstName: userInfo.firstName,
-        lastName: userInfo.lastName,
-        role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
-      };
-
-      console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
-
-      // Validate user data against schema before creating user
-      try {
-        insertUserSchema.parse(createUserData);
-      } catch (error) {
-        console.error("User data validation failed:", error);
-        throw error;
-      }
-
       let user;
-      try {
-        user = await this.createUser(createUserData);
-        console.log("User created successfully:", user.id);
-      } catch (error) {
-        console.error("Error creating user:", error);
-        throw error;
+
+      // Check if invitation is linked to an existing athlete (playerId)
+      if (invitation.playerId) {
+        console.log("Invitation linked to existing athlete:", invitation.playerId);
+
+        // Get the existing athlete/user
+        const existingUser = await this.getUser(invitation.playerId);
+
+        if (!existingUser) {
+          throw new Error("Linked athlete not found");
+        }
+
+        // Update the existing user with credentials
+        // Note: updateUser will hash the password, so pass the plain password
+        user = await this.updateUser(invitation.playerId, {
+          username: userInfo.username,
+          password: userInfo.password,
+          isActive: true
+        });
+
+        console.log("Updated existing athlete with credentials:", user.id);
+      } else {
+        // Create a new user - for non-athlete invitations or new athletes
+        // Note: role is also stored in user_organizations for organization-specific roles
+        const createUserData = {
+          username: userInfo.username,
+          emails: [invitation.email],
+          password: userInfo.password,
+          firstName: userInfo.firstName,
+          lastName: userInfo.lastName,
+          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+        };
+
+        console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+
+        // Validate user data against schema before creating user
+        try {
+          insertUserSchema.parse(createUserData);
+        } catch (error) {
+          console.error("User data validation failed:", error);
+          throw error;
+        }
+
+        try {
+          user = await this.createUser(createUserData);
+          console.log("User created successfully:", user.id);
+        } catch (error) {
+          console.error("Error creating user:", error);
+          throw error;
+        }
       }
 
       // Add user to organization with the invitation role (this will remove any existing roles first)
@@ -1254,15 +1277,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
-    // Generate a temporary username for the athlete
-    const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Generate a placeholder username that will be replaced when they accept the invitation
+    // Use email prefix if available, otherwise use name-based username
+    let username: string;
+    if (athlete.emails && athlete.emails.length > 0 && athlete.emails[0]) {
+      // Use email prefix as username placeholder (e.g., "john.doe" from "john.doe@email.com")
+      const emailPrefix = athlete.emails[0].split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      username = `${emailPrefix}_pending_${Date.now().toString().slice(-6)}`;
+    } else {
+      // Fallback to name-based username
+      const namePart = `${athlete.firstName}${athlete.lastName}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+      username = `${namePart}_pending_${Date.now().toString().slice(-6)}`;
+    }
 
     // Use primary email or generate one
     const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
 
     // Create new user directly without checking for existing emails
     const [newUser] = await db.insert(users).values({
-      username,
+      username, // This will be replaced when the athlete accepts their invitation
       emails, // Ensure emails array is always provided
       firstName: athlete.firstName!,
       lastName: athlete.lastName!,
@@ -1276,7 +1309,7 @@ export class DatabaseStorage implements IStorage {
       fullName: `${athlete.firstName} ${athlete.lastName}`,
       birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: athlete.isActive ?? true // Use provided value or default to active
+      isActive: false // Set to false until they complete registration
     }).returning();
 
     // Determine organization for athlete association
@@ -1372,17 +1405,49 @@ export class DatabaseStorage implements IStorage {
   async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
       // Delete all user-organization relationships
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
-      // Delete all measurements for this user
+      // Delete all measurements for this user (as subject)
       await tx.delete(measurements).where(eq(measurements.userId, id));
 
-      // Delete all invitations for this user
+      // Update measurements submitted by this user (set submittedBy to null or keep as-is)
+      // Don't delete them as they belong to other athletes
+      await tx.update(measurements)
+        .set({ submittedBy: null as any })
+        .where(eq(measurements.submittedBy, id));
+
+      // Update measurements verified by this user
+      await tx.update(measurements)
+        .set({ verifiedBy: null as any })
+        .where(eq(measurements.verifiedBy, id));
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: null as any })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: null as any })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Delete invitations created BY this user
       await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+
+      // Delete invitations FOR this user (as athlete/playerId)
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+
+      // Delete audit logs for this user
+      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
 
       // Finally, delete the user record
       await tx.delete(users).where(eq(users.id, id));

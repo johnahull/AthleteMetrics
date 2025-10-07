@@ -2664,6 +2664,8 @@ export async function registerRoutes(app: Express) {
     try {
       const { email, firstName, lastName, role, organizationId, teamIds, athleteId } = req.body;
 
+      console.log('[INVITATION DEBUG] Request body:', { email, firstName, lastName, role, organizationId, teamIds, athleteId });
+
       // Get current user info for invitedBy
       const invitedById = req.session.user?.id;
 
@@ -2673,10 +2675,13 @@ export async function registerRoutes(app: Express) {
 
       // Handle athlete invitation (send to all their emails)
       if (athleteId && role === "athlete") {
+        console.log('[INVITATION DEBUG] Fetching athlete:', athleteId);
         const athlete = await storage.getAthlete(athleteId);
         if (!athlete) {
+          console.error('[INVITATION DEBUG] Athlete not found:', athleteId);
           return res.status(404).json({ message: "Athlete not found" });
         }
+        console.log('[INVITATION DEBUG] Athlete found:', { id: athlete.id, emails: athlete.emails });
 
         // Validate organization exists
         const org = await storage.getOrganization(organizationId);
@@ -2707,12 +2712,15 @@ export async function registerRoutes(app: Express) {
         const invitations = [];
         const athleteEmails = athlete.emails || [];
 
+        console.log('[INVITATION DEBUG] Athlete emails:', athleteEmails);
+
         if (athleteEmails.length === 0) {
           return res.status(400).json({ message: "Athlete has no email addresses on file" });
         }
 
         for (const athleteEmail of athleteEmails) {
           try {
+            console.log('[INVITATION DEBUG] Creating invitation for email:', athleteEmail);
             const invitation = await storage.createInvitation({
               email: athleteEmail,
               firstName: athlete.firstName,
@@ -2724,9 +2732,11 @@ export async function registerRoutes(app: Express) {
               playerId: athlete.id,
               expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
             });
+            console.log('[INVITATION DEBUG] Created invitation:', invitation.id);
             invitations.push(invitation);
           } catch (error) {
-            console.error(`Failed to create invitation for ${athleteEmail}:`, error);
+            console.error(`[INVITATION DEBUG] Failed to create invitation for ${athleteEmail}:`, error);
+            throw error; // Re-throw to catch in outer handler
           }
         }
 
@@ -2846,7 +2856,8 @@ export async function registerRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error creating invitation:", error);
-      res.status(500).json({ message: "Failed to create invitation" });
+      const errorMessage = error instanceof Error ? error.message : "Failed to create invitation";
+      res.status(500).json({ message: errorMessage, error: String(error) });
     }
   });
 
@@ -3182,24 +3193,32 @@ export async function registerRoutes(app: Express) {
 
   app.get("/api/invitations/athletes", requireAuth, async (req, res) => {
     try {
+      console.log('[ATHLETE INVITATIONS DEBUG] Starting fetch');
       const user = (req as any).session.user;
 
       if (!user || !user.id) {
+        console.log('[ATHLETE INVITATIONS DEBUG] No user in session');
         return res.json([]);
       }
 
+      console.log('[ATHLETE INVITATIONS DEBUG] User ID:', user.id);
       const userOrgs = await storage.getUserOrganizations(user.id);
+      console.log('[ATHLETE INVITATIONS DEBUG] User orgs:', userOrgs.length);
 
       if (userOrgs.length === 0) {
         return res.json([]);
       }
 
+      console.log('[ATHLETE INVITATIONS DEBUG] Fetching all invitations');
       const allInvitations = await storage.getInvitations();
+      console.log('[ATHLETE INVITATIONS DEBUG] Total invitations:', allInvitations.length);
+
       const athleteInvitations = allInvitations.filter(invitation =>
         invitation.role === 'athlete' &&
         !invitation.isUsed &&
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
+      console.log('[ATHLETE INVITATIONS DEBUG] Filtered athlete invitations:', athleteInvitations.length);
 
       // Enrich with athlete data - handle errors gracefully
       const enrichedInvitations = await Promise.all(
@@ -3237,6 +3256,13 @@ export async function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Invitation not found" });
       }
 
+      console.log('[INVITATION DETAILS] Invitation found:', {
+        id: invitation.id,
+        email: invitation.email,
+        playerId: invitation.playerId,
+        role: invitation.role
+      });
+
       if (invitation.isUsed === true) {
         return res.status(400).json({ message: "Invitation already used" });
       }
@@ -3245,14 +3271,19 @@ export async function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Invitation expired" });
       }
 
-      res.json({
+      const responseData = {
         email: invitation.email,
         firstName: invitation.firstName,
         lastName: invitation.lastName,
         role: invitation.role,
         organizationId: invitation.organizationId,
-        teamIds: invitation.teamIds
-      });
+        teamIds: invitation.teamIds,
+        playerId: invitation.playerId // Include player/user ID if this is for an existing athlete
+      };
+
+      console.log('[INVITATION DETAILS] Sending response:', responseData);
+
+      res.json(responseData);
     } catch (error) {
       console.error("Error fetching invitation:", error);
       res.status(500).json({ message: "Failed to fetch invitation" });
@@ -3277,29 +3308,29 @@ export async function registerRoutes(app: Express) {
       const currentUser = req.session.user;
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Check if user has permission (Site Admin or Org Admin only)
+      // Check if user has permission (Site Admin, Org Admin, or Coach)
       const userOrgs = await storage.getUserOrganizations(userId);
       const userOrgRole = userOrgs.find(org => org.organizationId === invitation.organizationId);
       const isOrgAdmin = userOrgRole?.role === "org_admin";
+      const isCoach = userOrgRole?.role === "coach";
 
-      // Only Site Admins and Org Admins can delete invitations
-      if (!userIsSiteAdmin && !isOrgAdmin) {
-        return res.status(403).json({ message: "Insufficient permissions - only site admins and organization admins can delete invitations" });
+      // Allow Site Admins, Org Admins, and Coaches to delete invitations
+      if (!userIsSiteAdmin && !isOrgAdmin && !isCoach) {
+        return res.status(403).json({ message: "Insufficient permissions - only site admins, organization admins, and coaches can delete invitations" });
       }
 
-      // If the invited user is already in the organization, remove them first
-      if (invitation.organizationId) {
-        const invitedUser = await storage.getUserByEmail(invitation.email);
-        if (invitedUser) {
-          await storage.removeUserFromOrganization(invitedUser.id, invitation.organizationId);
-        }
-      }
-
+      // Delete the invitation only - do not remove user from organization
+      // Users who accepted invitations should remain in the organization
       await storage.deleteInvitation(invitationId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting invitation:", error);
-      res.status(500).json({ error: "Failed to delete invitation" });
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete invitation";
+      res.status(500).json({
+        error: "Failed to delete invitation",
+        message: errorMessage,
+        details: error instanceof Error ? error.stack : String(error)
+      });
     }
   });
 

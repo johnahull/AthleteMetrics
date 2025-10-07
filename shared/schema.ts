@@ -132,7 +132,7 @@ export const invitations = pgTable("invitations", {
   invitedBy: varchar("invited_by").notNull().references(() => users.id),
   token: text("token").notNull().unique(),
   // Enhanced tracking fields
-  status: text("status").notNull().default("pending"), // "pending", "accepted", "expired", "cancelled"
+  status: text("status").default("pending"), // "pending", "accepted", "expired", "cancelled" - made nullable for backward compatibility
   isUsed: boolean("is_used").default(false).notNull(),
   emailSent: boolean("email_sent").default(false).notNull(),
   emailSentAt: timestamp("email_sent_at"),

@@ -42,7 +42,7 @@ export class AuthService extends BaseService {
 
       // Check if user is active
       if (user.isActive === false) {
-        return { success: false, error: "Account is deactivated" };
+        return { success: false, error: "Your account has been deactivated. Please contact your administrator." };
       }
 
       // Handle invitation pending state
