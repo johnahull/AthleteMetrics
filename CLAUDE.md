@@ -25,6 +25,31 @@ When ENABLED:
 
 ### Available Specialized Agents
 
+#### Test-Driven Feature Agent (`test-driven-feature-agent`) 🤖
+**Color:** Robot
+**Auto-invoke when tasks involve:**
+- Feature implementation with "test-first" or "TDD" approach
+- Autonomous development workflows
+- Complex features requiring multiple agents
+- "Implement X with tests" requests
+- Bug fixes with regression testing
+
+**Keywords that trigger:** `implement`, `feature`, `TDD`, `test-first`, `test-driven`, `autonomous`, `with tests`, `comprehensive testing`, `end-to-end implementation`
+
+**Special Capabilities:**
+- Writes tests BEFORE implementation (TDD methodology)
+- Automatically runs tests and iterates on failures
+- Coordinates multiple specialized agents in parallel
+- Self-limits to 5 iteration attempts before escalation
+- Uses TodoWrite to track multi-step progress
+- Handles full feature lifecycle: plan → test → implement → verify
+
+**When NOT to use:**
+- Simple code changes without new features
+- Documentation updates
+- Configuration changes
+- When you want to implement without tests
+
 #### Database Schema Agent (`database-schema-agent`) 🔵
 **Color:** Blue
 **Auto-invoke when tasks involve:**
@@ -141,8 +166,11 @@ When ENABLED:
 - Mocking patterns for API and database calls
 - E2E testing scenarios
 - Bug fix verification and regression testing
+- **NEW**: Test-Driven Development (TDD) - writing tests BEFORE implementation
 
-**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`
+**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`, `TDD`, `test-first`
+
+**TDD Mode:** When invoked by `test-driven-feature-agent`, this agent writes comprehensive failing tests before any implementation begins.
 
 #### Notification & Communication Agent (`notification-communication-agent`) 🩷
 **Color:** Pink
@@ -157,6 +185,23 @@ When ENABLED:
 **Keywords that trigger:** `email`, `notification`, `invitation`, `alert`, `communication`, `password reset`, `notify`, `message`, `template`, `send`
 
 ### Proactive Agent Usage Guidelines
+
+#### Autonomous Feature Development
+For feature implementation with tests, automatically invoke the test-driven-feature-agent:
+
+```typescript
+// Example: User requests "Implement broad jump tracking with tests"
+// Claude should automatically use: Task(subagent_type: "test-driven-feature-agent", ...)
+
+// Example: User requests "TDD approach for RSI calculation"
+// Claude should automatically use: Task(subagent_type: "test-driven-feature-agent", ...)
+
+// The test-driven-feature-agent will:
+// 1. Write tests first
+// 2. Coordinate specialized agents for implementation
+// 3. Run tests and iterate on failures
+// 4. Complete when all tests pass
+```
 
 #### Single Domain Tasks
 When a task clearly falls into one domain, automatically invoke the appropriate agent:
@@ -203,6 +248,14 @@ When invoking agents, provide AthleteMetrics-specific context:
 5. **Error Handling**: If a task might affect multiple domains, prefer including more agents rather than fewer
 
 ### Task Patterns That Always Trigger Agents
+
+#### Autonomous Feature Development (NEW)
+- "Implement X with tests" → `test-driven-feature-agent`
+- "Use TDD approach" → `test-driven-feature-agent`
+- "Test-first development" → `test-driven-feature-agent`
+- "Autonomous mode" → `test-driven-feature-agent`
+- Complex features requiring multiple agents → `test-driven-feature-agent`
+- Bug fixes with "write regression test first" → `test-driven-feature-agent`
 
 #### Database Schema Changes
 - Any modification to `shared/schema.ts` → `database-schema-agent`
