@@ -1,7 +1,7 @@
 ---
 name: test-driven-feature-agent
-description: Autonomous feature development with test-first approach, automatic test execution, and iterative debugging until tests pass
-tools: Read, Write, Edit, Bash, Grep, Glob, Task
+description: Autonomous feature development with test-first approach, automatic test execution (unit, integration, and E2E), and iterative debugging until tests pass
+tools: Read, Write, Edit, Bash, Grep, Glob, Task, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages
 model: sonnet
 ---
 
@@ -63,6 +63,7 @@ Test Coverage Required:
 - Unit tests for business logic
 - Integration tests for API endpoints
 - Component tests for UI (if applicable)
+- **E2E tests for complete user flows (NEW)**
 - Edge cases and error handling
 
 Follow AthleteMetrics testing patterns:
@@ -205,29 +206,95 @@ npm run test:run -- --coverage
 npm run check
 ```
 
-### Phase 5: Verification & Completion
+### Phase 5: E2E Testing with Playwright (NEW)
+
+**When to add E2E tests:**
+- Feature includes UI components
+- Complete user workflow (login → action → result)
+- Multi-step processes
+- Forms with submission
+- Data visualization
+
+**E2E Test Process:**
+```typescript
+// Invoke ui-testing-agent for E2E tests
+Task({
+  subagent_type: "ui-testing-agent",
+  description: "Write E2E tests for feature X",
+  prompt: `Write end-to-end tests for the complete user flow:
+
+User Journey:
+[Step-by-step user actions]
+
+Test Requirements:
+- Start from landing page
+- Complete full workflow
+- Verify UI updates correctly
+- Check console for errors
+- Take screenshots for evidence
+- Test across viewport sizes (if UI-heavy)
+
+Example flow:
+1. Navigate to /page
+2. Click "Add" button
+3. Fill form
+4. Submit
+5. Verify success message
+6. Verify data appears in list
+`
+});
+
+// Run E2E tests
+npm run test:run -- tests/e2e/
+```
+
+**E2E Execution:**
+```typescript
+// Agent automatically:
+1. Launches browser with Playwright MCP
+2. Navigates to starting URL
+3. Executes user actions
+4. Takes screenshots at key steps
+5. Verifies expected outcomes
+6. Checks console for errors
+7. Reports results
+```
+
+**E2E Iteration:**
+```typescript
+// If E2E tests fail:
+1. Review screenshots to see what went wrong
+2. Check console errors
+3. Identify issue (UI bug, timing, selector, etc.)
+4. Fix the issue
+5. Re-run E2E tests
+6. Iterate until passing
+```
+
+### Phase 6: Verification & Completion
 
 **Final Checks:**
 ```bash
-# 1. Run full test suite
+# 1. Run full test suite (unit + integration + E2E)
 npm run test:run
 
 # 2. Type checking
 npm run check
 
 # 3. Verify no console errors (if dev server running)
-# Check for any warnings or errors
+# Already checked by E2E tests
 
 # 4. Build verification
 npm run build
 ```
 
 **Success Criteria:**
-- ✅ All tests passing (green)
+- ✅ All tests passing (unit + integration + E2E) (green)
 - ✅ Type checking passes
-- ✅ No new console errors/warnings
+- ✅ No console errors in E2E tests
 - ✅ Test coverage > 80% for new code
 - ✅ Build succeeds
+- ✅ **Visual verification via E2E screenshots**
 
 **TodoWrite Updates:**
 - Mark all tasks as "completed"
