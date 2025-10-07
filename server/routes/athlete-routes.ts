@@ -275,4 +275,140 @@ export function registerAthleteRoutes(app: Express) {
       res.status(500).json({ message, error: String(error) });
     }
   });
+
+  /**
+   * Bulk delete athletes (org admins and coaches within their organization)
+   */
+  app.post("/api/athletes/bulk-delete", athleteDeleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const { athleteIds } = req.body;
+
+      if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+        return res.status(400).json({ message: "athleteIds must be a non-empty array" });
+      }
+
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      let deletedCount = 0;
+      let failedCount = 0;
+
+      for (const athleteId of athleteIds) {
+        try {
+          // Check permissions for each athlete
+          if (!userIsSiteAdmin) {
+            const athlete = await storage.getAthlete(athleteId);
+            if (!athlete) {
+              failedCount++;
+              continue;
+            }
+
+            // Check organization access
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            const athleteTeams = await storage.getUserTeams(athleteId);
+
+            const userOrgIds = userOrgs.map(org => org.organizationId);
+            const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+
+            const hasAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+            if (!hasAccess) {
+              failedCount++;
+              continue;
+            }
+          }
+
+          await storage.deleteAthlete(athleteId);
+          deletedCount++;
+        } catch (error) {
+          console.error(`[BULK DELETE] Failed to delete athlete ${athleteId}:`, error);
+          failedCount++;
+        }
+      }
+
+      res.json({
+        deleted: deletedCount,
+        failed: failedCount,
+        message: `${deletedCount} athlete(s) deleted successfully${failedCount > 0 ? `, ${failedCount} failed` : ''}`
+      });
+    } catch (error) {
+      console.error("[BULK DELETE] Error:", error);
+      const message = error instanceof Error ? error.message : "Failed to bulk delete athletes";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Bulk invite athletes (org admins and coaches within their organization)
+   */
+  app.post("/api/athletes/bulk-invite", athleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const { athleteIds, organizationId } = req.body;
+
+      if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+        return res.status(400).json({ message: "athleteIds must be a non-empty array" });
+      }
+
+      if (!organizationId) {
+        return res.status(400).json({ message: "organizationId is required" });
+      }
+
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      let invitedCount = 0;
+      let skippedCount = 0;
+
+      for (const athleteId of athleteIds) {
+        try {
+          const athlete = await storage.getAthlete(athleteId);
+          if (!athlete) {
+            skippedCount++;
+            continue;
+          }
+
+          // Skip if athlete has no email
+          if (!athlete.emails || athlete.emails.length === 0) {
+            skippedCount++;
+            continue;
+          }
+
+          // Create invitation for each email
+          for (const email of athlete.emails) {
+            try {
+              await storage.createInvitation({
+                email,
+                role: "athlete",
+                organizationId,
+                teamIds: [],
+                createdBy: currentUser.id,
+                athleteId: athleteId,
+              });
+              invitedCount++;
+            } catch (error) {
+              // Skip if invitation already exists or other error
+              console.error(`[BULK INVITE] Failed to create invitation for ${email}:`, error);
+            }
+          }
+        } catch (error) {
+          console.error(`[BULK INVITE] Failed to process athlete ${athleteId}:`, error);
+          skippedCount++;
+        }
+      }
+
+      res.json({
+        invited: invitedCount,
+        skipped: skippedCount,
+        message: `${invitedCount} invitation(s) created${skippedCount > 0 ? `, ${skippedCount} skipped` : ''}`
+      });
+    } catch (error) {
+      console.error("[BULK INVITE] Error:", error);
+      const message = error instanceof Error ? error.message : "Failed to bulk invite athletes";
+      res.status(500).json({ message });
+    }
+  });
 }
