@@ -120,12 +120,12 @@ export function registerUserRoutes(app: Express) {
         return res.json(users);
       }
 
-      const userOrgs = await userService.getUserOrganizations(currentUser.id);
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
       if (userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization access" });
       }
 
-      const targetOrgId = organizationId || userOrgs[0].organizationId;
+      const targetOrgId = String(organizationId || userOrgs[0].organizationId);
       let orgUsers = await userService.getUsersByOrganization(targetOrgId, currentUser.id);
 
       // Filter by role if specified (e.g., role=athlete for players only)
@@ -169,9 +169,9 @@ export function registerUserRoutes(app: Express) {
         // Use optimized method that fetches users and team memberships in efficient queries
         const filters = {
           search: sanitizedSearch,
-          role: role as string | undefined,
-          excludeTeam: excludeTeam as string | undefined,
-          season: season as string | undefined
+          role: typeof role === 'string' ? role : undefined,
+          excludeTeam: typeof excludeTeam === 'string' ? excludeTeam : undefined,
+          season: typeof season === 'string' ? season : undefined
         };
 
         const usersWithTeams = await storage.getUsersWithTeamMembershipsByOrganization(
@@ -377,16 +377,20 @@ export function registerUserRoutes(app: Express) {
 
   /**
    * Check username availability
+   * Optional: Pass excludeUserId to allow checking if username is available for updating a specific user
    */
   app.get("/api/users/check-username", usernameCheckLimiter, async (req, res) => {
     try {
-      const { username } = req.query;
-      
+      const { username, excludeUserId } = req.query;
+
       if (!username || typeof username !== 'string') {
         return res.status(400).json({ message: "Username is required" });
       }
 
-      const isAvailable = await userService.checkUsernameAvailability(username);
+      const isAvailable = await userService.checkUsernameAvailability(
+        username,
+        excludeUserId && typeof excludeUserId === 'string' ? excludeUserId : undefined
+      );
       res.json({ available: isAvailable });
     } catch (error) {
       console.error("Check username error:", error);

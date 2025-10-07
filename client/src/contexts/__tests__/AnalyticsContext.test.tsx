@@ -116,6 +116,8 @@ describe('AnalyticsContext State Transitions', () => {
     },
     selectedChartType: 'box_swarm_combo',
     showAllCharts: false,
+    availableTeams: [],
+    availableAthletes: [],
     ...overrides,
   });
 
@@ -226,10 +228,10 @@ describe('AnalyticsContext State Transitions', () => {
       });
     });
 
-    it('should preserve timeframe when type is "average"', () => {
+    it('should preserve timeframe when type is "best"', () => {
       const initialState = createMockState({
         timeframe: {
-          type: 'average',
+          type: 'best',
           period: 'last_90_days',
         }
       });
@@ -237,7 +239,7 @@ describe('AnalyticsContext State Transitions', () => {
       const result = simulateEnterMultiGroup(initialState, 'multi_group');
 
       expect(result.timeframe).toEqual({
-        type: 'average',
+        type: 'best',
         period: 'last_90_days',
       });
     });
@@ -246,7 +248,7 @@ describe('AnalyticsContext State Transitions', () => {
       const initialState = createMockState({
         timeframe: {
           type: 'trends',
-          period: 'last_6_months',
+          period: 'last_90_days',
         }
       });
 
@@ -465,7 +467,7 @@ describe('AnalyticsContext State Transitions', () => {
         analysisType: 'individual',
         timeframe: {
           type: 'trends',
-          period: 'last_6_months',
+          period: 'last_90_days',
         }
       });
 
@@ -473,7 +475,7 @@ describe('AnalyticsContext State Transitions', () => {
 
       expect(result.timeframe).toEqual({
         type: 'trends',
-        period: 'last_6_months',
+        period: 'last_90_days',
       });
     });
 

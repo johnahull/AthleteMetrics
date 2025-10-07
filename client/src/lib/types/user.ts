@@ -9,6 +9,7 @@ export interface BaseUser {
   firstName: string;
   lastName: string;
   isSiteAdmin: boolean;
+  emailVerified?: boolean;
   athleteId?: string;
   primaryOrganizationId?: string;
 }

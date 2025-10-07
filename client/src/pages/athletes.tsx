@@ -6,10 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AthleteModal from "@/components/athlete-modal";
+import { InvitationModal } from "@/components/invitation-modal";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import type { Team } from "@shared/schema";
@@ -54,6 +55,7 @@ export default function Athletes() {
   }
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState(null);
   const [filters, setFilters] = useState({
     teamId: "all",
@@ -128,9 +130,31 @@ export default function Athletes() {
         params.append('organizationId', effectiveOrganizationId);
       }
 
-      const response = await fetch(`/api/athletes?${params}`);
+      // Add cache-busting parameter to force fresh request
+      params.append('_t', Date.now().toString());
+
+      const response = await fetch(`/api/athletes?${params}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) throw new Error('Failed to fetch athletes');
-      return response.json();
+      const data = await response.json();
+
+      // Debug: Log first athlete to see structure
+      if (data.length > 0) {
+        console.log('[FRONTEND DEBUG] First athlete from API:', {
+          id: data[0].id,
+          name: `${data[0].firstName} ${data[0].lastName}`,
+          emails: data[0].emails,
+          emailsType: typeof data[0].emails,
+          isArray: Array.isArray(data[0].emails),
+          allKeys: Object.keys(data[0]).sort()
+        });
+      }
+
+      return data;
     },
   });
 
@@ -162,6 +186,38 @@ export default function Athletes() {
   const handleDeleteAthlete = async (athleteId: string, athleteName: string) => {
     if (window.confirm(`Are you sure you want to delete "${athleteName}"? This action cannot be undone.`)) {
       deleteAthleteMutation.mutate(athleteId);
+    }
+  };
+
+  // Toggle athlete active status mutation
+  const toggleAthleteStatusMutation = useMutation({
+    mutationFn: async ({ athleteId, isActive }: { athleteId: string; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/athletes/${athleteId}/status`, { isActive });
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      toast({
+        title: "Success",
+        description: isActive ? "Athlete activated successfully" : "Athlete deactivated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleToggleAthleteStatus = (athleteId: string, athleteName: string, currentStatus: boolean) => {
+    const action = currentStatus ? "deactivate" : "activate";
+    const confirmMessage = currentStatus
+      ? `Are you sure you want to deactivate "${athleteName}"? They will not be able to log in.`
+      : `Are you sure you want to reactivate "${athleteName}"?`;
+
+    if (window.confirm(confirmMessage)) {
+      toggleAthleteStatusMutation.mutate({ athleteId, isActive: !currentStatus });
     }
   };
 
@@ -200,12 +256,12 @@ export default function Athletes() {
     }
   };
 
-  // Send athlete invitation mutation (sends to all emails)
+  // Create athlete invitation mutation (creates invitation and copies link to clipboard)
   const sendAthleteInvitationMutation = useMutation({
     mutationFn: async ({ athleteId, organizationId }: { athleteId: string; organizationId: string }) => {
       const response = await apiRequest("POST", "/api/invitations", {
         athleteId: athleteId,
-        role: "athlete", 
+        role: "athlete",
         organizationId,
         teamIds: []
       });
@@ -215,18 +271,29 @@ export default function Athletes() {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
 
-      const emailCount = data.invitations?.length || 1;
-      const athleteName = data.athlete ? `${data.athlete.firstName} ${data.athlete.lastName}` : 'athlete';
+      // Copy the first invitation link to clipboard
+      if (data.inviteLinks && data.inviteLinks.length > 0) {
+        navigator.clipboard.writeText(data.inviteLinks[0]);
 
-      toast({
-        title: "Success",
-        description: `${emailCount} invitation${emailCount > 1 ? 's' : ''} sent to ${athleteName}`,
-      });
+        const emailCount = data.invitations?.length || 1;
+
+        toast({
+          title: "Success",
+          description: emailCount > 1
+            ? `${emailCount} invitations created. First invitation link copied to clipboard.`
+            : "Invitation link copied to clipboard",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Invitation created",
+        });
+      }
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to send athlete invitations",
+        description: error.message || "Failed to create athlete invitation",
         variant: "destructive",
       });
     },
@@ -274,6 +341,9 @@ export default function Athletes() {
   };
 
   const handleSendAthleteInvitation = (athleteId: string) => {
+    console.log('[INVITE DEBUG] userOrgs:', userOrgs);
+    console.log('[INVITE DEBUG] effectiveOrganizationId:', effectiveOrganizationId);
+
     if (!userOrgs || userOrgs.length === 0) {
       toast({
         title: "Error",
@@ -283,7 +353,10 @@ export default function Athletes() {
       return;
     }
 
-    const orgId = userOrgs[0]?.organization?.id;
+    // Try multiple ways to get organization ID
+    const orgId = userOrgs[0]?.organization?.id || userOrgs[0]?.organizationId || effectiveOrganizationId;
+    console.log('[INVITE DEBUG] Resolved orgId:', orgId);
+
     if (!orgId) {
       toast({
         title: "Error",
@@ -363,13 +436,22 @@ export default function Athletes() {
             <FileUp className="h-4 w-4 mr-2" />
             Import CSV
           </Button>
-          <Button 
+          <Button
             onClick={() => setShowAddModal(true)}
             className="bg-primary hover:bg-blue-700"
             data-testid="button-add-athlete"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Athlete
+          </Button>
+          <Button
+            onClick={() => setShowInviteModal(true)}
+            variant="outline"
+            className="border-primary text-primary hover:bg-blue-50"
+            data-testid="button-invite-athlete"
+          >
+            <Mail className="h-4 w-4 mr-2" />
+            Invite Athlete
           </Button>
         </div>
       </div>
@@ -602,6 +684,7 @@ export default function Athletes() {
                     <th className="px-6 py-3">School</th>
                     <th className="px-6 py-3">Sport</th>
                     <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Invitation</th>
                     <th className="px-6 py-3">Actions</th>
                   </tr>
                 </thead>
@@ -657,6 +740,31 @@ export default function Athletes() {
                         )}
                       </td>
                       <td className="px-6 py-4">
+                        {(() => {
+                          // Check if athlete has a pending invitation for any of their emails
+                          const emails = (athlete as any).emails;
+                          const hasInvitation = Array.isArray(emails) && emails.some((email: string) =>
+                            athleteInvitations?.some((inv: any) => inv.email === email)
+                          );
+
+                          if ((athlete as any).isActive) {
+                            return (
+                              <Badge variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                                Registered
+                              </Badge>
+                            );
+                          } else if (hasInvitation) {
+                            return (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                                Invited
+                              </Badge>
+                            );
+                          } else {
+                            return <span className="text-gray-400">—</span>;
+                          }
+                        })()}
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="flex space-x-2">
                           <Button
                             variant="ghost"
@@ -674,20 +782,59 @@ export default function Athletes() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          {/* Send Athlete Invitation Button - sends to all emails */}
-                          {(athlete as any).emails && (athlete as any).emails.length > 0 && !athleteInvitations?.some((inv: any) => (athlete as any).emails.includes(inv.email)) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSendAthleteInvitation(athlete.id)}
-                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              disabled={sendAthleteInvitationMutation.isPending}
-                              title={`Send invitations to all emails (${(athlete as any).emails.length} addresses)`}
-                              data-testid={`button-invite-athlete-${athlete.id}`}
-                            >
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                          )}
+                          {/* Send/Resend Athlete Invitation Button - always visible with smart behavior */}
+                          {(() => {
+                            // Defensive email checking with better type safety
+                            const emails = (athlete as any).emails;
+                            const hasEmails = Array.isArray(emails) && emails.length > 0;
+
+                            // Debug logging (can be removed after issue is resolved)
+                            if (!hasEmails && typeof emails !== 'undefined') {
+                              console.warn(`Athlete ${athlete.id} has invalid emails:`, emails);
+                            }
+
+                            const hasInvitation = hasEmails && athleteInvitations?.some((inv: any) =>
+                              emails.includes(inv.email)
+                            );
+
+                            let title = "";
+                            let disabled = false;
+
+                            if (!hasEmails) {
+                              title = "No email address";
+                              disabled = true;
+                            } else if (hasInvitation) {
+                              title = `Create new invitation and copy link to clipboard`;
+                            } else {
+                              title = `Create invitation and copy link to clipboard`;
+                            }
+
+                            return (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSendAthleteInvitation(athlete.id)}
+                                className={disabled ? "text-gray-400" : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"}
+                                disabled={disabled || sendAthleteInvitationMutation.isPending}
+                                title={title}
+                                data-testid={`button-invite-athlete-${athlete.id}`}
+                              >
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            );
+                          })()}
+                          {/* Toggle Active/Inactive Status Button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleAthleteStatus(athlete.id, athlete.fullName, (athlete as any).isActive)}
+                            className={(athlete as any).isActive ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-green-600 hover:text-green-700 hover:bg-green-50"}
+                            disabled={toggleAthleteStatusMutation.isPending}
+                            title={(athlete as any).isActive ? "Mark as inactive" : "Reactivate athlete"}
+                            data-testid={`button-toggle-status-${athlete.id}`}
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
                           {/* Remove from Team Button - only show when viewing specific team */}
                           {filters.teamId && filters.teamId !== 'all' && athlete.teams?.some((team: any) => team.id === filters.teamId) && (
                             <Button
@@ -734,6 +881,15 @@ export default function Athletes() {
         onClose={() => setEditingAthlete(null)}
         athlete={editingAthlete}
       />
+
+      {effectiveOrganizationId && (
+        <InvitationModal
+          open={showInviteModal}
+          onOpenChange={setShowInviteModal}
+          organizationId={effectiveOrganizationId}
+          role="athlete"
+        />
+      )}
     </div>
   );
 }

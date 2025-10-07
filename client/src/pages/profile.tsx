@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { updateProfileSchema, changePasswordSchema, type UpdateProfile, type ChangePassword } from "@shared/schema";
-import { User, Lock, Save, Eye, EyeOff } from "lucide-react";
+import { User, Lock, Save, Eye, EyeOff, Mail, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -72,7 +72,7 @@ export default function Profile() {
     },
     onSuccess: () => {
       toast({
-        title: "Success", 
+        title: "Success",
         description: "Password changed successfully",
       });
       passwordForm.reset();
@@ -82,6 +82,26 @@ export default function Profile() {
       toast({
         title: "Error",
         description: error.message || "Failed to change password",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendVerificationEmailMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/auth/send-verification-email");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Verification email sent! Please check your inbox.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send verification email",
         variant: "destructive",
       });
     },
@@ -232,10 +252,39 @@ export default function Profile() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 space-y-2">
                 <p><strong>Role:</strong> {user.role ? user.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not assigned'}</p>
                 <p><strong>Account Status:</strong> Active</p>
+                <div className="flex items-center gap-2">
+                  <strong>Email Status:</strong>
+                  {user.emailVerified ? (
+                    <span className="flex items-center gap-1 text-green-600">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Verified
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-amber-600">
+                      <AlertCircle className="h-4 w-4" />
+                      Not Verified
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {!user.emailVerified && (
+                <>
+                  <Separator />
+                  <Button
+                    onClick={() => sendVerificationEmailMutation.mutate()}
+                    disabled={sendVerificationEmailMutation.isPending}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    {sendVerificationEmailMutation.isPending ? "Sending..." : "Send Verification Email"}
+                  </Button>
+                </>
+              )}
 
               <Separator />
 

@@ -1,6 +1,6 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs,
-  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   insertUserSchema
 } from "@shared/schema";
@@ -74,8 +74,15 @@ export interface IStorage {
     expiresAt: Date;
   }): Promise<Invitation>;
   getInvitation(token: string): Promise<Invitation | undefined>;
-  updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation>;
+  getInvitationById(id: string): Promise<Invitation | undefined>;
+  getInvitationByToken(token: string): Promise<Invitation | undefined>;
+  updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
+
+  // Email Verification
+  createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
+  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  getEmailVerificationToken(token: string): Promise<any>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
@@ -169,10 +176,9 @@ export interface IStorage {
   markPasswordResetTokenUsed(token: string): Promise<void>;
   updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
   updatePasswordChangedAt(userId: string): Promise<void>;
-  createEmailVerificationToken(token: any): Promise<void>;
-  findEmailVerificationToken(token: string): Promise<any>;
-  markEmailAsVerified(userId: string, email: string): Promise<void>;
-  markEmailVerificationTokenUsed(token: string): Promise<void>;
+  createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
+  getEmailVerificationToken(token: string): Promise<any>;
+  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
   getUserRole(userId: string, organizationId: string): Promise<string | null>;
   getUserRoles(userId: string, organizationId?: string): Promise<string[]>;
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
@@ -575,8 +581,8 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateInvitation(id: string, invitation: Partial<InsertInvitation>): Promise<Invitation> {
-    const [updated] = await db.update(invitations).set(invitation).where(eq(invitations.id, id)).returning();
+  async updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation> {
+    const [updated] = await db.update(invitations).set(invitation as any).where(eq(invitations.id, id)).returning();
     return updated;
   }
 
@@ -919,61 +925,172 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
+  async getInvitationByToken(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.token, token));
+    return invitation || undefined;
+  }
+
   async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
-    const invitation = await this.getInvitation(token);
-    if (!invitation) throw new Error("Invalid or expired invitation");
+    // Use database transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx: any) => {
+      // Lock the invitation row with SELECT FOR UPDATE
+      // This prevents concurrent acceptance attempts
+      const [invitation] = await tx.select()
+        .from(invitations)
+        .where(and(
+          eq(invitations.token, token),
+          eq(invitations.isUsed, false),
+          gte(invitations.expiresAt, new Date())
+        ))
+        .for('update');
 
-    // Always create a new user - email addresses are not unique identifiers for athletes
-    // Note: role is also stored in user_organizations for organization-specific roles
-    const createUserData = {
-      username: userInfo.username,
-      emails: [invitation.email],
-      password: userInfo.password,
-      firstName: userInfo.firstName,
-      lastName: userInfo.lastName,
-      role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
-    };
+      if (!invitation) {
+        throw new Error("Invalid or expired invitation");
+      }
 
-    console.log("Creating user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+      let user;
 
-    // Validate user data against schema before creating user
-    try {
-      insertUserSchema.parse(createUserData);
-    } catch (error) {
-      console.error("User data validation failed:", error);
-      throw error;
-    }
+      // Check if invitation is linked to an existing athlete (playerId)
+      if (invitation.playerId) {
+        console.log("Invitation linked to existing athlete:", invitation.playerId);
 
-    let user;
-    try {
-      user = await this.createUser(createUserData);
-      console.log("User created successfully:", user.id);
-    } catch (error) {
-      console.error("Error creating user:", error);
-      throw error;
-    }
+        // Get the existing athlete/user
+        const existingUser = await this.getUser(invitation.playerId);
 
-    // Add user to organization with the invitation role (this will remove any existing roles first)
-    await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+        if (!existingUser) {
+          throw new Error("Linked athlete not found");
+        }
 
-    // Add user to teams if specified
-    if (invitation.teamIds && invitation.teamIds.length > 0) {
-      for (const teamId of invitation.teamIds) {
+        // Update the existing user with credentials
+        // Note: updateUser will hash the password, so pass the plain password
+        user = await this.updateUser(invitation.playerId, {
+          username: userInfo.username,
+          password: userInfo.password,
+          isActive: true
+        });
+
+        console.log("Updated existing athlete with credentials:", user.id);
+      } else {
+        // Create a new user - for non-athlete invitations or new athletes
+        // Note: role is also stored in user_organizations for organization-specific roles
+        const createUserData = {
+          username: userInfo.username,
+          emails: [invitation.email],
+          password: userInfo.password,
+          firstName: userInfo.firstName,
+          lastName: userInfo.lastName,
+          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+        };
+
+        console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+
+        // Validate user data against schema before creating user
         try {
-          await this.addUserToTeam(user.id, teamId);
+          insertUserSchema.parse(createUserData);
         } catch (error) {
-          // May already be in team - that's okay
-          console.log("User may already be in team:", error);
+          console.error("User data validation failed:", error);
+          throw error;
+        }
+
+        try {
+          user = await this.createUser(createUserData);
+          console.log("User created successfully:", user.id);
+        } catch (error) {
+          console.error("Error creating user:", error);
+          throw error;
         }
       }
-    }
 
-    // Mark the invitation as used
-    await db.update(invitations)
-      .set({ isUsed: true })
-      .where(eq(invitations.token, token));
+      // Add user to organization with the invitation role (this will remove any existing roles first)
+      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
 
-    return { user };
+      // Add user to teams if specified
+      if (invitation.teamIds && invitation.teamIds.length > 0) {
+        for (const teamId of invitation.teamIds) {
+          try {
+            await this.addUserToTeam(user.id, teamId);
+          } catch (error) {
+            // May already be in team - that's okay
+            console.log("User may already be in team:", error);
+          }
+        }
+      }
+
+      // Mark the invitation as used and accepted (using transaction connection)
+      await tx.update(invitations)
+        .set({
+          isUsed: true,
+          status: 'accepted',
+          acceptedAt: new Date(),
+          acceptedBy: user.id
+        })
+        .where(eq(invitations.token, token));
+
+      return { user };
+    });
+  }
+
+  // Email Verification
+  async createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await db.insert(emailVerificationTokens).values({
+      userId,
+      email,
+      token,
+      expiresAt
+    });
+
+    return { token, expiresAt };
+  }
+
+  async verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }> {
+    // Use transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx: any) => {
+      // Lock the row for update to prevent concurrent verification attempts
+      const [verificationToken] = await tx.select()
+        .from(emailVerificationTokens)
+        .where(and(
+          eq(emailVerificationTokens.token, token),
+          eq(emailVerificationTokens.isUsed, false),
+          gte(emailVerificationTokens.expiresAt, new Date())
+        ))
+        .for('update'); // Row-level lock
+
+      if (!verificationToken) {
+        return { success: false };
+      }
+
+      // Mark token as used (within same transaction)
+      await tx.update(emailVerificationTokens)
+        .set({ isUsed: true })
+        .where(eq(emailVerificationTokens.token, token));
+
+      // Mark user's email as verified (within same transaction)
+      await tx.update(users)
+        .set({ isEmailVerified: true })
+        .where(eq(users.id, verificationToken.userId));
+
+      return {
+        success: true,
+        userId: verificationToken.userId,
+        email: verificationToken.email
+      };
+    });
+  }
+
+  async getEmailVerificationToken(token: string): Promise<typeof emailVerificationTokens.$inferSelect | undefined> {
+    const [verificationToken] = await db.select()
+      .from(emailVerificationTokens)
+      .where(and(
+        eq(emailVerificationTokens.token, token),
+        eq(emailVerificationTokens.isUsed, false),
+        gte(emailVerificationTokens.expiresAt, new Date())
+      ));
+
+    return verificationToken || undefined;
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers
@@ -1016,7 +1133,9 @@ export class DatabaseStorage implements IStorage {
       }
 
       const result = await db
-        .select()
+        .select({
+          users: users
+        })
         .from(users)
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .where(and(
@@ -1053,8 +1172,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get athletes first with optimized batched query approach
+    // IMPORTANT: Explicitly select user fields to ensure array fields (emails, phoneNumbers, sports) are properly serialized
     const athleteQuery = db
-      .select()
+      .select({
+        users: users
+      })
       .from(users)
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
@@ -1062,6 +1184,23 @@ export class DatabaseStorage implements IStorage {
 
     const athleteResults = await athleteQuery;
     const athletes = athleteResults.map((row: { users: User }) => row.users);
+
+    // Debug logging to verify database returns emails
+    if (athletes.length > 0) {
+      const sampleUser = athletes[0];
+      console.log('\n========================================');
+      console.log('[STORAGE DEBUG] Sample user from DB query:');
+      console.log('ID:', sampleUser.id);
+      console.log('Name:', sampleUser.firstName, sampleUser.lastName);
+      console.log('Has emails?:', !!sampleUser.emails);
+      console.log('Emails type:', Array.isArray(sampleUser.emails) ? 'array' : typeof sampleUser.emails);
+      console.log('Emails length:', Array.isArray(sampleUser.emails) ? sampleUser.emails.length : 'N/A');
+      console.log('Emails value:', sampleUser.emails);
+      console.log('Phone numbers:', sampleUser.phoneNumbers);
+      console.log('Sports:', sampleUser.sports);
+      console.log('All user keys:', Object.keys(sampleUser).sort());
+      console.log('========================================\n');
+    }
 
     // If no athletes found, return empty array
     if (athletes.length === 0) {
@@ -1143,15 +1282,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
-    // Generate a temporary username for the athlete
-    const username = `athlete_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Generate a placeholder username that will be replaced when they accept the invitation
+    // Use email prefix if available, otherwise use name-based username
+    let username: string;
+    if (athlete.emails && athlete.emails.length > 0 && athlete.emails[0]) {
+      // Use email prefix as username placeholder (e.g., "john.doe" from "john.doe@email.com")
+      const emailPrefix = athlete.emails[0].split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      username = `${emailPrefix}_pending_${Date.now().toString().slice(-6)}`;
+    } else {
+      // Fallback to name-based username
+      const namePart = `${athlete.firstName}${athlete.lastName}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+      username = `${namePart}_pending_${Date.now().toString().slice(-6)}`;
+    }
 
     // Use primary email or generate one
     const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
 
     // Create new user directly without checking for existing emails
     const [newUser] = await db.insert(users).values({
-      username,
+      username, // This will be replaced when the athlete accepts their invitation
       emails, // Ensure emails array is always provided
       firstName: athlete.firstName!,
       lastName: athlete.lastName!,
@@ -1165,7 +1314,7 @@ export class DatabaseStorage implements IStorage {
       fullName: `${athlete.firstName} ${athlete.lastName}`,
       birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: athlete.isActive ?? true // Use provided value or default to active
+      isActive: false // Set to false until they complete registration
     }).returning();
 
     // Determine organization for athlete association
@@ -1261,17 +1410,49 @@ export class DatabaseStorage implements IStorage {
   async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
       // Delete all user-organization relationships
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
-      // Delete all measurements for this user
+      // Delete all measurements for this user (as subject)
       await tx.delete(measurements).where(eq(measurements.userId, id));
 
-      // Delete all invitations for this user
+      // Update measurements submitted by this user (set submittedBy to null or keep as-is)
+      // Don't delete them as they belong to other athletes
+      await tx.update(measurements)
+        .set({ submittedBy: null as any })
+        .where(eq(measurements.submittedBy, id));
+
+      // Update measurements verified by this user
+      await tx.update(measurements)
+        .set({ verifiedBy: null as any })
+        .where(eq(measurements.verifiedBy, id));
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: null as any })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: null as any })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Delete invitations created BY this user
       await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+
+      // Delete invitations FOR this user (as athlete/playerId)
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+
+      // Delete audit logs for this user
+      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
 
       // Finally, delete the user record
       await tx.delete(users).where(eq(users.id, id));
@@ -1987,28 +2168,6 @@ export class DatabaseStorage implements IStorage {
       .set({ lastLoginAt: new Date() }) // Using lastLoginAt as placeholder
       .where(eq(users.id, userId));
   }
-
-  async createEmailVerificationToken(token: any): Promise<void> {
-    // Would need emailVerificationTokens table implementation
-    console.log('Creating email verification token for user:', token.userId);
-  }
-
-  async findEmailVerificationToken(token: string): Promise<any> {
-    // Would need emailVerificationTokens table implementation
-    return null;
-  }
-
-  async markEmailAsVerified(userId: string, email: string): Promise<void> {
-    await db.update(users)
-      .set({ isEmailVerified: true })
-      .where(eq(users.id, userId));
-  }
-
-  async markEmailVerificationTokenUsed(token: string): Promise<void> {
-    // Would need emailVerificationTokens table implementation
-    console.log('Marking email verification token as used:', token);
-  }
-
 
   async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
     try {

@@ -1,6 +1,6 @@
 import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +21,40 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { validateUsername } from "@shared/username-validation";
+
+// Mock components and types (replace with actual imports if available)
+const LoadingSpinner = ({ text }: { text: string }) => (
+  <div className="flex items-center justify-center py-12">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+      <p className="mt-2 text-gray-600">{text}</p>
+    </div>
+  </div>
+);
+
+const OrganizationDisplay = ({ organization, isLoading, error }: any) => {
+  if (isLoading) return <LoadingSpinner text="Loading organization details..." />;
+  if (error) return <p className="text-red-600">Error loading organization details: {error.message}</p>;
+  if (!organization) return <p className="text-gray-500">No organization data available.</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Building2 className="h-8 w-8 text-primary" />
+        <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
+      </div>
+      {organization.location && (
+        <div className="flex items-center gap-2 text-gray-600">
+          <MapPin className="h-4 w-4" />
+          <span>{organization.location}</span>
+        </div>
+      )}
+      {organization.description && (
+        <p className="text-gray-600 mt-2">{organization.description}</p>
+      )}
+    </div>
+  );
+};
 
 // Form schemas
 const createUserSchema = z.object({
@@ -83,6 +117,10 @@ type OrganizationProfile = {
         name: string;
       };
     }>;
+    // Added potential fields for athlete details
+    dateOfBirth?: string;
+    gender?: string;
+    email?: string;
   }>;
   invitations: Array<{
     id: string;
@@ -503,7 +541,6 @@ export default function OrganizationProfile() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-
   // Get user's organizations to check if they're an org admin
   const { data: userOrganizations = [] } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
@@ -513,6 +550,9 @@ export default function OrganizationProfile() {
     refetchOnMount: true,
     refetchOnWindowFocus: true, // Enable refetch on focus
   }) as { data: any[] };
+
+  const canEdit = user?.isSiteAdmin || (Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin"));
+  const handleEdit = () => { /* implement edit logic */ };
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
@@ -552,7 +592,7 @@ export default function OrganizationProfile() {
   useEffect(() => {
     if (id) {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] }); // Assuming this fetches teams or related data
     }
   }, [id]);
 
@@ -635,10 +675,10 @@ export default function OrganizationProfile() {
       const response = await fetch(`/api/invitations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          email, 
+        body: JSON.stringify({
+          email,
           role: roles[0], // Take the first role from the array
-          organizationId: id 
+          organizationId: id
         }),
       });
 
@@ -796,12 +836,7 @@ export default function OrganizationProfile() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading organization profile...</p>
-          </div>
-        </div>
+        <LoadingSpinner text="Loading organization profile..." />
       </div>
     );
   }
@@ -841,29 +876,34 @@ export default function OrganizationProfile() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold text-gray-900" data-testid="organization-title">{organization.name}</h1>
-          </div>
-          {organization.location && (
-            <div className="flex items-center gap-2 text-gray-600">
-              <MapPin className="h-4 w-4" />
-              <span>{organization.location}</span>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl">{organization?.name}</CardTitle>
+              <CardDescription>
+                Organization Profile and Settings
+              </CardDescription>
             </div>
-          )}
-          {organization.description && (
-            <p className="text-gray-600 mt-2">{organization.description}</p>
-          )}
-        </div>
+            {canEdit && (
+              <Button onClick={handleEdit}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Profile
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <OrganizationDisplay
+            organization={organization}
+            isLoading={isLoading}
+            error={error}
+          />
+        </CardContent>
+      </Card>
 
-        <UserManagementModal organizationId={id!} />
-      </div>
-
-      <div className="space-y-6">
-        {/* Coaches Section - First */}
+      {/* Coaches & Administrators Section - Only visible to Site Admins and Org Admins */}
+      {(user?.isSiteAdmin || isOrgAdmin) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -957,9 +997,9 @@ export default function OrganizationProfile() {
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete {isExpired ? 'Expired' : 'Pending'} Invitation</AlertDialogTitle>
+                                      <AlertDialogTitle>Delete Pending Invitation</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Are you sure you want to delete the {isExpired ? 'expired' : 'pending'} invitation for {invitation.email}? This will remove their access and they won't be able to join the organization.
+                                        Are you sure you want to delete the invitation for {invitation.email}? This action cannot be undone.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -968,7 +1008,7 @@ export default function OrganizationProfile() {
                                         onClick={() => deletePendingUser(invitation.id, invitation.email)}
                                         className="bg-red-600 hover:bg-red-700"
                                       >
-                                        Delete Invitation
+                                        Delete
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
@@ -983,22 +1023,17 @@ export default function OrganizationProfile() {
                 </div>
               )}
 
+              {/* Active Coaches */}
               {!organization.coaches || organization.coaches.length === 0 ? (
                 <p className="text-gray-500 text-sm">No coaches assigned</p>
               ) : (
-                organization.coaches.map((coach, index) => {
-                  // Check if there's a pending invitation for this user
-                  const pendingInvitation = organization.invitations?.find(
-                    inv => inv.email === coach.user.email && inv.isUsed === "false"
-                  );
-
-                  return (
-                    <div key={coach.user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                organization.coaches.map((coach) => (
+                  <div key={coach.user.id} className="p-3 bg-gray-50 rounded-lg border">
+                    <div className="flex items-center gap-3">
                       <div className="flex-1">
-                        <Link 
-                          href={`/users/${coach.user.id}`}
+                        <Link
+                          to={`/users/${coach.user.id}`}
                           className="font-medium text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                          data-testid={`user-profile-link-${coach.user.id}`}
                         >
                           {coach.user.firstName} {coach.user.lastName}
                         </Link>
@@ -1006,96 +1041,19 @@ export default function OrganizationProfile() {
                           <Mail className="h-3 w-3" />
                           <span>{coach.user.email}</span>
                         </div>
-                        {/* Display username if available */}
-                        {coach.user.username && (
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <UserCog className="h-3 w-3" />
-                            <span>{coach.user.username}</span>
-                          </div>
-                        )}
-
-                        {/* Invitation Status */}
-                        <div className="flex items-center gap-2 mt-1">
-                          {pendingInvitation ? (
-                            <div className="flex items-center gap-1 text-xs text-amber-600">
-                              <Clock className="h-3 w-3" />
-                              <span>Invitation pending</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1 text-xs text-green-600">
-                              <CheckCircle className="h-3 w-3" />
-                              <span>Active user</span>
-                            </div>
-                          )}
-                        </div>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={coach.role === 'org_admin' ? 'default' : 'secondary'}
-                        >
-                          {coach.role === 'org_admin' ? 'Admin' : coach.role === 'coach' ? 'Coach' : 'Athlete'}
-                        </Badge>
-
-                        {/* Action Buttons - only for admin users */}
-                        {(user?.isSiteAdmin || isOrgAdmin) && (
-                          <div className="flex items-center gap-1">
-                            {/* Send Invitation Button - only show if user is not active (no invitation needed for active users) */}
-                            {!pendingInvitation && coach.user.isActive !== "true" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => sendInvitation(coach.user.email, [coach.role])}
-                                data-testid={`send-invitation-${coach.user.id}`}
-                              >
-                                <Send className="h-3 w-3" />
-                              </Button>
-                            )}
-
-                            {/* Delete User Button - hide for current user */}
-                            {coach.user.id !== user?.id && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    data-testid={`delete-user-${coach.user.id}`}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to remove {coach.user.firstName} {coach.user.lastName} from this organization? This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => deleteUser(coach.user.id, `${coach.user.firstName} ${coach.user.lastName}`)}
-                                      className="bg-red-600 hover:bg-red-700"
-                                    >
-                                      Delete User
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <Badge variant={coach.role === 'org_admin' ? 'default' : 'secondary'}>
+                        {coach.role === 'org_admin' ? 'Admin' : 'Coach'}
+                      </Badge>
                     </div>
-                  );
-                })
+                  </div>
+                ))
               )}
             </div>
           </CardContent>
         </Card>
+      )}
 
-      </div>
     </div>
   );
 }

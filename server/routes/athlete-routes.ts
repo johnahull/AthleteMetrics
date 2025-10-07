@@ -87,11 +87,13 @@ export function registerAthleteRoutes(app: Express) {
         graduationYear: athlete.graduationYear,
         school: athlete.school,
         phoneNumbers: athlete.phoneNumbers,
+        emails: athlete.emails,
         sports: athlete.sports,
         positions: athlete.positions,
         height: athlete.height,
         weight: athlete.weight,
         gender: athlete.gender,
+        isActive: athlete.isActive,
       }));
 
       res.json(transformedAthletes);
@@ -228,18 +230,49 @@ export function registerAthleteRoutes(app: Express) {
   });
 
   /**
+   * Toggle athlete active status (org admins and coaches within their organization)
+   */
+  app.patch("/api/athletes/:id/status", athleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
+    try {
+      const athleteId = req.params.id;
+      const { isActive } = req.body;
+
+      // Validate isActive is a boolean
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ message: "isActive must be a boolean" });
+      }
+
+      // Update user's active status
+      const updatedUser = await storage.updateUser(athleteId, { isActive });
+
+      res.json({
+        id: updatedUser.id,
+        isActive: updatedUser.isActive,
+        message: isActive ? "Athlete activated successfully" : "Athlete deactivated successfully"
+      });
+    } catch (error) {
+      console.error("Toggle athlete status error:", error);
+      const message = error instanceof Error ? error.message : "Failed to toggle athlete status";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
    * Delete athlete (org admins and coaches within their organization)
    */
   app.delete("/api/athletes/:id", athleteDeleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
     try {
       const athleteId = req.params.id;
 
+      console.log('[DELETE ATHLETE] Starting deletion for athlete:', athleteId);
       await storage.deleteAthlete(athleteId);
+      console.log('[DELETE ATHLETE] Successfully deleted athlete:', athleteId);
       res.json({ message: "Athlete deleted successfully" });
     } catch (error) {
-      console.error("Delete athlete error:", error);
+      console.error("[DELETE ATHLETE] Error:", error);
+      console.error("[DELETE ATHLETE] Error stack:", error instanceof Error ? error.stack : 'No stack trace');
       const message = error instanceof Error ? error.message : "Failed to delete athlete";
-      res.status(500).json({ message });
+      res.status(500).json({ message, error: String(error) });
     }
   });
 }
