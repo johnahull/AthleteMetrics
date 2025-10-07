@@ -32,15 +32,15 @@ export function MetricIndicator({ count, maxCount, className = '' }: MetricIndic
 
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>
-      {/* Dot indicators */}
+      {/* Dot indicators - Using filled/outlined dots for colorblind accessibility */}
       <span className="inline-flex gap-0.5" aria-label={`Data availability: ${dotLevel} out of 5`}>
         {Array.from({ length: 5 }).map((_, i) => (
           <span
             key={i}
-            className={i < dotLevel ? 'text-green-600' : 'text-gray-300'}
+            className={i < dotLevel ? 'text-green-600 font-bold' : 'text-gray-300'}
             aria-hidden="true"
           >
-            ●
+            {i < dotLevel ? '●' : '○'}
           </span>
         ))}
       </span>

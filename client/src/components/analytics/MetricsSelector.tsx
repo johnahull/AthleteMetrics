@@ -51,6 +51,11 @@ interface MetricsSelectorProps {
    * Used to show data availability indicators
    */
   metricsAvailability?: Record<string, number>;
+  /**
+   * Maximum count across all metrics (provided by server for normalization)
+   * If not provided, will be calculated client-side from metricsAvailability
+   */
+  maxMetricCount?: number;
 }
 
 export function MetricsSelector({
@@ -59,18 +64,22 @@ export function MetricsSelector({
   maxAdditional = 5,
   className,
   analysisType = 'individual',
-  metricsAvailability = {}
+  metricsAvailability = {},
+  maxMetricCount
 }: MetricsSelectorProps) {
   const availableMetrics = Object.keys(METRIC_CONFIG);
 
   // Memoize multi-group check to avoid recalculating in map loop
   const isMultiGroupMode = analysisType === 'multi_group';
 
-  // Calculate max count for dot level calculation
+  // Use server-provided maxCount if available, otherwise calculate client-side
   const maxCount = useMemo(() => {
+    if (maxMetricCount !== undefined) {
+      return maxMetricCount;
+    }
     const counts = Object.values(metricsAvailability);
     return counts.length > 0 ? Math.max(...counts) : 0;
-  }, [metricsAvailability]);
+  }, [metricsAvailability, maxMetricCount]);
 
   const handlePrimaryMetricChange = (metric: string) => {
     // Remove from additional if it was there

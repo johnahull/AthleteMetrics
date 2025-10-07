@@ -8,6 +8,7 @@ import { measurements, users, userOrganizations, teams, userTeams } from "@share
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
+  AnalyticsFilters,
   ChartDataPoint,
   StatisticalSummary,
   TrendData,
@@ -354,21 +355,21 @@ export class AnalyticsService {
    * Get count of measurements per metric for given filters
    * Used to show data availability in metric selector
    */
-  async getMetricsAvailability(organizationId: string, teamIds?: string[], athleteIds?: string[], dateRange?: { start?: Date; end?: Date }): Promise<Record<string, number>> {
+  async getMetricsAvailability(filters: AnalyticsFilters): Promise<Record<string, number>> {
     const conditions = [
       eq(measurements.isVerified, true),
-      eq(userOrganizations.organizationId, organizationId)
+      eq(userOrganizations.organizationId, filters.organizationId)
     ];
 
     // Apply team filter - filter by athlete team membership
-    if (teamIds && teamIds.length > 0) {
+    if (filters.teams && filters.teams.length > 0) {
       conditions.push(
         exists(
           db.select().from(userTeams)
             .where(
               and(
                 eq(userTeams.userId, users.id),
-                inArray(userTeams.teamId, teamIds),
+                inArray(userTeams.teamId, filters.teams),
                 eq(userTeams.isActive, true)
               )
             )
@@ -377,17 +378,17 @@ export class AnalyticsService {
     }
 
     // Apply athlete filter
-    if (athleteIds && athleteIds.length > 0) {
-      conditions.push(inArray(measurements.userId, athleteIds));
+    if (filters.athleteIds && filters.athleteIds.length > 0) {
+      conditions.push(inArray(measurements.userId, filters.athleteIds));
     }
 
-    // Apply date range filter
-    if (dateRange) {
-      if (dateRange.start) {
-        conditions.push(gte(measurements.date, formatDateForDatabase(dateRange.start)));
+    // Apply date range filter (optional - not used by default to show all available data)
+    if (filters.dateRange) {
+      if (filters.dateRange.start) {
+        conditions.push(gte(measurements.date, formatDateForDatabase(filters.dateRange.start)));
       }
-      if (dateRange.end) {
-        conditions.push(lte(measurements.date, formatDateForDatabase(dateRange.end)));
+      if (filters.dateRange.end) {
+        conditions.push(lte(measurements.date, formatDateForDatabase(filters.dateRange.end)));
       }
     }
 
@@ -590,19 +591,28 @@ export class AnalyticsService {
       // Note: We don't pass date range here because we want to show ALL available data
       // regardless of the current timeframe selection
       let metricsAvailability: Record<string, number> = {};
+      let metricsAvailabilityError = false;
       try {
-        metricsAvailability = await this.getMetricsAvailability(
-          request.filters.organizationId,
-          request.filters.teams,
-          request.filters.athleteIds
-        );
+        // Create filters object without date range to show all available data
+        const availabilityFilters: AnalyticsFilters = {
+          organizationId: request.filters.organizationId,
+          teams: request.filters.teams,
+          athleteIds: request.filters.athleteIds
+          // Intentionally omit dateRange to show all available data
+        };
+        metricsAvailability = await this.getMetricsAvailability(availabilityFilters);
       } catch (error) {
         console.error('ERROR in getMetricsAvailability:', error);
+        metricsAvailabilityError = true;
         // Initialize with zeros if there's an error
         Object.keys(METRIC_CONFIG).forEach(metric => {
           metricsAvailability[metric] = 0;
         });
       }
+
+      // Calculate max count for client-side normalization
+      const counts = Object.values(metricsAvailability);
+      const maxMetricCount = counts.length > 0 ? Math.max(...counts) : 0;
 
       return {
         data: chartData,
@@ -624,7 +634,9 @@ export class AnalyticsService {
           appliedFilters: request.filters,
           recommendedCharts: recommendedCharts as any
         },
-        metricsAvailability
+        metricsAvailability,
+        maxMetricCount,
+        metricsAvailabilityError
       };
     } catch (error) {
       console.error('Analytics service error:', error);

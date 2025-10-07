@@ -3,7 +3,7 @@
  * Handles complex data aggregation and statistical analysis for charts
  */
 
-import { eq, sql, and, gte, lte, inArray, desc, asc } from "drizzle-orm";
+import { eq, sql, and, gte, lte, inArray, desc, asc, exists } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, teams, userTeams, userOrganizations } from "@shared/schema";
 import type {
@@ -75,7 +75,22 @@ export class AnalyticsService {
     const meta = await this.calculateMeta(data, filters, analysisType, timeframe);
 
     // Get metrics availability for metric selector
-    const metricsAvailability = await this.getMetricsAvailability(filters);
+    let metricsAvailability: Record<string, number> = {};
+    let metricsAvailabilityError = false;
+    try {
+      metricsAvailability = await this.getMetricsAvailability(filters);
+    } catch (error) {
+      console.error('ERROR in getMetricsAvailability:', error);
+      metricsAvailabilityError = true;
+      // Initialize with zeros if there's an error
+      Object.keys(METRIC_CONFIG).forEach(metric => {
+        metricsAvailability[metric] = 0;
+      });
+    }
+
+    // Calculate max count for client-side normalization
+    const counts = Object.values(metricsAvailability);
+    const maxMetricCount = counts.length > 0 ? Math.max(...counts) : 0;
 
     return {
       data,
@@ -84,7 +99,9 @@ export class AnalyticsService {
       statistics,
       groupings,
       meta,
-      metricsAvailability
+      metricsAvailability,
+      maxMetricCount,
+      metricsAvailabilityError
     };
   }
 
@@ -603,14 +620,18 @@ export class AnalyticsService {
     // Apply team filter with organization validation
     if (filters.teams && filters.teams.length > 0) {
       conditions.push(
-        sql`EXISTS (
-          SELECT 1 FROM ${userTeams}
-          INNER JOIN ${teams} ON ${userTeams.teamId} = ${teams.id}
-          WHERE ${userTeams.userId} = ${users.id}
-            AND ${inArray(userTeams.teamId, filters.teams)}
-            AND ${eq(teams.organizationId, filters.organizationId)}
-            AND ${eq(userTeams.isActive, true)}
-        )`
+        exists(
+          db.select().from(userTeams)
+            .innerJoin(teams, eq(userTeams.teamId, teams.id))
+            .where(
+              and(
+                eq(userTeams.userId, users.id),
+                inArray(userTeams.teamId, filters.teams),
+                eq(teams.organizationId, filters.organizationId),
+                eq(userTeams.isActive, true)
+              )
+            )
+        )
       );
     }
 

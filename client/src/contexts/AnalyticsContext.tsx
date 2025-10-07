@@ -51,6 +51,7 @@ export interface AnalyticsState {
 
   // Metrics Availability
   metricsAvailability: Record<string, number>;
+  maxMetricCount?: number;
 }
 
 // Analytics Actions
@@ -352,6 +353,7 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
         ...state,
         analyticsData: action.payload,
         metricsAvailability: action.payload?.metricsAvailability || {},
+        maxMetricCount: action.payload?.maxMetricCount,
         isLoading: false,
         error: null
       };

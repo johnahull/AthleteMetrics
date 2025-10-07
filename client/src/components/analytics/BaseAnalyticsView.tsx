@@ -334,6 +334,7 @@ function BaseAnalyticsViewContent({
             availableTeams={state.availableTeams}
             availableAthletes={state.availableAthletes}
             metricsAvailability={state.metricsAvailability}
+            maxMetricCount={state.maxMetricCount}
             onFiltersChange={updateFilters}
             onMetricsChange={updateMetrics}
             onTimeframeChange={updateTimeframe}
@@ -350,6 +351,7 @@ function BaseAnalyticsViewContent({
               onMetricsChange={updateMetrics}
               analysisType={state.analysisType}
               metricsAvailability={state.metricsAvailability}
+              maxMetricCount={state.maxMetricCount}
             />
             <TimeframeSelector
               timeframe={state.timeframe}

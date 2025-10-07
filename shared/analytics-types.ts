@@ -192,6 +192,8 @@ export interface AnalyticsResponse {
     recommendedCharts: ChartType[];
   };
   metricsAvailability?: Record<string, number>;
+  maxMetricCount?: number; // Maximum count across all metrics for normalization
+  metricsAvailabilityError?: boolean; // True if there was an error fetching metrics availability
 }
 
 // Dashboard layout configuration

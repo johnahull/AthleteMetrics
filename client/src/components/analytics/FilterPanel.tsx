@@ -54,6 +54,7 @@ interface FilterPanelProps {
   showAdvancedFilters?: boolean;
   className?: string;
   metricsAvailability?: Record<string, number>;
+  maxMetricCount?: number;
 }
 
 export function FilterPanel({
@@ -70,7 +71,8 @@ export function FilterPanel({
   effectiveOrganizationId,
   showAdvancedFilters = true,
   className,
-  metricsAvailability = {}
+  metricsAvailability = {},
+  maxMetricCount
 }: FilterPanelProps) {
 
 
@@ -109,6 +111,7 @@ export function FilterPanel({
           onMetricsChange={onMetricsChange}
           analysisType={analysisType}
           metricsAvailability={metricsAvailability}
+          maxMetricCount={maxMetricCount}
         />
 
         <TimeframeSelector
