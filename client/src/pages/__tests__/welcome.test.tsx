@@ -7,13 +7,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import Welcome from '../welcome';
+import type { EnhancedUser } from '@/lib/types/user';
 
-// Mock useAuth
-const mockUser = null;
+// Mock state that can be changed per test
+let mockUser: EnhancedUser | null = null;
 const mockSetLocation = vi.fn();
 
+// Mock modules
 vi.mock('@/lib/auth', () => ({
-  useAuth: () => ({ user: mockUser }),
+  useAuth: vi.fn(() => ({ user: mockUser })),
 }));
 
 vi.mock('wouter', () => ({
@@ -23,6 +25,7 @@ vi.mock('wouter', () => ({
 describe('Welcome Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser = null; // Reset to unauthenticated state
   });
 
   describe('Rendering for Unauthenticated Users', () => {
@@ -75,21 +78,52 @@ describe('Welcome Page', () => {
     });
   });
 
-  describe('Authenticated User Redirect', () => {
-    it('should redirect authenticated users to /dashboard', () => {
-      // Mock authenticated user
-      const authenticatedUser = { id: '1', username: 'testuser' };
+  describe('Authenticated User Behavior', () => {
+    it('should not render content when user is authenticated', () => {
+      // Set authenticated user state
+      mockUser = {
+        id: '1',
+        username: 'testuser',
+        firstName: 'Test',
+        lastName: 'User',
+        email: 'test@example.com',
+        role: 'coach',
+        isActive: true,
+        isSiteAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        organizations: [],
+        impersonationStatus: undefined,
+      };
 
-      vi.mock('@/lib/auth', () => ({
-        useAuth: () => ({ user: authenticatedUser }),
-      }));
-
-      // Note: This test would need to be adjusted to properly test the useEffect redirect
-      // In a real scenario, we'd need to test this at an integration level or mock useEffect
       render(<Welcome />);
 
-      // The component should return null for authenticated users
+      // The component should return null for authenticated users (early return)
       expect(screen.queryByText('AthleteMetrics')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+    });
+
+    it('should call setLocation with /dashboard when authenticated user is detected', () => {
+      // Set authenticated user state
+      mockUser = {
+        id: '2',
+        username: 'admin',
+        firstName: 'Admin',
+        lastName: 'User',
+        email: 'admin@example.com',
+        role: 'org_admin',
+        isActive: true,
+        isSiteAdmin: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        organizations: [],
+        impersonationStatus: undefined,
+      };
+
+      render(<Welcome />);
+
+      // Should attempt to redirect to dashboard
+      expect(mockSetLocation).toHaveBeenCalledWith('/dashboard');
     });
   });
 

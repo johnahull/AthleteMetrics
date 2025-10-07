@@ -125,16 +125,19 @@ function Router() {
           <Profile />
         </RouteWrapper>
       </Route>
-      <Route path="/">
-        <RouteWrapper loadingText="Loading...">
-          <Welcome />
-        </RouteWrapper>
-      </Route>
+      {/* Welcome page (/) must come after /dashboard to avoid route conflicts
+          The Welcome component handles authenticated user redirect to /dashboard internally */}
       <Route path="/dashboard">
         <RouteWrapper loadingText="Loading Dashboard...">
           <Dashboard />
         </RouteWrapper>
       </Route>
+      <Route path="/">
+        <RouteWrapper loadingText="Loading...">
+          <Welcome />
+        </RouteWrapper>
+      </Route>
+      {/* 404 Not Found - must be last (catch-all route) */}
       <Route component={NotFound} />
     </Switch>
   );

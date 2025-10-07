@@ -23,12 +23,16 @@ export default function Welcome() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-      <Card className="w-full max-w-md mx-4 shadow-lg">
+      <Card className="w-full max-w-md mx-4 shadow-lg" role="main">
         <CardContent className="pt-12 pb-8 px-8 space-y-6">
           {/* Logo/Icon */}
           <div className="flex justify-center">
-            <div className="h-20 w-20 rounded-full bg-primary flex items-center justify-center">
-              <BarChart3 className="h-10 w-10 text-white" />
+            <div
+              className="h-20 w-20 rounded-full bg-primary flex items-center justify-center"
+              aria-label="AthleteMetrics logo"
+              role="img"
+            >
+              <BarChart3 className="h-10 w-10 text-white" aria-hidden="true" />
             </div>
           </div>
 
@@ -78,17 +82,17 @@ export default function Welcome() {
           </div>
 
           {/* Feature Pills */}
-          <div className="pt-4 space-y-3">
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-              <Users className="h-4 w-4 text-primary" />
+          <div className="pt-4 space-y-3" role="list" aria-label="Key features">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
+              <Users className="h-4 w-4 text-primary" aria-hidden="true" />
               <span>Team Management</span>
             </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-              <BarChart3 className="h-4 w-4 text-primary" />
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
+              <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />
               <span>Performance Analytics</span>
             </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
-              <TrendingUp className="h-4 w-4 text-primary" />
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
+              <TrendingUp className="h-4 w-4 text-primary" aria-hidden="true" />
               <span>Data-Driven Insights</span>
             </div>
           </div>

@@ -1,5 +1,11 @@
 # Security Documentation
 
+> **Note**: This documentation was created as part of the landing page PR to address code review
+> feedback requesting comprehensive CSRF protection documentation. While the landing page itself
+> adds minimal security surface area (public welcome page), the review highlighted the need to
+> document existing CSRF protection mechanisms, especially for public endpoints like invitation
+> acceptance that bypass standard CSRF tokens.
+
 ## Authentication & Session Management
 
 ### Session Configuration
