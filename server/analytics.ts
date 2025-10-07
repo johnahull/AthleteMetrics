@@ -3,7 +3,7 @@
  * Handles complex data aggregation and statistical analysis for charts
  */
 
-import { eq, sql, and, gte, lte, inArray, desc, asc } from "drizzle-orm";
+import { eq, sql, and, gte, lte, inArray, desc, asc, exists } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, teams, userTeams, userOrganizations } from "@shared/schema";
 import type {
@@ -17,9 +17,11 @@ import type {
   MultiMetricData,
   TimeframeConfig,
   MetricSelection,
-  ChartType
+  ChartType,
+  AnalysisType
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
+import { formatDateForDatabase } from "@shared/analytics-utils";
 
 // Type for the database query result from buildBaseQuery
 type QueryResult = {
@@ -72,13 +74,34 @@ export class AnalyticsService {
     // Calculate metadata
     const meta = await this.calculateMeta(data, filters, analysisType, timeframe);
 
+    // Get metrics availability for metric selector
+    let metricsAvailability: Record<string, number> = {};
+    let metricsAvailabilityError = false;
+    try {
+      metricsAvailability = await this.getMetricsAvailability(filters);
+    } catch (error) {
+      console.error('ERROR in getMetricsAvailability:', error);
+      metricsAvailabilityError = true;
+      // Initialize with zeros if there's an error
+      Object.keys(METRIC_CONFIG).forEach(metric => {
+        metricsAvailability[metric] = 0;
+      });
+    }
+
+    // Calculate max count for client-side normalization
+    const counts = Object.values(metricsAvailability);
+    const maxMetricCount = counts.length > 0 ? Math.max(...counts) : 0;
+
     return {
       data,
       trends,
       multiMetric,
       statistics,
       groupings,
-      meta
+      meta,
+      metricsAvailability,
+      maxMetricCount,
+      metricsAvailabilityError
     };
   }
 
@@ -577,5 +600,72 @@ export class AnalyticsService {
         ? ['radar_chart', 'multi_line'] as ChartType[]
         : ['multi_line'] as ChartType[];
     }
+  }
+
+  /**
+   * Get count of measurements per metric for given filters
+   * Used to show data availability in metric selector
+   */
+  async getMetricsAvailability(filters: AnalyticsFilters): Promise<Record<string, number>> {
+    const conditions = [
+      eq(measurements.isVerified, true),
+      eq(userOrganizations.organizationId, filters.organizationId)
+    ];
+
+    // Apply athlete filter
+    if (filters.athleteIds && filters.athleteIds.length > 0) {
+      conditions.push(inArray(measurements.userId, filters.athleteIds));
+    }
+
+    // Apply team filter with organization validation
+    if (filters.teams && filters.teams.length > 0) {
+      conditions.push(
+        exists(
+          db.select().from(userTeams)
+            .innerJoin(teams, eq(userTeams.teamId, teams.id))
+            .where(
+              and(
+                eq(userTeams.userId, users.id),
+                inArray(userTeams.teamId, filters.teams),
+                eq(teams.organizationId, filters.organizationId),
+                eq(userTeams.isActive, true)
+              )
+            )
+        )
+      );
+    }
+
+    // Apply gender filter (exclude null values)
+    if (filters.genders && filters.genders.length > 0) {
+      conditions.push(sql`${users.gender} IS NOT NULL`);
+      conditions.push(inArray(users.gender, filters.genders));
+    }
+
+    // Query measurement counts per metric
+    const results = await db
+      .select({
+        metric: measurements.metric,
+        count: sql<number>`count(*)::int`
+      })
+      .from(measurements)
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...conditions))
+      .groupBy(measurements.metric);
+
+    // Convert to Record<string, number>
+    const metricsAvailability: Record<string, number> = {};
+
+    // Initialize all metrics to 0
+    Object.keys(METRIC_CONFIG).forEach(metric => {
+      metricsAvailability[metric] = 0;
+    });
+
+    // Fill in actual counts
+    results.forEach(row => {
+      metricsAvailability[row.metric] = row.count;
+    });
+
+    return metricsAvailability;
   }
 }

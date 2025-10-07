@@ -48,6 +48,10 @@ export interface AnalyticsState {
     teamName?: string;
     teams?: Array<{ id: string; name: string }>
   }>;
+
+  // Metrics Availability
+  metricsAvailability: Record<string, number>;
+  maxMetricCount?: number;
 }
 
 // Analytics Actions
@@ -94,7 +98,8 @@ const getDefaultState = (organizationId: string = '', userId?: string): Analytic
   selectedAthleteIds: [],
   selectedDates: [],
   availableTeams: [],
-  availableAthletes: []
+  availableAthletes: [],
+  metricsAvailability: {}
 });
 
 /**
@@ -347,6 +352,8 @@ function analyticsReducer(state: AnalyticsState, action: AnalyticsAction): Analy
       return {
         ...state,
         analyticsData: action.payload,
+        metricsAvailability: action.payload?.metricsAvailability || {},
+        maxMetricCount: action.payload?.maxMetricCount,
         isLoading: false,
         error: null
       };

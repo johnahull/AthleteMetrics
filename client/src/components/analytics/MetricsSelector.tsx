@@ -3,7 +3,7 @@
  * Smart component for selecting primary and additional metrics
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
+import { MetricIndicator } from './MetricIndicator';
 
 // Mutually exclusive metrics - selecting one prevents selecting the other
 // FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
@@ -45,6 +46,16 @@ interface MetricsSelectorProps {
    * @default 'individual'
    */
   analysisType?: AnalysisType;
+  /**
+   * Count of measurements per metric for current filters
+   * Used to show data availability indicators
+   */
+  metricsAvailability?: Record<string, number>;
+  /**
+   * Maximum count across all metrics (provided by server for normalization)
+   * If not provided, will be calculated client-side from metricsAvailability
+   */
+  maxMetricCount?: number;
 }
 
 export function MetricsSelector({
@@ -52,12 +63,23 @@ export function MetricsSelector({
   onMetricsChange,
   maxAdditional = 5,
   className,
-  analysisType = 'individual'
+  analysisType = 'individual',
+  metricsAvailability = {},
+  maxMetricCount
 }: MetricsSelectorProps) {
   const availableMetrics = Object.keys(METRIC_CONFIG);
 
   // Memoize multi-group check to avoid recalculating in map loop
   const isMultiGroupMode = analysisType === 'multi_group';
+
+  // Use server-provided maxCount if available, otherwise calculate client-side
+  const maxCount = useMemo(() => {
+    if (maxMetricCount !== undefined) {
+      return maxMetricCount;
+    }
+    const counts = Object.values(metricsAvailability);
+    return counts.length > 0 ? Math.max(...counts) : 0;
+  }, [metricsAvailability, maxMetricCount]);
 
   const handlePrimaryMetricChange = (metric: string) => {
     // Remove from additional if it was there
@@ -138,12 +160,21 @@ export function MetricsSelector({
             <SelectContent>
               {availableMetrics.map(metric => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const count = metricsAvailability[metric] || 0;
+                const hasData = count > 0;
+
                 return (
-                  <SelectItem key={metric} value={metric}>
+                  <SelectItem key={metric} value={metric} disabled={!hasData}>
                     <div className="flex flex-col">
-                      <span>{config?.label || metric}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {config?.unit} • {config?.lowerIsBetter ? 'Lower is better' : 'Higher is better'}
+                      <span className={!hasData ? 'text-muted-foreground' : ''}>
+                        {config?.label || metric}
+                        {!hasData && <span className="text-xs ml-1">(no data)</span>}
+                      </span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-2">
+                        <span>
+                          {config?.unit} • {config?.lowerIsBetter ? 'Lower is better' : 'Higher is better'}
+                        </span>
+                        {hasData && <MetricIndicator count={count} maxCount={maxCount} />}
                       </span>
                     </div>
                   </SelectItem>
@@ -212,6 +243,8 @@ export function MetricsSelector({
               )
               .map((metric: string) => {
                 const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const count = metricsAvailability[metric] || 0;
+                const hasData = count > 0;
 
                 // Check if this metric is mutually exclusive with a selected metric
                 const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
@@ -219,7 +252,8 @@ export function MetricsSelector({
                   (metrics.primary === exclusiveMetric ||
                    metrics.additional.includes(exclusiveMetric)));
 
-                const isDisabled = metrics.additional.length >= maxAdditional ||
+                const isDisabled = !hasData ||
+                                   metrics.additional.length >= maxAdditional ||
                                    isMultiGroupMode ||
                                    isExcluded;
 
@@ -236,13 +270,17 @@ export function MetricsSelector({
                     />
                     <label
                       htmlFor={`metric-${metric}`}
-                      className={`text-xs leading-tight cursor-pointer ${
-                        isExcluded ? 'text-muted-foreground' : ''
+                      className={`text-xs leading-tight cursor-pointer flex flex-col gap-0.5 ${
+                        !hasData || isExcluded ? 'text-muted-foreground' : ''
                       }`}
-                      title={isExcluded ? `Cannot select with ${METRIC_CONFIG[exclusiveMetric as keyof typeof METRIC_CONFIG]?.label}` : undefined}
+                      title={isExcluded ? `Cannot select with ${METRIC_CONFIG[exclusiveMetric as keyof typeof METRIC_CONFIG]?.label}` : !hasData ? 'No data available' : undefined}
                     >
-                      {config?.label || metric}
-                      {isExcluded && <span className="text-xs ml-1">(conflicts)</span>}
+                      <span>
+                        {config?.label || metric}
+                        {isExcluded && <span className="text-xs ml-1">(conflicts)</span>}
+                        {!hasData && <span className="text-xs ml-1">(no data)</span>}
+                      </span>
+                      {hasData && <MetricIndicator count={count} maxCount={maxCount} />}
                     </label>
                   </div>
                 );
