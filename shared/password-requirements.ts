@@ -26,6 +26,14 @@ export const PASSWORD_REGEX = {
 export function validatePassword(password: string): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
+  // Handle null/undefined
+  if (!password) {
+    return {
+      valid: false,
+      errors: ['Password is required']
+    };
+  }
+
   if (password.length < PASSWORD_REQUIREMENTS.minLength) {
     errors.push(`Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters long`);
   }

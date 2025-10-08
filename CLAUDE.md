@@ -25,6 +25,67 @@ When ENABLED:
 
 ### Available Specialized Agents
 
+#### PR Lifecycle Agent (`pr-lifecycle-agent`) 🔄
+**Color:** Arrows (Lifecycle)
+**Auto-invoke when tasks involve:**
+- Pull request review and code quality assessment
+- Automated fix implementation from review feedback
+- Multi-iteration review → fix cycles
+- Merge readiness assessment
+- PR-related automation
+
+**Keywords that trigger:** `pull request`, `PR review`, `code review`, `fix review feedback`, `merge`, `review iteration`, `@claude fix`, `@claude merge`
+
+**Special Capabilities:**
+- Autonomous review-fix-merge workflow
+- Detects new issues in fixes (full re-review after each iteration)
+- Multi-turn iteration (up to 10 turns configurable)
+- Invokes domain specialists for targeted reviews
+- Runs tests after every fix
+- Safety controls for security-sensitive files
+- Auto-merge with configurable safeguards
+
+**Workflow:**
+1. PR opened/updated → Automatic comprehensive review
+2. `@claude fix` → Implements fixes, commits, pushes
+3. Auto re-review → Finds any new issues in fixes
+4. Repeat fix-review cycle until merge-ready
+5. Recommends or executes merge when criteria met
+
+**When to use:**
+- Every pull request (runs automatically)
+- When you want automated fix iterations
+- To accelerate PR → merge cycle
+
+**When NOT to use:**
+- Already handled automatically by GitHub Actions
+- No manual invocation needed
+
+#### Test-Driven Feature Agent (`test-driven-feature-agent`) 🤖
+**Color:** Robot
+**Auto-invoke when tasks involve:**
+- Feature implementation with "test-first" or "TDD" approach
+- Autonomous development workflows
+- Complex features requiring multiple agents
+- "Implement X with tests" requests
+- Bug fixes with regression testing
+
+**Keywords that trigger:** `implement`, `feature`, `TDD`, `test-first`, `test-driven`, `autonomous`, `with tests`, `comprehensive testing`, `end-to-end implementation`
+
+**Special Capabilities:**
+- Writes tests BEFORE implementation (TDD methodology)
+- Automatically runs tests and iterates on failures
+- Coordinates multiple specialized agents in parallel
+- Self-limits to 5 iteration attempts before escalation
+- Uses TodoWrite to track multi-step progress
+- Handles full feature lifecycle: plan → test → implement → verify
+
+**When NOT to use:**
+- Simple code changes without new features
+- Documentation updates
+- Configuration changes
+- When you want to implement without tests
+
 #### Database Schema Agent (`database-schema-agent`) 🔵
 **Color:** Blue
 **Auto-invoke when tasks involve:**
@@ -141,8 +202,11 @@ When ENABLED:
 - Mocking patterns for API and database calls
 - E2E testing scenarios
 - Bug fix verification and regression testing
+- **NEW**: Test-Driven Development (TDD) - writing tests BEFORE implementation
 
-**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`
+**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`, `TDD`, `test-first`
+
+**TDD Mode:** When invoked by `test-driven-feature-agent`, this agent writes comprehensive failing tests before any implementation begins.
 
 #### Notification & Communication Agent (`notification-communication-agent`) 🩷
 **Color:** Pink
@@ -156,7 +220,60 @@ When ENABLED:
 
 **Keywords that trigger:** `email`, `notification`, `invitation`, `alert`, `communication`, `password reset`, `notify`, `message`, `template`, `send`
 
+#### UI Testing Agent (`ui-testing-agent`) 🎭
+**Color:** Theater Masks
+**Auto-invoke when tasks involve:**
+- End-to-end testing with Playwright MCP
+- Complete user flow verification
+- Browser-based integration testing
+- Visual regression testing with screenshots
+- Console error monitoring
+- Network request inspection
+
+**Keywords that trigger:** `e2e`, `end-to-end`, `user flow`, `browser test`, `playwright`, `visual test`, `integration test`, `screenshot verification`
+
+#### Visual Design Review Agent (`visual-design-review-agent`) 🎨
+**Color:** Artist Palette
+**Auto-invoke when tasks involve:**
+- UI/UX quality assurance and design review
+- WCAG 2.1 AA accessibility compliance
+- Responsive design verification (7 viewports)
+- Interactive state testing (hover, focus, etc.)
+- Design system consistency checks
+- Visual regression detection
+
+**Keywords that trigger:** `design review`, `accessibility`, `wcag`, `responsive`, `ui review`, `visual qa`, `design consistency`, `a11y audit`
+
+#### UI Development Agent (`ui-development-agent`) 🎯
+**Color:** Target
+**Auto-invoke when tasks involve:**
+- Building UI components with live visual feedback
+- Component development with Playwright verification
+- Real-time responsive testing during development
+- Visual iteration and debugging
+- Dark mode verification
+- Accessibility checks during build
+
+**Keywords that trigger:** `build component`, `create ui`, `visual feedback`, `develop component`, `ui development`, `live testing`, `component iteration`
+
 ### Proactive Agent Usage Guidelines
+
+#### Autonomous Feature Development
+For feature implementation with tests, automatically invoke the test-driven-feature-agent:
+
+```typescript
+// Example: User requests "Implement broad jump tracking with tests"
+// Claude should automatically use: Task(subagent_type: "test-driven-feature-agent", ...)
+
+// Example: User requests "TDD approach for RSI calculation"
+// Claude should automatically use: Task(subagent_type: "test-driven-feature-agent", ...)
+
+// The test-driven-feature-agent will:
+// 1. Write tests first
+// 2. Coordinate specialized agents for implementation
+// 3. Run tests and iterate on failures
+// 4. Complete when all tests pass
+```
 
 #### Single Domain Tasks
 When a task clearly falls into one domain, automatically invoke the appropriate agent:
@@ -203,6 +320,14 @@ When invoking agents, provide AthleteMetrics-specific context:
 5. **Error Handling**: If a task might affect multiple domains, prefer including more agents rather than fewer
 
 ### Task Patterns That Always Trigger Agents
+
+#### Autonomous Feature Development (NEW)
+- "Implement X with tests" → `test-driven-feature-agent`
+- "Use TDD approach" → `test-driven-feature-agent`
+- "Test-first development" → `test-driven-feature-agent`
+- "Autonomous mode" → `test-driven-feature-agent`
+- Complex features requiring multiple agents → `test-driven-feature-agent`
+- Bug fixes with "write regression test first" → `test-driven-feature-agent`
 
 #### Database Schema Changes
 - Any modification to `shared/schema.ts` → `database-schema-agent`
@@ -263,6 +388,14 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Email features → `notification-communication-agent`
 - User invitations → `notification-communication-agent` + `security-authentication-agent`
 - Alert systems → `notification-communication-agent`
+
+#### UI/Visual Testing (NEW)
+- E2E user flows → `ui-testing-agent`
+- Design review/QA → `visual-design-review-agent`
+- Component development → `ui-development-agent`
+- Accessibility audits → `visual-design-review-agent`
+- Responsive testing → `visual-design-review-agent` or `ui-development-agent`
+- Visual regression → `ui-testing-agent` + `visual-design-review-agent`
 
 ## Development Commands
 

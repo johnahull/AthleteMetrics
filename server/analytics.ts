@@ -662,7 +662,7 @@ export class AnalyticsService {
     });
 
     // Fill in actual counts
-    results.forEach(row => {
+    results.forEach((row: { metric: string; count: number }) => {
       metricsAvailability[row.metric] = row.count;
     });
 
