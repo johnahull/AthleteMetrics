@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AthleteModal from "@/components/athlete-modal";
@@ -63,6 +64,7 @@ export default function Athletes() {
     birthYearTo: "",
     search: "",
   });
+  const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
 
   // Debounce search to avoid excessive API calls
   const debouncedSearch = useDebounce(filters.search, 300);
@@ -401,6 +403,141 @@ export default function Athletes() {
     });
   };
 
+  // Bulk action handlers
+  const toggleSelectAll = () => {
+    if (selectedAthletes.size === athletes.length) {
+      setSelectedAthletes(new Set());
+    } else {
+      setSelectedAthletes(new Set(athletes.map((a: any) => a.id)));
+    }
+  };
+
+  const toggleSelectAthlete = (athleteId: string) => {
+    const newSelection = new Set(selectedAthletes);
+    if (newSelection.has(athleteId)) {
+      newSelection.delete(athleteId);
+    } else {
+      newSelection.add(athleteId);
+    }
+    setSelectedAthletes(newSelection);
+  };
+
+  const clearSelection = () => {
+    setSelectedAthletes(new Set());
+  };
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (athleteIds: string[]) => {
+      return await apiRequest("POST", "/api/athletes/bulk-delete", { athleteIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      if (effectiveOrganizationId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/organizations/${effectiveOrganizationId}/profile`] });
+      }
+
+      const result = data as any;
+      const successCount = result.deleted || 0;
+      const failureCount = result.failed || 0;
+
+      toast({
+        title: "Bulk Delete Complete",
+        description: failureCount > 0
+          ? `${successCount} athlete(s) deleted successfully. ${failureCount} failed.`
+          : `${successCount} athlete(s) deleted successfully`,
+        variant: failureCount > 0 ? "destructive" : "default",
+      });
+
+      clearSelection();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk invite mutation
+  const bulkInviteMutation = useMutation({
+    mutationFn: async (athleteIds: string[]) => {
+      const orgId = userOrgs[0]?.organization?.id || userOrgs[0]?.organizationId || effectiveOrganizationId;
+      if (!orgId) throw new Error("Organization ID not found");
+
+      return await apiRequest("POST", "/api/athletes/bulk-invite", {
+        athleteIds,
+        organizationId: orgId
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+
+      const result = data as any;
+      const successCount = result.invited || 0;
+      const skippedCount = result.skipped || 0;
+
+      toast({
+        title: "Bulk Invite Complete",
+        description: skippedCount > 0
+          ? `${successCount} invitation(s) created. ${skippedCount} skipped (no email).`
+          : `${successCount} invitation(s) created successfully`,
+      });
+
+      clearSelection();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleBulkDelete = () => {
+    const selectedAthletesArray = Array.from(selectedAthletes);
+    const athleteNames = athletes
+      .filter((a: any) => selectedAthletes.has(a.id))
+      .map((a: any) => a.fullName)
+      .slice(0, 5);
+
+    const namesList = athleteNames.length > 5
+      ? `${athleteNames.join(', ')} and ${selectedAthletes.size - 5} more`
+      : athleteNames.join(', ');
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedAthletes.size} athlete(s)?\n\n${namesList}\n\nThis action cannot be undone.`
+    );
+
+    if (confirmed) {
+      bulkDeleteMutation.mutate(selectedAthletesArray);
+    }
+  };
+
+  const handleBulkInvite = () => {
+    const selectedAthletesArray = Array.from(selectedAthletes);
+    const athletesWithEmail = athletes.filter((a: any) =>
+      selectedAthletes.has(a.id) && Array.isArray(a.emails) && a.emails.length > 0
+    );
+
+    const athletesWithoutEmail = selectedAthletes.size - athletesWithEmail.length;
+
+    let confirmMessage = `Create invitations for ${athletesWithEmail.length} athlete(s)?`;
+    if (athletesWithoutEmail > 0) {
+      confirmMessage += `\n\n${athletesWithoutEmail} athlete(s) will be skipped (no email address).`;
+    }
+
+    const confirmed = window.confirm(confirmMessage);
+
+    if (confirmed) {
+      bulkInviteMutation.mutate(selectedAthletesArray);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -677,6 +814,14 @@ export default function Athletes() {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr className="text-left text-sm font-medium text-gray-500">
+                    <th className="px-6 py-3 w-12">
+                      <Checkbox
+                        checked={athletes.length > 0 && selectedAthletes.size === athletes.length}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all athletes"
+                        data-testid="checkbox-select-all"
+                      />
+                    </th>
                     <th className="px-6 py-3">Athlete</th>
                     <th className="px-6 py-3">Team</th>
                     <th className="px-6 py-3">Birth Year</th>
@@ -692,6 +837,14 @@ export default function Athletes() {
                   {athletes?.map((athlete: any) => (
                     <tr key={athlete.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
+                        <Checkbox
+                          checked={selectedAthletes.has(athlete.id)}
+                          onCheckedChange={() => toggleSelectAthlete(athlete.id)}
+                          aria-label={`Select ${athlete.fullName}`}
+                          data-testid={`checkbox-athlete-${athlete.id}`}
+                        />
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-sm">
@@ -699,7 +852,7 @@ export default function Athletes() {
                             </span>
                           </div>
                           <div>
-                            <button 
+                            <button
                               onClick={() => setLocation(`/athletes/${athlete.id}`)}
                               className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                             >
@@ -889,6 +1042,52 @@ export default function Athletes() {
           organizationId={effectiveOrganizationId}
           role="athlete"
         />
+      )}
+
+      {/* Floating Action Bar */}
+      {selectedAthletes.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-2xl px-6 py-4 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">
+              {selectedAthletes.size} athlete{selectedAthletes.size !== 1 ? 's' : ''} selected
+            </span>
+          </div>
+          <div className="h-6 w-px bg-gray-600"></div>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              className="text-white hover:bg-gray-800"
+              data-testid="button-clear-selection"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Clear
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBulkInvite}
+              disabled={bulkInviteMutation.isPending}
+              className="text-white hover:bg-blue-600 bg-blue-700"
+              data-testid="button-bulk-invite"
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Bulk Invite
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="text-white hover:bg-red-600 bg-red-700"
+              data-testid="button-bulk-delete"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Bulk Delete
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

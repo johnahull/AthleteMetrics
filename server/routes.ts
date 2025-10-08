@@ -1317,10 +1317,10 @@ export async function registerRoutes(app: Express) {
   });
 
   /**
-   * Add multiple players to a team
-   * @route POST /api/teams/:teamId/add-players
+   * Add multiple athletes to a team
+   * @route POST /api/teams/:teamId/add-athletes
    * @param {string} teamId - UUID of the team
-   * @body {string[]} playerIds - Array of player UUIDs (max 100)
+   * @body {string[]} athleteIds - Array of athlete UUIDs (max 100)
    * @access Coaches, Organization Admins, Site Admins
    * @returns {Object} result - Operation results with success/error details
    * @returns {Object[]} result.results - Array of successful additions
@@ -1331,10 +1331,10 @@ export async function registerRoutes(app: Express) {
    * @throws {404} Team not found
    * @throws {500} Server error during transaction
    */
-  app.post("/api/teams/:teamId/add-players", createLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams/:teamId/add-athletes", createLimiter, requireAuth, async (req, res) => {
     const { teamId } = req.params;
     try {
-      const { playerIds } = req.body;
+      const { athleteIds } = req.body;
       const currentUser = req.session.user;
 
       if (!currentUser?.id) {
@@ -1347,18 +1347,18 @@ export async function registerRoutes(app: Express) {
       }
 
       // Validate input
-      if (!Array.isArray(playerIds) || playerIds.length === 0) {
-        return res.status(400).json({ message: "playerIds must be a non-empty array" });
+      if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+        return res.status(400).json({ message: "athleteIds must be a non-empty array" });
       }
 
-      // Limit number of players to prevent DoS attacks
-      if (playerIds.length > 100) {
-        return res.status(400).json({ message: "Cannot add more than 100 players at once" });
+      // Limit number of athletes to prevent DoS attacks
+      if (athleteIds.length > 100) {
+        return res.status(400).json({ message: "Cannot add more than 100 athletes at once" });
       }
 
-      // Validate all playerIds are valid UUIDs
+      // Validate all athleteIds are valid UUIDs
       try {
-        validateUuidsOrThrow(playerIds, "player IDs");
+        validateUuidsOrThrow(athleteIds, "athlete IDs");
       } catch (error: any) {
         return res.status(400).json({
           message: error.message
@@ -1366,11 +1366,11 @@ export async function registerRoutes(app: Express) {
       }
 
       // Check for duplicate IDs within the request
-      const uniqueIds = new Set(playerIds);
-      if (uniqueIds.size !== playerIds.length) {
-        const duplicates = playerIds.filter((id, index) => playerIds.indexOf(id) !== index);
+      const uniqueIds = new Set(athleteIds);
+      if (uniqueIds.size !== athleteIds.length) {
+        const duplicates = athleteIds.filter((id, index) => athleteIds.indexOf(id) !== index);
         return res.status(400).json({
-          message: `Duplicate player IDs found: ${[...new Set(duplicates)].join(", ")}`
+          message: `Duplicate athlete IDs found: ${[...new Set(duplicates)].join(", ")}`
         });
       }
 
@@ -1388,72 +1388,72 @@ export async function registerRoutes(app: Express) {
         const results = [];
         const errors = [];
 
-        // Validate all players first (batch operation)
-        const playerValidationPromises = playerIds.map(async (playerId) => {
+        // Validate all athletes first (batch operation)
+        const athleteValidationPromises = athleteIds.map(async (athleteId) => {
           try {
-            // Check if player exists
-            const player = await storage.getUser(playerId);
-            if (!player) {
-              return { playerId, error: "Player not found", valid: false };
+            // Check if athlete exists
+            const athlete = await storage.getUser(athleteId);
+            if (!athlete) {
+              return { athleteId, error: "Athlete not found", valid: false };
             }
 
             // Validate organization access for non-site admins
             if (!userIsSiteAdmin) {
-              const [playerOrgs, currentUserOrgs] = await Promise.all([
-                storage.getUserOrganizations(playerId),
+              const [athleteOrgs, currentUserOrgs] = await Promise.all([
+                storage.getUserOrganizations(athleteId),
                 storage.getUserOrganizations(currentUser.id)
               ]);
 
-              const hasSharedOrg = playerOrgs.some(pOrg =>
-                currentUserOrgs.some(uOrg => uOrg.organizationId === pOrg.organizationId)
+              const hasSharedOrg = athleteOrgs.some(aOrg =>
+                currentUserOrgs.some(uOrg => uOrg.organizationId === aOrg.organizationId)
               );
 
               if (!hasSharedOrg) {
-                return { playerId, error: "Access denied to this player", valid: false };
+                return { athleteId, error: "Access denied to this athlete", valid: false };
               }
             }
 
-            // Check if player is already on the team
-            const existingMemberships = await storage.getUserTeams(playerId);
+            // Check if athlete is already on the team
+            const existingMemberships = await storage.getUserTeams(athleteId);
             const isActiveOnTeam = existingMemberships.some(membership =>
               membership.teamId === teamId && membership.isActive === true
             );
 
             if (isActiveOnTeam) {
-              return { playerId, error: "Player is already on this team", valid: false };
+              return { athleteId, error: "Athlete is already on this team", valid: false };
             }
 
-            return { playerId, player, valid: true };
+            return { athleteId, athlete, valid: true };
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Unknown validation error";
-            console.error(`Error validating player ${playerId}:`, error);
-            return { playerId, error: `Validation failed: ${errorMessage}`, valid: false };
+            console.error(`Error validating athlete ${athleteId}:`, error);
+            return { athleteId, error: `Validation failed: ${errorMessage}`, valid: false };
           }
         });
 
         // Wait for all validations to complete
-        const validationResults = await Promise.all(playerValidationPromises);
+        const validationResults = await Promise.all(athleteValidationPromises);
 
-        // Separate valid players from errors
-        const validPlayers = validationResults.filter(result => result.valid);
+        // Separate valid athletes from errors
+        const validAthletes = validationResults.filter(result => result.valid);
         const validationErrors = validationResults.filter(result => !result.valid);
 
         errors.push(...validationErrors);
 
-        // Add valid players to team (batch operation)
-        if (validPlayers.length > 0) {
-          const addPlayerPromises = validPlayers.map(async ({ playerId }) => {
+        // Add valid athletes to team (batch operation)
+        if (validAthletes.length > 0) {
+          const addAthletePromises = validAthletes.map(async ({ athleteId }) => {
             try {
-              const newMembership = await storage.addUserToTeam(playerId, teamId);
-              return { playerId, membership: newMembership, success: true };
+              const newMembership = await storage.addUserToTeam(athleteId, teamId);
+              return { athleteId, membership: newMembership, success: true };
             } catch (error) {
               const errorMessage = error instanceof Error ? error.message : "Unknown error";
-              console.error(`Error adding player ${playerId} to team ${teamId}:`, error);
-              return { playerId, error: `Failed to add player: ${errorMessage}`, success: false };
+              console.error(`Error adding athlete ${athleteId} to team ${teamId}:`, error);
+              return { athleteId, error: `Failed to add athlete: ${errorMessage}`, success: false };
             }
           });
 
-          const addResults = await Promise.all(addPlayerPromises);
+          const addResults = await Promise.all(addAthletePromises);
 
           // Separate successful additions from failures
           results.push(...addResults.filter(result => result.success));
@@ -1476,7 +1476,7 @@ export async function registerRoutes(app: Express) {
       // If all failed, return error status
       if (result.results.length === 0 && result.errors.length > 0) {
         return res.status(400).json({
-          message: "Failed to add any players to team",
+          message: "Failed to add any athletes to team",
           ...response
         });
       }
@@ -1489,10 +1489,10 @@ export async function registerRoutes(app: Express) {
       res.json(response);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error(`Error in bulk add players operation for team ${teamId}:`, error);
+      console.error(`Error in bulk add athletes operation for team ${teamId}:`, error);
 
       res.status(500).json({
-        message: "Failed to add players to team",
+        message: "Failed to add athletes to team",
         error: process.env.NODE_ENV === 'development' ? errorMessage : undefined,
         teamId: teamId
       });

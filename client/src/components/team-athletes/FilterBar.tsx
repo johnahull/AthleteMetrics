@@ -124,7 +124,7 @@ export function FilterBar({
                 <SelectValue placeholder="All seasons" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All seasons</SelectItem>
+                <SelectItem value="all">All seasons</SelectItem>
                 {seasons.map(season => (
                   <SelectItem key={season} value={season}>
                     {season}
