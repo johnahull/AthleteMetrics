@@ -1136,15 +1136,24 @@ export async function registerRoutes(app: Express) {
   app.patch("/api/teams/:id", requireAuth, requireTeamAccess('write'), async (req, res) => {
     try {
       const { id } = req.params;
+      console.log('[TEAM UPDATE] Team ID:', id);
+      console.log('[TEAM UPDATE] Request body:', JSON.stringify(req.body));
+
       const teamData = insertTeamSchema.partial().parse(req.body);
+      console.log('[TEAM UPDATE] Validated data:', JSON.stringify(teamData));
+
       const updatedTeam = await storage.updateTeam(id, teamData);
+      console.log('[TEAM UPDATE] Updated successfully:', updatedTeam.id);
+
       res.json(updatedTeam);
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error('[TEAM UPDATE] Validation error:', error.errors);
         res.status(400).json({ message: "Validation error", errors: error.errors });
       } else {
-        console.error("Error updating team:", error);
-        res.status(500).json({ message: "Failed to update team" });
+        console.error("[TEAM UPDATE] Error updating team:", error);
+        console.error("[TEAM UPDATE] Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+        res.status(500).json({ message: "Failed to update team", error: error instanceof Error ? error.message : String(error) });
       }
     }
   });

@@ -80,7 +80,21 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
 
   const updateTeamMutation = useMutation({
     mutationFn: async (data: InsertTeam) => {
-      const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, data);
+      // Exclude organizationId from updates - it cannot be changed
+      const { organizationId, ...formData } = data;
+
+      // Only send fields that have actually changed to avoid unique constraint issues
+      const updateData: Partial<InsertTeam> = {};
+      if (formData.name !== team!.name) updateData.name = formData.name;
+      if (formData.level !== team!.level) updateData.level = formData.level;
+      if (formData.notes !== team!.notes) updateData.notes = formData.notes;
+      if (formData.season !== team!.season) updateData.season = formData.season;
+
+      const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update team");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -92,10 +106,12 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       });
       onClose();
     },
-    onError: () => {
+    onError: (error: any) => {
+      console.error("Team update error:", error);
+      const errorMessage = error?.message || "Failed to update team";
       toast({
         title: "Error",
-        description: "Failed to update team",
+        description: errorMessage,
         variant: "destructive",
       });
     },
