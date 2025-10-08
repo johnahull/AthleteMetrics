@@ -12,6 +12,7 @@ import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { sanitizeCSVValue } from "./utils/csv-utils";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema, type Invitation } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { TEAM_NAME_CONSTRAINTS } from "@shared/constants";
 import { z, ZodError } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
@@ -274,7 +275,7 @@ export async function registerRoutes(app: Express) {
   let redisClient = null;
   try {
     // Try to dynamically import Redis packages if available
-    // Use string literal to avoid Vite resolving during build/test
+    // @vite-ignore prevents Vite from bundling Redis during build (optional runtime dependency)
     // @ts-expect-error - Redis is an optional dependency that may not be installed
     const redisModule = await import(/* @vite-ignore */ "redis").catch(() => null);
     
@@ -1161,9 +1162,6 @@ export async function registerRoutes(app: Express) {
         if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
           const constraintName = (error as any).constraint;
           // Use exact constraint name matching to avoid false positives
-          // 'uniqueTeamPerOrg' - Drizzle ORM generated constraint name
-          // 'teams_organization_id_name_unique' - Direct PostgreSQL constraint name
-          const TEAM_NAME_CONSTRAINTS = new Set(['uniqueTeamPerOrg', 'teams_organization_id_name_unique']);
           if (constraintName && TEAM_NAME_CONSTRAINTS.has(constraintName)) {
             return res.status(409).json({
               message: "A team with this name already exists in this organization. Please choose a different name.",

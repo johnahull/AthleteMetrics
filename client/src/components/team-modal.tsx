@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertTeamSchema, type InsertTeam, type Team } from "@shared/schema";
+import { normalizeString } from "@/lib/form-utils";
 
 interface TeamModalProps {
   isOpen: boolean;
@@ -83,10 +84,6 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       // Exclude organizationId from updates - it cannot be changed
       const { organizationId, ...formData } = data;
 
-      // Normalize values for comparison
-      // NOTE: Zod schema handles .trim(), so no need to manually trim in updateData
-      const normalize = (val: string | null | undefined) => val?.trim() || null;
-
       // Only send fields that have actually changed to avoid unique constraint issues
       // OPTIMIZATION TRADEOFF: This prevents unnecessary API calls but introduces a potential
       // race condition if another user updates the team between when this modal opened and
@@ -94,12 +91,13 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       // Alternative: Always send all fields or implement optimistic concurrency control.
       const updateData: Partial<InsertTeam> = {};
 
-      if (normalize(formData.name) !== normalize(team!.name)) {
+      // Note: Zod schema handles .trim(), so no need to manually trim in updateData
+      if (normalizeString(formData.name) !== normalizeString(team!.name)) {
         updateData.name = formData.name;
       }
       if (formData.level !== team!.level) updateData.level = formData.level;
-      if (normalize(formData.notes) !== normalize(team!.notes)) updateData.notes = formData.notes;
-      if (normalize(formData.season) !== normalize(team!.season)) updateData.season = formData.season;
+      if (normalizeString(formData.notes) !== normalizeString(team!.notes)) updateData.notes = formData.notes;
+      if (normalizeString(formData.season) !== normalizeString(team!.season)) updateData.season = formData.season;
 
       // Always send at least one field to ensure server validation runs
       // This prevents bypassing auth/permission checks
@@ -113,7 +111,10 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         // Check for specific error codes to provide targeted feedback
         if (error.errorCode === 'DUPLICATE_TEAM_NAME') {
           // Re-throw with error code so onError can handle it
-          const duplicateError = new Error(error.message || "Duplicate team name") as any;
+          interface ApiError extends Error {
+            errorCode?: string;
+          }
+          const duplicateError = new Error(error.message || "Duplicate team name") as ApiError;
           duplicateError.errorCode = 'DUPLICATE_TEAM_NAME';
           throw duplicateError;
         }

@@ -141,7 +141,7 @@ describe('Team Update Storage Layer Integration Tests', () => {
         console.error(`Failed to delete organization ${orgId}:`, error);
       }
     }
-  }, 30000);
+  }, 30000); // Extended timeout for cleanup operations that may involve cascading deletes
 
   describe('Unique Constraint Handling', () => {
     it('should reject duplicate team names in same organization', async () => {
