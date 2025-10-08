@@ -274,8 +274,9 @@ export async function registerRoutes(app: Express) {
   let redisClient = null;
   try {
     // Try to dynamically import Redis packages if available
+    // Use string literal to avoid Vite resolving during build/test
     // @ts-expect-error - Redis is an optional dependency that may not be installed
-    const redisModule = await import("redis").catch(() => null);
+    const redisModule = await import(/* @vite-ignore */ "redis").catch(() => null);
     
     if (redisModule) {
       const { createClient } = redisModule;
