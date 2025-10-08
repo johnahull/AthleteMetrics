@@ -1139,6 +1139,11 @@ export async function registerRoutes(app: Express) {
 
       const teamData = insertTeamSchema.partial().parse(req.body);
 
+      // Trim whitespace from name field if present
+      if (teamData.name) {
+        teamData.name = teamData.name.trim();
+      }
+
       // Ensure organizationId cannot be updated
       delete teamData.organizationId;
 
@@ -1151,12 +1156,15 @@ export async function registerRoutes(app: Express) {
       } else {
         console.error("Error updating team:", error);
 
-        // Check for unique constraint violation
+        // Check for unique constraint violation (specifically for team name uniqueness)
         if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
-          return res.status(409).json({
-            message: "A team with this name already exists in this organization. Please choose a different name.",
-            errorCode: 'DUPLICATE_TEAM_NAME'
-          });
+          const constraintName = (error as any).constraint;
+          if (constraintName === 'uniqueTeamPerOrg' || constraintName?.includes('teams_organization_id_name_unique')) {
+            return res.status(409).json({
+              message: "A team with this name already exists in this organization. Please choose a different name.",
+              errorCode: 'DUPLICATE_TEAM_NAME'
+            });
+          }
         }
 
         res.status(500).json({ message: "Failed to update team", error: error instanceof Error ? error.message : String(error) });
