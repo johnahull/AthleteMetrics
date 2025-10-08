@@ -83,12 +83,22 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       // Exclude organizationId from updates - it cannot be changed
       const { organizationId, ...formData } = data;
 
+      console.log('[TEAM UPDATE CLIENT] Original team name:', JSON.stringify(team?.name));
+      console.log('[TEAM UPDATE CLIENT] Form data name:', JSON.stringify(formData.name));
+
       // Only send fields that have actually changed to avoid unique constraint issues
       const updateData: Partial<InsertTeam> = {};
-      if (formData.name !== team!.name) updateData.name = formData.name;
+      if (formData.name !== team!.name) {
+        console.log('[TEAM UPDATE CLIENT] Name changed from', JSON.stringify(team!.name), 'to', JSON.stringify(formData.name));
+        console.log('[TEAM UPDATE CLIENT] Are they equal?', formData.name === team!.name);
+        console.log('[TEAM UPDATE CLIENT] Old name length:', team!.name.length, 'New name length:', formData.name.length);
+        updateData.name = formData.name;
+      }
       if (formData.level !== team!.level) updateData.level = formData.level;
       if (formData.notes !== team!.notes) updateData.notes = formData.notes;
       if (formData.season !== team!.season) updateData.season = formData.season;
+
+      console.log('[TEAM UPDATE CLIENT] Update payload:', JSON.stringify(updateData));
 
       const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
       if (!response.ok) {
