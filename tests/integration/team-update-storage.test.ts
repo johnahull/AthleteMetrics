@@ -1,12 +1,17 @@
 /**
- * API Integration Tests for Team Update Endpoints
+ * Storage Layer Integration Tests for Team Update Functionality
  *
- * These tests validate the PATCH /api/teams/:id endpoint including:
- * - HTTP status codes and response formats
- * - Authentication and authorization (requireTeamAccess middleware)
- * - Unique constraint violation handling (409 Conflict)
+ * These tests validate the storage.updateTeam() method including:
+ * - Unique constraint violation handling
  * - Whitespace trimming and data normalization
- * - organizationId immutability protection
+ * - organizationId immutability protection (storage layer defense-in-depth)
+ * - Partial update functionality
+ *
+ * NOTE: These tests use the storage layer directly and do not test:
+ * - HTTP status codes and response formats
+ * - Authentication and authorization middleware
+ * - Route-level error handling
+ * For full API endpoint testing with HTTP, see separate API test files.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -16,11 +21,7 @@ import session from 'express-session';
 import { storage } from '../../server/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
-// We need to import the actual route setup to test the real endpoints
-// For now, we'll create a minimal Express app with just the team routes
-// In a future refactor, we could extract route registration to a separate function
-
-describe('Team Update API Integration Tests', () => {
+describe('Team Update Storage Layer Integration Tests', () => {
   let testOrg: Organization;
   let otherOrg: Organization;
   let testTeam: Team;
@@ -142,11 +143,8 @@ describe('Team Update API Integration Tests', () => {
     }
   }, 30000);
 
-  // NOTE: Authentication & Authorization tests would require actual HTTP endpoint testing
-  // These tests are covered by the storage layer tests and middleware unit tests
-
-  describe('PATCH /api/teams/:id - Unique Constraint Handling', () => {
-    it('should return 409 Conflict for duplicate team names in same organization', async () => {
+  describe('Unique Constraint Handling', () => {
+    it('should reject duplicate team names in same organization', async () => {
       // Attempt to update otherTeam to have the same name as testTeam
       await expect(async () => {
         await storage.updateTeam(otherTeam.id, {
@@ -155,18 +153,7 @@ describe('Team Update API Integration Tests', () => {
       }).rejects.toThrow();
     });
 
-    it('should include specific error message for duplicate names', async () => {
-      // Expected error response format
-      const expectedErrorResponse = {
-        message: "A team with this name already exists in this organization. Please choose a different name.",
-        errorCode: 'DUPLICATE_TEAM_NAME'
-      };
-
-      expect(expectedErrorResponse.errorCode).toBe('DUPLICATE_TEAM_NAME');
-      expect(expectedErrorResponse.message).toContain('already exists');
-    });
-
-    it('should only check duplicate names within the same organization', async () => {
+    it('should allow same team name in different organizations', async () => {
       // Teams with the same name in different orgs should be allowed
       const teamInOtherOrg = await storage.createTeam({
         name: testTeam.name, // Same name as testTeam
@@ -182,7 +169,7 @@ describe('Team Update API Integration Tests', () => {
     });
   });
 
-  describe('PATCH /api/teams/:id - Data Validation & Normalization', () => {
+  describe('Data Validation & Normalization', () => {
     it('should trim whitespace from team name', async () => {
       const nameWithWhitespace = '  Test Team With Spaces  ';
       const expectedName = 'Test Team With Spaces';
@@ -191,7 +178,7 @@ describe('Team Update API Integration Tests', () => {
         name: nameWithWhitespace,
       });
 
-      // Backend should trim whitespace from the name
+      // Zod schema should trim whitespace from the name
       expect(updatedTeam.name).toBe(expectedName);
       expect(updatedTeam.name).not.toMatch(/^\s|\s$/); // No leading/trailing spaces
     });
@@ -212,27 +199,23 @@ describe('Team Update API Integration Tests', () => {
         });
       }).rejects.toThrow();
     });
-
-    // NOTE: Zod validation tests would require actual HTTP endpoint testing
   });
 
-  describe('PATCH /api/teams/:id - Organization Immutability', () => {
-    it('should not allow changing team organizationId', async () => {
-      // Attempt to change organizationId
+  describe('Organization Immutability (Storage Layer Defense)', () => {
+    it('should strip organizationId from updates at storage layer', async () => {
+      // Attempt to change organizationId at storage layer
       const updatedTeam = await storage.updateTeam(testTeam.id, {
         name: testTeam.name,
         organizationId: otherOrg.id as any, // Try to change org
       });
 
-      // organizationId should remain unchanged
+      // organizationId should remain unchanged due to storage layer protection
       expect(updatedTeam.organizationId).toBe(testOrg.id);
       expect(updatedTeam.organizationId).not.toBe(otherOrg.id);
     });
-
-    // NOTE: Backend stripping behavior is verified by the test above - organizationId remains unchanged
   });
 
-  describe('PATCH /api/teams/:id - Partial Updates', () => {
+  describe('Partial Updates', () => {
     it('should allow updating only the name', async () => {
       const newName = `Updated Name ${Date.now()}`;
 
@@ -286,44 +269,23 @@ describe('Team Update API Integration Tests', () => {
     });
   });
 
-  describe('PATCH /api/teams/:id - Constraint Name Specificity', () => {
-    it('should check constraint name before returning 409 error', async () => {
-      // After the fix, the backend checks:
-      // if (constraintName === 'uniqueTeamPerOrg' || constraintName?.includes('teams_organization_id_name_unique'))
-      const expectedConstraintNames = ['uniqueTeamPerOrg', 'teams_organization_id_name_unique'];
-
-      // This ensures we only return the duplicate team name error
-      // for the specific constraint, not all 23505 errors
-      expect(expectedConstraintNames).toContain('uniqueTeamPerOrg');
-    });
-
-    // NOTE: Constraint specificity is verified by checking the constraint name in server code
-  });
-
-  describe('PATCH /api/teams/:id - HTTP Response Formats', () => {
-    it('should return 200 OK with updated team on success', async () => {
-      const newName = `Response Test ${Date.now()}`;
-      const updatedTeam = await storage.updateTeam(testTeam.id, {
-        name: newName,
-      });
-
-      // Expected response format
-      expect(updatedTeam).toHaveProperty('id');
-      expect(updatedTeam).toHaveProperty('name');
-      expect(updatedTeam).toHaveProperty('organizationId');
-      expect(updatedTeam.name).toBe(newName);
-    });
-
-    it('should return 404 Not Found for non-existent team', async () => {
+  describe('Error Handling', () => {
+    it('should throw error for non-existent team', async () => {
       const fakeTeamId = '00000000-0000-0000-0000-000000000000';
 
       await expect(async () => {
         await storage.updateTeam(fakeTeamId, {
           name: 'Should Fail',
         });
-      }).rejects.toThrow();
+      }).rejects.toThrow('Team not found');
     });
 
-    // NOTE: HTTP error response format tests would require actual HTTP endpoint testing
+    it('should throw error when no valid fields provided', async () => {
+      await expect(async () => {
+        await storage.updateTeam(testTeam.id, {
+          organizationId: otherOrg.id as any, // Only field, but it gets stripped
+        });
+      }).rejects.toThrow('No valid fields to update');
+    });
   });
 });

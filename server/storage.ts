@@ -648,7 +648,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team> {
-    const [updated] = await db.update(teams).set(team).where(eq(teams.id, id)).returning();
+    // Defense in depth - ALWAYS strip organizationId at storage layer
+    const { organizationId, ...safeTeamData } = team;
+
+    if (Object.keys(safeTeamData).length === 0) {
+      throw new Error("No valid fields to update");
+    }
+
+    const [updated] = await db.update(teams)
+      .set(safeTeamData)
+      .where(eq(teams.id, id))
+      .returning();
+
+    if (!updated) throw new Error("Team not found");
     return updated;
   }
 

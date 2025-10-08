@@ -292,7 +292,7 @@ export const insertTeamSchema = createInsertSchema(teams).omit({
   organizationId: z.string().optional(), // Made optional for client-side, server will provide it
   season: z.string().trim().optional(),
   notes: z.string().trim().optional(),
-  level: z.string().trim().optional(),
+  level: z.enum(['Club', 'HS', 'College']).optional(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
