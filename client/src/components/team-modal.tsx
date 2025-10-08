@@ -83,22 +83,22 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       // Exclude organizationId from updates - it cannot be changed
       const { organizationId, ...formData } = data;
 
-      console.log('[TEAM UPDATE CLIENT] Original team name:', JSON.stringify(team?.name));
-      console.log('[TEAM UPDATE CLIENT] Form data name:', JSON.stringify(formData.name));
+      // Normalize values for comparison (trim whitespace)
+      const normalize = (val: string | null | undefined) => val?.trim() || null;
 
       // Only send fields that have actually changed to avoid unique constraint issues
       const updateData: Partial<InsertTeam> = {};
-      if (formData.name !== team!.name) {
-        console.log('[TEAM UPDATE CLIENT] Name changed from', JSON.stringify(team!.name), 'to', JSON.stringify(formData.name));
-        console.log('[TEAM UPDATE CLIENT] Are they equal?', formData.name === team!.name);
-        console.log('[TEAM UPDATE CLIENT] Old name length:', team!.name.length, 'New name length:', formData.name.length);
-        updateData.name = formData.name;
+      if (normalize(formData.name) !== normalize(team!.name)) {
+        updateData.name = formData.name.trim();
       }
       if (formData.level !== team!.level) updateData.level = formData.level;
-      if (formData.notes !== team!.notes) updateData.notes = formData.notes;
-      if (formData.season !== team!.season) updateData.season = formData.season;
+      if (normalize(formData.notes) !== normalize(team!.notes)) updateData.notes = formData.notes;
+      if (normalize(formData.season) !== normalize(team!.season)) updateData.season = formData.season;
 
-      console.log('[TEAM UPDATE CLIENT] Update payload:', JSON.stringify(updateData));
+      // If nothing changed, close modal without API call
+      if (Object.keys(updateData).length === 0) {
+        return { success: true, team: team! };
+      }
 
       const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
       if (!response.ok) {
@@ -116,9 +116,11 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       });
       onClose();
     },
-    onError: (error: any) => {
+    onError: (error: Error | { message?: string }) => {
       console.error("Team update error:", error);
-      const errorMessage = error?.message || "Failed to update team";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : error?.message || "Failed to update team";
       toast({
         title: "Error",
         description: errorMessage,
