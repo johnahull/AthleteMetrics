@@ -1160,6 +1160,9 @@ export async function registerRoutes(app: Express) {
         // Check for unique constraint violation (specifically for team name uniqueness)
         if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
           const constraintName = (error as any).constraint;
+          // Check both possible constraint names:
+          // 'uniqueTeamPerOrg' - Drizzle ORM generated constraint name
+          // 'teams_organization_id_name_unique' - Direct PostgreSQL constraint name
           if (constraintName === 'uniqueTeamPerOrg' || constraintName?.includes('teams_organization_id_name_unique')) {
             return res.status(409).json({
               message: "A team with this name already exists in this organization. Please choose a different name.",

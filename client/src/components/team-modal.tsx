@@ -83,14 +83,19 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       // Exclude organizationId from updates - it cannot be changed
       const { organizationId, ...formData } = data;
 
-      // Normalize values for comparison (trim whitespace)
+      // Normalize values for comparison
+      // NOTE: Zod schema handles .trim(), so no need to manually trim in updateData
       const normalize = (val: string | null | undefined) => val?.trim() || null;
 
       // Only send fields that have actually changed to avoid unique constraint issues
+      // OPTIMIZATION TRADEOFF: This prevents unnecessary API calls but introduces a potential
+      // race condition if another user updates the team between when this modal opened and
+      // when the update is submitted. The cached `team!` object may be stale.
+      // Alternative: Always send all fields or implement optimistic concurrency control.
       const updateData: Partial<InsertTeam> = {};
 
       if (normalize(formData.name) !== normalize(team!.name)) {
-        updateData.name = formData.name.trim();
+        updateData.name = formData.name;
       }
       if (formData.level !== team!.level) updateData.level = formData.level;
       if (normalize(formData.notes) !== normalize(team!.notes)) updateData.notes = formData.notes;
@@ -104,6 +109,13 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
       if (!response.ok) {
         const error = await response.json();
+        // Check for specific error codes to provide targeted feedback
+        if (error.errorCode === 'DUPLICATE_TEAM_NAME') {
+          // Re-throw with error code so onError can handle it
+          const duplicateError = new Error(error.message || "Duplicate team name") as any;
+          duplicateError.errorCode = 'DUPLICATE_TEAM_NAME';
+          throw duplicateError;
+        }
         throw new Error(error.message || "Failed to update team");
       }
       return response.json();
@@ -119,6 +131,16 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     },
     onError: (error: Error | { message?: string }) => {
       console.error("Team update error:", error);
+
+      // Handle duplicate team name error by highlighting the name field
+      if ((error as any).errorCode === 'DUPLICATE_TEAM_NAME') {
+        form.setError('name', {
+          type: 'manual',
+          message: error instanceof Error ? error.message : "A team with this name already exists",
+        });
+        return; // Don't show toast for form field errors
+      }
+
       const errorMessage = error instanceof Error
         ? error.message
         : error?.message || "Failed to update team";
