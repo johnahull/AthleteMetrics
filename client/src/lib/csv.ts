@@ -1,7 +1,7 @@
 export function downloadCSV(csvContent: string, filename: string) {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  
+
   if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
@@ -10,6 +10,8 @@ export function downloadCSV(csvContent: string, filename: string) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    // Clean up blob URL to prevent memory leak
+    URL.revokeObjectURL(url);
   }
 }
 
@@ -34,23 +36,44 @@ export function parseCSV(csvText: string): any[] {
   return data;
 }
 
+/**
+ * Sanitize a CSV cell value to prevent formula injection attacks
+ * @param value - The cell value to sanitize
+ * @returns Sanitized value safe for CSV export
+ */
+function sanitizeCSVCell(value: any): string {
+  if (value === null || value === undefined) return '';
+
+  const strValue = String(value);
+
+  // Prevent CSV formula injection by prefixing dangerous characters with a single quote
+  // Dangerous characters: =, +, -, @, tab, carriage return
+  if (/^[=+\-@\t\r]/.test(strValue)) {
+    return `'${strValue}`;
+  }
+
+  return strValue;
+}
+
 export function arrayToCSV(data: any[], headers?: string[]): string {
   if (data.length === 0) return '';
-  
+
   const csvHeaders = headers || Object.keys(data[0]);
   const headerRow = csvHeaders.join(',');
-  
-  const rows = data.map(row => 
+
+  const rows = data.map(row =>
     csvHeaders.map(header => {
-      const value = row[header] || '';
+      const rawValue = row[header] || '';
+      const sanitizedValue = sanitizeCSVCell(rawValue);
+
       // Escape commas and quotes
-      if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-        return `"${value.replace(/"/g, '""')}"`;
+      if (typeof sanitizedValue === 'string' && (sanitizedValue.includes(',') || sanitizedValue.includes('"'))) {
+        return `"${sanitizedValue.replace(/"/g, '""')}"`;
       }
-      return value;
+      return sanitizedValue;
     }).join(',')
   );
-  
+
   return [headerRow, ...rows].join('\n');
 }
 

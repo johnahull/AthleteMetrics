@@ -317,24 +317,58 @@ export function useChartConfiguration() {
 export function useAnalyticsExport() {
   const { state } = useAnalyticsContext();
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async (
+    format: 'csv' | 'png' | 'clipboard',
+    chartRef?: any,
+    containerRef?: HTMLElement | null
+  ) => {
     if (!state.analyticsData) {
-      devLog.warn('No analytics data to export');
-      return;
+      throw new Error('No analytics data to export');
     }
 
-    try {
-      // TODO: Implement actual export logic
-      // This could export to CSV, PDF, or other formats
-      devLog.log('Exporting analytics data:', state.analyticsData);
+    // Dynamic import to avoid bundling unless needed
+    const {
+      exportAnalyticsDataAsCSV,
+      exportChartAsPNG,
+      copyChartToClipboard,
+      generateExportFilename
+    } = await import('@/lib/chartExport');
 
-      // Example CSV export implementation:
-      // const csvData = convertAnalyticsDataToCSV(state.analyticsData);
-      // downloadCSV(csvData, `analytics-${Date.now()}.csv`);
-    } catch (error) {
-      devLog.error('Failed to export analytics data:', error);
+    const filename = generateExportFilename(
+      state.selectedChartType,
+      state.metrics,
+      format
+    );
+
+    switch (format) {
+      case 'csv':
+        exportAnalyticsDataAsCSV(
+          state.analyticsData,
+          state.selectedChartType,
+          state.metrics
+        );
+        devLog.log('CSV export completed:', { filename });
+        break;
+
+      case 'png':
+        if (containerRef) {
+          await exportChartAsPNG(containerRef, filename);
+          devLog.log('PNG export completed:', { filename });
+        } else {
+          throw new Error('Container not available for PNG export');
+        }
+        break;
+
+      case 'clipboard':
+        if (containerRef) {
+          await copyChartToClipboard(containerRef);
+          devLog.log('Chart copied to clipboard successfully');
+        } else {
+          throw new Error('Container not available for clipboard copy');
+        }
+        break;
     }
-  }, [state.analyticsData]);
+  }, [state.analyticsData, state.selectedChartType, state.metrics]);
 
   return {
     handleExport,
