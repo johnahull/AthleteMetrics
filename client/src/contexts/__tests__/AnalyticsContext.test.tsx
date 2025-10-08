@@ -118,6 +118,7 @@ describe('AnalyticsContext State Transitions', () => {
     showAllCharts: false,
     availableTeams: [],
     availableAthletes: [],
+    metricsAvailability: {},
     ...overrides,
   });
 

@@ -382,15 +382,8 @@ export class AnalyticsService {
       conditions.push(inArray(measurements.userId, filters.athleteIds));
     }
 
-    // Apply date range filter (optional - not used by default to show all available data)
-    if (filters.dateRange) {
-      if (filters.dateRange.start) {
-        conditions.push(gte(measurements.date, formatDateForDatabase(filters.dateRange.start)));
-      }
-      if (filters.dateRange.end) {
-        conditions.push(lte(measurements.date, formatDateForDatabase(filters.dateRange.end)));
-      }
-    }
+    // Note: No date range filter in AnalyticsFilters interface
+    // Date filtering is handled by timeframe configuration in the query layer
 
     // Query measurement counts per metric
     const results = await db
