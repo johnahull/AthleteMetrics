@@ -117,9 +117,8 @@ export function ChartContainer({
   // Fullscreen state
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
-  // Refs for export
+  // Ref for export (container element used by html2canvas)
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
 
   // Handle fullscreen toggle
   const handleFullscreen = () => {
@@ -135,7 +134,7 @@ export function ChartContainer({
   // Handle export with format selection
   const handleExport = (format: ExportFormat) => {
     if (onExport) {
-      onExport(format, chartRef.current, containerRef.current);
+      onExport(format, undefined, containerRef.current);
     }
   };
 

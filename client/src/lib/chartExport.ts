@@ -128,12 +128,14 @@ export async function exportChartAsPNG(
     return;
   }
 
+  let canvas: HTMLCanvasElement | null = null;
+
   try {
     // Dynamically import html2canvas
     const html2canvas = (await import('html2canvas')).default;
 
     // Capture the entire container
-    const canvas = await html2canvas(containerElement, {
+    canvas = await html2canvas(containerElement, {
       backgroundColor: '#ffffff',
       scale: 2, // Higher quality
       logging: false,
@@ -156,6 +158,17 @@ export async function exportChartAsPNG(
     }, 'image/png');
   } catch (error) {
     console.error('Error exporting chart as PNG:', error);
+  } finally {
+    // Clean up canvas to free memory
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas = null;
+    }
   }
 }
 
@@ -177,12 +190,14 @@ export async function copyChartToClipboard(
     return;
   }
 
+  let canvas: HTMLCanvasElement | null = null;
+
   try {
     // Dynamically import html2canvas
     const html2canvas = (await import('html2canvas')).default;
 
     // Capture the entire container
-    const canvas = await html2canvas(containerElement, {
+    canvas = await html2canvas(containerElement, {
       backgroundColor: '#ffffff',
       scale: 2, // Higher quality
       logging: false,
@@ -191,7 +206,7 @@ export async function copyChartToClipboard(
 
     // Convert canvas to blob
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/png');
+      canvas!.toBlob(resolve, 'image/png');
     });
 
     if (!blob) {
@@ -209,7 +224,47 @@ export async function copyChartToClipboard(
     console.log('Chart copied to clipboard successfully');
   } catch (error) {
     console.error('Error copying chart to clipboard:', error);
+  } finally {
+    // Clean up canvas to free memory
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas = null;
+    }
   }
+}
+
+/**
+ * Sanitize a filename to prevent path traversal and injection attacks
+ * @param filename - The filename to sanitize
+ * @returns Sanitized filename safe for file download
+ */
+function sanitizeFilename(filename: string): string {
+  return filename
+    // Remove path traversal sequences
+    .replace(/\.\./g, '')
+    // Remove path separators
+    .replace(/[/\\]/g, '')
+    // Remove null bytes
+    .replace(/\0/g, '')
+    // Remove control characters (ASCII 0-31)
+    .replace(/[\x00-\x1F]/g, '')
+    // Replace whitespace with underscores
+    .replace(/\s+/g, '_')
+    // Remove other potentially dangerous characters
+    .replace(/[<>:"|?*]/g, '')
+    // Limit to alphanumeric, underscore, hyphen, and dot
+    .replace(/[^a-zA-Z0-9_.-]/g, '_')
+    // Prevent hidden files
+    .replace(/^\.+/, '')
+    // Collapse multiple underscores
+    .replace(/_+/g, '_')
+    // Trim underscores from start and end
+    .replace(/^_+|_+$/g, '');
 }
 
 /**
@@ -223,13 +278,14 @@ export function generateExportFilename(
   const timestamp = new Date().toISOString().split('T')[0];
   const metricLabels = [metrics.primary, ...metrics.additional]
     .map(m => METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
-    .join('_')
-    .replace(/\s+/g, '_');
+    .join('_');
 
   const chartTypeName = chartType.replace(/_/g, '-');
 
   const extension = format === 'csv' ? 'csv' : 'png';
   const viewType = 'chart';
 
-  return `analytics_${chartTypeName}_${metricLabels}_${viewType}_${timestamp}.${extension}`;
+  const rawFilename = `analytics_${chartTypeName}_${metricLabels}_${viewType}_${timestamp}.${extension}`;
+
+  return sanitizeFilename(rawFilename);
 }
