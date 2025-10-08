@@ -339,36 +339,69 @@ export function registerAthleteRoutes(app: Express) {
       let deletedCount = 0;
       let failedCount = 0;
 
-      for (const athleteId of athleteIds) {
-        try {
-          // Check permissions for each athlete
-          if (!userIsSiteAdmin) {
-            const athlete = await storage.getAthlete(athleteId);
-            if (!athlete) {
-              failedCount++;
-              continue;
+      // PERFORMANCE FIX: Batch permission checks upfront to avoid N+1 queries
+      if (!userIsSiteAdmin) {
+        // Get user's organizations once
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const userOrgIds = userOrgs.map(org => org.organizationId);
+
+        // Batch fetch all athletes and their organization memberships
+        const athleteChecks = await Promise.all(
+          athleteIds.map(async (athleteId) => {
+            try {
+              const athlete = await storage.getAthlete(athleteId);
+              if (!athlete) {
+                return { athleteId, hasAccess: false };
+              }
+
+              const athleteTeams = await storage.getUserTeams(athleteId);
+              const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+              const hasAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+
+              return { athleteId, hasAccess };
+            } catch (error) {
+              console.error(`[BULK DELETE] Failed to check access for athlete ${athleteId}:`, error);
+              return { athleteId, hasAccess: false };
             }
+          })
+        );
 
-            // Check organization access
-            const userOrgs = await storage.getUserOrganizations(currentUser.id);
-            const athleteTeams = await storage.getUserTeams(athleteId);
+        // Filter to only athletes the user has access to
+        const authorizedAthleteIds = athleteChecks
+          .filter(check => check.hasAccess)
+          .map(check => check.athleteId);
 
-            const userOrgIds = userOrgs.map(org => org.organizationId);
-            const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
+        // Track unauthorized attempts
+        failedCount = athleteIds.length - authorizedAthleteIds.length;
 
-            const hasAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
-            if (!hasAccess) {
-              failedCount++;
-              continue;
-            }
+        // Delete authorized athletes in parallel
+        const deleteResults = await Promise.allSettled(
+          authorizedAthleteIds.map(athleteId => storage.deleteAthlete(athleteId))
+        );
+
+        // Count successes and failures
+        deleteResults.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            deletedCount++;
+          } else {
+            console.error(`[BULK DELETE] Failed to delete athlete ${authorizedAthleteIds[index]}:`, result.reason);
+            failedCount++;
           }
+        });
+      } else {
+        // Site admin can delete all - process in parallel
+        const deleteResults = await Promise.allSettled(
+          athleteIds.map(athleteId => storage.deleteAthlete(athleteId))
+        );
 
-          await storage.deleteAthlete(athleteId);
-          deletedCount++;
-        } catch (error) {
-          console.error(`[BULK DELETE] Failed to delete athlete ${athleteId}:`, error);
-          failedCount++;
-        }
+        deleteResults.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            deletedCount++;
+          } else {
+            console.error(`[BULK DELETE] Failed to delete athlete ${athleteIds[index]}:`, result.reason);
+            failedCount++;
+          }
+        });
       }
 
       res.json({
@@ -423,45 +456,72 @@ export function registerAthleteRoutes(app: Express) {
       let invitedCount = 0;
       let skippedCount = 0;
 
-      for (const athleteId of athleteIds) {
-        try {
-          const athlete = await storage.getAthlete(athleteId);
-          if (!athlete) {
-            skippedCount++;
-            continue;
-          }
+      // PERFORMANCE FIX: Batch fetch athletes and validate organization membership upfront
+      // CRITICAL SECURITY FIX: Verify all athletes belong to the target organization
+      const athleteData = await Promise.all(
+        athleteIds.map(async (athleteId) => {
+          try {
+            const [athlete, athleteOrgs, athleteTeams] = await Promise.all([
+              storage.getAthlete(athleteId),
+              storage.getUserOrganizations(athleteId),
+              storage.getUserTeams(athleteId)
+            ]);
 
-          // Skip if athlete has no email
-          if (!athlete.emails || athlete.emails.length === 0) {
-            skippedCount++;
-            continue;
-          }
-
-          // Create invitation for each email
-          for (const email of athlete.emails) {
-            try {
-              await storage.createInvitation({
-                email,
-                firstName: athlete.firstName,
-                lastName: athlete.lastName,
-                role: "athlete",
-                organizationId,
-                teamIds: [],
-                invitedBy: currentUser.id,
-                playerId: athleteId,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Expires in 7 days
-              });
-              invitedCount++;
-            } catch (error) {
-              // Skip if invitation already exists or other error
-              console.error(`[BULK INVITE] Failed to create invitation for ${email}:`, error);
+            if (!athlete) {
+              return { athleteId, valid: false, reason: 'not_found' };
             }
+
+            // Verify athlete belongs to the target organization
+            const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
+            const athleteTeamOrgIds = athleteTeams.map(team => team.team.organizationId);
+            const allAthleteOrgIds = [...new Set([...athleteOrgIds, ...athleteTeamOrgIds])];
+
+            const belongsToOrganization = allAthleteOrgIds.includes(organizationId);
+            if (!belongsToOrganization) {
+              console.warn(`[BULK INVITE] Athlete ${athleteId} does not belong to organization ${organizationId}`);
+              return { athleteId, valid: false, reason: 'wrong_organization' };
+            }
+
+            // Skip if athlete has no email
+            if (!athlete.emails || athlete.emails.length === 0) {
+              return { athleteId, valid: false, reason: 'no_email' };
+            }
+
+            return { athleteId, valid: true, athlete };
+          } catch (error) {
+            console.error(`[BULK INVITE] Failed to fetch athlete ${athleteId}:`, error);
+            return { athleteId, valid: false, reason: 'error' };
           }
-        } catch (error) {
-          console.error(`[BULK INVITE] Failed to process athlete ${athleteId}:`, error);
-          skippedCount++;
-        }
-      }
+        })
+      );
+
+      // Process invitations in parallel for valid athletes
+      const invitationPromises = athleteData
+        .filter(data => data.valid)
+        .flatMap(data => {
+          const athlete = data.athlete!;
+          return athlete.emails!.map(email =>
+            storage.createInvitation({
+              email,
+              firstName: athlete.firstName,
+              lastName: athlete.lastName,
+              role: "athlete",
+              organizationId,
+              teamIds: [],
+              invitedBy: currentUser.id,
+              playerId: data.athleteId,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Expires in 7 days
+            }).catch(error => {
+              console.error(`[BULK INVITE] Failed to create invitation for ${email}:`, error);
+              return null;
+            })
+          );
+        });
+
+      const invitationResults = await Promise.allSettled(invitationPromises);
+      invitedCount = invitationResults.filter(result => result.status === 'fulfilled' && result.value !== null).length;
+      skippedCount = athleteData.filter(data => !data.valid).length +
+                     invitationResults.filter(result => result.status === 'rejected' || result.value === null).length;
 
       res.json({
         invited: invitedCount,

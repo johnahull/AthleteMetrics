@@ -148,7 +148,25 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
       }
       const athlete = await response.json();
 
-      // Add athlete to teams
+      // BUGFIX: Explicitly add athlete to organization when assigning to teams
+      // This ensures organization membership is not solely reliant on team assignment
+      if (data.teamIds.length > 0 && organizationContext) {
+        try {
+          const orgResponse = await apiRequest("POST", `/api/organizations/${organizationContext}/add-users`, {
+            userIds: [athlete.id],
+            role: "athlete"
+          });
+          if (!orgResponse.ok) {
+            console.error(`Failed to add athlete to organization ${organizationContext}`);
+          }
+        } catch (error) {
+          console.error(`Error adding athlete to organization:`, error);
+          // Don't fail - the server-side POST /api/athletes already adds to org
+        }
+      }
+
+      // Add athlete to teams - collect errors for better reporting
+      const teamErrors: string[] = [];
       if (data.teamIds.length > 0) {
         for (const teamId of data.teamIds) {
           try {
@@ -156,24 +174,40 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               athleteIds: [athlete.id]
             });
             if (!teamResponse.ok) {
-              console.error(`Failed to add athlete to team ${teamId}`);
+              const errorData = await teamResponse.json();
+              teamErrors.push(`Team assignment failed: ${errorData.message || 'Unknown error'}`);
             }
           } catch (error) {
-            console.error(`Error adding athlete to team ${teamId}:`, error);
+            teamErrors.push(`Error adding athlete to team: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }
       }
 
+      // Return athlete with any team assignment errors
+      if (teamErrors.length > 0) {
+        return { ...athlete, teamErrors };
+      }
       return athlete;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
-      toast({
-        title: "Success",
-        description: "Athlete created successfully",
-      });
+
+      // IMPROVED ERROR HANDLING: Show team assignment warnings if present
+      if (data.teamErrors && data.teamErrors.length > 0) {
+        toast({
+          title: "Athlete created with warnings",
+          description: `Athlete created successfully, but some team assignments failed: ${data.teamErrors.join(', ')}`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Athlete created successfully",
+        });
+      }
+
       onClose();
       form.reset({
         firstName: "",
@@ -728,7 +762,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                             setShowCreateTeam(false);
                             setNewTeamName("");
                           }}
-                          disabled={isPending}
+                          disabled={isPending || createTeamMutation.isPending}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -737,13 +771,13 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                         placeholder="Team name"
                         value={newTeamName}
                         onChange={(e) => setNewTeamName(e.target.value)}
-                        disabled={isPending}
+                        disabled={isPending || createTeamMutation.isPending}
                         data-testid="input-new-team-name"
                       />
                       <Select
                         value={newTeamLevel}
                         onValueChange={(value: "Club" | "HS" | "College") => setNewTeamLevel(value)}
-                        disabled={isPending}
+                        disabled={isPending || createTeamMutation.isPending}
                       >
                         <SelectTrigger data-testid="select-new-team-level">
                           <SelectValue />
@@ -754,6 +788,9 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                           <SelectItem value="College">College</SelectItem>
                         </SelectContent>
                       </Select>
+                      {createTeamMutation.isPending && (
+                        <p className="text-sm text-gray-500">Creating team...</p>
+                      )}
                     </div>
                   )}
                 </div>
