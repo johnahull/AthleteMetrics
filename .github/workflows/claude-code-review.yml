@@ -53,7 +53,7 @@ jobs:
             - Use TodoWrite to track review tasks
             - Be constructive and specific in feedback
 
-          claude_args: --max-turns 5 --allowed-tools "Bash(gh:*),Read,Grep,Glob,Task,TodoWrite"
+          claude_args: --max-turns 15 --allowed-tools "Bash(gh:*),Read,Grep,Glob,Task,TodoWrite"
 
           additional_permissions: |
             actions: read
