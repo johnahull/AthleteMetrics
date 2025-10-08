@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/hooks/use-toast';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { FullscreenChartDialog } from './FullscreenChartDialog';
 import type {
@@ -116,9 +117,13 @@ export function ChartContainer({
 }: ChartContainerProps) {
   // Fullscreen state
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Ref for export (container element used by html2canvas)
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Toast notifications
+  const { toast } = useToast();
 
   // Handle fullscreen toggle
   const handleFullscreen = () => {
@@ -131,10 +136,42 @@ export function ChartContainer({
     }
   };
 
-  // Handle export with format selection
-  const handleExport = (format: ExportFormat) => {
-    if (onExport) {
-      onExport(format, undefined, containerRef.current);
+  // Check if clipboard API is available
+  const isClipboardAvailable = useMemo(() => {
+    return typeof navigator !== 'undefined' &&
+           navigator.clipboard &&
+           navigator.clipboard.write &&
+           window.isSecureContext;
+  }, []);
+
+  // Handle export with format selection and user feedback
+  const handleExport = async (format: ExportFormat) => {
+    if (!onExport) return;
+
+    setIsExporting(true);
+    try {
+      await onExport(format, undefined, containerRef.current);
+
+      // Show success toast
+      const formatNames = {
+        csv: 'CSV data',
+        png: 'PNG image',
+        clipboard: 'Clipboard'
+      };
+
+      toast({
+        title: 'Export successful',
+        description: `${formatNames[format]} export completed successfully`
+      });
+    } catch (error) {
+      // Show error toast
+      toast({
+        variant: 'destructive',
+        title: 'Export failed',
+        description: error instanceof Error ? error.message : 'An error occurred during export'
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -307,23 +344,26 @@ export function ChartContainer({
                   variant="outline"
                   size="icon"
                   title="Export chart"
+                  disabled={isExporting}
                 >
                   <Download className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                <DropdownMenuItem onClick={() => handleExport('csv')} disabled={isExporting}>
                   <FileText className="mr-2 h-4 w-4" />
                   <span>Export Data (CSV)</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('png')}>
+                <DropdownMenuItem onClick={() => handleExport('png')} disabled={isExporting}>
                   <Image className="mr-2 h-4 w-4" />
                   <span>Export Chart (PNG)</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('clipboard')}>
-                  <Clipboard className="mr-2 h-4 w-4" />
-                  <span>Copy to Clipboard</span>
-                </DropdownMenuItem>
+                {isClipboardAvailable && (
+                  <DropdownMenuItem onClick={() => handleExport('clipboard')} disabled={isExporting}>
+                    <Clipboard className="mr-2 h-4 w-4" />
+                    <span>Copy to Clipboard</span>
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

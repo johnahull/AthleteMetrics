@@ -149,6 +149,19 @@ describe('Chart Export Utilities - TDD', () => {
         expect(filename).not.toMatch(/^\./);
       });
 
+      it('should enforce 200 character limit for long filenames', () => {
+        // Create a very long chart type name
+        const longChartType = 'a'.repeat(300);
+        const filename = generateExportFilename(
+          longChartType,
+          { primary: 'FLY10_TIME', additional: [] },
+          'csv'
+        );
+
+        // Filename should be truncated to 200 chars max
+        expect(filename.length).toBeLessThanOrEqual(200);
+      });
+
       it('should collapse multiple underscores', () => {
         const filename = generateExportFilename(
           'chart___test',

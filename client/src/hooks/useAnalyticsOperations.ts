@@ -323,55 +323,50 @@ export function useAnalyticsExport() {
     containerRef?: HTMLElement | null
   ) => {
     if (!state.analyticsData) {
-      devLog.warn('No analytics data to export');
-      return;
+      throw new Error('No analytics data to export');
     }
 
-    try {
-      // Dynamic import to avoid bundling unless needed
-      const {
-        exportAnalyticsDataAsCSV,
-        exportChartAsPNG,
-        copyChartToClipboard,
-        generateExportFilename
-      } = await import('@/lib/chartExport');
+    // Dynamic import to avoid bundling unless needed
+    const {
+      exportAnalyticsDataAsCSV,
+      exportChartAsPNG,
+      copyChartToClipboard,
+      generateExportFilename
+    } = await import('@/lib/chartExport');
 
-      const filename = generateExportFilename(
-        state.selectedChartType,
-        state.metrics,
-        format
-      );
+    const filename = generateExportFilename(
+      state.selectedChartType,
+      state.metrics,
+      format
+    );
 
-      switch (format) {
-        case 'csv':
-          exportAnalyticsDataAsCSV(
-            state.analyticsData,
-            state.selectedChartType,
-            state.metrics
-          );
-          devLog.log('CSV export completed:', { filename });
-          break;
+    switch (format) {
+      case 'csv':
+        exportAnalyticsDataAsCSV(
+          state.analyticsData,
+          state.selectedChartType,
+          state.metrics
+        );
+        devLog.log('CSV export completed:', { filename });
+        break;
 
-        case 'png':
-          if (containerRef) {
-            await exportChartAsPNG(containerRef, filename);
-            devLog.log('PNG export completed:', { filename });
-          } else {
-            devLog.warn('Container ref not available for PNG export');
-          }
-          break;
+      case 'png':
+        if (containerRef) {
+          await exportChartAsPNG(containerRef, filename);
+          devLog.log('PNG export completed:', { filename });
+        } else {
+          throw new Error('Container not available for PNG export');
+        }
+        break;
 
-        case 'clipboard':
-          if (containerRef) {
-            await copyChartToClipboard(containerRef);
-            devLog.log('Chart copied to clipboard successfully');
-          } else {
-            devLog.warn('Container ref not available for clipboard copy');
-          }
-          break;
-      }
-    } catch (error) {
-      devLog.error('Failed to export analytics data:', error);
+      case 'clipboard':
+        if (containerRef) {
+          await copyChartToClipboard(containerRef);
+          devLog.log('Chart copied to clipboard successfully');
+        } else {
+          throw new Error('Container not available for clipboard copy');
+        }
+        break;
     }
   }, [state.analyticsData, state.selectedChartType, state.metrics]);
 

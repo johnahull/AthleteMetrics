@@ -244,7 +244,7 @@ export async function copyChartToClipboard(
  * @returns Sanitized filename safe for file download
  */
 function sanitizeFilename(filename: string): string {
-  return filename
+  const sanitized = filename
     // Remove path traversal sequences
     .replace(/\.\./g, '')
     // Remove path separators
@@ -265,6 +265,12 @@ function sanitizeFilename(filename: string): string {
     .replace(/_+/g, '_')
     // Trim underscores from start and end
     .replace(/^_+|_+$/g, '');
+
+  // Enforce 200 char limit (255 is OS limit, leave room for extension)
+  const MAX_LENGTH = 200;
+  return sanitized.length > MAX_LENGTH
+    ? sanitized.substring(0, MAX_LENGTH)
+    : sanitized;
 }
 
 /**
