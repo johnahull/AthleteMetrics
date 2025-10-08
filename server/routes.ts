@@ -1137,12 +1137,13 @@ export async function registerRoutes(app: Express) {
     try {
       const { id } = req.params;
 
-      const teamData = insertTeamSchema.partial().parse(req.body);
-
-      // Trim whitespace from name field if present
-      if (teamData.name) {
-        teamData.name = teamData.name.trim();
+      // Check if team exists
+      const existingTeam = await storage.getTeam(id);
+      if (!existingTeam) {
+        return res.status(404).json({ message: "Team not found" });
       }
+
+      const teamData = insertTeamSchema.partial().parse(req.body);
 
       // Ensure organizationId cannot be updated
       delete teamData.organizationId;
@@ -1167,7 +1168,7 @@ export async function registerRoutes(app: Express) {
           }
         }
 
-        res.status(500).json({ message: "Failed to update team", error: error instanceof Error ? error.message : String(error) });
+        res.status(500).json({ message: "Failed to update team" });
       }
     }
   });

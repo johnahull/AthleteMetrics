@@ -142,48 +142,8 @@ describe('Team Update API Integration Tests', () => {
     }
   }, 30000);
 
-  describe('PATCH /api/teams/:id - Authentication & Authorization', () => {
-    it('should require authentication', async () => {
-      // This test documents expected behavior
-      // In a real implementation, you'd use supertest with the actual app
-      const isAuthenticationRequired = true;
-      expect(isAuthenticationRequired).toBe(true);
-    });
-
-    it('should enforce team write access via requireTeamAccess middleware', async () => {
-      // Test that requireTeamAccess('write') middleware is applied
-      // Athletes should not be able to update teams
-      const athleteCanUpdateTeam = false;
-      expect(athleteCanUpdateTeam).toBe(false);
-    });
-
-    it('should allow site admins to update any team', async () => {
-      // Site admins should have full access
-      const siteAdminCanUpdate = siteAdminUser.isSiteAdmin === true;
-      expect(siteAdminCanUpdate).toBe(true);
-    });
-
-    it('should allow org admins to update teams in their organization', async () => {
-      // Org admins should have access to teams in their org
-      const userOrgs = await storage.getUserOrganizations(orgAdminUser.id);
-      const hasAccess = userOrgs.some(org => org.organizationId === testOrg.id);
-      expect(hasAccess).toBe(true);
-    });
-
-    it('should allow coaches to update teams in their organization', async () => {
-      // Coaches should have access to teams in their org
-      const userOrgs = await storage.getUserOrganizations(coachUser.id);
-      const hasAccess = userOrgs.some(org => org.organizationId === testOrg.id);
-      expect(hasAccess).toBe(true);
-    });
-
-    it('should prevent users from updating teams in other organizations', async () => {
-      // Users from other orgs should not have access
-      const userOrgs = await storage.getUserOrganizations(orgAdminUser.id);
-      const hasAccessToOtherOrg = userOrgs.some(org => org.organizationId === otherOrg.id);
-      expect(hasAccessToOtherOrg).toBe(false);
-    });
-  });
+  // NOTE: Authentication & Authorization tests would require actual HTTP endpoint testing
+  // These tests are covered by the storage layer tests and middleware unit tests
 
   describe('PATCH /api/teams/:id - Unique Constraint Handling', () => {
     it('should return 409 Conflict for duplicate team names in same organization', async () => {
@@ -225,15 +185,15 @@ describe('Team Update API Integration Tests', () => {
   describe('PATCH /api/teams/:id - Data Validation & Normalization', () => {
     it('should trim whitespace from team name', async () => {
       const nameWithWhitespace = '  Test Team With Spaces  ';
+      const expectedName = 'Test Team With Spaces';
 
       const updatedTeam = await storage.updateTeam(testTeam.id, {
         name: nameWithWhitespace,
       });
 
-      // After the fix, the backend should trim whitespace
-      // Note: This may still be nameWithWhitespace if backend doesn't trim
-      // The important thing is the test documents expected behavior
-      expect(updatedTeam.name.trim()).toBe(nameWithWhitespace.trim());
+      // Backend should trim whitespace from the name
+      expect(updatedTeam.name).toBe(expectedName);
+      expect(updatedTeam.name).not.toMatch(/^\s|\s$/); // No leading/trailing spaces
     });
 
     it('should prevent duplicate names even with different whitespace', async () => {
@@ -253,12 +213,7 @@ describe('Team Update API Integration Tests', () => {
       }).rejects.toThrow();
     });
 
-    it('should validate using Zod partial schema', async () => {
-      // Invalid data should be rejected by Zod validation
-      // Expected 400 Bad Request with validation errors
-      const expectedValidationBehavior = true;
-      expect(expectedValidationBehavior).toBe(true);
-    });
+    // NOTE: Zod validation tests would require actual HTTP endpoint testing
   });
 
   describe('PATCH /api/teams/:id - Organization Immutability', () => {
@@ -274,12 +229,7 @@ describe('Team Update API Integration Tests', () => {
       expect(updatedTeam.organizationId).not.toBe(otherOrg.id);
     });
 
-    it('should strip organizationId from request body on backend', async () => {
-      // Backend should delete organizationId from teamData before update
-      // This is a defense-in-depth measure
-      const backendStripsBehavior = true;
-      expect(backendStripsBehavior).toBe(true);
-    });
+    // NOTE: Backend stripping behavior is verified by the test above - organizationId remains unchanged
   });
 
   describe('PATCH /api/teams/:id - Partial Updates', () => {
@@ -347,12 +297,7 @@ describe('Team Update API Integration Tests', () => {
       expect(expectedConstraintNames).toContain('uniqueTeamPerOrg');
     });
 
-    it('should not catch other unique constraint violations with generic error', async () => {
-      // If there were other unique constraints on the teams table,
-      // they should not trigger the "duplicate team name" error message
-      const specificErrorHandling = true;
-      expect(specificErrorHandling).toBe(true);
-    });
+    // NOTE: Constraint specificity is verified by checking the constraint name in server code
   });
 
   describe('PATCH /api/teams/:id - HTTP Response Formats', () => {
@@ -379,24 +324,6 @@ describe('Team Update API Integration Tests', () => {
       }).rejects.toThrow();
     });
 
-    it('should return 400 Bad Request for invalid Zod validation', async () => {
-      // Expected response when Zod validation fails
-      const expectedErrorFormat = {
-        message: "Validation error",
-        errors: [] // Zod error array
-      };
-
-      expect(expectedErrorFormat.message).toBe("Validation error");
-    });
-
-    it('should return 500 Internal Server Error for unexpected errors', async () => {
-      // Generic error handling for non-Zod, non-constraint errors
-      const expectedErrorFormat = {
-        message: "Failed to update team",
-        error: "error message string"
-      };
-
-      expect(expectedErrorFormat.message).toBe("Failed to update team");
-    });
+    // NOTE: HTTP error response format tests would require actual HTTP endpoint testing
   });
 });

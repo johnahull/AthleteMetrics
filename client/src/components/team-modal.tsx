@@ -87,16 +87,17 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       const normalize = (val: string | null | undefined) => val?.trim() || null;
 
       // Only send fields that have actually changed to avoid unique constraint issues
-      // Always include name field to ensure proper unique constraint validation
-      const updateData: Partial<InsertTeam> = {
-        name: formData.name.trim(),
-      };
+      const updateData: Partial<InsertTeam> = {};
+
+      if (normalize(formData.name) !== normalize(team!.name)) {
+        updateData.name = formData.name.trim();
+      }
       if (formData.level !== team!.level) updateData.level = formData.level;
       if (normalize(formData.notes) !== normalize(team!.notes)) updateData.notes = formData.notes;
       if (normalize(formData.season) !== normalize(team!.season)) updateData.season = formData.season;
 
-      // If only name is in updateData and it hasn't changed, skip API call
-      if (Object.keys(updateData).length === 1 && normalize(formData.name) === normalize(team!.name)) {
+      // If no fields changed, skip API call
+      if (Object.keys(updateData).length === 0) {
         return { success: true, team: team! };
       }
 
