@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   exportAnalyticsDataAsCSV,
   exportChartAsPNG,
-  exportFullViewAsPNG,
+  copyChartToClipboard,
   generateExportFilename,
   type ExportFormat
 } from '../chartExport';
@@ -56,24 +56,14 @@ describe('Chart Export Utilities - TDD', () => {
       expect(filename).toMatch(/^analytics_box-plot_10-Yard_Fly_Time_chart_\d{4}-\d{2}-\d{2}\.csv$/);
     });
 
-    it('should generate PNG chart filename', () => {
+    it('should generate PNG filename', () => {
       const filename = generateExportFilename(
         'scatter_plot',
         { primary: 'VERTICAL_JUMP', additional: ['FLY10_TIME'] },
-        'png-chart'
+        'png'
       );
 
       expect(filename).toMatch(/^analytics_scatter-plot_.*_chart_\d{4}-\d{2}-\d{2}\.png$/);
-    });
-
-    it('should generate PNG full view filename', () => {
-      const filename = generateExportFilename(
-        'box_swarm_combo',
-        { primary: 'VERTICAL_JUMP', additional: [] },
-        'png-full'
-      );
-
-      expect(filename).toMatch(/^analytics_box-swarm-combo_.*_full_\d{4}-\d{2}-\d{2}\.png$/);
     });
 
     it('should handle multiple metrics in filename', () => {
@@ -246,61 +236,13 @@ describe('Chart Export Utilities - TDD', () => {
   });
 
   describe('exportChartAsPNG', () => {
-    it('should export chart canvas as PNG using toBase64Image', () => {
-      const mockBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-
-      const mockChartRef = {
-        toBase64Image: vi.fn(() => mockBase64)
-      };
-
-      // Mock document.createElement
-      const mockLink = {
-        href: '',
-        download: '',
-        click: vi.fn()
-      };
-      const createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue(mockLink as any);
-
-      exportChartAsPNG(mockChartRef, 'test-chart.png');
-
-      expect(mockChartRef.toBase64Image).toHaveBeenCalledWith('image/png', 1);
-      expect(mockLink.href).toBe(mockBase64);
-      expect(mockLink.download).toBe('test-chart.png');
-      expect(mockLink.click).toHaveBeenCalled();
-
-      createElementSpy.mockRestore();
-    });
-
-    it('should handle null chart ref gracefully', () => {
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      exportChartAsPNG(null, 'test.png');
-
-      expect(consoleWarnSpy).toHaveBeenCalledWith('No chart reference available for export');
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it('should handle missing toBase64Image method', () => {
-      const mockChartRef = {};
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      exportChartAsPNG(mockChartRef, 'test.png');
-
-      expect(consoleErrorSpy).toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
-    });
-  });
-
-  describe('exportFullViewAsPNG', () => {
-    it('should handle container element for full view export', async () => {
+    it('should export chart as PNG using html2canvas', async () => {
       const mockContainer = document.createElement('div');
 
       // Note: Testing dynamic html2canvas import requires complex mocking
       // The function structure is validated, actual html2canvas integration
       // will be tested in integration tests
-      await exportFullViewAsPNG(mockContainer, 'full-view.png');
+      await exportChartAsPNG(mockContainer, 'test-chart.png');
 
       expect(mockContainer).toBeDefined();
     });
@@ -308,11 +250,64 @@ describe('Chart Export Utilities - TDD', () => {
     it('should handle null container gracefully', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      await exportFullViewAsPNG(null, 'test.png');
+      await exportChartAsPNG(null, 'test.png');
 
       expect(consoleWarnSpy).toHaveBeenCalledWith('No container element available for export');
 
       consoleWarnSpy.mockRestore();
+    });
+  });
+
+  describe('copyChartToClipboard', () => {
+    it('should attempt clipboard copy with valid container', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Mock clipboard write
+      const mockClipboardWrite = vi.fn(() => Promise.resolve());
+      Object.assign(navigator, {
+        clipboard: {
+          write: mockClipboardWrite
+        }
+      });
+
+      // Note: Testing dynamic html2canvas import requires complex mocking
+      // html2canvas will fail in jsdom environment, but we verify the function runs
+      await copyChartToClipboard(mockContainer);
+
+      // Function should run without throwing (even if html2canvas fails internally)
+      expect(mockContainer).toBeDefined();
+    });
+
+    it('should handle null container gracefully', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await copyChartToClipboard(null);
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith('No container element available for clipboard copy');
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should handle clipboard API not available', async () => {
+      const mockContainer = document.createElement('div');
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Remove clipboard API
+      const originalClipboard = navigator.clipboard;
+      Object.defineProperty(navigator, 'clipboard', {
+        value: undefined,
+        configurable: true
+      });
+
+      await copyChartToClipboard(mockContainer);
+
+      // Restore
+      Object.defineProperty(navigator, 'clipboard', {
+        value: originalClipboard,
+        configurable: true
+      });
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });

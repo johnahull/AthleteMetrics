@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { AlertTriangle, Download, Maximize2, FileText, Image, FileImage } from 'lucide-react';
+import { AlertTriangle, Download, Maximize2, FileText, Image, Clipboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -67,7 +67,7 @@ const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ 
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
-export type ExportFormat = 'csv' | 'png-chart' | 'png-full';
+export type ExportFormat = 'csv' | 'png' | 'clipboard';
 
 interface ChartContainerProps {
   title: string;
@@ -317,13 +317,13 @@ export function ChartContainer({
                   <FileText className="mr-2 h-4 w-4" />
                   <span>Export Data (CSV)</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('png-chart')}>
+                <DropdownMenuItem onClick={() => handleExport('png')}>
                   <Image className="mr-2 h-4 w-4" />
                   <span>Export Chart (PNG)</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('png-full')}>
-                  <FileImage className="mr-2 h-4 w-4" />
-                  <span>Export Full View (PNG)</span>
+                <DropdownMenuItem onClick={() => handleExport('clipboard')}>
+                  <Clipboard className="mr-2 h-4 w-4" />
+                  <span>Copy to Clipboard</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

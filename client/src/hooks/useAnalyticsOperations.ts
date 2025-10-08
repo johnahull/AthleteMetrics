@@ -318,7 +318,7 @@ export function useAnalyticsExport() {
   const { state } = useAnalyticsContext();
 
   const handleExport = useCallback(async (
-    format: 'csv' | 'png-chart' | 'png-full',
+    format: 'csv' | 'png' | 'clipboard',
     chartRef?: any,
     containerRef?: HTMLElement | null
   ) => {
@@ -332,7 +332,7 @@ export function useAnalyticsExport() {
       const {
         exportAnalyticsDataAsCSV,
         exportChartAsPNG,
-        exportFullViewAsPNG,
+        copyChartToClipboard,
         generateExportFilename
       } = await import('@/lib/chartExport');
 
@@ -349,30 +349,27 @@ export function useAnalyticsExport() {
             state.selectedChartType,
             state.metrics
           );
+          devLog.log('CSV export completed:', { filename });
           break;
 
-        case 'png-chart':
-          if (chartRef) {
-            exportChartAsPNG(chartRef, filename);
+        case 'png':
+          if (containerRef) {
+            await exportChartAsPNG(containerRef, filename);
+            devLog.log('PNG export completed:', { filename });
           } else {
-            // Fallback to full view if chart ref not available
-            devLog.warn('Chart ref not available, falling back to full view export');
-            if (containerRef) {
-              await exportFullViewAsPNG(containerRef, filename);
-            }
+            devLog.warn('Container ref not available for PNG export');
           }
           break;
 
-        case 'png-full':
+        case 'clipboard':
           if (containerRef) {
-            await exportFullViewAsPNG(containerRef, filename);
+            await copyChartToClipboard(containerRef);
+            devLog.log('Chart copied to clipboard successfully');
           } else {
-            devLog.warn('Container ref not available for full view export');
+            devLog.warn('Container ref not available for clipboard copy');
           }
           break;
       }
-
-      devLog.log('Export completed:', { format, filename });
     } catch (error) {
       devLog.error('Failed to export analytics data:', error);
     }

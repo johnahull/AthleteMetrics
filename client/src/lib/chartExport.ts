@@ -12,7 +12,7 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
-export type ExportFormat = 'csv' | 'png-chart' | 'png-full';
+export type ExportFormat = 'csv' | 'png' | 'clipboard';
 
 /**
  * Export analytics data as CSV
@@ -116,42 +116,10 @@ function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[]): string {
 }
 
 /**
- * Export chart canvas as PNG image
- * Uses Chart.js's built-in toBase64Image() method
+ * Export chart as PNG image
+ * Uses html2canvas to capture the entire container
  */
-export function exportChartAsPNG(
-  chartRef: any,
-  filename: string
-): void {
-  if (!chartRef) {
-    console.warn('No chart reference available for export');
-    return;
-  }
-
-  try {
-    // Get base64 image from Chart.js
-    const base64Image = chartRef.toBase64Image?.('image/png', 1);
-
-    if (!base64Image) {
-      console.error('Failed to generate chart image');
-      return;
-    }
-
-    // Download the image
-    const link = document.createElement('a');
-    link.href = base64Image;
-    link.download = filename;
-    link.click();
-  } catch (error) {
-    console.error('Error exporting chart as PNG:', error);
-  }
-}
-
-/**
- * Export full chart view (including statistics) as PNG
- * Requires html2canvas library
- */
-export async function exportFullViewAsPNG(
+export async function exportChartAsPNG(
   containerElement: HTMLElement | null,
   filename: string
 ): Promise<void> {
@@ -187,7 +155,60 @@ export async function exportFullViewAsPNG(
       URL.revokeObjectURL(url);
     }, 'image/png');
   } catch (error) {
-    console.error('Error exporting full view as PNG:', error);
+    console.error('Error exporting chart as PNG:', error);
+  }
+}
+
+/**
+ * Copy chart to clipboard as image
+ * Uses html2canvas to capture and Clipboard API to copy
+ */
+export async function copyChartToClipboard(
+  containerElement: HTMLElement | null
+): Promise<void> {
+  if (!containerElement) {
+    console.warn('No container element available for clipboard copy');
+    return;
+  }
+
+  // Check if Clipboard API is available
+  if (!navigator.clipboard || !navigator.clipboard.write) {
+    console.error('Clipboard API not available. Requires HTTPS or localhost.');
+    return;
+  }
+
+  try {
+    // Dynamically import html2canvas
+    const html2canvas = (await import('html2canvas')).default;
+
+    // Capture the entire container
+    const canvas = await html2canvas(containerElement, {
+      backgroundColor: '#ffffff',
+      scale: 2, // Higher quality
+      logging: false,
+      useCORS: true
+    });
+
+    // Convert canvas to blob
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/png');
+    });
+
+    if (!blob) {
+      console.error('Failed to create image blob for clipboard');
+      return;
+    }
+
+    // Copy to clipboard using Clipboard API
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': blob
+      })
+    ]);
+
+    console.log('Chart copied to clipboard successfully');
+  } catch (error) {
+    console.error('Error copying chart to clipboard:', error);
   }
 }
 
@@ -208,7 +229,7 @@ export function generateExportFilename(
   const chartTypeName = chartType.replace(/_/g, '-');
 
   const extension = format === 'csv' ? 'csv' : 'png';
-  const viewType = format === 'png-full' ? 'full' : 'chart';
+  const viewType = 'chart';
 
   return `analytics_${chartTypeName}_${metricLabels}_${viewType}_${timestamp}.${extension}`;
 }
