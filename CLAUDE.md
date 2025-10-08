@@ -25,6 +25,42 @@ When ENABLED:
 
 ### Available Specialized Agents
 
+#### PR Lifecycle Agent (`pr-lifecycle-agent`) 🔄
+**Color:** Arrows (Lifecycle)
+**Auto-invoke when tasks involve:**
+- Pull request review and code quality assessment
+- Automated fix implementation from review feedback
+- Multi-iteration review → fix cycles
+- Merge readiness assessment
+- PR-related automation
+
+**Keywords that trigger:** `pull request`, `PR review`, `code review`, `fix review feedback`, `merge`, `review iteration`, `@claude fix`, `@claude merge`
+
+**Special Capabilities:**
+- Autonomous review-fix-merge workflow
+- Detects new issues in fixes (full re-review after each iteration)
+- Multi-turn iteration (up to 10 turns configurable)
+- Invokes domain specialists for targeted reviews
+- Runs tests after every fix
+- Safety controls for security-sensitive files
+- Auto-merge with configurable safeguards
+
+**Workflow:**
+1. PR opened/updated → Automatic comprehensive review
+2. `@claude fix` → Implements fixes, commits, pushes
+3. Auto re-review → Finds any new issues in fixes
+4. Repeat fix-review cycle until merge-ready
+5. Recommends or executes merge when criteria met
+
+**When to use:**
+- Every pull request (runs automatically)
+- When you want automated fix iterations
+- To accelerate PR → merge cycle
+
+**When NOT to use:**
+- Already handled automatically by GitHub Actions
+- No manual invocation needed
+
 #### Test-Driven Feature Agent (`test-driven-feature-agent`) 🤖
 **Color:** Robot
 **Auto-invoke when tasks involve:**

@@ -3,52 +3,99 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+  issue_comment:
+    types: [created]
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-    
+    # Run on PR events OR when @claude is mentioned in comments
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude'))
+
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write          # Needed to push fixes
+      pull-requests: write     # Needed to comment and manage PR
+      issues: write           # Needed to manage discussions
       id-token: write
-    
+      actions: read           # Needed to check CI status
+
     steps:
-      - name: Checkout repository
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.ref || github.event.issue.pull_request.head.ref }}
+          fetch-depth: 0      # Full history for better context
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Claude Code Review
-        id: claude-review
+      - name: Determine action from comment
+        id: action
+        if: github.event_name == 'issue_comment'
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          if echo "$COMMENT" | grep -qi "@claude fix"; then
+            echo "action=fix" >> $GITHUB_OUTPUT
+          elif echo "$COMMENT" | grep -qi "@claude merge"; then
+            echo "action=merge" >> $GITHUB_OUTPUT
+          else
+            echo "action=review" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run PR Lifecycle Agent
+        id: claude-agent
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
-            
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
-          
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
+          prompt: |
+            You are the pr-lifecycle-agent. Use the agent definition at .claude/agents/pr-lifecycle-agent.md
+
+            Context:
+            - PR Number: ${{ github.event.pull_request.number || github.event.issue.number }}
+            - Event: ${{ github.event_name }}
+            - Action requested: ${{ steps.action.outputs.action || 'review' }}
+
+            Tasks based on action:
+
+            **review** (PR opened/updated):
+            1. Fetch PR diff: `gh pr diff ${{ github.event.pull_request.number || github.event.issue.number }}`
+            2. Read all changed files
+            3. Perform comprehensive code review (quality, security, performance, tests)
+            4. Invoke specialized agents for domain-specific review
+            5. Post review comment with issues found (use format from agent doc)
+            6. Check iteration count - if >5, escalate to human
+
+            **fix** (@claude fix commented):
+            1. Read all unresolved review comments
+            2. Parse issues to fix
+            3. Implement fixes using Edit tool
+            4. Run tests: `npm run test:run`
+            5. Run type check: `npm run check`
+            6. If tests/types pass:
+               - Commit fixes: `git add -A && git commit -m "fix: address review feedback - iteration N"`
+               - Push: `git push`
+            7. Comment on progress
+
+            **merge** (@claude merge commented):
+            1. Check merge readiness (CI, reviews, tests)
+            2. If ready and AUTO_MERGE enabled: `gh pr merge --squash`
+            3. Else: Comment recommendation to human
+
+            Important:
+            - Use TodoWrite to track tasks
+            - Follow AthleteMetrics patterns from CLAUDE.md
+            - Run tests after every fix
+            - Post detailed progress comments
+
+          claude_args: >-
+            --max-turns 10
+            --allowed-tools "Bash(git:*),Bash(gh:*),Bash(npm run test:*),Bash(npm run check:*),Read,Write,Edit,Grep,Glob,Task,TodoWrite"
+
+          additional_permissions: |
+            actions: read
+            contents: write
+            pull-requests: write
 
