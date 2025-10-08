@@ -12,6 +12,7 @@ import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { sanitizeCSVValue } from "./utils/csv-utils";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema, type Invitation } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { TEAM_NAME_CONSTRAINTS } from "@shared/constants";
 import { z, ZodError } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
@@ -274,8 +275,9 @@ export async function registerRoutes(app: Express) {
   let redisClient = null;
   try {
     // Try to dynamically import Redis packages if available
+    // @vite-ignore prevents Vite from bundling Redis during build (optional runtime dependency)
     // @ts-expect-error - Redis is an optional dependency that may not be installed
-    const redisModule = await import("redis").catch(() => null);
+    const redisModule = await import(/* @vite-ignore */ "redis").catch(() => null);
     
     if (redisModule) {
       const { createClient } = redisModule;
@@ -1135,12 +1137,49 @@ export async function registerRoutes(app: Express) {
   app.patch("/api/teams/:id", requireAuth, requireTeamAccess('write'), async (req, res) => {
     try {
       const { id } = req.params;
+
+      // Check if team exists
+      const existingTeam = await storage.getTeam(id);
+      if (!existingTeam) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
       const teamData = insertTeamSchema.partial().parse(req.body);
+
+      // Ensure organizationId cannot be updated
+      delete teamData.organizationId;
+
       const updatedTeam = await storage.updateTeam(id, teamData);
+
       res.json(updatedTeam);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Validation error", errors: error.errors });
+      } else if (error instanceof Error) {
+        console.error("Error updating team:", error);
+
+        // Handle specific storage layer errors
+        if (error.message === "Team not found") {
+          return res.status(404).json({ message: "Team not found" });
+        }
+
+        if (error.message === "No valid fields to update") {
+          return res.status(400).json({ message: error.message });
+        }
+
+        // Check for unique constraint violation (specifically for team name uniqueness)
+        if ('code' in error && error.code === '23505') {
+          const constraintName = (error as any).constraint;
+          // Use exact constraint name matching to avoid false positives
+          if (constraintName && TEAM_NAME_CONSTRAINTS.has(constraintName)) {
+            return res.status(409).json({
+              message: "A team with this name already exists in this organization. Please choose a different name.",
+              errorCode: 'DUPLICATE_TEAM_NAME'
+            });
+          }
+        }
+
+        res.status(500).json({ message: "Failed to update team" });
       } else {
         console.error("Error updating team:", error);
         res.status(500).json({ message: "Failed to update team" });

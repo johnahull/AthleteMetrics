@@ -88,12 +88,8 @@ describe('Welcome Page', () => {
         lastName: 'User',
         email: 'test@example.com',
         role: 'coach',
-        isActive: true,
         isSiteAdmin: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
         organizations: [],
-        impersonationStatus: undefined,
       };
 
       render(<Welcome />);
@@ -112,12 +108,8 @@ describe('Welcome Page', () => {
         lastName: 'User',
         email: 'admin@example.com',
         role: 'org_admin',
-        isActive: true,
         isSiteAdmin: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
         organizations: [],
-        impersonationStatus: undefined,
       };
 
       render(<Welcome />);

@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertTeamSchema, type InsertTeam, type Team } from "@shared/schema";
+import { normalizeString } from "@/lib/form-utils";
 
 interface TeamModalProps {
   isOpen: boolean;
@@ -80,7 +81,45 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
 
   const updateTeamMutation = useMutation({
     mutationFn: async (data: InsertTeam) => {
-      const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, data);
+      // Exclude organizationId from updates - it cannot be changed
+      const { organizationId, ...formData } = data;
+
+      // Only send fields that have actually changed to avoid unique constraint issues
+      // OPTIMIZATION TRADEOFF: This prevents unnecessary API calls but introduces a potential
+      // race condition if another user updates the team between when this modal opened and
+      // when the update is submitted. The cached `team!` object may be stale.
+      // Alternative: Always send all fields or implement optimistic concurrency control.
+      const updateData: Partial<InsertTeam> = {};
+
+      // Note: Zod schema handles .trim(), so no need to manually trim in updateData
+      if (normalizeString(formData.name) !== normalizeString(team!.name)) {
+        updateData.name = formData.name;
+      }
+      if (formData.level !== team!.level) updateData.level = formData.level;
+      if (normalizeString(formData.notes) !== normalizeString(team!.notes)) updateData.notes = formData.notes;
+      if (normalizeString(formData.season) !== normalizeString(team!.season)) updateData.season = formData.season;
+
+      // If no fields have changed, just close the modal without making an API call
+      if (Object.keys(updateData).length === 0) {
+        onClose();
+        return;
+      }
+
+      const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
+      if (!response.ok) {
+        const error = await response.json();
+        // Check for specific error codes to provide targeted feedback
+        if (error.errorCode === 'DUPLICATE_TEAM_NAME') {
+          // Re-throw with error code so onError can handle it
+          interface ApiError extends Error {
+            errorCode?: string;
+          }
+          const duplicateError = new Error(error.message || "Duplicate team name") as ApiError;
+          duplicateError.errorCode = 'DUPLICATE_TEAM_NAME';
+          throw duplicateError;
+        }
+        throw new Error(error.message || "Failed to update team");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -92,10 +131,24 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       });
       onClose();
     },
-    onError: () => {
+    onError: (error: Error | { message?: string }) => {
+      console.error("Team update error:", error);
+
+      // Handle duplicate team name error by highlighting the name field
+      if ((error as any).errorCode === 'DUPLICATE_TEAM_NAME') {
+        form.setError('name', {
+          type: 'manual',
+          message: error instanceof Error ? error.message : "A team with this name already exists",
+        });
+        return; // Don't show toast for form field errors
+      }
+
+      const errorMessage = error instanceof Error
+        ? error.message
+        : error?.message || "Failed to update team";
       toast({
         title: "Error",
-        description: "Failed to update team",
+        description: errorMessage,
         variant: "destructive",
       });
     },
