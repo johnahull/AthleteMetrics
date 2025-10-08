@@ -1155,11 +1155,20 @@ export async function registerRoutes(app: Express) {
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Validation error", errors: error.errors });
-      } else {
+      } else if (error instanceof Error) {
         console.error("Error updating team:", error);
 
+        // Handle specific storage layer errors
+        if (error.message === "Team not found") {
+          return res.status(404).json({ message: "Team not found" });
+        }
+
+        if (error.message === "No valid fields to update") {
+          return res.status(400).json({ message: error.message });
+        }
+
         // Check for unique constraint violation (specifically for team name uniqueness)
-        if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+        if ('code' in error && error.code === '23505') {
           const constraintName = (error as any).constraint;
           // Use exact constraint name matching to avoid false positives
           if (constraintName && TEAM_NAME_CONSTRAINTS.has(constraintName)) {
@@ -1170,6 +1179,9 @@ export async function registerRoutes(app: Express) {
           }
         }
 
+        res.status(500).json({ message: "Failed to update team" });
+      } else {
+        console.error("Error updating team:", error);
         res.status(500).json({ message: "Failed to update team" });
       }
     }

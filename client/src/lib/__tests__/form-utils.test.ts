@@ -72,6 +72,46 @@ describe('normalizeString', () => {
     });
   });
 
+  describe('Unicode Whitespace Handling', () => {
+    it('should handle zero-width spaces', () => {
+      expect(normalizeString('\u200BTeam Alpha\u200B')).toBe('Team Alpha');
+    });
+
+    it('should handle non-breaking spaces', () => {
+      expect(normalizeString('\xA0Team Alpha\xA0')).toBe('Team Alpha');
+    });
+
+    it('should handle zero-width non-joiner', () => {
+      expect(normalizeString('\u200CTeam Alpha\u200C')).toBe('Team Alpha');
+    });
+
+    it('should handle zero-width joiner', () => {
+      expect(normalizeString('\u200DTeam Alpha\u200D')).toBe('Team Alpha');
+    });
+
+    it('should handle line separator', () => {
+      expect(normalizeString('\u2028Team Alpha\u2028')).toBe('Team Alpha');
+    });
+
+    it('should handle paragraph separator', () => {
+      expect(normalizeString('\u2029Team Alpha\u2029')).toBe('Team Alpha');
+    });
+
+    it('should handle BOM (byte order mark)', () => {
+      expect(normalizeString('\uFEFFTeam Alpha\uFEFF')).toBe('Team Alpha');
+    });
+
+    it('should convert Unicode whitespace-only strings to null', () => {
+      expect(normalizeString('\u200B\u200C\u200D')).toBe(null);
+      expect(normalizeString('\xA0\xA0\xA0')).toBe(null);
+      expect(normalizeString('\uFEFF\u2028\u2029')).toBe(null);
+    });
+
+    it('should handle mixed ASCII and Unicode whitespace', () => {
+      expect(normalizeString('  \u200B\xA0Team Alpha\xA0\u200B  ')).toBe('Team Alpha');
+    });
+  });
+
   describe('Comparison Use Cases', () => {
     it('should normalize for case-sensitive comparison', () => {
       const input1 = '  Team Alpha  ';

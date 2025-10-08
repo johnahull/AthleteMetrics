@@ -99,10 +99,10 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       if (normalizeString(formData.notes) !== normalizeString(team!.notes)) updateData.notes = formData.notes;
       if (normalizeString(formData.season) !== normalizeString(team!.season)) updateData.season = formData.season;
 
-      // Always send at least one field to ensure server validation runs
-      // This prevents bypassing auth/permission checks
+      // If no fields have changed, just close the modal without making an API call
       if (Object.keys(updateData).length === 0) {
-        updateData.notes = team!.notes || null;
+        onClose();
+        return;
       }
 
       const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
