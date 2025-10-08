@@ -317,24 +317,66 @@ export function useChartConfiguration() {
 export function useAnalyticsExport() {
   const { state } = useAnalyticsContext();
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async (
+    format: 'csv' | 'png-chart' | 'png-full',
+    chartRef?: any,
+    containerRef?: HTMLElement | null
+  ) => {
     if (!state.analyticsData) {
       devLog.warn('No analytics data to export');
       return;
     }
 
     try {
-      // TODO: Implement actual export logic
-      // This could export to CSV, PDF, or other formats
-      devLog.log('Exporting analytics data:', state.analyticsData);
+      // Dynamic import to avoid bundling unless needed
+      const {
+        exportAnalyticsDataAsCSV,
+        exportChartAsPNG,
+        exportFullViewAsPNG,
+        generateExportFilename
+      } = await import('@/lib/chartExport');
 
-      // Example CSV export implementation:
-      // const csvData = convertAnalyticsDataToCSV(state.analyticsData);
-      // downloadCSV(csvData, `analytics-${Date.now()}.csv`);
+      const filename = generateExportFilename(
+        state.selectedChartType,
+        state.metrics,
+        format
+      );
+
+      switch (format) {
+        case 'csv':
+          exportAnalyticsDataAsCSV(
+            state.analyticsData,
+            state.selectedChartType,
+            state.metrics
+          );
+          break;
+
+        case 'png-chart':
+          if (chartRef) {
+            exportChartAsPNG(chartRef, filename);
+          } else {
+            // Fallback to full view if chart ref not available
+            devLog.warn('Chart ref not available, falling back to full view export');
+            if (containerRef) {
+              await exportFullViewAsPNG(containerRef, filename);
+            }
+          }
+          break;
+
+        case 'png-full':
+          if (containerRef) {
+            await exportFullViewAsPNG(containerRef, filename);
+          } else {
+            devLog.warn('Container ref not available for full view export');
+          }
+          break;
+      }
+
+      devLog.log('Export completed:', { format, filename });
     } catch (error) {
       devLog.error('Failed to export analytics data:', error);
     }
-  }, [state.analyticsData]);
+  }, [state.analyticsData, state.selectedChartType, state.metrics]);
 
   return {
     handleExport,

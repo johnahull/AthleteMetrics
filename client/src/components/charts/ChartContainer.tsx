@@ -1,10 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { AlertTriangle, Download, Maximize2 } from 'lucide-react';
+import { AlertTriangle, Download, Maximize2, FileText, Image, FileImage } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { FullscreenChartDialog } from './FullscreenChartDialog';
 import type {
@@ -61,6 +67,8 @@ const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ 
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
+export type ExportFormat = 'csv' | 'png-chart' | 'png-full';
+
 interface ChartContainerProps {
   title: string;
   subtitle?: string;
@@ -79,7 +87,7 @@ interface ChartContainerProps {
   selectedDates?: string[];
   metric?: string;
   selectedGroups?: GroupDefinition[];
-  onExport?: () => void;
+  onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => void;
   onFullscreen?: () => void;
   className?: string;
 }
@@ -109,6 +117,10 @@ export function ChartContainer({
   // Fullscreen state
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
+  // Refs for export
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>(null);
+
   // Handle fullscreen toggle
   const handleFullscreen = () => {
     if (onFullscreen) {
@@ -117,6 +129,13 @@ export function ChartContainer({
     } else {
       // Otherwise, use built-in fullscreen dialog
       setIsFullscreenOpen(true);
+    }
+  };
+
+  // Handle export with format selection
+  const handleExport = (format: ExportFormat) => {
+    if (onExport) {
+      onExport(format, chartRef.current, containerRef.current);
     }
   };
 
@@ -273,7 +292,7 @@ export function ChartContainer({
     : CHART_HEIGHT_DEFAULT;
 
   return (
-    <Card className={`${className} ${cardHeight} flex flex-col`}>
+    <Card className={`${className} ${cardHeight} flex flex-col`} ref={containerRef}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
@@ -283,14 +302,31 @@ export function ChartContainer({
         </div>
         <div className="flex items-center gap-2">
           {onExport && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onExport}
-              title="Export chart"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  title="Export chart"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Export Data (CSV)</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport('png-chart')}>
+                  <Image className="mr-2 h-4 w-4" />
+                  <span>Export Chart (PNG)</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport('png-full')}>
+                  <FileImage className="mr-2 h-4 w-4" />
+                  <span>Export Full View (PNG)</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Button
             variant="outline"
