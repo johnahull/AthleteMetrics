@@ -50,10 +50,8 @@ const createAuthenticatedSession = async (userType: 'admin' | 'athlete' = 'admin
 };
 
 const cleanupAgent = (agent: request.SuperAgentTest) => {
-  // Close any open connections
-  if (agent && typeof (agent as any).close === 'function') {
-    (agent as any).close();
-  }
+  // Supertest agents are lightweight wrappers - just remove from tracking
+  // Note: Supertest automatically manages HTTP connections
   activeAgents.delete(agent);
 };
 

@@ -15,35 +15,25 @@ describe('EmailService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset to original env without creating a shallow copy reference
-    // Only delete keys that were added during tests, preserve CI env vars
-    try {
-      Object.keys(process.env).forEach(key => {
-        if (!(key in originalEnv)) {
-          delete process.env[key];
-        }
-      });
-      Object.assign(process.env, originalEnv);
-    } catch (error) {
-      // If cleanup fails midway, ensure we at least restore originalEnv
-      process.env = { ...originalEnv };
-    }
+    // Reset only the email-related env vars we modify in tests
+    ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 'SENDGRID_FROM_NAME'].forEach(key => {
+      if (key in originalEnv) {
+        process.env[key] = originalEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    });
   });
 
   afterEach(() => {
-    // Restore original env completely with atomic operation
-    // Only delete keys that were added during tests, preserve CI env vars
-    try {
-      Object.keys(process.env).forEach(key => {
-        if (!(key in originalEnv)) {
-          delete process.env[key];
-        }
-      });
-      Object.assign(process.env, originalEnv);
-    } catch (error) {
-      // If cleanup fails midway, ensure we at least restore originalEnv
-      process.env = { ...originalEnv };
-    }
+    // Restore only the email-related env vars we modify in tests
+    ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 'SENDGRID_FROM_NAME'].forEach(key => {
+      if (key in originalEnv) {
+        process.env[key] = originalEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    });
   });
 
   describe('constructor', () => {

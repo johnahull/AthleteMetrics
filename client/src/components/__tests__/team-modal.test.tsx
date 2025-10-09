@@ -271,7 +271,7 @@ describe('TeamModal', () => {
             timeoutId = setTimeout(() => resolve({
               ok: true,
               json: async () => mockTeam,
-            }), 200); // Increased from 100ms to 200ms for reliable testing
+            }), 200); // Increased from 100ms to 200ms to prevent race conditions in CI/CD environments with higher latency
           })
         );
 
