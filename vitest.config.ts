@@ -9,13 +9,14 @@ export default defineConfig({
     environment: 'happy-dom', // Switched from jsdom - 2-3x less memory usage
     setupFiles: ['./vitest.setup.ts'],
     hookTimeout: 30000, // Increase hook timeout to 30 seconds for cleanup operations
-    testTimeout: 30000, // Increase test timeout to 30 seconds
+    testTimeout: 10000, // Reduce test timeout to 10 seconds (30s was too high, may mask slow tests)
 
     // Memory optimization settings
     pool: 'forks', // Use process forks instead of threads for better memory isolation
     poolOptions: {
       forks: {
-        singleFork: true, // Run tests in single process to minimize memory overhead
+        singleFork: false, // Enable parallel test execution for better performance
+        maxForks: 3, // Limit to 3 concurrent forks for memory control (~800MB each)
       },
     },
     isolate: true, // Isolate tests between files for better cleanup
