@@ -112,12 +112,11 @@ function createBackup() {
 
   } catch (error) {
     console.error('\n❌ Database backup failed:', error.message);
-    console.error('\nDeployment will continue, but be aware no backup was created.');
-    console.error('Consider manually creating a backup before proceeding.\n');
+    console.error('\nBackup failed - deployment will not continue.');
+    console.error('Manual intervention required to create backup before deploying.\n');
 
-    // Don't fail the deployment, just warn
-    // In production, you might want to fail here instead
-    process.exit(0); // Change to exit(1) to fail deployment on backup failure
+    // Fail the deployment if backup fails - safety first
+    process.exit(1);
   }
 }
 

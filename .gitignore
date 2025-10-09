@@ -46,4 +46,7 @@ attached_assets/image_*.png
 check-*.ts
 fix-*.ts
 test-*.ts
-update-*.tsbackups/
+update-*.ts
+
+# Database backups
+backups/

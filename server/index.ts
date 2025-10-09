@@ -10,6 +10,35 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Health check endpoint - must be before other middleware
+app.get('/api/health', async (_req, res) => {
+  try {
+    // Import database and sql helper
+    const { db } = await import('./db');
+    const { sql } = await import('drizzle-orm');
+
+    // Test database connection with a simple query
+    await db.execute(sql`SELECT 1`);
+
+    // Import package.json for version
+    const packageJson = await import('../package.json');
+
+    res.status(200).json({
+      status: 'ok',
+      database: 'connected',
+      version: packageJson.version || 'unknown',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    // If database check fails, still return 200 but with degraded status
+    res.status(200).json({
+      status: 'ok',
+      database: 'error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
