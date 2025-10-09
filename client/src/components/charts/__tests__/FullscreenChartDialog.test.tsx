@@ -398,7 +398,7 @@ describe('FullscreenChartDialog', () => {
         />
       );
       await waitFor(() => {
-        expect(screen.getByText(/No data available for radar chart/i)).toBeInTheDocument();
+        expect(screen.getByText(/No multi-metric data available for radar chart/i)).toBeInTheDocument();
       });
     });
 

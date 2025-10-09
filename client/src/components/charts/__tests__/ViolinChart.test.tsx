@@ -175,6 +175,10 @@ describe('ViolinChart', () => {
         />
       );
 
+      // Click to expand statistics
+      const expandButton = screen.getByText(/Group Statistics Summary/i);
+      fireEvent.click(expandButton);
+
       expect(screen.getByText(/Count/i)).toBeInTheDocument();
       expect(screen.getAllByText(/Mean/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Median/i).length).toBeGreaterThan(0);
@@ -380,6 +384,10 @@ describe('ViolinChart', () => {
         />
       );
 
+      // Click to expand statistics to see group names
+      const expandButton = screen.getByText(/Group Statistics Summary/i);
+      fireEvent.click(expandButton);
+
       // Should render statistical summary for both groups
       expect(screen.getByText('Team A')).toBeInTheDocument();
       expect(screen.getByText('Team B')).toBeInTheDocument();
@@ -515,6 +523,10 @@ describe('ViolinChart', () => {
         />
       );
 
+      // Click to expand statistics
+      const expandButton = screen.getByText(/Group Statistics Summary/i);
+      fireEvent.click(expandButton);
+
       // Check that statistical data is presented in a readable format
       expect(screen.getByText(/Count/i)).toBeInTheDocument();
       expect(screen.getAllByText(/Mean/i).length).toBeGreaterThan(0);
@@ -579,6 +591,10 @@ describe('ViolinChart', () => {
           selectedGroups={groups}
         />
       );
+
+      // Click to expand statistics to see group names
+      const expandButton = screen.getByText(/Group Statistics Summary/i);
+      fireEvent.click(expandButton);
 
       // Should filter out empty group and render only valid group
       expect(screen.getByText('Valid Group')).toBeInTheDocument();

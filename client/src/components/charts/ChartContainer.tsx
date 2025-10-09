@@ -140,7 +140,7 @@ export function ChartContainer({
   const isClipboardAvailable = useMemo(() => {
     return typeof navigator !== 'undefined' &&
            navigator.clipboard &&
-           navigator.clipboard.write &&
+           typeof navigator.clipboard.write === 'function' &&
            window.isSecureContext;
   }, []);
 
