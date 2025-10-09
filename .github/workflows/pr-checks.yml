@@ -48,7 +48,7 @@ jobs:
         run: npm run test:run
         env:
           NODE_ENV: test
-          NODE_OPTIONS: --max-old-space-size=4096
+          NODE_OPTIONS: --max-old-space-size=6144
 
   integration-tests:
     name: Integration Tests
@@ -86,7 +86,7 @@ jobs:
         run: npm run test:run
         env:
           NODE_ENV: test
-          NODE_OPTIONS: --max-old-space-size=4096
+          NODE_OPTIONS: --max-old-space-size=6144
           DATABASE_URL: postgresql://test:test@localhost:5432/athletemetrics_test
           SESSION_SECRET: test-secret-key-for-ci
 

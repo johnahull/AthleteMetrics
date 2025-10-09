@@ -10,6 +10,14 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     hookTimeout: 30000, // Increase hook timeout to 30 seconds for cleanup operations
     testTimeout: 30000, // Increase test timeout to 30 seconds
+    // Limit concurrent test files to reduce memory pressure in CI
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        maxForks: 2,
+        minForks: 1,
+      },
+    },
   },
   resolve: {
     alias: {
