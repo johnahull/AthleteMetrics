@@ -1,0 +1,207 @@
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    name: Test and Deploy to Production
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript type check
+        run: npm run check
+
+      - name: Run unit tests
+        run: npm run test:run
+        env:
+          NODE_ENV: test
+
+      - name: Run security audit
+        id: audit
+        run: |
+          # Run audit and capture output
+          npm audit --audit-level=moderate --json > audit-results.json || true
+
+          # Check for HIGH or CRITICAL vulnerabilities
+          HIGH_COUNT=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json)
+          CRITICAL_COUNT=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json)
+          MODERATE_COUNT=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json)
+
+          echo "Critical: $CRITICAL_COUNT"
+          echo "High: $HIGH_COUNT"
+          echo "Moderate: $MODERATE_COUNT"
+
+          # Fail production deploy if HIGH or CRITICAL vulnerabilities found
+          if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "❌ BLOCKING PRODUCTION DEPLOY: Found $CRITICAL_COUNT critical and $HIGH_COUNT high severity vulnerabilities"
+            npm audit --audit-level=high
+            exit 1
+          fi
+
+          # Warn about moderate vulnerabilities but don't fail
+          if [ "$MODERATE_COUNT" -gt 0 ]; then
+            echo "⚠️  Found $MODERATE_COUNT moderate severity vulnerabilities"
+            echo "Consider updating dependencies in next release"
+          fi
+
+          echo "✅ No high or critical vulnerabilities found"
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Verify build artifacts
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory not created"
+            exit 1
+          fi
+          if [ ! -f "dist/index.js" ]; then
+            echo "Error: dist/index.js not found"
+            exit 1
+          fi
+          echo "✅ Build verification successful"
+
+      - name: Validate environment configuration
+        run: node scripts/validate-env.js
+        env:
+          RAILWAY_ENVIRONMENT: production
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Backup production database
+        run: node scripts/backup-database.js
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          BACKUP_RETENTION_DAYS: 30
+
+      - name: Run database migrations
+        run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Get current deployment ID (for rollback)
+        id: current-deploy
+        run: |
+          DEPLOY_ID=$(railway status --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --json | jq -r '.deployment.id')
+          echo "deployment_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        continue-on-error: true
+
+      - name: Deploy to Railway Production
+        id: deploy
+        run: |
+          railway up --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
+          NEW_DEPLOY_ID=$(railway status --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --json | jq -r '.deployment.id')
+          echo "new_deployment_id=$NEW_DEPLOY_ID" >> $GITHUB_OUTPUT
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment
+        run: sleep 45
+
+      - name: Run health check
+        id: health-check
+        run: node scripts/health-check.js
+        env:
+          HEALTH_CHECK_URL: ${{ secrets.PRODUCTION_URL }}
+          HEALTH_CHECK_TIMEOUT: 60000
+          HEALTH_CHECK_RETRIES: 5
+        continue-on-error: true
+
+      - name: Run smoke tests
+        id: smoke-tests
+        if: steps.health-check.outcome == 'success'
+        run: node scripts/smoke-tests.js
+        env:
+          BASE_URL: ${{ secrets.PRODUCTION_URL }}
+        continue-on-error: true
+
+      - name: Rollback on failure
+        if: steps.health-check.outcome == 'failure' || steps.smoke-tests.outcome == 'failure'
+        run: |
+          echo "⚠️ Health check or smoke tests failed! Rolling back..."
+          if [ -n "${{ steps.current-deploy.outputs.deployment_id }}" ]; then
+            echo "Rolling back to deployment: ${{ steps.current-deploy.outputs.deployment_id }}"
+            railway rollback ${{ steps.current-deploy.outputs.deployment_id }} --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+            echo "✅ Rollback completed"
+          else
+            echo "❌ No previous deployment ID found. Manual rollback required."
+          fi
+          exit 1
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "🚀 Production deployment successful!"
+          echo "Release: ${{ github.event.release.tag_name }}"
+          echo "URL: ${{ secrets.PRODUCTION_URL }}"
+          echo "Deployment ID: ${{ steps.deploy.outputs.new_deployment_id }}"
+          echo "Deployment completed at: $(date)"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed!"
+          echo "Release: ${{ github.event.release.tag_name }}"
+          echo "Check the logs above for details."
+          if [ -n "${{ steps.current-deploy.outputs.deployment_id }}" ]; then
+            echo "Attempted rollback to: ${{ steps.current-deploy.outputs.deployment_id }}"
+          fi
+          exit 1
+
+      - name: Post deployment comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const release = context.payload.release;
+            const deploymentId = '${{ steps.deploy.outputs.new_deployment_id }}';
+            const healthCheck = '${{ steps.health-check.outcome }}';
+            const smokeTests = '${{ steps.smoke-tests.outcome }}';
+
+            let body = `## 🚀 Production Deployment ${status === 'success' ? '✅' : '❌'}\n\n`;
+            body += `**Release:** ${release.tag_name}\n`;
+            body += `**URL:** ${{ secrets.PRODUCTION_URL }}\n`;
+            body += `**Deployment ID:** ${deploymentId}\n`;
+            body += `**Health Check:** ${healthCheck === 'success' ? '✅' : '❌'}\n`;
+            body += `**Smoke Tests:** ${smokeTests === 'success' ? '✅' : '❌'}\n`;
+            body += `**Status:** ${status}\n`;
+
+            if (status !== 'success') {
+              body += `\n⚠️ Deployment failed and rollback was attempted.`;
+            }
+
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: body
+            });

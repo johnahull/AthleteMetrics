@@ -10,6 +10,99 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Cache database connection modules for performance
+let dbCache: any = null;
+let sqlCache: any = null;
+let packageJsonCache: any = null;
+
+async function getDbConnection() {
+  if (!dbCache || !sqlCache) {
+    const dbModule = await import('./db');
+    const sqlModule = await import('drizzle-orm');
+    dbCache = dbModule.db;
+    sqlCache = sqlModule.sql;
+  }
+  return { db: dbCache, sql: sqlCache };
+}
+
+async function getPackageJson() {
+  if (!packageJsonCache) {
+    packageJsonCache = await import('../package.json');
+  }
+  return packageJsonCache;
+}
+
+// Liveness probe - checks if the process is responsive (no DB check)
+app.get('/api/health/liveness', async (_req, res) => {
+  res.status(200).json({
+    status: 'alive',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Readiness probe - checks if ready to serve traffic (with DB check)
+app.get('/api/health/readiness', async (_req, res) => {
+  try {
+    const { db, sql } = await getDbConnection();
+    await db.execute(sql`SELECT 1`);
+
+    const packageJson = await getPackageJson();
+
+    res.status(200).json({
+      status: 'ready',
+      database: 'connected',
+      version: packageJson.version || 'unknown',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    // Log error in non-production environments
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Readiness check failed:', error);
+    }
+
+    res.status(503).json({
+      status: 'not_ready',
+      database: 'disconnected',
+      error: process.env.NODE_ENV === 'production'
+        ? 'Database connection failed'
+        : error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Combined health check endpoint (for backward compatibility and monitoring)
+app.get('/api/health', async (_req, res) => {
+  try {
+    const { db, sql } = await getDbConnection();
+    await db.execute(sql`SELECT 1`);
+
+    const packageJson = await getPackageJson();
+
+    res.status(200).json({
+      status: 'healthy',
+      database: 'connected',
+      version: packageJson.version || 'unknown',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    // Log error in non-production environments
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Health check failed:', error);
+    }
+
+    // Return 503 Service Unavailable if database is down
+    res.status(503).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: process.env.NODE_ENV === 'production'
+        ? 'Database connection failed'
+        : error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

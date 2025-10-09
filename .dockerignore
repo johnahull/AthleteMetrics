@@ -1,0 +1,59 @@
+# Node modules
+node_modules
+npm-debug.log
+
+# Development files
+.git
+.github
+.gitignore
+*.md
+!DEPLOYMENT.md
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage
+.nyc_output
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+__tests__
+**/__tests__
+
+# Development tools
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts (will be created during build)
+dist
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp
+temp
+
+# Replit specific
+.replit
+replit.nix
+.config
+
+# Claude AI
+.claude
+CLAUDE.md
+
+# CI/CD
+.github/workflows

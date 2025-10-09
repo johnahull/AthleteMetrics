@@ -47,3 +47,6 @@ check-*.ts
 fix-*.ts
 test-*.ts
 update-*.ts
+
+# Database backups
+backups/
