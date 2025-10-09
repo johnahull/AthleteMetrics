@@ -119,15 +119,8 @@ jobs:
           PR_NUMBER="${{ steps.merge-check.outputs.pr_number }}"
 
           # Comment before merging
-          gh pr comment $PR_NUMBER --body "## ✅ Auto-Merge Initiated
-
-All merge criteria met:
-- ✅ Code review: Approved
-- ✅ CI checks: Passing
-- ✅ Safety checks: Passed
-- ✅ No conflicts
-
-Merging with squash strategy..."
+          printf -v MERGE_COMMENT "## ✅ Auto-Merge Initiated\n\nAll merge criteria met:\n- ✅ Code review: Approved\n- ✅ CI checks: Passing\n- ✅ Safety checks: Passed\n- ✅ No conflicts\n\nMerging with squash strategy..."
+          gh pr comment "$PR_NUMBER" --body "$MERGE_COMMENT"
 
           # Perform squash merge
           gh pr merge $PR_NUMBER --squash --auto
@@ -144,11 +137,6 @@ Merging with squash strategy..."
           REASON="${{ steps.merge-check.outputs.reason }}"
 
           if [ -n "$PR_NUMBER" ]; then
-            gh pr comment $PR_NUMBER --body "## ℹ️ Auto-Merge Status
-
-**Status**: Not ready for auto-merge
-
-**Reason**: $REASON
-
-The PR will be eligible for auto-merge once all criteria are met."
+            printf -v STATUS_COMMENT "## ℹ️ Auto-Merge Status\n\n**Status**: Not ready for auto-merge\n\n**Reason**: %s\n\nThe PR will be eligible for auto-merge once all criteria are met." "$REASON"
+            gh pr comment "$PR_NUMBER" --body "$STATUS_COMMENT"
           fi
