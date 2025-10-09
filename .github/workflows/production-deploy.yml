@@ -1,14 +1,16 @@
 name: Deploy to Production
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
 
 jobs:
   test-and-deploy:
     name: Test and Deploy to Production
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ secrets.PRODUCTION_URL }}
 
     steps:
       - name: Checkout code
@@ -60,8 +62,33 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Backup production database
+        run: node scripts/backup-database.js
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          BACKUP_RETENTION_DAYS: 30
+
+      - name: Run database migrations
+        run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Get current deployment ID (for rollback)
+        id: current-deploy
+        run: |
+          DEPLOY_ID=$(railway status --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.deployment.id')
+          echo "deployment_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        continue-on-error: true
+
       - name: Deploy to Railway Production
-        run: railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+        id: deploy
+        run: |
+          railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          NEW_DEPLOY_ID=$(railway status --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.deployment.id')
+          echo "new_deployment_id=$NEW_DEPLOY_ID" >> $GITHUB_OUTPUT
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
@@ -69,40 +96,83 @@ jobs:
         run: sleep 45
 
       - name: Run health check
+        id: health-check
         run: node scripts/health-check.js
         env:
           HEALTH_CHECK_URL: ${{ secrets.PRODUCTION_URL }}
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
+        continue-on-error: true
 
-      - name: Verify database connection
+      - name: Run smoke tests
+        id: smoke-tests
+        if: steps.health-check.outcome == 'success'
+        run: node scripts/smoke-tests.js
+        env:
+          BASE_URL: ${{ secrets.PRODUCTION_URL }}
+        continue-on-error: true
+
+      - name: Rollback on failure
+        if: steps.health-check.outcome == 'failure' || steps.smoke-tests.outcome == 'failure'
         run: |
-          echo "Verifying production database connection..."
-          # Health check already validates database connection
-          echo "✅ Database connection verified"
+          echo "⚠️ Health check or smoke tests failed! Rolling back..."
+          if [ -n "${{ steps.current-deploy.outputs.deployment_id }}" ]; then
+            echo "Rolling back to deployment: ${{ steps.current-deploy.outputs.deployment_id }}"
+            railway rollback ${{ steps.current-deploy.outputs.deployment_id }} --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+            echo "✅ Rollback completed"
+          else
+            echo "❌ No previous deployment ID found. Manual rollback required."
+          fi
+          exit 1
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Notify deployment success
         if: success()
         run: |
           echo "🚀 Production deployment successful!"
+          echo "Release: ${{ github.event.release.tag_name }}"
           echo "URL: ${{ secrets.PRODUCTION_URL }}"
+          echo "Deployment ID: ${{ steps.deploy.outputs.new_deployment_id }}"
           echo "Deployment completed at: $(date)"
 
       - name: Notify deployment failure
         if: failure()
         run: |
           echo "❌ Production deployment failed!"
+          echo "Release: ${{ github.event.release.tag_name }}"
           echo "Check the logs above for details."
-          echo "Consider rolling back if necessary."
+          if [ -n "${{ steps.current-deploy.outputs.deployment_id }}" ]; then
+            echo "Attempted rollback to: ${{ steps.current-deploy.outputs.deployment_id }}"
+          fi
           exit 1
 
-      - name: Create deployment tag
-        if: success()
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          TAG="deploy-$(date +%Y%m%d-%H%M%S)"
-          git tag -a "$TAG" -m "Production deployment $TAG"
-          git push origin "$TAG"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Post deployment comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const release = context.payload.release;
+            const deploymentId = '${{ steps.deploy.outputs.new_deployment_id }}';
+            const healthCheck = '${{ steps.health-check.outcome }}';
+            const smokeTests = '${{ steps.smoke-tests.outcome }}';
+
+            let body = `## 🚀 Production Deployment ${status === 'success' ? '✅' : '❌'}\n\n`;
+            body += `**Release:** ${release.tag_name}\n`;
+            body += `**URL:** ${{ secrets.PRODUCTION_URL }}\n`;
+            body += `**Deployment ID:** ${deploymentId}\n`;
+            body += `**Health Check:** ${healthCheck === 'success' ? '✅' : '❌'}\n`;
+            body += `**Smoke Tests:** ${smokeTests === 'success' ? '✅' : '❌'}\n`;
+            body += `**Status:** ${status}\n`;
+
+            if (status !== 'success') {
+              body += `\n⚠️ Deployment failed and rollback was attempted.`;
+            }
+
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: body
+            });
