@@ -342,42 +342,176 @@ git push origin feature/my-feature
 
 # 5. After PR approval and merge to develop:
 #    - Automatic deploy to STAGING
+#    - Database migrations run
 #    - Health checks run
-#    - Test on staging: https://athletemetrics-staging.up.railway.app
+#    - Test on staging: https://staging.athletemetrics.io
 
 # 6. Create PR from develop to main
 # Open PR: develop → main on GitHub
 
 # 7. After approval and merge to main:
-#    - Automatic deploy to PRODUCTION
-#    - Health checks run
-#    - Live on: https://athletemetrics-production.up.railway.app
+#    - Code is ready for production
+#    - NO automatic deployment yet
+
+# 8. Create a GitHub Release to deploy to production
 ```
+
+### Creating a Production Release
+
+Production deployments are triggered by creating GitHub releases, not by pushing to main.
+
+**Option 1: Via GitHub UI**
+1. Go to your repository on GitHub
+2. Click "Releases" → "Create a new release"
+3. Click "Choose a tag" → Enter version (e.g., `v1.0.0`)
+4. Click "Create new tag on publish"
+5. **Release title:** Version 1.0.0 (or descriptive title)
+6. **Description:** Add release notes:
+   ```markdown
+   ## What's New
+   - Feature: Added user dashboard
+   - Fix: Resolved login issue
+   - Improvement: Faster page load times
+
+   ## Deployment Notes
+   - Database migration included
+   - No breaking changes
+   ```
+7. Click "Publish release"
+8. **Production deployment starts automatically:**
+   - ✅ Runs all tests
+   - ✅ Backs up database
+   - ✅ Runs migrations
+   - ✅ Deploys to Railway
+   - ✅ Runs health checks + smoke tests
+   - ✅ Auto-rollback on failure
+
+**Option 2: Via GitHub CLI**
+```bash
+# Create and publish a release
+gh release create v1.0.0 \
+  --title "Version 1.0.0" \
+  --notes "Release notes here" \
+  --target main
+
+# View releases
+gh release list
+
+# View specific release
+gh release view v1.0.0
+```
+
+**Option 3: Via Git Tags + GitHub UI**
+```bash
+# Create an annotated tag
+git tag -a v1.0.0 -m "Version 1.0.0"
+
+# Push tag to GitHub
+git push origin v1.0.0
+
+# Then create release from tag in GitHub UI
+```
+
+### Semantic Versioning
+
+Follow semantic versioning for release tags:
+- **Major** (v1.0.0 → v2.0.0): Breaking changes
+- **Minor** (v1.0.0 → v1.1.0): New features, backwards compatible
+- **Patch** (v1.0.0 → v1.0.1): Bug fixes, backwards compatible
+
+### Deployment Approval
+
+Production deployments require approval from authorized team members:
+1. Release is created
+2. Deployment workflow starts
+3. **Waits for manual approval** (GitHub Environment protection)
+4. Authorized reviewer approves
+5. Deployment continues
+
+**To configure approvers:**
+1. GitHub → Repository → Settings → Environments
+2. Click "production" environment
+3. Enable "Required reviewers"
+4. Add team members who can approve deployments
 
 ### Manual Deploy (Emergency)
 
+If CI/CD is unavailable, deploy manually:
+
 ```bash
-# Deploy specific branch to production
+# Staging (develop branch)
+git checkout develop
+railway up --service athletemetrics-staging
+
+# Production (main branch)
+git checkout main
 railway up --service athletemetrics-production
 
-# Deploy to staging
-railway up --service athletemetrics-staging
+# IMPORTANT: Always run migrations after manual deploy
+railway run --service athletemetrics-production npm run db:push
 ```
 
 ### Rollback
 
-**Option 1: Via Railway Dashboard**
+**Option 1: Automatic Rollback**
+- If health checks or smoke tests fail, deployment automatically rolls back
+- Previous deployment is restored
+- Check GitHub Actions logs for details
+
+**Option 2: Via Railway Dashboard**
 1. Go to Service → Deployments
 2. Find previous working deployment
 3. Click "Redeploy"
 
-**Option 2: Via Git**
+**Option 3: Redeploy Previous Release**
 ```bash
-# Revert last commit on main
+# List releases
+gh release list
+
+# View specific release
+gh release view v1.0.0
+
+# Trigger redeployment by republishing release
+gh release delete v1.0.1 --yes  # Delete broken release
+gh release create v1.0.1 \
+  --title "Version 1.0.1 (Hotfix)" \
+  --notes "Rollback to stable version" \
+  --target main
+```
+
+**Option 4: Emergency Hotfix Release**
+```bash
+# Create hotfix branch from last good release
+git checkout -b hotfix/emergency-fix v1.0.0
+
+# Make fixes
+git add .
+git commit -m "fix: emergency hotfix"
+
+# Merge to main
 git checkout main
-git revert HEAD
+git merge hotfix/emergency-fix
 git push origin main
-# Triggers automatic redeployment
+
+# Create new release
+gh release create v1.0.1 \
+  --title "Version 1.0.1 (Emergency Hotfix)" \
+  --notes "Critical bug fix" \
+  --target main
+```
+
+### Database Rollback
+
+If database migration causes issues:
+
+```bash
+# Option 1: Restore from automatic backup
+# 1. Railway Dashboard → Database → Backups
+# 2. Select backup from before deployment
+# 3. Click "Restore"
+
+# Option 2: Restore from local backup
+railway run --service athletemetrics-production psql $DATABASE_URL < backups/pre-deploy-backup-TIMESTAMP.sql
 ```
 
 ---
