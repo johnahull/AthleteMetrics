@@ -103,7 +103,8 @@ jobs:
             echo "reason=$SAFETY_REASON" >> $GITHUB_OUTPUT
 
             # Comment on PR about why auto-merge is blocked
-            gh pr comment $PR_NUMBER --body "## 🔒 Auto-Merge Blocked
+            gh pr comment "$PR_NUMBER" --body "$(cat <<'EOF'
+## 🔒 Auto-Merge Blocked
 
 **Reason**: $SAFETY_REASON
 
@@ -114,7 +115,9 @@ This PR requires human review and manual merge for safety.
 - ✅ CI checks: Passing
 - ⚠️ Safety check: **Requires human approval**
 
-Please review and merge manually if appropriate."
+Please review and merge manually if appropriate.
+EOF
+)"
             exit 0
           fi
 
