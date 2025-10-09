@@ -46,12 +46,11 @@ jobs:
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
           # Get PR details
-          PR_DATA=$(gh pr view $PR_NUMBER --json reviewDecision,mergeable,statusCheckRollup,files,additions,deletions)
+          PR_DATA=$(gh pr view "$PR_NUMBER" --json reviewDecision,mergeable,statusCheckRollup,files,additions,deletions)
 
           # Extract data
           REVIEW_DECISION=$(echo "$PR_DATA" | jq -r '.reviewDecision')
           MERGEABLE=$(echo "$PR_DATA" | jq -r '.mergeable')
-          FILES_COUNT=$(echo "$PR_DATA" | jq '.files | length')
           ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
           DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
           TOTAL_CHANGES=$((ADDITIONS + DELETIONS))
@@ -123,7 +122,7 @@ jobs:
           gh pr comment "$PR_NUMBER" --body "$MERGE_COMMENT"
 
           # Perform squash merge
-          gh pr merge $PR_NUMBER --squash --auto
+          gh pr merge "$PR_NUMBER" --squash --auto
 
           # Comment success
           echo "✅ PR #$PR_NUMBER auto-merged successfully"
