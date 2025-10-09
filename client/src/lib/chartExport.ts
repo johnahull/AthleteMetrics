@@ -92,6 +92,8 @@ function convertTrendDataToCSV(trends: TrendData[]): string {
 
 /**
  * Convert MultiMetricData[] to CSV
+ * Note: MultiMetricData structure only includes athleteId, athleteName, and metrics.
+ * It does not include team information, unlike ChartDataPoint and TrendData.
  */
 function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[]): string {
   const rows: any[] = [];

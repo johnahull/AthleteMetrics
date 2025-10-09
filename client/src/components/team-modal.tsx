@@ -37,9 +37,15 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
 
   useEffect(() => {
     if (team) {
+      // Validate level is one of the allowed enum values before casting
+      const validLevels = ["Club", "HS", "College"];
+      const level = team.level && validLevels.includes(team.level)
+        ? (team.level as "Club" | "HS" | "College")
+        : undefined;
+
       form.reset({
         name: team.name,
-        level: (team.level as "Club" | "HS" | "College") || undefined,
+        level,
         notes: team.notes || "",
         season: team.season || "",
         organizationId: team.organizationId,
