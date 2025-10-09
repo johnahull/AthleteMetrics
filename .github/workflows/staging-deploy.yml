@@ -5,6 +5,10 @@ on:
     branches:
       - develop
 
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
 jobs:
   test-and-deploy:
     name: Test and Deploy to Staging
