@@ -378,7 +378,7 @@ function BaseAnalyticsViewContent({
                 analyticsData={state.analyticsData}
                 isLoading={state.isLoading}
                 onRefresh={fetchAnalyticsData}
-                onExport={canExport ? () => handleExport('csv') : undefined}
+                onExport={undefined}
               />
             )}
 
