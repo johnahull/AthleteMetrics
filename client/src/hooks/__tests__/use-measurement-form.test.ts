@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterEach, afterAll, vi } from 'vitest';
 import type { ActiveTeam, Athlete } from '../use-measurement-form';
-
-// Mock fetch
-global.fetch = vi.fn();
 
 const mockAthlete: Athlete = {
   id: 'athlete-1',
@@ -22,9 +19,22 @@ const mockActiveTeams: ActiveTeam[] = [
 ];
 
 describe('useMeasurementForm types and interfaces', () => {
+  // Save original fetch to prevent global mock pollution
+  const originalFetch = global.fetch;
+
+  beforeAll(() => {
+    // Mock fetch for all tests
+    global.fetch = vi.fn();
+  });
+
+  afterAll(() => {
+    // Restore original fetch to prevent memory leak
+    global.fetch = originalFetch;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
-    (fetch as any).mockClear();
+    (global.fetch as any).mockClear();
   });
 
   afterEach(() => {

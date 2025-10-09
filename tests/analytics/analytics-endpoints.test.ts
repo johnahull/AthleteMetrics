@@ -7,15 +7,23 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 
-// Mock the main app
-const mockApp = {
-  get: vi.fn(),
-  post: vi.fn(),
-  use: vi.fn(),
-  listen: vi.fn(),
-} as unknown as Express;
-
 describe('Analytics Endpoints', () => {
+  let mockApp: Express;
+
+  beforeEach(() => {
+    // Create fresh mock app for each test
+    mockApp = {
+      get: vi.fn(),
+      post: vi.fn(),
+      use: vi.fn(),
+      listen: vi.fn(),
+    } as unknown as Express;
+  });
+
+  afterEach(() => {
+    // Clear all mock function calls
+    vi.clearAllMocks();
+  });
   describe('Authentication & Authorization', () => {
     it('should require authentication for analytics endpoints', async () => {
       // Test that unauthenticated requests are rejected

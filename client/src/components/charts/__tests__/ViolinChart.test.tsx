@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import { ViolinChart } from '../ViolinChart';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 
@@ -42,9 +42,19 @@ const mockCanvasContext = {
   textAlign: 'left' as CanvasTextAlign,
 };
 
-HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCanvasContext) as any;
-
 describe('ViolinChart', () => {
+  // Save original getContext to prevent global prototype pollution
+  const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+  beforeAll(() => {
+    // Mock canvas context for all tests
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCanvasContext) as any;
+  });
+
+  afterAll(() => {
+    // Restore original getContext to prevent memory leak
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+  });
   const mockData: ChartDataPoint[] = [
     {
       athleteId: 'athlete-1',

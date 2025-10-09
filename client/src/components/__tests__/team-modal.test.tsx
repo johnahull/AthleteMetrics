@@ -59,6 +59,7 @@ describe('TeamModal', () => {
   afterEach(() => {
     // Clean up QueryClient to prevent memory leaks
     queryClient.clear();
+    queryClient.unmount(); // Dispose all resources including observers and subscriptions
   });
 
   describe('Rendering', () => {
