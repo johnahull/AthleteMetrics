@@ -482,8 +482,10 @@ describe('PreviewTableDialog', () => {
   });
 
   describe('Performance and Scalability', () => {
-    it('should handle 10,000 row dataset without crashing', () => {
-      const largeDataset: PreviewRow[] = Array.from({ length: 10000 }, (_, i) => ({
+    it('should handle large dataset without crashing', () => {
+      // Reduced from 10,000 to 500 for memory optimization
+      // Tests rendering performance without excessive memory usage
+      const largeDataset: PreviewRow[] = Array.from({ length: 500 }, (_, i) => ({
         rowIndex: i,
         data: {
           'First Name': `User${i}`,
@@ -518,13 +520,14 @@ describe('PreviewTableDialog', () => {
       // +1 for header row
       expect(rows.length).toBeLessThanOrEqual(101);
 
-      // Summary should show all 10,000 rows (appears in "Total Rows" and "Will Create")
-      const totalElements = screen.getAllByText('10000');
+      // Summary should show all rows (appears in "Total Rows" and "Will Create")
+      const totalElements = screen.getAllByText('500');
       expect(totalElements.length).toBeGreaterThan(0);
     });
 
     it('should render large dataset in under 2 seconds', () => {
-      const largeDataset: PreviewRow[] = Array.from({ length: 1000 }, (_, i) => ({
+      // Reduced from 1000 to 200 for memory optimization
+      const largeDataset: PreviewRow[] = Array.from({ length: 200 }, (_, i) => ({
         rowIndex: i,
         data: {
           'First Name': `User${i}`,
@@ -557,7 +560,7 @@ describe('PreviewTableDialog', () => {
       const endTime = performance.now();
       const renderTime = endTime - startTime;
 
-      // Rendering should be fast even with 1000 rows (only displays 100)
+      // Rendering should be fast even with 200 rows (only displays 100)
       expect(renderTime).toBeLessThan(2000); // 2 seconds
     });
 

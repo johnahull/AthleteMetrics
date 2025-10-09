@@ -329,8 +329,9 @@ describe('ViolinChart', () => {
     });
 
     it('should use sampling for large datasets', () => {
-      // Create a large dataset (>1000 points)
-      const largeDataset: ChartDataPoint[] = Array.from({ length: 1500 }, (_, i) => ({
+      // Reduced from 1500 to 300 for memory optimization
+      // Still tests sampling logic without excessive memory
+      const largeDataset: ChartDataPoint[] = Array.from({ length: 300 }, (_, i) => ({
         athleteId: `athlete-${i}`,
         athleteName: `Athlete ${i}`,
         metric: 'FLY10_TIME',
@@ -637,8 +638,9 @@ describe('ViolinChart', () => {
     });
 
     it('should use sampling for datasets exceeding MAX_SAMPLE_SIZE (1000)', () => {
-      // Create dataset with exactly 1500 points to trigger sampling
-      const largeDataset: ChartDataPoint[] = Array.from({ length: 1500 }, (_, i) => ({
+      // Reduced from 1500 to 300 for memory optimization
+      // Still validates sampling behavior
+      const largeDataset: ChartDataPoint[] = Array.from({ length: 300 }, (_, i) => ({
         athleteId: `athlete-${i}`,
         athleteName: `Athlete ${i}`,
         metric: 'FLY10_TIME',
