@@ -78,7 +78,7 @@ function convertTrendDataToCSV(trends: TrendData[]): string {
         'Athlete ID': trend.athleteId,
         'Athlete Name': trend.athleteName,
         'Team': trend.teamName || '',
-        'Metric': point.metric,
+        'Metric': trend.metric,
         'Value': point.value,
         'Date': point.date instanceof Date
           ? point.date.toISOString().split('T')[0]
@@ -92,6 +92,8 @@ function convertTrendDataToCSV(trends: TrendData[]): string {
 
 /**
  * Convert MultiMetricData[] to CSV
+ * Note: MultiMetricData structure only includes athleteId, athleteName, and metrics.
+ * It does not include team information, unlike ChartDataPoint and TrendData.
  */
 function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[]): string {
   const rows: any[] = [];
@@ -99,8 +101,7 @@ function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[]): string {
   multiMetric.forEach(athlete => {
     const row: any = {
       'Athlete ID': athlete.athleteId,
-      'Athlete Name': athlete.athleteName,
-      'Team': athlete.teamName || ''
+      'Athlete Name': athlete.athleteName
     };
 
     // Add each metric as a column

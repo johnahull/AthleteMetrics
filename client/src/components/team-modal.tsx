@@ -28,7 +28,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     resolver: zodResolver(insertTeamSchema),
     defaultValues: {
       name: "",
-      level: "",
+      level: undefined,
       notes: "",
       season: "",
       organizationId: undefined,
@@ -37,9 +37,15 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
 
   useEffect(() => {
     if (team) {
+      // Validate level is one of the allowed enum values before casting
+      const validLevels = ["Club", "HS", "College"];
+      const level = team.level && validLevels.includes(team.level)
+        ? (team.level as "Club" | "HS" | "College")
+        : undefined;
+
       form.reset({
         name: team.name,
-        level: team.level || "",
+        level,
         notes: team.notes || "",
         season: team.season || "",
         organizationId: team.organizationId,
@@ -47,7 +53,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     } else {
       form.reset({
         name: "",
-        level: "",
+        level: undefined,
         notes: "",
         season: "",
         organizationId: undefined,
@@ -225,8 +231,8 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Level</FormLabel>
-                  <Select 
-                    value={field.value || ""} 
+                  <Select
+                    value={field.value || undefined}
                     onValueChange={field.onChange}
                     disabled={isPending}
                   >

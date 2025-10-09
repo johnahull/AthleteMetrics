@@ -378,7 +378,10 @@ function BaseAnalyticsViewContent({
                 analyticsData={state.analyticsData}
                 isLoading={state.isLoading}
                 onRefresh={fetchAnalyticsData}
-                onExport={canExport ? handleExport : undefined}
+                // Export functionality disabled: ChartContainer provides export dropdown with
+                // full format options (CSV, PNG, Clipboard). Toolbar export would create
+                // inconsistent UX by only offering CSV export without format choice.
+                onExport={undefined}
               />
             )}
 
