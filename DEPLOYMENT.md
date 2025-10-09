@@ -541,21 +541,195 @@ Before going live:
 
 ---
 
+## Custom Domain Configuration
+
+### Configure athletemetrics.io Domain
+
+#### Step 1: Add Custom Domain in Railway
+
+1. **In Railway Dashboard:**
+   - Navigate to **Production Service**
+   - Click **Settings** → **Domains**
+   - Click **+ Custom Domain**
+   - Enter: `athletemetrics.io`
+   - Railway will display DNS records you need to configure
+
+#### Step 2: Configure DNS Records
+
+**In your domain registrar (where you purchased athletemetrics.io):**
+
+Railway will provide specific values, but the structure will be:
+
+**Option A: Using CNAME (Recommended)**
+```
+Type: CNAME
+Name: @ (or leave blank for root domain)
+Value: [provided-by-railway].up.railway.app
+TTL: 3600 (or Auto)
+
+Type: CNAME
+Name: www
+Value: [provided-by-railway].up.railway.app
+TTL: 3600 (or Auto)
+```
+
+**Option B: Using A/AAAA Records** (if CNAME not supported for root):
+```
+Type: A
+Name: @
+Value: [Railway IPv4 address]
+TTL: 3600
+
+Type: AAAA
+Name: @
+Value: [Railway IPv6 address]
+TTL: 3600
+
+Type: CNAME
+Name: www
+Value: [provided-by-railway].up.railway.app
+TTL: 3600
+```
+
+#### Step 3: Wait for DNS Propagation
+
+- DNS changes take 5 minutes to 48 hours (typically ~15-30 minutes)
+- Check propagation status:
+  ```bash
+  # Check DNS resolution
+  dig athletemetrics.io
+
+  # Or use online tool
+  # Visit: https://dnschecker.org
+  ```
+
+#### Step 4: Update Environment Variables
+
+**In Railway Production Service → Variables:**
+```bash
+APP_URL=https://athletemetrics.io
+```
+
+**In GitHub Repository → Settings → Secrets:**
+```bash
+PRODUCTION_URL=https://athletemetrics.io
+```
+
+#### Step 5: SSL Certificate (Automatic)
+
+Railway automatically:
+- ✅ Provisions Let's Encrypt SSL certificate
+- ✅ Enables HTTPS
+- ✅ Redirects HTTP → HTTPS
+- ✅ Auto-renews certificates before expiration
+
+No manual SSL configuration required!
+
+#### Step 6: Verify Domain Configuration
+
+After DNS propagates:
+
+1. **Visit your domain:**
+   ```
+   https://athletemetrics.io
+   ```
+
+2. **Check SSL certificate:**
+   - Look for 🔒 padlock icon in browser
+   - Click to view certificate details
+   - Verify it's issued by Let's Encrypt
+
+3. **Test health endpoint:**
+   ```bash
+   curl https://athletemetrics.io/api/health
+   ```
+
+4. **Verify redirects:**
+   ```bash
+   # HTTP should redirect to HTTPS
+   curl -I http://athletemetrics.io
+   # Should return 301 or 302 redirect to https://
+   ```
+
+### Optional: Configure Staging Subdomain
+
+To access staging at `staging.athletemetrics.io`:
+
+1. **In Railway Staging Service:**
+   - Settings → Domains → + Custom Domain
+   - Enter: `staging.athletemetrics.io`
+
+2. **Add DNS Record:**
+   ```
+   Type: CNAME
+   Name: staging
+   Value: [staging-provided-by-railway].up.railway.app
+   TTL: 3600
+   ```
+
+3. **Update Staging Environment Variables:**
+   ```bash
+   APP_URL=https://staging.athletemetrics.io
+   ```
+
+4. **Update GitHub Secrets:**
+   ```bash
+   STAGING_URL=https://staging.athletemetrics.io
+   ```
+
+### Domain Configuration Troubleshooting
+
+**Issue: "Domain not verified" in Railway**
+- **Solution:** Wait longer for DNS propagation (up to 48 hours)
+- **Check:** Verify DNS records are correct using `dig` or dnschecker.org
+- **Verify:** Ensure no typos in CNAME/A record values
+
+**Issue: "SSL certificate not ready"**
+- **Solution:** Railway provisions SSL automatically after DNS propagates
+- **Wait:** Allow 5-10 minutes after DNS is fully propagated
+- **Check:** Railway Dashboard → Service → Settings → Domains for status
+
+**Issue: "Website not loading"**
+- **Check:** Railway deployment logs for errors
+- **Verify:** `APP_URL` environment variable is updated
+- **Test:** Health check at railway.app subdomain first
+- **Debug:** Use `curl -v https://athletemetrics.io` for verbose output
+
+**Issue: "Mixed content" warnings**
+- **Solution:** Ensure all internal links use HTTPS or relative URLs
+- **Check:** Browser console for specific mixed content resources
+- **Fix:** Update any hardcoded HTTP URLs to HTTPS
+
+**Issue: DNS not propagating**
+- **Wait:** Full propagation can take up to 48 hours
+- **Check:** Different DNS servers may propagate at different rates
+- **Test:** Use `dig @8.8.8.8 athletemetrics.io` to check Google's DNS
+- **Verify:** Lower TTL values before making changes (optional)
+
+**Issue: www subdomain not working**
+- **Solution:** Ensure www CNAME is configured in DNS
+- **Alternative:** Configure redirect in Railway (Settings → Domains)
+
+---
+
 ## Next Steps
 
 After deployment is complete:
 
-1. **Configure Custom Domain** (Optional)
-   - Railway Dashboard → Service → Settings → Domains
-   - Add custom domain and update DNS records
+1. **Configure Custom Domain** ✅
+   - See "Custom Domain Configuration" section above
+   - Configure athletemetrics.io for production
+   - Optionally configure staging.athletemetrics.io
 
 2. **Set Up Monitoring**
    - Consider adding: Sentry, LogRocket, or similar
    - Configure uptime monitoring (UptimeRobot, Pingdom)
+   - Set up alerts for health check failures
 
 3. **Enable Backups**
    - Verify Railway auto-backups are enabled
    - Set up additional backup strategy if needed
+   - Test backup restoration process
 
 4. **Documentation**
    - Update README.md with production URLs
@@ -566,6 +740,12 @@ After deployment is complete:
    - Share Railway access with team
    - Review deployment process with team
    - Set up on-call rotation if needed
+
+6. **Security Review**
+   - Run security audit: `npm audit`
+   - Review environment variables are secure
+   - Verify rate limiting is properly configured
+   - Test authentication flows on production domain
 
 ---
 
