@@ -51,17 +51,15 @@ const createAuthenticatedSession = async (userType: 'admin' | 'athlete' = 'admin
 
 const cleanupAgent = (agent: request.SuperAgentTest) => {
   // Close any open connections
+  if (agent && typeof (agent as any).close === 'function') {
+    (agent as any).close();
+  }
   activeAgents.delete(agent);
 };
 
 describe('Analytics Endpoints Integration Tests', () => {
   beforeAll(async () => {
-    // Set up test environment
-    process.env.NODE_ENV = 'test';
-    process.env.DATABASE_URL = 'file:./test.db';
-    process.env.SESSION_SECRET = 'test-secret-key-for-integration-tests-only';
-
-    // Create test app
+    // Create test app (environment already set at top of file)
     app = express();
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));

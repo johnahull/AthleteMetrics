@@ -38,10 +38,14 @@ describe('useGroupComparison', () => {
 
   afterEach(() => {
     // Clean up QueryClient after each test to prevent memory leaks
-    if (currentWrapper && (currentWrapper as any).queryClient) {
-      (currentWrapper as any).queryClient.clear();
+    try {
+      if (currentWrapper && (currentWrapper as any).queryClient) {
+        (currentWrapper as any).queryClient.clear();
+      }
+    } finally {
+      // Always reset wrapper to null, even if cleanup fails
+      currentWrapper = null;
     }
-    currentWrapper = null;
   });
   const mockAthletes = [
     { id: 'athlete-1', name: 'John Doe', team: 'Team A', age: 16 },

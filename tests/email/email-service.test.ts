@@ -16,14 +16,24 @@ describe('EmailService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset to original env without creating a shallow copy reference
-    Object.keys(process.env).forEach(key => delete process.env[key]);
-    Object.assign(process.env, originalEnv);
+    try {
+      Object.keys(process.env).forEach(key => delete process.env[key]);
+      Object.assign(process.env, originalEnv);
+    } catch (error) {
+      // If cleanup fails midway, ensure we at least restore originalEnv
+      process.env = { ...originalEnv };
+    }
   });
 
   afterEach(() => {
-    // Restore original env completely
-    Object.keys(process.env).forEach(key => delete process.env[key]);
-    Object.assign(process.env, originalEnv);
+    // Restore original env completely with atomic operation
+    try {
+      Object.keys(process.env).forEach(key => delete process.env[key]);
+      Object.assign(process.env, originalEnv);
+    } catch (error) {
+      // If cleanup fails midway, ensure we at least restore originalEnv
+      process.env = { ...originalEnv };
+    }
   });
 
   describe('constructor', () => {
