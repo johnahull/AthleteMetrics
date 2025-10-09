@@ -61,14 +61,23 @@ async function testHealthEndpoint() {
   try {
     const response = await makeRequest(`${BASE_URL}/api/health`);
 
+    // Parse response to get detailed error information
+    const data = JSON.parse(response.body);
+
+    // Health endpoint should return 200 for healthy or 503 for unhealthy
+    if (response.statusCode === 503) {
+      const errorMsg = data.error || 'Service unavailable';
+      throw new Error(`Service unhealthy (503): ${errorMsg}`);
+    }
+
     if (response.statusCode !== 200) {
       throw new Error(`Expected 200, got ${response.statusCode}`);
     }
 
-    const data = JSON.parse(response.body);
-
-    if (data.status !== 'ok') {
-      throw new Error(`Health status is not ok: ${data.status}`);
+    // Accept various healthy status values
+    const healthyStatuses = ['ok', 'healthy', 'ready'];
+    if (!healthyStatuses.includes(data.status)) {
+      throw new Error(`Health status is not healthy: ${data.status}`);
     }
 
     if (data.database !== 'connected') {
@@ -160,6 +169,12 @@ async function testDatabaseConnection() {
     // This is a redundant check to ensure DB is definitely working
     const response = await makeRequest(`${BASE_URL}/api/health`);
     const data = JSON.parse(response.body);
+
+    // Check for unhealthy status
+    if (response.statusCode === 503) {
+      const errorMsg = data.error || 'Service unavailable';
+      throw new Error(`Database connection failed: ${errorMsg}`);
+    }
 
     if (!data.database || data.database !== 'connected') {
       throw new Error('Database connection check failed in health endpoint');

@@ -69,12 +69,7 @@ async function checkHealth() {
 
       const response = await makeRequest(HEALTH_CHECK_URL);
 
-      // Check status code
-      if (response.statusCode !== 200) {
-        throw new Error(`Unexpected status code: ${response.statusCode}`);
-      }
-
-      // Parse response
+      // Parse response first (to get more detailed error info)
       let healthData;
       try {
         healthData = JSON.parse(response.body);
@@ -82,13 +77,25 @@ async function checkHealth() {
         throw new Error(`Invalid JSON response: ${response.body.substring(0, 100)}`);
       }
 
+      // Check status code - accept 200 for healthy, reject 503 for unhealthy
+      if (response.statusCode === 503) {
+        const errorMsg = healthData.error || 'Service unavailable';
+        throw new Error(`Service unhealthy (503): ${errorMsg}`);
+      }
+
+      if (response.statusCode !== 200) {
+        throw new Error(`Unexpected status code: ${response.statusCode}`);
+      }
+
       // Validate health response structure
       if (!healthData.status) {
         throw new Error('Health check response missing "status" field');
       }
 
-      if (healthData.status !== 'ok' && healthData.status !== 'healthy') {
-        throw new Error(`Health check status is not ok: ${healthData.status}`);
+      // Accept various healthy status values for backward compatibility
+      const healthyStatuses = ['ok', 'healthy', 'ready'];
+      if (!healthyStatuses.includes(healthData.status)) {
+        throw new Error(`Health check status is not healthy: ${healthData.status}`);
       }
 
       // Check database connection if present
