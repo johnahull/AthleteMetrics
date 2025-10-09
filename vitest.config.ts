@@ -11,7 +11,13 @@ export default defineConfig({
     hookTimeout: 30000, // Increase hook timeout to 30 seconds for cleanup operations
     testTimeout: 10000, // Reduce test timeout to 10 seconds (30s was too high, may mask slow tests)
 
-    // Memory optimization settings
+    // Memory optimization strategy:
+    // - 3GB heap (configurable via TEST_HEAP_SIZE env var in package.json, defaults to 3072MB)
+    // - 10s test timeout (catches slow tests)
+    // - 30s hook timeout (allows cleanup operations)
+    // - maxForks=3 (balances parallelism with memory usage: 3 × ~800MB = ~2.4GB under 3GB heap)
+    // - happy-dom environment (2-3x memory reduction vs jsdom)
+    // - isolate: true (prevents leak propagation between test files)
     pool: 'forks', // Use process forks instead of threads for better memory isolation
     poolOptions: {
       forks: {

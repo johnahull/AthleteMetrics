@@ -42,6 +42,9 @@ describe('useGroupComparison', () => {
       if (currentWrapper && (currentWrapper as any).queryClient) {
         (currentWrapper as any).queryClient.clear();
       }
+    } catch (error) {
+      // Log cleanup failures to help diagnose issues
+      console.warn('QueryClient cleanup failed:', error);
     } finally {
       // Always reset wrapper to null, even if cleanup fails
       currentWrapper = null;
