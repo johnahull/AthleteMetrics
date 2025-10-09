@@ -23,6 +23,7 @@ let app: Express;
 let testOrgId: string;
 let testAthleteId: string;
 let adminSession: any;
+let activeAgents: Set<request.SuperAgentTest> = new Set();
 
 // Test data setup
 const setupTestData = async () => {
@@ -34,6 +35,7 @@ const setupTestData = async () => {
 
 const createAuthenticatedSession = async (userType: 'admin' | 'athlete' = 'admin') => {
   const agent = request.agent(app);
+  activeAgents.add(agent);
 
   // Login with test credentials
   const loginResponse = await agent
@@ -45,6 +47,11 @@ const createAuthenticatedSession = async (userType: 'admin' | 'athlete' = 'admin
 
   expect(loginResponse.status).toBe(200);
   return agent;
+};
+
+const cleanupAgent = (agent: request.SuperAgentTest) => {
+  // Close any open connections
+  activeAgents.delete(agent);
 };
 
 describe('Analytics Endpoints Integration Tests', () => {
@@ -65,9 +72,23 @@ describe('Analytics Endpoints Integration Tests', () => {
     await setupTestData();
   });
 
+  afterEach(() => {
+    // Clean up any active agents after each test
+    activeAgents.forEach(agent => {
+      cleanupAgent(agent);
+    });
+    activeAgents.clear();
+  });
+
   afterAll(async () => {
     // Cleanup test database if needed
     // In production, this would clean up the test database
+
+    // Ensure all agents are cleaned up
+    activeAgents.forEach(agent => {
+      cleanupAgent(agent);
+    });
+    activeAgents.clear();
   });
 
   describe('GET /api/analytics/dashboard', () => {
@@ -112,21 +133,25 @@ describe('Analytics Endpoints Integration Tests', () => {
     it('should enforce rate limiting', async () => {
       const agent = await createAuthenticatedSession('admin');
 
-      // Make multiple rapid requests
-      const requests = Array.from({ length: 60 }, () =>
-        agent
-          .get('/api/analytics/dashboard')
-          .query({ organizationId: testOrgId })
-      );
+      try {
+        // Make multiple rapid requests
+        const requests = Array.from({ length: 60 }, () =>
+          agent
+            .get('/api/analytics/dashboard')
+            .query({ organizationId: testOrgId })
+        );
 
-      const responses = await Promise.allSettled(requests);
+        const responses = await Promise.allSettled(requests);
 
-      // At least some requests should be rate limited
-      const rateLimitedResponses = responses.filter(
-        result => result.status === 'fulfilled' && result.value.status === 429
-      );
+        // At least some requests should be rate limited
+        const rateLimitedResponses = responses.filter(
+          result => result.status === 'fulfilled' && result.value.status === 429
+        );
 
-      expect(rateLimitedResponses.length).toBeGreaterThan(0);
+        expect(rateLimitedResponses.length).toBeGreaterThan(0);
+      } finally {
+        cleanupAgent(agent);
+      }
     });
 
     it('should include rate limit headers', async () => {
@@ -377,25 +402,29 @@ describe('Analytics Endpoints Integration Tests', () => {
     it('should handle concurrent requests efficiently', async () => {
       const agent = await createAuthenticatedSession('admin');
 
-      const concurrentRequests = Array.from({ length: 10 }, () =>
-        agent
-          .get('/api/analytics/dashboard')
-          .query({ organizationId: testOrgId })
-      );
+      try {
+        const concurrentRequests = Array.from({ length: 10 }, () =>
+          agent
+            .get('/api/analytics/dashboard')
+            .query({ organizationId: testOrgId })
+        );
 
-      const startTime = Date.now();
-      const responses = await Promise.all(concurrentRequests);
-      const endTime = Date.now();
+        const startTime = Date.now();
+        const responses = await Promise.all(concurrentRequests);
+        const endTime = Date.now();
 
-      const totalTime = endTime - startTime;
+        const totalTime = endTime - startTime;
 
-      // All requests should complete successfully
-      responses.forEach(response => {
-        expect([200, 304, 404]).toContain(response.status);
-      });
+        // All requests should complete successfully
+        responses.forEach(response => {
+          expect([200, 304, 404]).toContain(response.status);
+        });
 
-      // Should handle concurrent load efficiently
-      expect(totalTime).toBeLessThan(15000); // Within 15 seconds
+        // Should handle concurrent load efficiently
+        expect(totalTime).toBeLessThan(15000); // Within 15 seconds
+      } finally {
+        cleanupAgent(agent);
+      }
     });
 
     it('should return appropriate HTTP status codes', async () => {

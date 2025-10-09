@@ -72,58 +72,87 @@ describe('useMeasurementForm types and interfaces', () => {
 
   it('should handle AbortController signal creation', () => {
     const controller = new AbortController();
-    expect(controller.signal).toBeDefined();
-    expect(controller.signal.aborted).toBe(false);
-    
-    controller.abort();
-    expect(controller.signal.aborted).toBe(true);
+
+    try {
+      expect(controller.signal).toBeDefined();
+      expect(controller.signal.aborted).toBe(false);
+
+      controller.abort();
+      expect(controller.signal.aborted).toBe(true);
+    } finally {
+      // Ensure controller is aborted to clean up any pending operations
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    }
   });
 
   describe('API response validation', () => {
     it('should handle successful API response', async () => {
-      (fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockActiveTeams
-      });
+      const controller = new AbortController();
 
-      const response = await fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01');
-      const data = await response.json();
+      try {
+        (fetch as any).mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockActiveTeams
+        });
 
-      expect(response.ok).toBe(true);
-      expect(Array.isArray(data)).toBe(true);
-      expect(data).toEqual(mockActiveTeams);
+        const response = await fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01', { signal: controller.signal });
+        const data = await response.json();
+
+        expect(response.ok).toBe(true);
+        expect(Array.isArray(data)).toBe(true);
+        expect(data).toEqual(mockActiveTeams);
+      } finally {
+        controller.abort();
+      }
     });
 
     it('should handle failed API response', async () => {
-      (fetch as any).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found'
-      });
+      const controller = new AbortController();
 
-      const response = await fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01');
-      
-      expect(response.ok).toBe(false);
-      expect(response.status).toBe(404);
+      try {
+        (fetch as any).mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found'
+        });
+
+        const response = await fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01', { signal: controller.signal });
+
+        expect(response.ok).toBe(false);
+        expect(response.status).toBe(404);
+      } finally {
+        controller.abort();
+      }
     });
 
     it('should handle network error', async () => {
-      const networkError = new Error('Network error');
-      (fetch as any).mockRejectedValueOnce(networkError);
+      const controller = new AbortController();
 
-      await expect(fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01')).rejects.toThrow('Network error');
+      try {
+        const networkError = new Error('Network error');
+        (fetch as any).mockRejectedValueOnce(networkError);
+
+        await expect(fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01', { signal: controller.signal })).rejects.toThrow('Network error');
+      } finally {
+        controller.abort();
+      }
     });
 
     it('should handle AbortError gracefully', async () => {
+      const controller = new AbortController();
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
       (fetch as any).mockRejectedValueOnce(abortError);
 
       try {
-        await fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01');
+        await fetch('/api/athletes/athlete-1/active-teams?date=2024-01-01', { signal: controller.signal });
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
         expect((error as Error).name).toBe('AbortError');
+      } finally {
+        controller.abort();
       }
     });
   });

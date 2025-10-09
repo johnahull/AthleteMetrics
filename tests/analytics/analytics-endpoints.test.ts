@@ -252,18 +252,22 @@ describe('Analytics Endpoints', () => {
   describe('Error Handling', () => {
     it('should handle database errors gracefully', async () => {
       // Simulate database error
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      // Make request that would trigger database error
-      const response = await request(mockApp)
-        .get('/api/analytics/dashboard')
-        .query({ organizationId: 'test-org' })
-        .set('Authorization', 'Bearer valid-token');
+      try {
+        // Make request that would trigger database error
+        const response = await request(mockApp)
+          .get('/api/analytics/dashboard')
+          .query({ organizationId: 'test-org' })
+          .set('Authorization', 'Bearer valid-token');
 
-      // Should return appropriate error response
-      if (response.status === 500) {
-        expect(response.body.message).toContain('Failed to');
-        expect(response.body.message).not.toContain('SQL'); // No internal details
+        // Should return appropriate error response
+        if (response.status === 500) {
+          expect(response.body.message).toContain('Failed to');
+          expect(response.body.message).not.toContain('SQL'); // No internal details
+        }
+      } finally {
+        consoleSpy.mockRestore();
       }
     });
 

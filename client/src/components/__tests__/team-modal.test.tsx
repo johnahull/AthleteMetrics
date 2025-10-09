@@ -56,6 +56,11 @@ describe('TeamModal', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    // Clean up QueryClient to prevent memory leaks
+    queryClient.clear();
+  });
+
   describe('Rendering', () => {
     it('should render create mode when team is null', () => {
       renderWithQueryClient(
@@ -258,29 +263,40 @@ describe('TeamModal', () => {
     });
 
     it('should disable form inputs while saving', async () => {
-      mockApiRequest.mockImplementationOnce(() =>
-        new Promise(resolve => setTimeout(() => resolve({
-          ok: true,
-          json: async () => mockTeam,
-        }), 100))
-      );
+      let timeoutId: NodeJS.Timeout | null = null;
 
-      renderWithQueryClient(
-        <TeamModal isOpen={true} onClose={vi.fn()} team={mockTeam} />
-      );
+      try {
+        mockApiRequest.mockImplementationOnce(() =>
+          new Promise(resolve => {
+            timeoutId = setTimeout(() => resolve({
+              ok: true,
+              json: async () => mockTeam,
+            }), 100);
+          })
+        );
 
-      const nameInput = screen.getByTestId('input-team-name');
-      const saveButton = screen.getByTestId('button-save-team');
+        renderWithQueryClient(
+          <TeamModal isOpen={true} onClose={vi.fn()} team={mockTeam} />
+        );
 
-      fireEvent.change(nameInput, { target: { value: 'New Name' } });
-      fireEvent.click(saveButton);
+        const nameInput = screen.getByTestId('input-team-name');
+        const saveButton = screen.getByTestId('button-save-team');
 
-      // Wait for inputs to be disabled during save
-      await waitFor(() => {
-        expect(nameInput).toBeDisabled();
-        expect(saveButton).toBeDisabled();
-        expect(screen.getByText('Saving...')).toBeInTheDocument();
-      });
+        fireEvent.change(nameInput, { target: { value: 'New Name' } });
+        fireEvent.click(saveButton);
+
+        // Wait for inputs to be disabled during save
+        await waitFor(() => {
+          expect(nameInput).toBeDisabled();
+          expect(saveButton).toBeDisabled();
+          expect(screen.getByText('Saving...')).toBeInTheDocument();
+        });
+      } finally {
+        // Clean up timeout to prevent memory leak
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
     });
 
     it('should show success toast and close modal after successful save', async () => {

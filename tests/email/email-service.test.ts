@@ -11,15 +11,19 @@ vi.mock('@sendgrid/mail', () => ({
 
 describe('EmailService', () => {
   let emailService: EmailService;
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
+    // Reset to original env without creating a shallow copy reference
+    Object.keys(process.env).forEach(key => delete process.env[key]);
+    Object.assign(process.env, originalEnv);
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    // Restore original env completely
+    Object.keys(process.env).forEach(key => delete process.env[key]);
+    Object.assign(process.env, originalEnv);
   });
 
   describe('constructor', () => {
