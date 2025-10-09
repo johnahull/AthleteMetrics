@@ -34,8 +34,8 @@ describe('TeamModal', () => {
     season: '2024-Fall',
     organizationId: 'org-123',
     isArchived: false,
+    archivedAt: null,
     createdAt: new Date(),
-    updatedAt: new Date(),
   };
 
   const renderWithQueryClient = (component: React.ReactElement) => {
@@ -226,27 +226,21 @@ describe('TeamModal', () => {
       expect(callArgs).toHaveProperty('notes');
     });
 
-    it('should send at least one field when no changes detected', async () => {
-      mockApiRequest.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTeam,
-      });
+    it('should close modal without API call when no changes detected', async () => {
+      const mockOnClose = vi.fn();
 
       renderWithQueryClient(
-        <TeamModal isOpen={true} onClose={vi.fn()} team={mockTeam} />
+        <TeamModal isOpen={true} onClose={mockOnClose} team={mockTeam} />
       );
 
       const saveButton = screen.getByTestId('button-save-team');
       fireEvent.click(saveButton);
 
-      // When no fields change, should send notes to ensure server validation runs
+      // When no fields change, should close modal without making an API call
       await waitFor(() => {
-        expect(mockApiRequest).toHaveBeenCalledWith(
-          'PATCH',
-          '/api/teams/team-123',
-          expect.objectContaining({ notes: mockTeam.notes })
-        );
+        expect(mockOnClose).toHaveBeenCalled();
       });
+      expect(mockApiRequest).not.toHaveBeenCalled();
     });
   });
 
@@ -281,10 +275,12 @@ describe('TeamModal', () => {
       fireEvent.change(nameInput, { target: { value: 'New Name' } });
       fireEvent.click(saveButton);
 
-      // Inputs should be disabled during save
-      expect(nameInput).toBeDisabled();
-      expect(saveButton).toBeDisabled();
-      expect(screen.getByText('Saving...')).toBeInTheDocument();
+      // Wait for inputs to be disabled during save
+      await waitFor(() => {
+        expect(nameInput).toBeDisabled();
+        expect(saveButton).toBeDisabled();
+        expect(screen.getByText('Saving...')).toBeInTheDocument();
+      });
     });
 
     it('should show success toast and close modal after successful save', async () => {
@@ -316,13 +312,10 @@ describe('TeamModal', () => {
 
   describe('Whitespace Normalization', () => {
     it('should normalize whitespace when comparing fields', async () => {
-      mockApiRequest.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTeam,
-      });
+      const mockOnClose = vi.fn();
 
       renderWithQueryClient(
-        <TeamModal isOpen={true} onClose={vi.fn()} team={mockTeam} />
+        <TeamModal isOpen={true} onClose={mockOnClose} team={mockTeam} />
       );
 
       const nameInput = screen.getByTestId('input-team-name');
@@ -332,13 +325,12 @@ describe('TeamModal', () => {
       fireEvent.change(nameInput, { target: { value: '  Test Team  ' } });
       fireEvent.click(saveButton);
 
-      // Should detect no real change and send notes field for validation
+      // Should detect no real change and close modal without API call
       await waitFor(() => {
-        expect(mockApiRequest).toHaveBeenCalled();
-        const callArgs = mockApiRequest.mock.calls[0][2];
-        // Name should not be in payload since it's the same after normalization
-        expect(callArgs).toHaveProperty('notes');
+        expect(mockOnClose).toHaveBeenCalled();
       });
+      // Name should not trigger API call since it's the same after normalization
+      expect(mockApiRequest).not.toHaveBeenCalled();
     });
   });
 });
