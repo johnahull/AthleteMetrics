@@ -23,14 +23,27 @@ if (!process.env.DATABASE_URL) {
 }
 
 import { beforeAll, afterAll } from 'vitest';
+import { db } from '../../server/db.js';
+
+// Store original console methods
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
 
 beforeAll(async () => {
   // Suppress console logs during tests except for errors
-  const originalConsoleLog = console.log;
   console.log = () => {}; // Suppress normal logs
-  console.error = originalConsoleLog; // Keep errors visible
+  console.error = originalConsoleError; // Keep errors visible
 });
 
 afterAll(async () => {
-  // Cleanup is handled by individual test files
+  // Restore console methods
+  console.log = originalConsoleLog;
+  console.error = originalConsoleError;
+
+  // Close database connection to prevent leaks
+  try {
+    await db.$client.end();
+  } catch (error) {
+    console.error('Error closing database connection:', error);
+  }
 });
