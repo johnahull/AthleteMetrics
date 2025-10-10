@@ -15,7 +15,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 const client = postgres(DATABASE_URL, {
   max: isProduction ? 20 : 10, // Connection pool size
-  idle_timeout: isProduction ? 60 : 20, // Longer idle timeout in production for traffic spikes
+  idle_timeout: isProduction ? 180 : 20, // 3 minutes in production for bursty traffic patterns
   connect_timeout: 10, // Seconds to wait for connection
   max_lifetime: isProduction ? 60 * 60 : 60 * 30, // 1 hour in prod, 30 min in dev
   ssl: isProduction ? 'require' : undefined, // Require SSL in production
