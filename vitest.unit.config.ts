@@ -21,7 +21,7 @@ export default mergeConfig(
 
         // Specific test directories that don't need DB
         'tests/validation/**/*.{test,spec}.{ts,tsx}',
-        'tests/analytics/analytics-service.test.ts', // Uses mocked DB
+        'tests/analytics/**/*.{test,spec}.{ts,tsx}', // Analytics tests
         'tests/import/csv-parsing.test.ts', // Parsing logic only
         'tests/auth/site-admin.test.ts', // Logic tests
       ],
@@ -29,8 +29,6 @@ export default mergeConfig(
         '**/node_modules/**',
         '**/dist/**',
         '**/.{idea,git,cache,output,temp}/**',
-        '**/MultiLineChart.test.tsx', // TEMPORARILY EXCLUDED - hangs
-        '**/analytics-endpoints.test.ts', // TEMPORARILY EXCLUDED - broken
 
         // Explicitly exclude integration tests (require database)
         'tests/integration/**',
