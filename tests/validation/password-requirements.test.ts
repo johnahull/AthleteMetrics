@@ -8,7 +8,7 @@ describe('Password Requirements Validation', () => {
         'MyP@ssw0rd123',
         'Secur3P@ssword!',
         'C0mpl3x!Pass',
-        'Abcd123!@#$',
+        'Abcd123!@#$%', // Fixed: was 11 chars, now 12
         'Test123!Password'
       ];
 
