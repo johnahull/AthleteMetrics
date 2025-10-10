@@ -2,12 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { log } from "./utils/logger.js";
 
-// Validate NODE_ENV is set - fail fast if missing
-if (process.env.NODE_ENV === undefined) {
-  console.error('❌ FATAL: NODE_ENV environment variable not set');
-  console.error('   Set NODE_ENV=production for production deployments');
-  console.error('   Set NODE_ENV=development for local development');
-  process.exit(1);
+// Default NODE_ENV to production if not set
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+  console.warn('⚠️  NODE_ENV not set, defaulting to production');
 }
 
 // Validate SESSION_SECRET is set and meets security requirements
@@ -235,11 +233,11 @@ app.use((req, res, next) => {
       }
     });
 
-    // Force exit after 10 seconds if graceful shutdown fails
+    // Force exit after 30 seconds if graceful shutdown fails
     setTimeout(() => {
       console.error('Forced shutdown after timeout');
       process.exit(1);
-    }, 10000);
+    }, 30000);
   };
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

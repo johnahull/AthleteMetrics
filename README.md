@@ -66,11 +66,11 @@ A full-stack web application for tracking and analyzing athlete performance data
 
 When deploying to production, you **must** set the following environment variables:
 
-- **`NODE_ENV=production`** - **REQUIRED** for production deployments
+- **`NODE_ENV=production`** - **RECOMMENDED** for production deployments
   - Enables production error handling (prevents sensitive error details from being exposed)
   - Activates rate limiting protections
   - Optimizes performance settings
-  - **Note:** The `npm start` script does NOT set this automatically - your deployment environment must provide it
+  - **Note:** If not set, the application defaults to `production` mode for safety. However, explicitly setting it is recommended for clarity.
 
 - **`DATABASE_URL`** - PostgreSQL connection string (SQLite is no longer supported)
 - **`SESSION_SECRET`** - Secure random string for session encryption
