@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -54,6 +54,12 @@ describe('TeamModal', () => {
       },
     });
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // Clean up QueryClient to prevent memory leaks
+    queryClient.clear();
+    queryClient.unmount(); // Dispose all resources including observers and subscriptions
   });
 
   describe('Rendering', () => {
@@ -258,29 +264,40 @@ describe('TeamModal', () => {
     });
 
     it('should disable form inputs while saving', async () => {
-      mockApiRequest.mockImplementationOnce(() =>
-        new Promise(resolve => setTimeout(() => resolve({
-          ok: true,
-          json: async () => mockTeam,
-        }), 100))
-      );
+      let timeoutId: NodeJS.Timeout | null = null;
 
-      renderWithQueryClient(
-        <TeamModal isOpen={true} onClose={vi.fn()} team={mockTeam} />
-      );
+      try {
+        mockApiRequest.mockImplementationOnce(() =>
+          new Promise(resolve => {
+            timeoutId = setTimeout(() => resolve({
+              ok: true,
+              json: async () => mockTeam,
+            }), 300); // Increased from 100ms to 300ms to prevent race conditions in CI/CD environments with higher latency
+          })
+        );
 
-      const nameInput = screen.getByTestId('input-team-name');
-      const saveButton = screen.getByTestId('button-save-team');
+        renderWithQueryClient(
+          <TeamModal isOpen={true} onClose={vi.fn()} team={mockTeam} />
+        );
 
-      fireEvent.change(nameInput, { target: { value: 'New Name' } });
-      fireEvent.click(saveButton);
+        const nameInput = screen.getByTestId('input-team-name');
+        const saveButton = screen.getByTestId('button-save-team');
 
-      // Wait for inputs to be disabled during save
-      await waitFor(() => {
-        expect(nameInput).toBeDisabled();
-        expect(saveButton).toBeDisabled();
-        expect(screen.getByText('Saving...')).toBeInTheDocument();
-      });
+        fireEvent.change(nameInput, { target: { value: 'New Name' } });
+        fireEvent.click(saveButton);
+
+        // Wait for inputs to be disabled during save
+        await waitFor(() => {
+          expect(nameInput).toBeDisabled();
+          expect(saveButton).toBeDisabled();
+          expect(screen.getByText('Saving...')).toBeInTheDocument();
+        });
+      } finally {
+        // Clean up timeout to prevent memory leak
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
     });
 
     it('should show success toast and close modal after successful save', async () => {

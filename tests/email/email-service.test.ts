@@ -11,15 +11,29 @@ vi.mock('@sendgrid/mail', () => ({
 
 describe('EmailService', () => {
   let emailService: EmailService;
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
+    // Reset only the email-related env vars we modify in tests
+    ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 'SENDGRID_FROM_NAME'].forEach(key => {
+      if (key in originalEnv) {
+        process.env[key] = originalEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    });
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    // Restore only the email-related env vars we modify in tests
+    ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 'SENDGRID_FROM_NAME'].forEach(key => {
+      if (key in originalEnv) {
+        process.env[key] = originalEnv[key];
+      } else {
+        delete process.env[key];
+      }
+    });
   });
 
   describe('constructor', () => {

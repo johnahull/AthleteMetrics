@@ -21,12 +21,35 @@ const createWrapper = () => {
       },
     },
   });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+
+  const WrapperComponent = ({ children }: { children: React.ReactNode }) => {
+    const clientProp = queryClient;
+    return React.createElement(QueryClientProvider, { client: clientProp }, children);
+  };
+
+  // Attach queryClient to wrapper for cleanup
+  (WrapperComponent as any).queryClient = queryClient;
+
+  return WrapperComponent;
 };
 
 describe('useGroupComparison', () => {
+  let currentWrapper: ReturnType<typeof createWrapper> | null = null;
+
+  afterEach(() => {
+    // Clean up QueryClient after each test to prevent memory leaks
+    try {
+      if (currentWrapper && (currentWrapper as any).queryClient) {
+        (currentWrapper as any).queryClient.clear();
+      }
+    } catch (error) {
+      // Log cleanup failures to help diagnose issues
+      console.warn('QueryClient cleanup failed:', error);
+    } finally {
+      // Always reset wrapper to null, even if cleanup fails
+      currentWrapper = null;
+    }
+  });
   const mockAthletes = [
     { id: 'athlete-1', name: 'John Doe', team: 'Team A', age: 16 },
     { id: 'athlete-2', name: 'Jane Smith', team: 'Team A', age: 17 },
@@ -85,6 +108,7 @@ describe('useGroupComparison', () => {
 
   describe('Initialization', () => {
     it('should initialize with empty groups', () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -93,7 +117,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       expect(result.current.selectedGroups).toEqual([]);
@@ -102,6 +126,7 @@ describe('useGroupComparison', () => {
     });
 
     it('should not fetch data when analyticsData is provided', () => {
+      currentWrapper = createWrapper();
       renderHook(
         () =>
           useGroupComparison({
@@ -110,13 +135,14 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should wait for main analytics loading before fetching separately', () => {
+      currentWrapper = createWrapper();
       renderHook(
         () =>
           useGroupComparison({
@@ -126,7 +152,7 @@ describe('useGroupComparison', () => {
             analyticsData: undefined,
             isMainAnalyticsLoading: true,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       // Should not fetch while main analytics is loading
@@ -136,6 +162,7 @@ describe('useGroupComparison', () => {
 
   describe('Group Selection', () => {
     it('should update selectedGroups via setSelectedGroups', () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -144,7 +171,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const newGroups: GroupDefinition[] = [
@@ -164,6 +191,7 @@ describe('useGroupComparison', () => {
     });
 
     it('should respect maxGroups limit', () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -173,7 +201,7 @@ describe('useGroupComparison', () => {
             analyticsData: mockAnalyticsData,
             maxGroups: 2,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = Array.from({ length: 3 }, (_, i) => ({
@@ -195,6 +223,7 @@ describe('useGroupComparison', () => {
 
   describe('Data Aggregation', () => {
     it('should aggregate data by groups when groups are selected', async () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -203,7 +232,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = [
@@ -236,6 +265,7 @@ describe('useGroupComparison', () => {
     });
 
     it('should calculate group statistics correctly', async () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -244,7 +274,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = [
@@ -285,6 +315,7 @@ describe('useGroupComparison', () => {
         statistics: mockAnalyticsData.statistics
       };
 
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -293,7 +324,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: multiMetricData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = [
@@ -324,6 +355,7 @@ describe('useGroupComparison', () => {
     it('should handle fetch errors gracefully', async () => {
       (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
 
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -333,7 +365,7 @@ describe('useGroupComparison', () => {
             analyticsData: undefined,
             isMainAnalyticsLoading: false,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       await waitFor(() => {
@@ -345,6 +377,7 @@ describe('useGroupComparison', () => {
     });
 
     it('should handle empty analytics data', () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -353,7 +386,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: { data: [], statistics: {} },
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = [
@@ -377,6 +410,7 @@ describe('useGroupComparison', () => {
 
   describe('Edge Cases', () => {
     it('should handle groups with no matching athletes', async () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -385,7 +419,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = [
@@ -410,6 +444,7 @@ describe('useGroupComparison', () => {
     });
 
     it('should handle removal of all groups', async () => {
+      currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
           useGroupComparison({
@@ -418,7 +453,7 @@ describe('useGroupComparison', () => {
             athletes: mockAthletes,
             analyticsData: mockAnalyticsData,
           }),
-        { wrapper: createWrapper() }
+        { wrapper: currentWrapper }
       );
 
       const groups: GroupDefinition[] = [

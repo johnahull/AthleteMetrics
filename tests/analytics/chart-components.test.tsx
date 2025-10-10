@@ -255,73 +255,81 @@ describe('Chart Components', () => {
       // Suppress console errors for this test
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
-      );
+      try {
+        render(
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        );
 
-      expect(screen.getByText(/chart error/i)).toBeDefined();
-      expect(screen.getByRole('button', { name: /retry/i })).toBeDefined();
-
-      consoleSpy.mockRestore();
+        expect(screen.getByText(/chart error/i)).toBeDefined();
+        expect(screen.getByRole('button', { name: /retry/i })).toBeDefined();
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
 
     it('should allow retry after error', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
-      );
+      try {
+        render(
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        );
 
-      // Should show retry button
-      const retryButton = screen.getByRole('button', { name: /retry/i });
-      expect(retryButton).toBeDefined();
-      
-      // Click retry - the component should handle it gracefully
-      expect(() => fireEvent.click(retryButton)).not.toThrow();
+        // Should show retry button
+        const retryButton = screen.getByRole('button', { name: /retry/i });
+        expect(retryButton).toBeDefined();
 
-      consoleSpy.mockRestore();
+        // Click retry - the component should handle it gracefully
+        expect(() => fireEvent.click(retryButton)).not.toThrow();
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
 
     it('should show error details in development mode', () => {
       const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
-
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
-      );
+      try {
+        process.env.NODE_ENV = 'development';
 
-      expect(screen.getByText(/error details/i)).toBeDefined();
+        render(
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        );
 
-      process.env.NODE_ENV = originalEnv;
-      consoleSpy.mockRestore();
+        expect(screen.getByText(/error details/i)).toBeDefined();
+      } finally {
+        process.env.NODE_ENV = originalEnv;
+        consoleSpy.mockRestore();
+      }
     });
 
     it('should call custom error handler', () => {
       const mockErrorHandler = vi.fn();
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      render(
-        <ErrorBoundary onError={mockErrorHandler}>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
-      );
+      try {
+        render(
+          <ErrorBoundary onError={mockErrorHandler}>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        );
 
-      expect(mockErrorHandler).toHaveBeenCalledWith(
-        expect.any(Error),
-        expect.objectContaining({
-          componentStack: expect.any(String)
-        })
-      );
-
-      consoleSpy.mockRestore();
+        expect(mockErrorHandler).toHaveBeenCalledWith(
+          expect.any(Error),
+          expect.objectContaining({
+            componentStack: expect.any(String)
+          })
+        );
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
   });
 

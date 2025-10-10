@@ -12,6 +12,12 @@ import '@testing-library/jest-dom';
 import { MultiLineChart } from '../MultiLineChart';
 import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/analytics-types';
 
+// Mock useDebounce FIRST to prevent timer-based hanging during imports
+vi.mock('@/hooks/useDebounce', () => ({
+  useDebounce: vi.fn((value: any) => value), // Return value immediately without debouncing
+  useDebouncedCallback: vi.fn((callback: any) => callback) // Return callback immediately without debouncing
+}));
+
 // Mock Chart.js
 vi.mock('react-chartjs-2', () => ({
   Line: vi.fn(({ data, options }) => (

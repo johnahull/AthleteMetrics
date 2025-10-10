@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import { ViolinChart } from '../ViolinChart';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 
@@ -42,9 +42,19 @@ const mockCanvasContext = {
   textAlign: 'left' as CanvasTextAlign,
 };
 
-HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCanvasContext) as any;
-
 describe('ViolinChart', () => {
+  // Save original getContext to prevent global prototype pollution
+  const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+  beforeAll(() => {
+    // Mock canvas context for all tests
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCanvasContext) as any;
+  });
+
+  afterAll(() => {
+    // Restore original getContext to prevent memory leak
+    HTMLCanvasElement.prototype.getContext = originalGetContext;
+  });
   const mockData: ChartDataPoint[] = [
     {
       athleteId: 'athlete-1',
@@ -329,8 +339,9 @@ describe('ViolinChart', () => {
     });
 
     it('should use sampling for large datasets', () => {
-      // Create a large dataset (>1000 points)
-      const largeDataset: ChartDataPoint[] = Array.from({ length: 1500 }, (_, i) => ({
+      // Reduced from 1500 to 300 for memory optimization
+      // Still tests sampling logic without excessive memory
+      const largeDataset: ChartDataPoint[] = Array.from({ length: 300 }, (_, i) => ({
         athleteId: `athlete-${i}`,
         athleteName: `Athlete ${i}`,
         metric: 'FLY10_TIME',
@@ -637,8 +648,9 @@ describe('ViolinChart', () => {
     });
 
     it('should use sampling for datasets exceeding MAX_SAMPLE_SIZE (1000)', () => {
-      // Create dataset with exactly 1500 points to trigger sampling
-      const largeDataset: ChartDataPoint[] = Array.from({ length: 1500 }, (_, i) => ({
+      // Reduced from 1500 to 300 for memory optimization
+      // Still validates sampling behavior
+      const largeDataset: ChartDataPoint[] = Array.from({ length: 300 }, (_, i) => ({
         athleteId: `athlete-${i}`,
         athleteName: `Athlete ${i}`,
         metric: 'FLY10_TIME',

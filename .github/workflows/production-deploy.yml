@@ -106,8 +106,13 @@ jobs:
       - name: Get current deployment ID (for rollback)
         id: current-deploy
         run: |
-          DEPLOY_ID=$(railway status --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --json | jq -r '.deployment.id')
-          echo "deployment_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+          SERVICE_ID="${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
+          if [ -z "$SERVICE_ID" ]; then
+            echo "Error: RAILWAY_PRODUCTION_SERVICE_ID is not set"
+            exit 1
+          fi
+          DEPLOY_ID=$(railway status --service "$SERVICE_ID" --json | jq -r '.deployment.id')
+          echo "deployment_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         continue-on-error: true
@@ -115,9 +120,14 @@ jobs:
       - name: Deploy to Railway Production
         id: deploy
         run: |
-          railway up --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-          NEW_DEPLOY_ID=$(railway status --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --json | jq -r '.deployment.id')
-          echo "new_deployment_id=$NEW_DEPLOY_ID" >> $GITHUB_OUTPUT
+          SERVICE_ID="${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
+          if [ -z "$SERVICE_ID" ]; then
+            echo "Error: RAILWAY_PRODUCTION_SERVICE_ID is not set"
+            exit 1
+          fi
+          railway up --service "$SERVICE_ID"
+          NEW_DEPLOY_ID=$(railway status --service "$SERVICE_ID" --json | jq -r '.deployment.id')
+          echo "new_deployment_id=$NEW_DEPLOY_ID" >> "$GITHUB_OUTPUT"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 

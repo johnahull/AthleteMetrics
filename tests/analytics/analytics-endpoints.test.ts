@@ -7,15 +7,23 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 
-// Mock the main app
-const mockApp = {
-  get: vi.fn(),
-  post: vi.fn(),
-  use: vi.fn(),
-  listen: vi.fn(),
-} as unknown as Express;
-
 describe('Analytics Endpoints', () => {
+  let mockApp: Express;
+
+  beforeEach(() => {
+    // Create fresh mock app for each test
+    mockApp = {
+      get: vi.fn(),
+      post: vi.fn(),
+      use: vi.fn(),
+      listen: vi.fn(),
+    } as unknown as Express;
+  });
+
+  afterEach(() => {
+    // Clear all mock function calls
+    vi.clearAllMocks();
+  });
   describe('Authentication & Authorization', () => {
     it('should require authentication for analytics endpoints', async () => {
       // Test that unauthenticated requests are rejected
@@ -252,18 +260,22 @@ describe('Analytics Endpoints', () => {
   describe('Error Handling', () => {
     it('should handle database errors gracefully', async () => {
       // Simulate database error
-      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      // Make request that would trigger database error
-      const response = await request(mockApp)
-        .get('/api/analytics/dashboard')
-        .query({ organizationId: 'test-org' })
-        .set('Authorization', 'Bearer valid-token');
+      try {
+        // Make request that would trigger database error
+        const response = await request(mockApp)
+          .get('/api/analytics/dashboard')
+          .query({ organizationId: 'test-org' })
+          .set('Authorization', 'Bearer valid-token');
 
-      // Should return appropriate error response
-      if (response.status === 500) {
-        expect(response.body.message).toContain('Failed to');
-        expect(response.body.message).not.toContain('SQL'); // No internal details
+        // Should return appropriate error response
+        if (response.status === 500) {
+          expect(response.body.message).toContain('Failed to');
+          expect(response.body.message).not.toContain('SQL'); // No internal details
+        }
+      } finally {
+        consoleSpy.mockRestore();
       }
     });
 
