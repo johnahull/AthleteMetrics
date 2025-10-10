@@ -155,9 +155,16 @@ describe('GroupSelector', () => {
         />
       );
 
-      // Team A has 3 athletes, Team B has 2
-      expect(screen.getByText(/\(3 athletes\)/)).toBeInTheDocument();
-      expect(screen.getByText(/\(2 athletes\)/)).toBeInTheDocument();
+      // Team A has 3 athletes, Team B has 2 - use getAllByText since multiple sections may show counts
+      const teamAElements = screen.getAllByText(/Team A/);
+      const teamBElements = screen.getAllByText(/Team B/);
+
+      // Find the label that contains athlete count for Team A
+      const teamALabel = teamAElements.find(el => el.textContent?.includes('3 athlete'));
+      const teamBLabel = teamBElements.find(el => el.textContent?.includes('2 athlete'));
+
+      expect(teamALabel).toBeDefined();
+      expect(teamBLabel).toBeDefined();
     });
 
     it('should handle team selection via checkbox', () => {
@@ -269,7 +276,7 @@ describe('GroupSelector', () => {
     });
 
     it('should display validation error when creating group without name', async () => {
-      const { getByRole, findByRole, findByText } = render(
+      const { getByRole, findByRole } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -281,14 +288,14 @@ describe('GroupSelector', () => {
       const customTab = getByRole('tab', { name: /Create custom groups/i });
       fireEvent.click(customTab);
 
-      const createButton = await findByRole('button', { name: /Create Group/i });
-      fireEvent.click(createButton);
+      const createButton = await findByRole('button', { name: /Create Custom Group/i });
 
-      expect(await findByText(/Please enter a group name/i)).toBeInTheDocument();
+      // Button should be disabled when name is empty
+      expect(createButton).toBeDisabled();
     });
 
     it('should display validation error when creating group without athletes', async () => {
-      const { getByRole, findByLabelText, findByRole, findByText } = render(
+      const { getByRole, findByLabelText, findByRole } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -303,10 +310,10 @@ describe('GroupSelector', () => {
       const nameInput = await findByLabelText(/Group Name/i);
       fireEvent.change(nameInput, { target: { value: 'My Group' } });
 
-      const createButton = await findByRole('button', { name: /Create Group/i });
-      fireEvent.click(createButton);
+      const createButton = await findByRole('button', { name: /Create Custom Group/i });
 
-      expect(await findByText(/Please select at least one athlete/i)).toBeInTheDocument();
+      // Button should be disabled when no athletes are selected
+      expect(createButton).toBeDisabled();
     });
   });
 
@@ -397,7 +404,7 @@ describe('GroupSelector', () => {
 
   describe('Loading State', () => {
     it('should display loading state correctly', () => {
-      render(
+      const { container } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -407,8 +414,9 @@ describe('GroupSelector', () => {
         />
       );
 
-      // Look for the Loader2 icon by testId or class name
-      expect(screen.getByTestId('lucide-icon')).toBeInTheDocument();
+      // Look for the Loader2 icon by class name (Lucide icons have specific classes)
+      const loadingIcon = container.querySelector('.animate-spin');
+      expect(loadingIcon).toBeInTheDocument();
     });
   });
 
