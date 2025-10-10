@@ -114,15 +114,30 @@ npm run test:unit
 
 ### Integration Tests
 
-Integration tests require a PostgreSQL database. Set the following environment variables before running:
+**Prerequisites:** Integration tests require a PostgreSQL database.
 
-- `DATABASE_URL` - PostgreSQL connection string (e.g., `postgresql://user:pass@localhost:5432/testdb`)
-- `NODE_ENV` - Set to `test` (automatically set by test scripts)
-- `SESSION_SECRET` - Any test value (has default in test setup)
+**Setup:**
+1. Create a test database:
+   ```bash
+   # Using psql
+   createdb athletemetrics_test
+   # Or using PostgreSQL CLI
+   psql -c "CREATE DATABASE athletemetrics_test;"
+   ```
 
-```bash
-npm run test:integration
-```
+2. Set environment variables:
+   ```bash
+   export DATABASE_URL="postgresql://user:pass@localhost:5432/athletemetrics_test"
+   export NODE_ENV="test"  # Optional - automatically set by test scripts
+   export SESSION_SECRET="test-secret"  # Optional - has default in test setup
+   ```
+
+3. Run integration tests:
+   ```bash
+   npm run test:integration
+   ```
+
+**Note:** Tests will automatically create and clean up test data. Ensure you're using a dedicated test database, not your development or production database.
 
 ### CI/CD Setup
 

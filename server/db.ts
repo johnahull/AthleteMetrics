@@ -38,5 +38,12 @@ export { db };
 
 // Export cleanup function instead of raw client to prevent misuse
 export async function closeDatabase() {
-  await client.end();
+  try {
+    await client.end();
+  } catch (error) {
+    // Already closed or connection error - safe to ignore
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Database close error (safe to ignore if already closed):', error);
+    }
+  }
 }

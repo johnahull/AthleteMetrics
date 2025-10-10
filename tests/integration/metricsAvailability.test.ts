@@ -17,6 +17,14 @@ describe('Metrics Availability', () => {
   let testTeamId: string;
 
   beforeAll(async () => {
+    // Validate DATABASE_URL is set
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        'DATABASE_URL must be set to run integration tests. ' +
+        'See README.md for PostgreSQL setup instructions.'
+      );
+    }
+
     analyticsService = new AnalyticsService();
 
     // Create test organization

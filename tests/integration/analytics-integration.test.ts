@@ -58,6 +58,14 @@ const cleanupAgent = (agent: request.SuperAgentTest) => {
 
 describe('Analytics Endpoints Integration Tests', () => {
   beforeAll(async () => {
+    // Validate DATABASE_URL is set
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        'DATABASE_URL must be set to run integration tests. ' +
+        'See README.md for PostgreSQL setup instructions.'
+      );
+    }
+
     // Create test app (environment already set at top of file)
     app = express();
     app.use(express.json());
