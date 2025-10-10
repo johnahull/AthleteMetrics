@@ -260,16 +260,8 @@ export async function registerRoutes(app: Express) {
   const server = createServer(app);
 
   // Session setup with security best practices - MUST BE BEFORE ROUTES
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret) {
-    console.error("SECURITY: SESSION_SECRET environment variable must be set");
-    process.exit(1);
-  }
-
-  if (sessionSecret.length < 32) {
-    console.error("SECURITY: SESSION_SECRET must be at least 32 characters long");
-    process.exit(1);
-  }
+  // Note: SESSION_SECRET validation is now done at startup in server/index.ts
+  const sessionSecret = process.env.SESSION_SECRET!; // Already validated at startup
 
   // Initialize Redis client for session storage (optional)
   let redisClient = null;

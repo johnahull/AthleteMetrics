@@ -10,6 +10,19 @@ if (process.env.NODE_ENV === undefined) {
   process.exit(1);
 }
 
+// Validate SESSION_SECRET is set and meets security requirements
+if (!process.env.SESSION_SECRET) {
+  console.error('❌ FATAL: SESSION_SECRET environment variable not set');
+  console.error('   Generate a secure secret: openssl rand -hex 32');
+  process.exit(1);
+}
+
+if (process.env.SESSION_SECRET.length < 32) {
+  console.error('❌ FATAL: SESSION_SECRET must be at least 32 characters long');
+  console.error('   Generate a secure secret: openssl rand -hex 32');
+  process.exit(1);
+}
+
 const app = express();
 
 // Trust proxy when running behind a proxy (like in Replit environment)
@@ -203,4 +216,32 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
   });
+
+  // Graceful shutdown handler - properly close database connections on process termination
+  const gracefulShutdown = async (signal: string) => {
+    log(`${signal} received, starting graceful shutdown`);
+
+    server.close(async () => {
+      log('HTTP server closed');
+
+      try {
+        const { client } = await import('./db.js');
+        await client.end();
+        log('Database connections closed');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+      }
+    });
+
+    // Force exit after 10 seconds if graceful shutdown fails
+    setTimeout(() => {
+      console.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();
