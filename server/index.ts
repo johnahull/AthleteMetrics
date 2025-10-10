@@ -2,12 +2,13 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { log } from "./utils/logger.js";
 
-// Validate NODE_ENV is set - fail fast if missing
+// Default NODE_ENV to production for security (fail-secure approach)
+// Production mode ensures: error sanitization, rate limiting, secure cookies
+// This is safer than failing or defaulting to development mode
 if (!process.env.NODE_ENV) {
-  console.error('❌ FATAL: NODE_ENV environment variable not set');
-  console.error('   Set NODE_ENV=production for production deployments');
-  console.error('   Set NODE_ENV=development for local development');
-  process.exit(1);
+  process.env.NODE_ENV = 'production';
+  console.warn('⚠️  NODE_ENV not set, defaulting to production for security');
+  console.warn('   Set NODE_ENV=development explicitly for local development');
 }
 
 // Validate SESSION_SECRET is set and meets security requirements
