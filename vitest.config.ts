@@ -35,15 +35,13 @@ export default defineConfig({
     isolate: true, // Isolate tests between files for better cleanup
     maxConcurrency: 5, // Limit concurrent test execution
 
-    // TEMPORARILY EXCLUDE broken/hanging tests
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
       '**/.{idea,git,cache,output,temp}/**',
-      '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
-      '**/MultiLineChart.test.tsx', // TEMPORARILY EXCLUDED - hangs due to useDebounce timer issues
-      '**/analytics-endpoints.test.ts' // TEMPORARILY EXCLUDED - broken mock Express app (pre-existing issue)
-    ]
+      '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*'
+    ],
+
   },
   resolve: {
     alias: {

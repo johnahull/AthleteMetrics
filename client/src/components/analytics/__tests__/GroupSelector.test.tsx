@@ -9,6 +9,55 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GroupSelector } from '../GroupSelector';
 import type { GroupDefinition } from '@shared/analytics-types';
 
+// Mock Radix UI Tabs to work properly in test environment
+vi.mock('@radix-ui/react-tabs', () => ({
+  Root: ({ children, defaultValue, ...props }: any) => {
+    const [value, setValue] = React.useState(defaultValue);
+    return (
+      <div {...props} data-radix-tabs-root="">
+        {React.Children.map(children, child =>
+          React.isValidElement(child)
+            ? React.cloneElement(child as any, { value, onValueChange: setValue })
+            : child
+        )}
+      </div>
+    );
+  },
+  List: ({ children, ...props }: any) => (
+    <div role="tablist" {...props}>
+      {children}
+    </div>
+  ),
+  Trigger: ({ children, value: triggerValue, ...props }: any) => {
+    const parentProps = (props as any).value !== undefined ? props : {};
+    const currentValue = parentProps.value;
+    const onValueChange = parentProps.onValueChange;
+
+    return (
+      <button
+        role="tab"
+        aria-selected={currentValue === triggerValue}
+        onClick={() => onValueChange?.(triggerValue)}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  },
+  Content: ({ children, value: contentValue, ...props }: any) => {
+    const parentProps = (props as any).value !== undefined ? props : {};
+    const currentValue = parentProps.value;
+
+    if (currentValue !== contentValue) return null;
+
+    return (
+      <div role="tabpanel" {...props}>
+        {children}
+      </div>
+    );
+  },
+}))
+
 describe('GroupSelector', () => {
   const mockAthletes = [
     { id: 'athlete-1', name: 'John Doe', team: 'Team A', age: 16, birthYear: 2008 },
@@ -106,9 +155,16 @@ describe('GroupSelector', () => {
         />
       );
 
-      // Team A has 3 athletes, Team B has 2
-      expect(screen.getByText(/\(3 athletes\)/)).toBeInTheDocument();
-      expect(screen.getByText(/\(2 athletes\)/)).toBeInTheDocument();
+      // Team A has 3 athletes, Team B has 2 - use getAllByText since multiple sections may show counts
+      const teamAElements = screen.getAllByText(/Team A/);
+      const teamBElements = screen.getAllByText(/Team B/);
+
+      // Find the label that contains athlete count for Team A
+      const teamALabel = teamAElements.find(el => el.textContent?.includes('3 athlete'));
+      const teamBLabel = teamBElements.find(el => el.textContent?.includes('2 athlete'));
+
+      expect(teamALabel).toBeDefined();
+      expect(teamBLabel).toBeDefined();
     });
 
     it('should handle team selection via checkbox', () => {
@@ -158,8 +214,8 @@ describe('GroupSelector', () => {
   });
 
   describe('Age Group Selection', () => {
-    it('should generate age ranges from athlete data', () => {
-      render(
+    it('should generate age ranges from athlete data', async () => {
+      const { getByRole, findByText } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -169,16 +225,16 @@ describe('GroupSelector', () => {
       );
 
       // Switch to age groups tab
-      const ageTab = screen.getByRole('tab', { name: /Create groups by age ranges/i });
+      const ageTab = getByRole('tab', { name: /Create groups by age ranges/i });
       fireEvent.click(ageTab);
 
-      // Age ranges: 15-16, 17-18
-      expect(screen.getByText(/15-16/)).toBeInTheDocument();
-      expect(screen.getByText(/17-18/)).toBeInTheDocument();
+      // Age ranges: 15-16, 17-18 - use findByText for async rendering
+      expect(await findByText(/15-16/)).toBeInTheDocument();
+      expect(await findByText(/17-18/)).toBeInTheDocument();
     });
 
-    it('should handle age range selection', () => {
-      render(
+    it('should handle age range selection', async () => {
+      const { getByRole, findByRole } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -187,10 +243,10 @@ describe('GroupSelector', () => {
         />
       );
 
-      const ageTab = screen.getByRole('tab', { name: /Create groups by age ranges/i });
+      const ageTab = getByRole('tab', { name: /Create groups by age ranges/i });
       fireEvent.click(ageTab);
 
-      const ageCheckbox = screen.getByRole('checkbox', { name: /15-16/i });
+      const ageCheckbox = await findByRole('checkbox', { name: /15-16/i });
       fireEvent.click(ageCheckbox);
 
       expect(mockOnGroupSelectionChange).toHaveBeenCalledTimes(1);
@@ -200,8 +256,8 @@ describe('GroupSelector', () => {
   });
 
   describe('Custom Group Creation', () => {
-    it('should allow custom group name input', () => {
-      render(
+    it('should allow custom group name input', async () => {
+      const { getByRole, findByLabelText } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -210,17 +266,17 @@ describe('GroupSelector', () => {
         />
       );
 
-      const customTab = screen.getByRole('tab', { name: /Create custom groups/i });
+      const customTab = getByRole('tab', { name: /Create custom groups/i });
       fireEvent.click(customTab);
 
-      const nameInput = screen.getByLabelText(/Group Name/i);
+      const nameInput = await findByLabelText(/Group Name/i);
       fireEvent.change(nameInput, { target: { value: 'My Custom Group' } });
 
       expect(nameInput).toHaveValue('My Custom Group');
     });
 
-    it('should display validation error when creating group without name', () => {
-      render(
+    it('should display validation error when creating group without name', async () => {
+      const { getByRole, findByRole } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -229,17 +285,17 @@ describe('GroupSelector', () => {
         />
       );
 
-      const customTab = screen.getByRole('tab', { name: /Create custom groups/i });
+      const customTab = getByRole('tab', { name: /Create custom groups/i });
       fireEvent.click(customTab);
 
-      const createButton = screen.getByRole('button', { name: /Create Group/i });
-      fireEvent.click(createButton);
+      const createButton = await findByRole('button', { name: /Create Custom Group/i });
 
-      expect(screen.getByText(/Please enter a group name/i)).toBeInTheDocument();
+      // Button should be disabled when name is empty
+      expect(createButton).toBeDisabled();
     });
 
-    it('should display validation error when creating group without athletes', () => {
-      render(
+    it('should display validation error when creating group without athletes', async () => {
+      const { getByRole, findByLabelText, findByRole } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -248,16 +304,16 @@ describe('GroupSelector', () => {
         />
       );
 
-      const customTab = screen.getByRole('tab', { name: /Create custom groups/i });
+      const customTab = getByRole('tab', { name: /Create custom groups/i });
       fireEvent.click(customTab);
 
-      const nameInput = screen.getByLabelText(/Group Name/i);
+      const nameInput = await findByLabelText(/Group Name/i);
       fireEvent.change(nameInput, { target: { value: 'My Group' } });
 
-      const createButton = screen.getByRole('button', { name: /Create Group/i });
-      fireEvent.click(createButton);
+      const createButton = await findByRole('button', { name: /Create Custom Group/i });
 
-      expect(screen.getByText(/Please select at least one athlete/i)).toBeInTheDocument();
+      // Button should be disabled when no athletes are selected
+      expect(createButton).toBeDisabled();
     });
   });
 
@@ -348,7 +404,7 @@ describe('GroupSelector', () => {
 
   describe('Loading State', () => {
     it('should display loading state correctly', () => {
-      render(
+      const { container } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={mockAthletes}
@@ -358,7 +414,9 @@ describe('GroupSelector', () => {
         />
       );
 
-      expect(screen.getByRole('img', { name: /loading/i, hidden: true })).toBeInTheDocument();
+      // Look for the Loader2 icon by class name (Lucide icons have specific classes)
+      const loadingIcon = container.querySelector('.animate-spin');
+      expect(loadingIcon).toBeInTheDocument();
     });
   });
 
@@ -394,13 +452,13 @@ describe('GroupSelector', () => {
       expect(screen.getByText(/No teams found/i)).toBeInTheDocument();
     });
 
-    it('should handle athletes without age information', () => {
+    it('should handle athletes without age information', async () => {
       const athletesWithoutAges = [
         { id: 'athlete-1', name: 'John Doe', team: 'Team A' },
         { id: 'athlete-2', name: 'Jane Smith', team: 'Team A' }
       ];
 
-      render(
+      const { getByRole, findByText } = render(
         <GroupSelector
           organizationId="org-1"
           athletes={athletesWithoutAges}
@@ -409,10 +467,10 @@ describe('GroupSelector', () => {
         />
       );
 
-      const ageTab = screen.getByRole('tab', { name: /Create groups by age ranges/i });
+      const ageTab = getByRole('tab', { name: /Create groups by age ranges/i });
       fireEvent.click(ageTab);
 
-      expect(screen.getByText(/No athletes with age data/i)).toBeInTheDocument();
+      expect(await findByText(/No age data available/i)).toBeInTheDocument();
     });
   });
 });

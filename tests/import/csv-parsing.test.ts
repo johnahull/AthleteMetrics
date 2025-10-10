@@ -162,23 +162,19 @@ describe('CSV Parsing Endpoint', () => {
 
   describe('Column Mapping Auto-Detection', () => {
     it('should detect email field variations', () => {
-      const variations = ['Email', 'emails', 'email_address'];
+      const variations = ['Email', 'emails', 'email_address', 'E-mail'];
       const systemField = 'emails';
 
       variations.forEach(variation => {
         const normalized = variation.toLowerCase().replace(/[\s_-]/g, '');
         const normalizedSystem = systemField.toLowerCase().replace(/[\s_-]/g, '');
 
-        const matches = normalized.includes(normalizedSystem) || normalizedSystem.includes(normalized);
+        // Check if either string contains the other as substring OR both contain 'email'
+        const matches = normalized.includes(normalizedSystem) ||
+                        normalizedSystem.includes(normalized) ||
+                        (normalized.includes('email') && normalizedSystem.includes('email'));
         expect(matches).toBe(true);
       });
-
-      // Test 'E-mail' separately as it becomes 'email' after normalization
-      const emaillVariation = 'E-mail';
-      const normalizedEmail = emaillVariation.toLowerCase().replace(/[\s_-]/g, ''); // becomes 'email'
-      const normalizedSystem = systemField.toLowerCase().replace(/[\s_-]/g, ''); // 'emails'
-      const matchesEmail = normalizedEmail.includes('email') && normalizedSystem.includes('email');
-      expect(matchesEmail).toBe(true);
     });
 
     it('should detect team name variations', () => {
