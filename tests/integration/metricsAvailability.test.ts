@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AnalyticsService } from '../analytics-simple';
-import { db } from '../db';
+import { AnalyticsService } from '../../server/analytics-simple';
+import { db } from '../../server/db';
 import { measurements, users, userOrganizations, teams, userTeams, organizations } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { METRIC_CONFIG } from '@shared/analytics-types';

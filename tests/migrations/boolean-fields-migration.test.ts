@@ -9,7 +9,11 @@ import { db } from '../../server/db';
 import { users, teams, userTeams, measurements, invitations } from '@shared/schema';
 import { sql } from 'drizzle-orm';
 
-describe('Boolean Fields Migration Tests', () => {
+// Skip these tests when using SQLite (tests are PostgreSQL-specific)
+const isPostgres = process.env.DATABASE_URL?.startsWith('postgres');
+const describeIfPostgres = isPostgres ? describe : describe.skip;
+
+describeIfPostgres('Boolean Fields Migration Tests', () => {
   describe('Database Schema Validation', () => {
     it('should have users.is_active as BOOLEAN type', async () => {
       const result = await db.execute(sql`
