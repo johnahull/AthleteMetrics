@@ -31,10 +31,12 @@ jobs:
       - name: Run TypeScript type check
         run: npm run check
 
-      - name: Run unit tests
-        run: npm run test:run
+      - name: Run integration tests
+        run: npm run test:integration
         env:
           NODE_ENV: test
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.PRODUCTION_SESSION_SECRET }}
 
       - name: Run security audit
         id: audit

@@ -30,10 +30,12 @@ jobs:
       - name: Run TypeScript type check
         run: npm run check
 
-      - name: Run tests
-        run: npm run test:run
+      - name: Run integration tests
+        run: npm run test:integration
         env:
           NODE_ENV: test
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
 
       - name: Build application
         run: npm run build

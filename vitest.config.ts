@@ -43,7 +43,8 @@ export default defineConfig({
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
       '**/MultiLineChart.test.tsx', // TEMPORARILY EXCLUDED - hangs due to useDebounce timer issues
       '**/analytics-endpoints.test.ts' // TEMPORARILY EXCLUDED - broken mock Express app (pre-existing issue)
-    ]
+    ],
+
   },
   resolve: {
     alias: {
