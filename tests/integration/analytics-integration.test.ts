@@ -1,14 +1,15 @@
 /**
  * Integration tests for analytics endpoints
- * Tests actual API endpoints with real Express app and in-memory database
+ * Tests actual API endpoints with real Express app and PostgreSQL database
+ *
+ * NOTE: Requires DATABASE_URL environment variable to be set to a PostgreSQL connection string
  */
 
-// Set environment variables before any imports
-process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:./test-integration.db';
-process.env.SESSION_SECRET = 'test-secret-key-for-integration-tests-only';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'password123456789';
+// Set environment variables before any imports (DATABASE_URL must be provided externally)
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password123456789';
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
