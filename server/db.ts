@@ -25,5 +25,10 @@ const client = postgres(DATABASE_URL, {
 
 const db = drizzle(client, { schema });
 
-// Export both db and client for proper cleanup in tests
-export { db, client };
+// Only export db for application use
+export { db };
+
+// Export cleanup function instead of raw client to prevent misuse
+export async function closeDatabase() {
+  await client.end();
+}

@@ -23,7 +23,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 import { beforeAll, afterAll } from 'vitest';
-import { db, client } from '../../server/db.js';
+import { closeDatabase } from '../../server/db.js';
 
 // Store original console methods
 const originalConsoleLog = console.log;
@@ -42,7 +42,7 @@ afterAll(async () => {
 
   // Close database connection to prevent leaks
   try {
-    await client.end();
+    await closeDatabase();
   } catch (error) {
     console.error('Error closing database connection:', error);
   }

@@ -78,8 +78,10 @@ describe('Analytics Endpoints Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // Cleanup test database if needed
-    // In production, this would clean up the test database
+    // Cleanup test data
+    // Note: Test data uses mock IDs that don't exist in the database,
+    // so no database cleanup is needed. In a real implementation,
+    // this would delete test organizations, users, and measurements.
 
     // Ensure all agents are cleaned up
     activeAgents.forEach(agent => {

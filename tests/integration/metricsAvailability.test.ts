@@ -90,17 +90,21 @@ describe('Metrics Availability', () => {
 
   afterAll(async () => {
     // Cleanup test data in correct order (foreign key constraints)
-    if (testUserId) {
-      await db.delete(measurements).where(eq(measurements.userId, testUserId));
-      await db.delete(userTeams).where(eq(userTeams.userId, testUserId));
-      await db.delete(userOrganizations).where(eq(userOrganizations.userId, testUserId));
-      await db.delete(users).where(eq(users.id, testUserId));
-    }
-    if (testTeamId) {
-      await db.delete(teams).where(eq(teams.id, testTeamId));
-    }
-    if (testOrgId) {
-      await db.delete(organizations).where(eq(organizations.id, testOrgId));
+    try {
+      if (testUserId) {
+        await db.delete(measurements).where(eq(measurements.userId, testUserId));
+        await db.delete(userTeams).where(eq(userTeams.userId, testUserId));
+        await db.delete(userOrganizations).where(eq(userOrganizations.userId, testUserId));
+        await db.delete(users).where(eq(users.id, testUserId));
+      }
+      if (testTeamId) {
+        await db.delete(teams).where(eq(teams.id, testTeamId));
+      }
+      if (testOrgId) {
+        await db.delete(organizations).where(eq(organizations.id, testOrgId));
+      }
+    } catch (error) {
+      console.error('Error cleaning up test data:', error);
     }
   });
 

@@ -157,17 +157,36 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    // In production, don't expose internal error messages to clients
-    const message = process.env.NODE_ENV === 'production' && status === 500
-      ? 'Internal Server Error'
-      : err.message || "Internal Server Error";
+
+    // In production, sanitize ALL error messages to prevent information disclosure
+    let message = err.message || "Internal Server Error";
+    if (process.env.NODE_ENV === 'production') {
+      const safeMessages: Record<number, string> = {
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        403: 'Forbidden',
+        404: 'Not Found',
+        409: 'Conflict',
+        422: 'Validation Error',
+        429: 'Too Many Requests',
+        500: 'Internal Server Error',
+        503: 'Service Unavailable'
+      };
+      message = safeMessages[status] || 'Internal Server Error';
+    }
 
     res.status(status).json({ message });
 
-    // Log the full error for debugging (won't be sent to client)
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Application error:', err.message);
-    } else {
+    // Always log full error details server-side for debugging
+    console.error(`[${status}] Application error:`, {
+      message: err.message,
+      stack: err.stack,
+      path: _req.path,
+      method: _req.method
+    });
+
+    // In development, also throw for easier debugging
+    if (process.env.NODE_ENV !== 'production') {
       throw err;
     }
   });
@@ -223,8 +242,8 @@ app.use((req, res, next) => {
       log('HTTP server closed');
 
       try {
-        const { client } = await import('./db.js');
-        await client.end();
+        const { closeDatabase } = await import('./db.js');
+        await closeDatabase();
         log('Database connections closed');
         process.exit(0);
       } catch (error) {
