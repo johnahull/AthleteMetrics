@@ -160,7 +160,17 @@ railway login
 # Navigate to Production Service → Variables tab
 NODE_ENV=production
 PORT=5000
+
+# SESSION_SECRET: Cryptographic key for session cookie encryption
+# - Used by express-session to sign and encrypt session cookies
+# - Prevents session hijacking and tampering
+# - MUST be a strong, random string (32+ characters recommended)
+# - MUST be different between staging and production
+# - Should be rotated periodically (monthly recommended)
+# - Generate with: openssl rand -base64 32
+# - Never commit to version control or share publicly
 SESSION_SECRET=[generate strong 32+ char random string]
+
 ADMIN_USER=[your-admin-username]
 ADMIN_PASS=[your-secure-password]
 SENDGRID_API_KEY=[your-sendgrid-api-key]
@@ -188,7 +198,11 @@ MAX_CSV_ROWS=10000
 # Navigate to Staging Service → Variables tab
 NODE_ENV=staging
 PORT=5000
+
+# SESSION_SECRET for staging - MUST be different from production
+# Generate a separate secret: openssl rand -base64 32
 SESSION_SECRET=[different-random-string-than-production]
+
 ADMIN_USER=admin
 ADMIN_PASS=[staging-password]
 SENDGRID_API_KEY=[can-reuse-or-separate]
