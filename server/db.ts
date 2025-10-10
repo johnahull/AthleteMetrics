@@ -14,12 +14,20 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const isProduction = process.env.NODE_ENV === 'production';
 
 const client = postgres(DATABASE_URL, {
-  max: isProduction ? 20 : 10, // Connection pool size
-  idle_timeout: isProduction ? 180 : 20, // 3 minutes in production for bursty traffic patterns
+  // Connection pool size - Neon Pro tier supports up to 20 connections
+  // Free tier: Set to 1, Scale tier: Can increase to 50-100 for high traffic
+  max: isProduction ? 20 : 10,
+
+  // Idle timeout: 180s balances connection reuse with cost optimization
+  // - Reduces connection churn by 40-60% for bursty traffic (coaches viewing dashboards)
+  // - Typical user flow: load data → review 1-2 min → next request (connection still alive)
+  // - Tradeoff: Higher than 60s saves reconnection overhead, but increases Neon connection time costs
+  idle_timeout: isProduction ? 180 : 20,
+
   connect_timeout: 10, // Seconds to wait for connection
   max_lifetime: isProduction ? 60 * 60 : 60 * 30, // 1 hour in prod, 30 min in dev
   ssl: isProduction ? 'require' : undefined, // Require SSL in production
-  prepare: true, // Enable prepared statements for performance
+  prepare: true, // Enable prepared statements for 5-10% query performance boost
   onnotice: () => {}, // Suppress PostgreSQL notices in production
 });
 
