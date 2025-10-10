@@ -39,11 +39,11 @@ jobs:
 
           if [ -z "$PR_NUMBER" ]; then
             echo "No PR found, skipping auto-merge"
-            echo "should_merge=false" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
           # Get PR details
           PR_DATA=$(gh pr view "$PR_NUMBER" --json reviewDecision,mergeable,statusCheckRollup,files,additions,deletions)
@@ -77,29 +77,29 @@ jobs:
 
           # Check 3: Review decision
           if [ "$REVIEW_DECISION" != "APPROVED" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=Not approved (status: $REVIEW_DECISION)" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Not approved (status: $REVIEW_DECISION)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check 4: Mergeable state
           if [ "$MERGEABLE" != "MERGEABLE" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=Not in mergeable state (status: $MERGEABLE)" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Not in mergeable state (status: $MERGEABLE)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check 5: Status checks
           if [ -n "$STATUS_CHECKS" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=Failing checks: $STATUS_CHECKS" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Failing checks: $STATUS_CHECKS" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check 6: Safety checks
           if [ "$SAFETY_PASS" = "false" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=$SAFETY_REASON" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$SAFETY_REASON" >> "$GITHUB_OUTPUT"
 
             # Comment on PR about why auto-merge is blocked
             printf -v COMMENT_BODY "## 🔒 Auto-Merge Blocked\n\n**Reason**: %s\n\nThis PR requires human review and manual merge for safety.\n\n**Current Status**:\n- ✅ Code review: Approved\n- ✅ CI checks: Passing\n- ⚠️ Safety check: **Requires human approval**\n\nPlease review and merge manually if appropriate." "${SAFETY_REASON}"
@@ -108,7 +108,7 @@ jobs:
           fi
 
           # All checks passed
-          echo "should_merge=true" >> $GITHUB_OUTPUT
+          echo "should_merge=true" >> "$GITHUB_OUTPUT"
 
       - name: Auto-merge PR
         if: steps.merge-check.outputs.should_merge == 'true'
