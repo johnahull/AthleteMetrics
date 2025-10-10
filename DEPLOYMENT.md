@@ -171,8 +171,9 @@ PORT=5000
 # - Never commit to version control or share publicly
 SESSION_SECRET=[generate strong 32+ char random string]
 
-ADMIN_USER=[your-admin-username]
-ADMIN_PASS=[your-secure-password]
+# Admin Authentication (minimum 12 character password required)
+ADMIN_EMAIL=[your-admin-email@domain.com]
+ADMIN_PASSWORD=[your-secure-password-min-12-chars]
 SENDGRID_API_KEY=[your-sendgrid-api-key]
 SENDGRID_FROM_EMAIL=noreply@yourdomain.com
 SENDGRID_FROM_NAME=AthleteMetrics
@@ -203,8 +204,9 @@ PORT=5000
 # Generate a separate secret: openssl rand -base64 32
 SESSION_SECRET=[different-random-string-than-production]
 
-ADMIN_USER=admin
-ADMIN_PASS=[staging-password]
+# Admin Authentication (minimum 12 character password required)
+ADMIN_EMAIL=admin@staging.yourdomain.com
+ADMIN_PASSWORD=[staging-password-min-12-chars]
 SENDGRID_API_KEY=[can-reuse-or-separate]
 SENDGRID_FROM_EMAIL=staging@yourdomain.com
 SENDGRID_FROM_NAME=AthleteMetrics Staging
