@@ -2,6 +2,14 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { log } from "./utils/logger.js";
 
+// Validate NODE_ENV is set - fail fast if missing
+if (process.env.NODE_ENV === undefined) {
+  console.error('❌ FATAL: NODE_ENV environment variable not set');
+  console.error('   Set NODE_ENV=production for production deployments');
+  console.error('   Set NODE_ENV=development for local development');
+  process.exit(1);
+}
+
 const app = express();
 
 // Trust proxy when running behind a proxy (like in Replit environment)
