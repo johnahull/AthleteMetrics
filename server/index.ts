@@ -146,10 +146,19 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    // In production, don't expose internal error messages to clients
+    const message = process.env.NODE_ENV === 'production' && status === 500
+      ? 'Internal Server Error'
+      : err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+
+    // Log the full error for debugging (won't be sent to client)
+    if (process.env.NODE_ENV === 'production') {
+      console.error('Application error:', err.message);
+    } else {
+      throw err;
+    }
   });
 
   // importantly only setup vite in development and after
@@ -160,7 +169,11 @@ app.use((req, res, next) => {
       const { setupVite } = await import("./vite.js");
       await setupVite(app, server);
     } catch (error) {
-      log("Failed to setup Vite dev server", "express");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      log(`Failed to setup Vite dev server: ${errorMsg}`, "express");
+      if (error instanceof Error && error.stack) {
+        console.error(error.stack);
+      }
       throw error;
     }
   } else {
@@ -168,7 +181,11 @@ app.use((req, res, next) => {
       const { serveStatic } = await import("./vite.js");
       serveStatic(app);
     } catch (error) {
-      log("Failed to setup static file server", "express");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      log(`Failed to setup static file server: ${errorMsg}`, "express");
+      if (error instanceof Error && error.stack) {
+        console.error(error.stack);
+      }
       throw error;
     }
   }

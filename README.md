@@ -103,3 +103,59 @@ Set environment variables in the Secrets tab:
 ```bash
 npm run build
 npm start
+```
+
+## Running Tests
+
+### Unit Tests
+```bash
+npm run test:unit
+```
+
+### Integration Tests
+
+Integration tests require a PostgreSQL database. Set the following environment variables before running:
+
+- `DATABASE_URL` - PostgreSQL connection string (e.g., `postgresql://user:pass@localhost:5432/testdb`)
+- `NODE_ENV` - Set to `test` (automatically set by test scripts)
+- `SESSION_SECRET` - Any test value (has default in test setup)
+
+```bash
+npm run test:integration
+```
+
+### CI/CD Setup
+
+For continuous integration pipelines (GitHub Actions, CircleCI, etc.), you'll need to:
+
+1. **Provision a PostgreSQL service** in your CI configuration
+2. **Set environment variables:**
+   - `DATABASE_URL` - Connection string to CI PostgreSQL instance
+   - `NODE_ENV=test`
+   - `SESSION_SECRET` - Test secret value
+
+**Example GitHub Actions:**
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+      NODE_ENV: test
+      SESSION_SECRET: test-secret
+    steps:
+      - uses: actions/checkout@v3
+      - run: npm install
+      - run: npm run db:push
+      - run: npm run test:integration
+```
