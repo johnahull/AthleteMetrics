@@ -27,13 +27,13 @@ A full-stack web application for tracking and analyzing athlete performance data
 ### Backend
 - **Node.js** with Express
 - **TypeScript** throughout
-- **Prisma ORM** with PostgreSQL/SQLite support
+- **Drizzle ORM** with PostgreSQL
 - **Session-based authentication**
 - **CSV parsing and generation**
 - **Comprehensive REST API**
 
 ### Database
-- **PostgreSQL** (production) / **SQLite** (development)
+- **PostgreSQL** (required for all environments)
 - **Drizzle ORM** for type-safe database access
 - **Schema validation** with Zod
 
@@ -42,4 +42,64 @@ A full-stack web application for tracking and analyzing athlete performance data
 1. **Install dependencies:**
    ```bash
    npm install
-   
+   ```
+
+2. **Set up environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Run database migrations:**
+   ```bash
+   npm run db:push
+   ```
+
+4. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+
+## Production Deployment
+
+### Required Environment Variables
+
+When deploying to production, you **must** set the following environment variables:
+
+- **`NODE_ENV=production`** - **REQUIRED** for production deployments
+  - Enables production error handling (prevents sensitive error details from being exposed)
+  - Activates rate limiting protections
+  - Optimizes performance settings
+  - **Note:** The `npm start` script does NOT set this automatically - your deployment environment must provide it
+
+- **`DATABASE_URL`** - PostgreSQL connection string (SQLite is no longer supported)
+- **`SESSION_SECRET`** - Secure random string for session encryption
+- **`ADMIN_USER`** and **`ADMIN_PASS`** - Admin credentials
+
+### Deployment Examples
+
+**Heroku:**
+```bash
+heroku config:set NODE_ENV=production
+heroku config:set DATABASE_URL="postgresql://..."
+heroku config:set SESSION_SECRET="..."
+```
+
+**Docker:**
+```dockerfile
+ENV NODE_ENV=production
+ENV DATABASE_URL="postgresql://..."
+```
+
+**Replit:**
+Set environment variables in the Secrets tab:
+- `NODE_ENV` = `production`
+- `DATABASE_URL` = `postgresql://...`
+
+**Other platforms:** Consult your platform's documentation for setting environment variables.
+
+### Build and Start
+
+```bash
+npm run build
+npm start
