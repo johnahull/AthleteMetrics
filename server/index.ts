@@ -148,11 +148,21 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
-    const { setupVite } = await import("./vite.js");
-    await setupVite(app, server);
+    try {
+      const { setupVite } = await import("./vite.js");
+      await setupVite(app, server);
+    } catch (error) {
+      log("Failed to setup Vite dev server", "express");
+      throw error;
+    }
   } else {
-    const { serveStatic } = await import("./vite.js");
-    serveStatic(app);
+    try {
+      const { serveStatic } = await import("./vite.js");
+      serveStatic(app);
+    } catch (error) {
+      log("Failed to setup static file server", "express");
+      throw error;
+    }
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
