@@ -26,8 +26,7 @@ export default mergeConfig(
         '**/node_modules/**',
         '**/dist/**',
         '**/.{idea,git,cache,output,temp}/**',
-        '**/MultiLineChart.test.tsx', // TEMPORARILY EXCLUDED - hangs
-        '**/analytics-endpoints.test.ts', // TEMPORARILY EXCLUDED - broken
+        '**/MultiLineChart.test.tsx', // Excluded - mocked version in unit tests, integration version not needed
       ],
     },
   })

@@ -3,8 +3,8 @@
  * Tests group comparison data aggregation and state management
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { renderHook, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { GroupDefinition, MetricSelection } from '@shared/analytics-types';
 import { useGroupComparison } from '../useGroupComparison';
@@ -161,7 +161,7 @@ describe('useGroupComparison', () => {
   });
 
   describe('Group Selection', () => {
-    it.skip('should update selectedGroups via setSelectedGroups', () => {
+    it('should update selectedGroups via setSelectedGroups', async () => {
       currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
@@ -185,12 +185,16 @@ describe('useGroupComparison', () => {
         }
       ];
 
-      result.current.setSelectedGroups(newGroups);
+      await act(async () => {
+        result.current.setSelectedGroups(newGroups);
+      });
 
-      expect(result.current.selectedGroups).toEqual(newGroups);
+      await waitFor(() => {
+        expect(result.current.selectedGroups).toEqual(newGroups);
+      });
     });
 
-    it.skip('should respect maxGroups limit', () => {
+    it('should respect maxGroups limit', async () => {
       currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
@@ -214,10 +218,14 @@ describe('useGroupComparison', () => {
       }));
 
       // The hook itself doesn't enforce the limit, but maxGroups is passed to components
-      result.current.setSelectedGroups(groups);
+      await act(async () => {
+        result.current.setSelectedGroups(groups);
+      });
 
-      // Verify that the groups were set (enforcement happens in GroupSelector)
-      expect(result.current.selectedGroups).toHaveLength(3);
+      await waitFor(() => {
+        // Verify that the groups were set (enforcement happens in GroupSelector)
+        expect(result.current.selectedGroups).toHaveLength(3);
+      });
     });
   });
 
@@ -264,7 +272,7 @@ describe('useGroupComparison', () => {
       expect(result.current.groupComparisonData).not.toBeNull();
     });
 
-    it.skip('should calculate group statistics correctly', async () => {
+    it('should calculate group statistics correctly', async () => {
       currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
@@ -288,7 +296,9 @@ describe('useGroupComparison', () => {
         }
       ];
 
-      result.current.setSelectedGroups(groups);
+      await act(async () => {
+        result.current.setSelectedGroups(groups);
+      });
 
       await waitFor(() => {
         expect(result.current.groupComparisonData).not.toBeNull();
@@ -376,7 +386,7 @@ describe('useGroupComparison', () => {
       expect(result.current.chartData).toBeNull();
     });
 
-    it.skip('should handle empty analytics data', () => {
+    it('should handle empty analytics data', async () => {
       currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
@@ -400,16 +410,21 @@ describe('useGroupComparison', () => {
         }
       ];
 
-      result.current.setSelectedGroups(groups);
+      await act(async () => {
+        result.current.setSelectedGroups(groups);
+      });
 
-      expect(result.current.isDataReady).toBe(true);
+      await waitFor(() => {
+        expect(result.current.isDataReady).toBe(true);
+      });
+
       // Should handle empty data without crashing
       expect(result.current.chartData).toBeDefined();
     });
   });
 
   describe('Edge Cases', () => {
-    it.skip('should handle groups with no matching athletes', async () => {
+    it('should handle groups with no matching athletes', async () => {
       currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
@@ -433,7 +448,9 @@ describe('useGroupComparison', () => {
         }
       ];
 
-      result.current.setSelectedGroups(groups);
+      await act(async () => {
+        result.current.setSelectedGroups(groups);
+      });
 
       await waitFor(() => {
         expect(result.current.isDataReady).toBe(true);
@@ -443,7 +460,7 @@ describe('useGroupComparison', () => {
       expect(result.current.chartData).toBeDefined();
     });
 
-    it.skip('should handle removal of all groups', async () => {
+    it('should handle removal of all groups', async () => {
       currentWrapper = createWrapper();
       const { result } = renderHook(
         () =>
@@ -467,17 +484,23 @@ describe('useGroupComparison', () => {
         }
       ];
 
-      result.current.setSelectedGroups(groups);
+      await act(async () => {
+        result.current.setSelectedGroups(groups);
+      });
 
       await waitFor(() => {
         expect(result.current.isDataReady).toBe(true);
       });
 
       // Remove all groups
-      result.current.setSelectedGroups([]);
+      await act(async () => {
+        result.current.setSelectedGroups([]);
+      });
 
-      expect(result.current.isDataReady).toBe(false);
-      expect(result.current.chartData).toBeNull();
+      await waitFor(() => {
+        expect(result.current.isDataReady).toBe(false);
+        expect(result.current.chartData).toBeNull();
+      });
     });
   });
 });

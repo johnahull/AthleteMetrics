@@ -9,6 +9,55 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GroupSelector } from '../GroupSelector';
 import type { GroupDefinition } from '@shared/analytics-types';
 
+// Mock Radix UI Tabs to work properly in test environment
+vi.mock('@radix-ui/react-tabs', () => ({
+  Root: ({ children, defaultValue, ...props }: any) => {
+    const [value, setValue] = React.useState(defaultValue);
+    return (
+      <div {...props} data-radix-tabs-root="">
+        {React.Children.map(children, child =>
+          React.isValidElement(child)
+            ? React.cloneElement(child as any, { value, onValueChange: setValue })
+            : child
+        )}
+      </div>
+    );
+  },
+  List: ({ children, ...props }: any) => (
+    <div role="tablist" {...props}>
+      {children}
+    </div>
+  ),
+  Trigger: ({ children, value: triggerValue, ...props }: any) => {
+    const parentProps = (props as any).value !== undefined ? props : {};
+    const currentValue = parentProps.value;
+    const onValueChange = parentProps.onValueChange;
+
+    return (
+      <button
+        role="tab"
+        aria-selected={currentValue === triggerValue}
+        onClick={() => onValueChange?.(triggerValue)}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  },
+  Content: ({ children, value: contentValue, ...props }: any) => {
+    const parentProps = (props as any).value !== undefined ? props : {};
+    const currentValue = parentProps.value;
+
+    if (currentValue !== contentValue) return null;
+
+    return (
+      <div role="tabpanel" {...props}>
+        {children}
+      </div>
+    );
+  },
+}))
+
 describe('GroupSelector', () => {
   const mockAthletes = [
     { id: 'athlete-1', name: 'John Doe', team: 'Team A', age: 16, birthYear: 2008 },
@@ -158,8 +207,7 @@ describe('GroupSelector', () => {
   });
 
   describe('Age Group Selection', () => {
-    // TODO: Fix Radix UI Tabs rendering in test environment
-    it.skip('should generate age ranges from athlete data', async () => {
+    it('should generate age ranges from athlete data', async () => {
       const { getByRole, findByText } = render(
         <GroupSelector
           organizationId="org-1"
@@ -178,7 +226,7 @@ describe('GroupSelector', () => {
       expect(await findByText(/17-18/)).toBeInTheDocument();
     });
 
-    it.skip('should handle age range selection', async () => {
+    it('should handle age range selection', async () => {
       const { getByRole, findByRole } = render(
         <GroupSelector
           organizationId="org-1"
@@ -201,7 +249,7 @@ describe('GroupSelector', () => {
   });
 
   describe('Custom Group Creation', () => {
-    it.skip('should allow custom group name input', async () => {
+    it('should allow custom group name input', async () => {
       const { getByRole, findByLabelText } = render(
         <GroupSelector
           organizationId="org-1"
@@ -220,7 +268,7 @@ describe('GroupSelector', () => {
       expect(nameInput).toHaveValue('My Custom Group');
     });
 
-    it.skip('should display validation error when creating group without name', async () => {
+    it('should display validation error when creating group without name', async () => {
       const { getByRole, findByRole, findByText } = render(
         <GroupSelector
           organizationId="org-1"
@@ -239,7 +287,7 @@ describe('GroupSelector', () => {
       expect(await findByText(/Please enter a group name/i)).toBeInTheDocument();
     });
 
-    it.skip('should display validation error when creating group without athletes', async () => {
+    it('should display validation error when creating group without athletes', async () => {
       const { getByRole, findByLabelText, findByRole, findByText } = render(
         <GroupSelector
           organizationId="org-1"
@@ -348,7 +396,7 @@ describe('GroupSelector', () => {
   });
 
   describe('Loading State', () => {
-    it.skip('should display loading state correctly', () => {
+    it('should display loading state correctly', () => {
       render(
         <GroupSelector
           organizationId="org-1"
@@ -396,7 +444,7 @@ describe('GroupSelector', () => {
       expect(screen.getByText(/No teams found/i)).toBeInTheDocument();
     });
 
-    it.skip('should handle athletes without age information', async () => {
+    it('should handle athletes without age information', async () => {
       const athletesWithoutAges = [
         { id: 'athlete-1', name: 'John Doe', team: 'Team A' },
         { id: 'athlete-2', name: 'Jane Smith', team: 'Team A' }
