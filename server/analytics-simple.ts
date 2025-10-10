@@ -31,7 +31,7 @@ type QueryResult = {
   measurementId: string;
   athleteId: string;
   metric: string;
-  value: number;
+  value: string; // Stored as string in database, converted to number when needed
   date: string;
   teamId: string | null;
   athleteName: string;
