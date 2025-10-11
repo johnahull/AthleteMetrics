@@ -3,16 +3,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 /**
  * Tests for server startup validation
  *
- * These tests verify that the server performs fail-fast validation
- * of critical environment variables (NODE_ENV, SESSION_SECRET)
- * before starting.
+ * These tests verify that the server:
+ * - Defaults NODE_ENV to 'production' if not set (fail-secure)
+ * - Performs fail-fast validation of SESSION_SECRET
  */
 describe('Server Startup Validation', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let mockExit: ReturnType<typeof vi.spyOn>;
   let mockConsoleError: ReturnType<typeof vi.spyOn>;
+  let mockConsoleWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // Clear module cache BEFORE setting up environment for each test
+    vi.resetModules();
+
     // Save original environment
     originalEnv = { ...process.env };
 
@@ -21,6 +25,9 @@ describe('Server Startup Validation', () => {
 
     // Mock console.error to suppress output during tests
     mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Mock console.warn to capture warnings
+    mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -30,26 +37,26 @@ describe('Server Startup Validation', () => {
     // Restore mocked functions
     mockExit.mockRestore();
     mockConsoleError.mockRestore();
-
-    // Clear module cache to allow re-testing server initialization
-    vi.resetModules();
+    mockConsoleWarn.mockRestore();
   });
 
   describe('NODE_ENV validation', () => {
-    it('should exit with code 1 if NODE_ENV is not set', async () => {
+    it('should default to production and warn if NODE_ENV is not set', async () => {
       delete process.env.NODE_ENV;
       process.env.SESSION_SECRET = 'a'.repeat(32);
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
         await import('../../server/index');
       } catch (error) {
-        // Import may throw after process.exit is called
+        // Server may fail to start for other reasons (e.g., database connection)
       }
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('NODE_ENV environment variable not set')
+      // Should NOT exit due to NODE_ENV, but should warn
+      expect(mockConsoleWarn).toHaveBeenCalledWith(
+        '⚠️  NODE_ENV not set, defaulting to production for security'
       );
+      expect(process.env.NODE_ENV).toBe('production');
     });
 
     it('should start successfully when NODE_ENV is set to production', async () => {
@@ -98,6 +105,10 @@ describe('Server Startup Validation', () => {
     it('should exit with code 1 if SESSION_SECRET is not set', async () => {
       process.env.NODE_ENV = 'production';
       delete process.env.SESSION_SECRET;
+      // Set other required env vars so we test SESSION_SECRET validation specifically
+      process.env.ADMIN_EMAIL = 'test@example.com';
+      process.env.ADMIN_PASSWORD = 'test-password-123';
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
         await import('../../server/index');
@@ -106,14 +117,20 @@ describe('Server Startup Validation', () => {
       }
 
       expect(mockExit).toHaveBeenCalledWith(1);
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('SESSION_SECRET environment variable not set')
+      // Check that the SESSION_SECRET validation error was logged
+      const errorCalls = mockConsoleError.mock.calls.flat();
+      expect(errorCalls).toContainEqual(
+        '❌ FATAL: SESSION_SECRET environment variable not set'
       );
     });
 
     it('should exit with code 1 if SESSION_SECRET is less than 32 characters', async () => {
       process.env.NODE_ENV = 'production';
       process.env.SESSION_SECRET = 'a'.repeat(31); // 31 characters
+      // Set other required env vars
+      process.env.ADMIN_EMAIL = 'test@example.com';
+      process.env.ADMIN_PASSWORD = 'test-password-123';
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
         await import('../../server/index');
@@ -122,8 +139,10 @@ describe('Server Startup Validation', () => {
       }
 
       expect(mockExit).toHaveBeenCalledWith(1);
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('SESSION_SECRET must be at least 32 characters long')
+      // Check that the SESSION_SECRET length validation error was logged
+      const errorCalls = mockConsoleError.mock.calls.flat();
+      expect(errorCalls).toContainEqual(
+        '❌ FATAL: SESSION_SECRET must be at least 32 characters long'
       );
     });
 
@@ -167,9 +186,13 @@ describe('Server Startup Validation', () => {
   });
 
   describe('Combined validation', () => {
-    it('should validate NODE_ENV before SESSION_SECRET', async () => {
+    it('should default NODE_ENV then validate SESSION_SECRET', async () => {
       delete process.env.NODE_ENV;
       delete process.env.SESSION_SECRET;
+      // Set other required env vars
+      process.env.ADMIN_EMAIL = 'test@example.com';
+      process.env.ADMIN_PASSWORD = 'test-password-123';
+      process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
         await import('../../server/index');
@@ -178,9 +201,15 @@ describe('Server Startup Validation', () => {
       }
 
       expect(mockExit).toHaveBeenCalledWith(1);
-      // Should fail on NODE_ENV first
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        expect.stringContaining('NODE_ENV environment variable not set')
+      // NODE_ENV should default with a warning
+      const warnCalls = mockConsoleWarn.mock.calls.flat();
+      expect(warnCalls).toContainEqual(
+        '⚠️  NODE_ENV not set, defaulting to production for security'
+      );
+      // Then SESSION_SECRET validation should fail
+      const errorCalls = mockConsoleError.mock.calls.flat();
+      expect(errorCalls).toContainEqual(
+        '❌ FATAL: SESSION_SECRET environment variable not set'
       );
     });
 

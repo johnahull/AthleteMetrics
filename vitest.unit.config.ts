@@ -22,6 +22,7 @@ export default mergeConfig(
         // Specific test directories that don't need DB
         'tests/validation/**/*.{test,spec}.{ts,tsx}',
         'tests/analytics/**/*.{test,spec}.{ts,tsx}', // Analytics tests
+        'tests/server/**/*.{test,spec}.{ts,tsx}', // Server unit tests (startup, error handling, etc.)
         'tests/import/csv-parsing.test.ts', // Parsing logic only
         'tests/auth/site-admin.test.ts', // Logic tests
       ],
