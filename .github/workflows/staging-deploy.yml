@@ -56,11 +56,13 @@ jobs:
           NODE_ENV: production
 
       - name: Deploy to Railway Staging
-        uses: railway/deploy@v3
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
-          detach: true
+        run: |
+          docker run --rm \
+            -v $(pwd):/app \
+            -w /app \
+            -e RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN }} \
+            ghcr.io/railwayapp/cli:latest \
+            up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
 
       - name: Wait for deployment
         run: sleep 30
