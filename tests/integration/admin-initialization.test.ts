@@ -8,7 +8,7 @@ process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-secret-for-admin-init-tests';
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test';
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
 import { db } from '../../server/db';
 import { users } from '@shared/schema';
@@ -21,15 +21,13 @@ vi.mock('../../server/vite.js', () => ({
   serveStatic: vi.fn()
 }));
 
-// Import storage
+// Import storage and the actual function we're testing
 import { storage } from '../../server/storage';
-
-// Import initializeDefaultUser - we need to import the module and call the function
-// Since initializeDefaultUser is called during module initialization, we need to mock it
-// and then call it manually in tests
-let initializeDefaultUser: () => Promise<void>;
+import { initializeDefaultUser } from '../../server/routes';
 
 describe('Admin User Initialization', () => {
+  let originalEnv: NodeJS.ProcessEnv;
+
   beforeAll(async () => {
     // Validate DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
@@ -38,56 +36,25 @@ describe('Admin User Initialization', () => {
         'Set it to a test PostgreSQL database.'
       );
     }
-
-    // Import and extract initializeDefaultUser function
-    // We need to re-import the routes module to get the function
-    const routesModule = await import('../../server/routes');
-    // Access the function through the module's exports if available
-    // For now, we'll create a helper that mimics the behavior
-    initializeDefaultUser = async () => {
-      const adminUser = process.env.ADMIN_USER || "admin";
-      const adminPassword = process.env.ADMIN_PASSWORD || "password";
-
-      // Check if user exists
-      const existingUser = await storage.getUserByUsername(adminUser);
-
-      if (!existingUser) {
-        // Create new admin user
-        await storage.createUser({
-          username: adminUser,
-          password: adminPassword,
-          email: `${adminUser}@athletemetrics.local`,
-          firstName: "Site",
-          lastName: "Administrator",
-          role: "site_admin",
-          isSiteAdmin: true
-        });
-      } else {
-        // User exists - check if password needs to be synced
-        const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
-
-        if (!passwordMatches) {
-          await storage.updateUser(existingUser.id, {
-            password: adminPassword
-          });
-        }
-
-        // Ensure isSiteAdmin flag is set
-        if (existingUser.isSiteAdmin !== true) {
-          await storage.updateUser(existingUser.id, {
-            isSiteAdmin: true
-          });
-        }
-      }
-    };
   });
 
   beforeEach(async () => {
+    // Save original environment variables
+    originalEnv = { ...process.env };
+
     // Clean up any existing test admin user
     const testUser = await storage.getUserByUsername('test-admin');
     if (testUser) {
       await db.delete(users).where(eq(users.id, testUser.id));
     }
+  });
+
+  afterEach(() => {
+    // Restore environment variables
+    process.env = originalEnv;
+
+    // Restore all mocks
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
@@ -102,7 +69,57 @@ describe('Admin User Initialization', () => {
     }
   });
 
-  describe('Password Synchronization', () => {
+  describe('Environment Variable Validation', () => {
+    it('should exit when ADMIN_USER is not set', async () => {
+      delete process.env.ADMIN_USER;
+      process.env.ADMIN_PASSWORD = 'valid-password-123456';
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when ADMIN_PASSWORD is not set', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      delete process.env.ADMIN_PASSWORD;
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when username is less than 3 characters', async () => {
+      process.env.ADMIN_USER = 'ab'; // Only 2 characters
+      process.env.ADMIN_PASSWORD = 'valid-password-123456';
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when password is less than 12 characters', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'short123'; // Only 8 characters
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('Admin User Creation', () => {
     it('should create admin user when it does not exist', async () => {
       // Set test admin credentials
       process.env.ADMIN_USER = 'test-admin';
@@ -117,12 +134,38 @@ describe('Admin User Initialization', () => {
       expect(user?.username).toBe('test-admin');
       expect(user?.isSiteAdmin).toBe(true);
       expect(user?.role).toBe('site_admin');
+      expect(user?.firstName).toBe('Site');
+      expect(user?.lastName).toBe('Administrator');
 
       // Verify password is hashed correctly
       const passwordMatches = await bcrypt.compare('initial-password-123', user!.password);
       expect(passwordMatches).toBe(true);
     });
 
+    it('should use ADMIN_EMAIL when provided', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'password-123456789';
+      process.env.ADMIN_EMAIL = 'admin@example.com';
+
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user?.emails).toContain('admin@example.com');
+    });
+
+    it('should use empty email array when ADMIN_EMAIL is undefined', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'password-123456789';
+      delete process.env.ADMIN_EMAIL;
+
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user?.emails).toEqual([]);
+    });
+  });
+
+  describe('Password Synchronization', () => {
     it('should update password when environment variable changes', async () => {
       // Create admin with initial password
       process.env.ADMIN_USER = 'test-admin';
@@ -135,17 +178,42 @@ describe('Admin User Initialization', () => {
       expect(passwordMatches).toBe(true);
 
       // Change environment password
-      process.env.ADMIN_PASSWORD = 'new-password-456';
+      process.env.ADMIN_PASSWORD = 'new-password-456789';
       await initializeDefaultUser();
 
       // Verify new password works
       user = await storage.getUserByUsername('test-admin');
-      passwordMatches = await bcrypt.compare('new-password-456', user!.password);
+      passwordMatches = await bcrypt.compare('new-password-456789', user!.password);
       expect(passwordMatches).toBe(true);
 
       // Verify old password no longer works
       const oldPasswordMatches = await bcrypt.compare('initial-password-123', user!.password);
       expect(oldPasswordMatches).toBe(false);
+    });
+
+    it('should update passwordChangedAt when password syncs', async () => {
+      // Create admin with initial password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'initial-password-123';
+      await initializeDefaultUser();
+
+      // Get initial passwordChangedAt
+      let user = await storage.getUserByUsername('test-admin');
+      const initialPasswordChangedAt = user!.passwordChangedAt;
+
+      // Wait a moment to ensure timestamp changes
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Change environment password
+      process.env.ADMIN_PASSWORD = 'new-password-456789';
+      await initializeDefaultUser();
+
+      // Verify passwordChangedAt was updated
+      user = await storage.getUserByUsername('test-admin');
+      expect(user!.passwordChangedAt).toBeDefined();
+      if (initialPasswordChangedAt) {
+        expect(user!.passwordChangedAt!.getTime()).toBeGreaterThan(initialPasswordChangedAt.getTime());
+      }
     });
 
     it('should not update password when it already matches', async () => {
@@ -154,21 +222,36 @@ describe('Admin User Initialization', () => {
       process.env.ADMIN_PASSWORD = 'consistent-password-789';
       await initializeDefaultUser();
 
-      // Get initial password hash
-      const userBefore = await storage.getUserByUsername('test-admin');
-      const hashBefore = userBefore!.password;
+      // Spy on storage.updateUser to verify it's NOT called
+      const updateSpy = vi.spyOn(storage, 'updateUser');
 
       // Call initialization again with same password
       await initializeDefaultUser();
 
-      // Verify password hash hasn't changed (no unnecessary update)
-      const userAfter = await storage.getUserByUsername('test-admin');
-      const hashAfter = userAfter!.password;
+      // Verify updateUser was NOT called (optimization worked)
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
 
-      // Note: bcrypt generates different hashes each time, but if password matches,
-      // the function should skip the update. We can verify by checking the password still works.
-      const passwordMatches = await bcrypt.compare('consistent-password-789', hashAfter);
-      expect(passwordMatches).toBe(true);
+    it('should create audit log when password syncs', async () => {
+      // Create admin with initial password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'initial-password-123';
+      await initializeDefaultUser();
+
+      // Spy on createAuditLog
+      const auditSpy = vi.spyOn(storage, 'createAuditLog');
+
+      // Change password
+      process.env.ADMIN_PASSWORD = 'new-password-456789';
+      await initializeDefaultUser();
+
+      // Verify audit log was created
+      expect(auditSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'admin_password_synced',
+          resourceType: 'user',
+        })
+      );
     });
   });
 
@@ -176,7 +259,7 @@ describe('Admin User Initialization', () => {
     it('should restore isSiteAdmin flag if changed to false', async () => {
       // Create admin user
       process.env.ADMIN_USER = 'test-admin';
-      process.env.ADMIN_PASSWORD = 'password-123';
+      process.env.ADMIN_PASSWORD = 'password-123456789';
       await initializeDefaultUser();
 
       // Manually change isSiteAdmin to false (simulating privilege tampering)
@@ -197,22 +280,47 @@ describe('Admin User Initialization', () => {
       expect(user?.isSiteAdmin).toBe(true);
     });
 
-    it('should not update user when isSiteAdmin is already true', async () => {
+    it('should not update user when isSiteAdmin is already true and password matches', async () => {
       // Create admin user with correct flag
       process.env.ADMIN_USER = 'test-admin';
-      process.env.ADMIN_PASSWORD = 'password-123';
+      process.env.ADMIN_PASSWORD = 'password-123456789';
       await initializeDefaultUser();
 
-      // Get initial state
-      const userBefore = await storage.getUserByUsername('test-admin');
-      expect(userBefore?.isSiteAdmin).toBe(true);
+      // Spy on storage.updateUser to verify it's NOT called
+      const updateSpy = vi.spyOn(storage, 'updateUser');
 
       // Call initialization again
       await initializeDefaultUser();
 
-      // Verify flag is still true
-      const userAfter = await storage.getUserByUsername('test-admin');
-      expect(userAfter?.isSiteAdmin).toBe(true);
+      // Verify updateUser was NOT called
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('should create audit log when privilege is restored', async () => {
+      // Create admin user
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'password-123456789';
+      await initializeDefaultUser();
+
+      // Tamper with privilege
+      let user = await storage.getUserByUsername('test-admin');
+      await db.update(users)
+        .set({ isSiteAdmin: false })
+        .where(eq(users.id, user!.id));
+
+      // Spy on createAuditLog
+      const auditSpy = vi.spyOn(storage, 'createAuditLog');
+
+      // Call initialization
+      await initializeDefaultUser();
+
+      // Verify audit log was created
+      expect(auditSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'privilege_restored',
+          resourceType: 'user',
+        })
+      );
     });
   });
 
@@ -234,16 +342,30 @@ describe('Admin User Initialization', () => {
         .where(eq(users.id, user!.id));
 
       // Change environment password
-      process.env.ADMIN_PASSWORD = 'new-password-456';
+      process.env.ADMIN_PASSWORD = 'new-password-456789';
+
+      // Spy on storage.updateUser to verify single call
+      const updateSpy = vi.spyOn(storage, 'updateUser');
 
       // Call initialization
       await initializeDefaultUser();
+
+      // Verify single update call with both fields
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(updateSpy).toHaveBeenCalledWith(
+        user!.id,
+        expect.objectContaining({
+          password: 'new-password-456789',
+          isSiteAdmin: true,
+          passwordChangedAt: expect.any(Date)
+        })
+      );
 
       // Verify both password and flag are correct
       user = await storage.getUserByUsername('test-admin');
       expect(user?.isSiteAdmin).toBe(true);
 
-      const passwordMatches = await bcrypt.compare('new-password-456', user!.password);
+      const passwordMatches = await bcrypt.compare('new-password-456789', user!.password);
       expect(passwordMatches).toBe(true);
     });
   });
@@ -267,7 +389,7 @@ describe('Admin User Initialization', () => {
 
     it('should create user with required admin fields', async () => {
       process.env.ADMIN_USER = 'test-admin';
-      process.env.ADMIN_PASSWORD = 'password-123';
+      process.env.ADMIN_PASSWORD = 'password-123456789';
       await initializeDefaultUser();
 
       const user = await storage.getUserByUsername('test-admin');
