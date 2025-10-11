@@ -67,7 +67,7 @@ const client = postgres(DATABASE_URL, {
 
   connect_timeout: 10, // Seconds to wait for connection
   max_lifetime: finalPoolConfig.max_lifetime, // Connection lifetime before forced refresh
-  ssl: isProduction ? 'require' : undefined, // Require SSL in production
+  ssl: 'require', // Always require SSL for Neon database connections (dev and prod)
   prepare: true, // Enable prepared statements for 5-10% query performance boost
   onnotice: () => {}, // Suppress PostgreSQL notices in production
 });
