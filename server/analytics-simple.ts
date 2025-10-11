@@ -22,7 +22,8 @@ import {
   filterToBestMeasurementsPerDate,
   calculateDateRange,
   formatDateForDatabase,
-  validateAnalyticsFilters
+  validateAnalyticsFilters,
+  parseDecimalValue
 } from "@shared/analytics-utils";
 import DOMPurify from "isomorphic-dompurify";
 
@@ -509,7 +510,8 @@ export class AnalyticsService {
       let chartData: ChartDataPoint[] = data.map((row: QueryResult) => ({
         athleteId: row.athleteId,
         athleteName: sanitizeString(row.athleteName) || 'Unknown',
-        value: typeof row.value === 'string' ? parseFloat(row.value) : (row.value || 0),
+        // Use type-safe helper for decimal value conversion
+        value: parseDecimalValue(row.value || 0),
         date: new Date(row.date),
         metric: row.metric,
         teamName: sanitizeString(row.teamName) || 'No Team'

@@ -73,6 +73,14 @@ When deploying to production, you **must** set the following environment variabl
   - **Note:** If not set, the application defaults to `production` mode for safety. However, explicitly setting it is recommended for clarity.
 
 - **`DATABASE_URL`** - PostgreSQL connection string (SQLite is no longer supported)
+- **`NEON_TIER`** - **IMPORTANT** for Neon PostgreSQL deployments
+  - Options: `"free"`, `"pro"`, or `"scale"`
+  - Default: `"pro"` if not set
+  - **Free tier**: 1 connection limit - set `NEON_TIER=free` to prevent connection exhaustion
+  - **Pro tier**: Up to 20 connections - set `NEON_TIER=pro` (default)
+  - **Scale tier**: Up to 100+ connections - set `NEON_TIER=scale`
+  - This optimizes connection pooling for your Neon plan and prevents unexpected costs
+  - See [Neon connection pooling docs](https://neon.tech/docs/connect/connection-pooling)
 - **`SESSION_SECRET`** - Secure random string for session encryption
 - **`ADMIN_USER`** and **`ADMIN_PASS`** - Admin credentials
 
@@ -82,6 +90,7 @@ When deploying to production, you **must** set the following environment variabl
 ```bash
 heroku config:set NODE_ENV=production
 heroku config:set DATABASE_URL="postgresql://..."
+heroku config:set NEON_TIER="pro"  # Set to match your Neon plan
 heroku config:set SESSION_SECRET="..."
 ```
 
@@ -89,12 +98,14 @@ heroku config:set SESSION_SECRET="..."
 ```dockerfile
 ENV NODE_ENV=production
 ENV DATABASE_URL="postgresql://..."
+ENV NEON_TIER="pro"
 ```
 
 **Replit:**
 Set environment variables in the Secrets tab:
 - `NODE_ENV` = `production`
 - `DATABASE_URL` = `postgresql://...`
+- `NEON_TIER` = `pro` (or `free`/`scale` based on your Neon plan)
 
 **Other platforms:** Consult your platform's documentation for setting environment variables.
 
