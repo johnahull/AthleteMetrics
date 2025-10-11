@@ -293,12 +293,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+    // List of valid database columns that can be updated
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
     const updateData: any = {};
 
-    // Only include defined fields in the update
+    // Only include defined fields that are actual database columns
     Object.keys(user).forEach(key => {
       const value = (user as any)[key];
-      if (value !== undefined) {
+      if (value !== undefined && validUserColumns.includes(key)) {
         updateData[key] = value;
       }
     });
@@ -1399,11 +1408,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
-    // Filter out undefined values to prevent UNDEFINED_VALUE errors
+    // List of valid database columns that can be updated
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors
     const updateData: any = {};
     Object.keys(athlete).forEach(key => {
       const value = (athlete as any)[key];
-      if (value !== undefined) {
+      if (value !== undefined && validUserColumns.includes(key)) {
         updateData[key] = value;
       }
     });
