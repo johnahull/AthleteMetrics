@@ -636,7 +636,7 @@ export async function registerRoutes(app: Express) {
   };
 
   // Initialize default user
-  initializeDefaultUser();
+  await initializeDefaultUser();
 
   // ⚠️ LEGACY ROUTES - These have been refactored to new service layer
   // Authentication routes are now handled by ./routes/auth-routes.ts
