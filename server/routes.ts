@@ -214,12 +214,19 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 // Initialize default site admin user
 async function initializeDefaultUser() {
   try {
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminUser = process.env.ADMIN_USER;
     const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminEmail = process.env.ADMIN_EMAIL; // Optional: email address for admin
 
     // Require admin credentials to be set in environment variables
-    if (!adminEmail || !adminPassword) {
-      console.error("SECURITY: ADMIN_EMAIL and ADMIN_PASSWORD environment variables must be set");
+    if (!adminUser || !adminPassword) {
+      console.error("SECURITY: ADMIN_USER and ADMIN_PASSWORD environment variables must be set");
+      process.exit(1);
+    }
+
+    // Validate username
+    if (adminUser.length < 3) {
+      console.error("SECURITY: ADMIN_USER must be at least 3 characters long");
       process.exit(1);
     }
 
@@ -229,26 +236,25 @@ async function initializeDefaultUser() {
       process.exit(1);
     }
 
-    // Check if admin user already exists by email or username
-    const existingUserByEmail = await storage.getUserByEmail(adminEmail);
-    const existingUserByUsername = await storage.getUserByUsername("admin");
+    // Check if admin user already exists by username
+    const existingUser = await storage.getUserByUsername(adminUser);
 
-    if (!existingUserByEmail && !existingUserByUsername) {
+    if (!existingUser) {
       // Note: Site admins don't have a role field - they are identified by isSiteAdmin flag
       // This is intentional: role is for organization-level permissions (athlete, coach, org_admin)
       // while isSiteAdmin grants platform-wide access independent of organizations
       await storage.createUser({
-        username: "admin",
-        emails: [adminEmail],
+        username: adminUser,
+        emails: adminEmail ? [adminEmail] : [], // Optional email
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
         role: "site_admin",
         isSiteAdmin: true
       });
-      console.log("Site administrator account created successfully");
+      console.log(`Site administrator account created successfully: ${adminUser}`);
     } else {
-      console.log("Site administrator account already exists");
+      console.log(`Site administrator account already exists: ${adminUser}`);
     }
   } catch (error) {
     console.error("Error initializing default user:", error);

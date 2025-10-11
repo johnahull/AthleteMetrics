@@ -33,14 +33,19 @@ const REQUIRED_VARS = {
     description: 'Session encryption secret',
     validator: (val) => val.length >= 32
   },
-  ADMIN_EMAIL: {
+  ADMIN_USER: {
     required: true,
-    description: 'Admin email'
+    description: 'Admin username',
+    validator: (val) => val.length >= 3
   },
   ADMIN_PASSWORD: {
     required: true,
     description: 'Admin password',
     validator: (val) => val.length >= 12
+  },
+  ADMIN_EMAIL: {
+    required: false,
+    description: 'Admin email address (optional)'
   },
 
   // Email service
