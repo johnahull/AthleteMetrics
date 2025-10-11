@@ -12,13 +12,22 @@
  * these tests make actual HTTP requests to the Express API endpoints.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
-import { app } from '../../server';
+import express, { type Express } from 'express';
 import { storage } from '../../server/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
+// Mock vite module before importing registerRoutes
+vi.mock('../../server/vite.js', () => ({
+  setupVite: vi.fn().mockResolvedValue(undefined),
+  serveStatic: vi.fn()
+}));
+
+import { registerRoutes } from '../../server/routes';
+
 describe('Team Update API Integration Tests', () => {
+  let app: Express;
   let testOrg: Organization;
   let otherOrg: Organization;
   let testTeam: Team;
@@ -35,6 +44,14 @@ describe('Team Update API Integration Tests', () => {
   let createdOrgs: string[] = [];
 
   beforeAll(async () => {
+    // Create test Express app
+    app = express();
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: false }));
+
+    // Register routes
+    await registerRoutes(app);
+
     const timestamp = Date.now();
 
     // Create test organizations

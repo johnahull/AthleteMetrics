@@ -3,18 +3,35 @@
  * Uses supertest for real HTTP request testing
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
-import { app } from '../../server';
+import express, { type Express } from 'express';
 import { storage } from '../../server/storage';
 
+// Mock vite module before importing registerRoutes
+vi.mock('../../server/vite.js', () => ({
+  setupVite: vi.fn().mockResolvedValue(undefined),
+  serveStatic: vi.fn()
+}));
+
+import { registerRoutes } from '../../server/routes';
+
 describe('Invitation Integration Tests', () => {
+  let app: Express;
   let authCookie: string;
   let testOrgId: string;
   let testTeamId: string;
   let testUserId: string;
 
   beforeAll(async () => {
+    // Create test Express app
+    app = express();
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: false }));
+
+    // Register routes
+    await registerRoutes(app);
+
     // Set up test organization, user, and team
     // Note: In real implementation, use test database setup
   });

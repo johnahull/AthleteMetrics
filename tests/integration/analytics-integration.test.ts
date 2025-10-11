@@ -16,8 +16,15 @@ import request from 'supertest';
 import express from 'express';
 import session from 'express-session';
 import type { Express } from 'express';
-import { registerRoutes } from '../../server/routes';
 import type { AnalyticsRequest } from '@shared/analytics-types';
+
+// Mock vite module before importing registerRoutes to prevent build directory errors
+vi.mock('../../server/vite.js', () => ({
+  setupVite: vi.fn().mockResolvedValue(undefined),
+  serveStatic: vi.fn()
+}));
+
+import { registerRoutes } from '../../server/routes';
 
 // In-memory database for testing
 let app: Express;
