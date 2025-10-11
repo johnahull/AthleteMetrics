@@ -641,8 +641,14 @@ export class DatabaseStorage implements IStorage {
       throw new Error("No valid fields to update");
     }
 
+    // Trim whitespace from name if provided
+    const normalizedData = {
+      ...safeTeamData,
+      ...(safeTeamData.name && { name: safeTeamData.name.trim() })
+    };
+
     const [updated] = await db.update(teams)
-      .set(safeTeamData)
+      .set(normalizedData)
       .where(eq(teams.id, id))
       .returning();
 

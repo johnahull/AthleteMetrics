@@ -3,7 +3,7 @@
  * Configures test environment and database
  *
  * NOTE: Integration tests require a PostgreSQL database.
- * Set DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, and ADMIN_PASSWORD
+ * Set DATABASE_URL, SESSION_SECRET, ADMIN_USER, ADMIN_EMAIL, and ADMIN_PASSWORD
  * environment variables before running tests.
  */
 
@@ -11,6 +11,7 @@
 // These will be overridden by actual env vars in CI/CD
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password123456789';
 
