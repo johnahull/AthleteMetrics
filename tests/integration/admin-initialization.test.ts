@@ -21,11 +21,13 @@ vi.mock('../../server/vite.js', () => ({
   serveStatic: vi.fn()
 }));
 
+// Import storage
+import { storage } from '../../server/storage';
+
 // Import initializeDefaultUser - we need to import the module and call the function
 // Since initializeDefaultUser is called during module initialization, we need to mock it
 // and then call it manually in tests
 let initializeDefaultUser: () => Promise<void>;
-let storage: any;
 
 describe('Admin User Initialization', () => {
   beforeAll(async () => {
@@ -36,10 +38,6 @@ describe('Admin User Initialization', () => {
         'Set it to a test PostgreSQL database.'
       );
     }
-
-    // Import storage module
-    const storageModule = await import('../../server/storage');
-    storage = storageModule.default;
 
     // Import and extract initializeDefaultUser function
     // We need to re-import the routes module to get the function
