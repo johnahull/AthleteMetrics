@@ -2495,6 +2495,11 @@ export async function registerRoutes(app: Express) {
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     skip: (req) => {
+      // Skip rate limiting in test environment to allow integration tests
+      if (process.env.NODE_ENV === 'test') {
+        return true;
+      }
+
       // Production safeguard: Never bypass rate limiting in production environment
       const isProduction = process.env.NODE_ENV === 'production';
       if (isProduction) {
