@@ -44,7 +44,11 @@ describe('Metrics Availability', () => {
       emails: ['test@test.com'],
       gender: 'Male',
       birthYear: 2000,
-      isSiteAdmin: false
+      isSiteAdmin: false,
+      isActive: true,
+      mfaEnabled: false,
+      isEmailVerified: false,
+      requiresPasswordChange: false
     }).returning();
     testUserId = testUser[0].id;
 
