@@ -260,8 +260,8 @@ export async function initializeDefaultUser() {
     const existingUser = await storage.getUserByUsername(adminUser);
 
     if (!existingUser) {
-      // Note: Site admins don't have a role field - they are identified by isSiteAdmin flag
-      // This is intentional: role is for organization-level permissions (athlete, coach, org_admin)
+      // Note: Site admins have role=site_admin and isSiteAdmin=true
+      // role is for organization-level permissions (athlete, coach, org_admin, site_admin)
       // while isSiteAdmin grants platform-wide access independent of organizations
       await storage.createUser({
         username: adminUser,
@@ -269,6 +269,7 @@ export async function initializeDefaultUser() {
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
+        role: "site_admin",
         isSiteAdmin: true
       });
       console.log(`Site administrator account created successfully: ${adminUser}`);
