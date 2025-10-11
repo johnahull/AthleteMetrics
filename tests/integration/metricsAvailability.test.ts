@@ -94,7 +94,8 @@ describe('Metrics Availability', () => {
           date: measurementDate.toISOString().split('T')[0],
           age: 24, // Calculate based on birth year if needed
           units: 's',
-          isVerified: true
+          isVerified: true,
+          teamContextAuto: true
         });
       }
     }
