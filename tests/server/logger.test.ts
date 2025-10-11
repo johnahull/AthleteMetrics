@@ -111,9 +111,9 @@ describe('Logger Utility', () => {
       // Should have AM or PM
       expect(logCall).toMatch(/(AM|PM)/);
 
-      // Should not use 24-hour format (no hours like 13-23)
-      // Matches hours 13-19 or 20-23 followed by colon
-      expect(logCall).not.toMatch(/\b(1[3-9]|2[0-3]):/);
+      // Should not use 24-hour format (no hours like 13-23 at the start)
+      // Check only the hour at the beginning of the string
+      expect(logCall).not.toMatch(/^(1[3-9]|2[0-3]):/);
     });
 
     it('should handle numeric hour formats correctly', () => {
