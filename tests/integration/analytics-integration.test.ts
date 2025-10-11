@@ -25,6 +25,10 @@ vi.mock('../../server/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../server/routes';
+import { db } from '../../server/db';
+import { users } from '@shared/schema';
+import { eq } from 'drizzle-orm';
+import bcrypt from 'bcrypt';
 
 // In-memory database for testing
 let app: Express;
@@ -32,11 +36,34 @@ let testOrgId: string;
 let testAthleteId: string;
 let adminSession: any;
 let activeAgents: Set<request.SuperAgentTest> = new Set();
+let testAdminUserId: string;
 
 // Test data setup
 const setupTestData = async () => {
-  // This would set up test organizations, athletes, and measurements
-  // For now, we'll use mock IDs
+  // Create admin user for authentication
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@test.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'password123456789';
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+  const [adminUser] = await db.insert(users).values({
+    username: adminEmail,
+    password: hashedPassword,
+    firstName: 'Test',
+    lastName: 'Admin',
+    fullName: 'Test Admin',
+    emails: [adminEmail],
+    gender: 'Male',
+    birthYear: 1990,
+    isSiteAdmin: true,
+    isActive: true,
+    mfaEnabled: false,
+    isEmailVerified: true,
+    requiresPasswordChange: false
+  }).returning();
+
+  testAdminUserId = adminUser.id;
+
+  // Set up mock test data
   testOrgId = 'test-org-' + Date.now();
   testAthleteId = 'test-athlete-' + Date.now();
 };
@@ -95,9 +122,13 @@ describe('Analytics Endpoints Integration Tests', () => {
 
   afterAll(async () => {
     // Cleanup test data
-    // Note: Test data uses mock IDs that don't exist in the database,
-    // so no database cleanup is needed. In a real implementation,
-    // this would delete test organizations, users, and measurements.
+    try {
+      if (testAdminUserId) {
+        await db.delete(users).where(eq(users.id, testAdminUserId));
+      }
+    } catch (error) {
+      console.error('Error cleaning up test admin user:', error);
+    }
 
     // Ensure all agents are cleaned up
     activeAgents.forEach(agent => {
