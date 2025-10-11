@@ -32,15 +32,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
-      # Temporarily disabled - fixing test failures
-      # - name: Run integration tests
-      #   run: npm run test:integration
-      #   env:
-      #     NODE_ENV: test
-      #     DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-      #     SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
-      #     ADMIN_EMAIL: admin@test.com
-      #     ADMIN_PASSWORD: test-password-12-chars
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
+          ADMIN_USER: ${{ secrets.STAGING_ADMIN_USER }}
+          ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.STAGING_ADMIN_PASSWORD }}
 
       - name: Build application
         run: npm run build
