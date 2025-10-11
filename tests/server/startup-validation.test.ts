@@ -28,6 +28,28 @@ describe('Server Startup Validation', () => {
 
     // Mock console.warn to capture warnings
     mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Mock server to prevent startup errors
+    const mockServer = {
+      listen: vi.fn((_port: any, _host: any, callback: any) => {
+        if (callback) callback();
+        return mockServer;
+      }),
+      close: vi.fn((callback: any) => {
+        if (callback) callback();
+      })
+    };
+
+    // Mock registerRoutes to return mock server
+    vi.doMock('../../server/routes', () => ({
+      registerRoutes: vi.fn().mockResolvedValue(mockServer)
+    }));
+
+    // Mock setupVite and serveStatic to prevent build directory errors
+    vi.doMock('../../server/vite.js', () => ({
+      setupVite: vi.fn().mockResolvedValue(undefined),
+      serveStatic: vi.fn()
+    }));
   });
 
   afterEach(() => {
@@ -38,6 +60,10 @@ describe('Server Startup Validation', () => {
     mockExit.mockRestore();
     mockConsoleError.mockRestore();
     mockConsoleWarn.mockRestore();
+
+    // Clean up module mocks
+    vi.doUnmock('../../server/routes');
+    vi.doUnmock('../../server/vite.js');
   });
 
   describe('NODE_ENV validation', () => {
