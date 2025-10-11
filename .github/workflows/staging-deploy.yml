@@ -61,7 +61,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Wait for deployment
-        run: sleep 30
+        run: sleep 120
 
       - name: Run health check
         run: node scripts/health-check.js
