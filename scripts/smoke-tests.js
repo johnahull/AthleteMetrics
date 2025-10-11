@@ -7,8 +7,8 @@
  * is working after deployment to staging or production.
  */
 
-const http = require('http');
-const https = require('https');
+import http from 'http';
+import https from 'https';
 
 // Configuration
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
