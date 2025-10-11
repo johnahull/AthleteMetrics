@@ -2177,8 +2177,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async revokeAllUserSessions(userId: string): Promise<void> {
-    // Would need loginSessions table implementation
-    console.log('Revoking all sessions for user:', userId);
+    // Revoke all sessions for a user by deleting them from the session store
+    // Sessions are stored with user ID in the sess JSON field
+    const { sessions } = await import('@shared/schema');
+    const { sql } = await import('drizzle-orm');
+
+    try {
+      // Delete all sessions where the session data contains this user ID
+      // The sess field is JSONB and can contain user data in different formats:
+      // - sess.passport.user (for passport-based auth)
+      // - sess.user.id (for custom session data)
+      const result = await db.delete(sessions).where(
+        sql`
+          (${sessions.sess}->>'passport' IS NOT NULL AND
+           ${sessions.sess}->'passport'->>'user' = ${userId})
+          OR
+          (${sessions.sess}->>'user' IS NOT NULL AND
+           ${sessions.sess}->'user'->>'id' = ${userId})
+        `
+      );
+
+      console.log(`Revoked all sessions for user: ${userId}`);
+    } catch (error) {
+      console.error('Failed to revoke user sessions:', error);
+      // Don't throw - session revocation is a best-effort operation
+      // The system should still function if session cleanup fails
+    }
   }
 
   async updateUserBackupCodes(userId: string, codes: string[]): Promise<void> {
