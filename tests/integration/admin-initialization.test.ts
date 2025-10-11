@@ -121,6 +121,54 @@ describe('Admin User Initialization', () => {
       await expect(initializeDefaultUser()).rejects.toThrow();
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
+
+    it('should exit when password lacks lowercase letter', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'UPPERCASE123!'; // No lowercase letter
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when password lacks uppercase letter', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'lowercase123!'; // No uppercase letter
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when password lacks number', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'NoNumbersHere!'; // No number
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when password lacks special character', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'NoSpecialChar123'; // No special character
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as any);
+
+      await expect(initializeDefaultUser()).rejects.toThrow();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
   });
 
   describe('Admin User Creation', () => {

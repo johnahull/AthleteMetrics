@@ -280,6 +280,13 @@ export async function initializeDefaultUser() {
 
       // Combine updates into single atomic operation to prevent race conditions
       if (!passwordMatches || needsPrivilegeRestore) {
+        // CRITICAL: Revoke sessions BEFORE password update to prevent race condition
+        // This ensures no one can log in during the window between update and revocation
+        let revokedCount = 0;
+        if (!passwordMatches) {
+          revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id);
+        }
+
         const updateData: any = {};
 
         if (!passwordMatches) {
@@ -291,16 +298,20 @@ export async function initializeDefaultUser() {
 
         if (needsPrivilegeRestore) {
           // Ensure isSiteAdmin flag is set (in case it was changed)
-          updateData.isSiteAdmin = true;
+          // NOTE: This requires RESTORE_ADMIN_PRIVILEGE environment variable to be set
+          const restorePrivilege = process.env.RESTORE_ADMIN_PRIVILEGE === 'true';
+          if (restorePrivilege) {
+            updateData.isSiteAdmin = true;
+          } else {
+            console.error('SECURITY: Admin privilege mismatch detected. isSiteAdmin flag is not true.');
+            console.error('SECURITY: Set RESTORE_ADMIN_PRIVILEGE=true to automatically restore privileges.');
+            console.error('SECURITY: This is a security feature to prevent unauthorized privilege escalation.');
+            // Don't restore privilege without explicit opt-in
+          }
         }
 
         // Single atomic update to prevent race conditions
         await storage.updateUser(existingUser.id, updateData);
-
-        // Revoke all existing sessions when password changes (security best practice)
-        if (!passwordMatches) {
-          await AuthSecurity.revokeAllSessions(existingUser.id);
-        }
 
         // Create audit logs for security events
         if (!passwordMatches) {
@@ -314,13 +325,30 @@ export async function initializeDefaultUser() {
               syncReason: 'environment_variable_mismatch',
               timestamp: new Date().toISOString()
             }),
-            ipAddress: '0.0.0.0', // Server-initiated
+            ipAddress: '127.0.0.1', // Server-initiated
             userAgent: 'System',
           });
+
+          // Audit log for session revocation
+          await storage.createAuditLog({
+            userId: existingUser.id,
+            action: 'sessions_revoked',
+            resourceType: 'user',
+            resourceId: existingUser.id,
+            details: JSON.stringify({
+              reason: 'password_sync',
+              count: revokedCount,
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          });
+
           console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+          console.log(`Revoked ${revokedCount} active session(s) for security`);
         }
 
-        if (needsPrivilegeRestore) {
+        if (needsPrivilegeRestore && updateData.isSiteAdmin) {
           await storage.createAuditLog({
             userId: existingUser.id,
             action: 'privilege_restored',

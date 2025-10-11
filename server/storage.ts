@@ -2176,7 +2176,7 @@ export class DatabaseStorage implements IStorage {
     console.log('Revoking login session:', token);
   }
 
-  async revokeAllUserSessions(userId: string): Promise<void> {
+  async revokeAllUserSessions(userId: string): Promise<number> {
     // Revoke all sessions for a user by deleting them from the session store
     // Sessions are stored with user ID in the sess JSON field
     const { sessions } = await import('@shared/schema');
@@ -2184,24 +2184,40 @@ export class DatabaseStorage implements IStorage {
 
     try {
       // Delete all sessions where the session data contains this user ID
-      // The sess field is JSONB and can contain user data in different formats:
-      // - sess.passport.user (for passport-based auth)
-      // - sess.user.id (for custom session data)
+      // Using simplified query - we only use sess.user.id format (not passport.js)
       const result = await db.delete(sessions).where(
-        sql`
-          (${sessions.sess}->>'passport' IS NOT NULL AND
-           ${sessions.sess}->'passport'->>'user' = ${userId})
-          OR
-          (${sessions.sess}->>'user' IS NOT NULL AND
-           ${sessions.sess}->'user'->>'id' = ${userId})
-        `
+        sql`${sessions.sess}->'user'->>'id' = ${userId}`
       );
 
-      console.log(`Revoked all sessions for user: ${userId}`);
+      const count = result.rowCount || 0;
+      console.log(`Revoked ${count} session(s) for user: ${userId}`);
+
+      return count;
     } catch (error) {
-      console.error('Failed to revoke user sessions:', error);
+      console.error('SECURITY: Failed to revoke user sessions:', error);
       // Don't throw - session revocation is a best-effort operation
       // The system should still function if session cleanup fails
+
+      // Create audit log for failed session revocation
+      try {
+        await this.createAuditLog({
+          userId,
+          action: 'session_revocation_failed',
+          resourceType: 'user',
+          resourceId: userId,
+          details: JSON.stringify({
+            error: String(error),
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: '127.0.0.1',
+          userAgent: 'System',
+        });
+      } catch (auditError) {
+        // If audit logging fails, just log to console
+        console.error('Failed to create audit log for session revocation failure:', auditError);
+      }
+
+      return 0;
     }
   }
 
