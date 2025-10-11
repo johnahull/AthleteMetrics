@@ -4,11 +4,12 @@
 
 ### 1. Default Admin Credentials Removed
 - **Issue**: Weak default admin credentials ("admin123")
-- **Fix**: Removed default fallback values for `ADMIN_EMAIL` and `ADMIN_PASSWORD`
+- **Fix**: Removed default fallback values for `ADMIN_USER` and `ADMIN_PASSWORD`
 - **Impact**: Application now requires strong environment variables to be set
-- **Requirements**: 
-  - `ADMIN_EMAIL` must be set
+- **Requirements**:
+  - `ADMIN_USER` must be at least 3 characters
   - `ADMIN_PASSWORD` must be at least 12 characters
+  - `ADMIN_EMAIL` is optional (for admin notifications)
 
 ### 2. Session Security Hardened
 - **Issue**: Weak session configuration with default secret
@@ -55,8 +56,9 @@ The following environment variables are now **REQUIRED** for security:
 
 ```bash
 # Admin credentials (required)
-ADMIN_EMAIL=your-admin-email@domain.com
+ADMIN_USER=admin
 ADMIN_PASSWORD=YourStrongPassword123!
+ADMIN_EMAIL=your-admin-email@domain.com  # Optional
 
 # Session security (required)
 SESSION_SECRET=your-32-character-or-longer-session-secret
@@ -88,6 +90,7 @@ DATABASE_URL=your-database-connection-string
 
 ## Breaking Changes
 
-- **Environment Variables**: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `SESSION_SECRET` are now required
+- **Environment Variables**: `ADMIN_USER`, `ADMIN_PASSWORD`, and `SESSION_SECRET` are now required
+- **Username-based Authentication**: Admin users login with username (not email)
 - **Password Requirements**: Existing users may need to update passwords to meet new requirements
 - **Session Cookies**: More restrictive cookie settings may affect some client configurations

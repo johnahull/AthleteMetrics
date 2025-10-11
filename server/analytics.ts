@@ -21,14 +21,14 @@ import type {
   AnalysisType
 } from "@shared/analytics-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
-import { formatDateForDatabase } from "@shared/analytics-utils";
+import { formatDateForDatabase, parseDecimalValue } from "@shared/analytics-utils";
 
 // Type for the database query result from buildBaseQuery
 type QueryResult = {
   measurementId: string;
   athleteId: string;
   metric: string;
-  value: number;
+  value: string; // Stored as string in database, converted to number when needed
   date: string;
   teamId: string | null;
   season: string | null;
@@ -249,9 +249,16 @@ export class AnalyticsService {
 
     for (const metric of allMetrics) {
       const metricData = data.filter(d => d.metric === metric);
-      // Convert decimal values to numbers (Drizzle returns decimals as strings)
+      // Convert decimal values to numbers using type-safe helper
       const values = metricData
-        .map(d => typeof d.value === 'string' ? parseFloat(d.value) : d.value)
+        .map(d => {
+          try {
+            return parseDecimalValue(d.value);
+          } catch (error) {
+            console.warn(`Skipping invalid measurement value for metric ${metric}:`, error);
+            return NaN;
+          }
+        })
         .filter(v => !isNaN(v))
         .sort((a, b) => a - b);
 
@@ -476,8 +483,8 @@ export class AnalyticsService {
     return results.map(row => ({
       athleteId: row.athleteId,
       athleteName: row.athleteName,
-      // Convert decimal values to numbers (Drizzle returns decimals as strings)
-      value: typeof row.value === 'string' ? parseFloat(row.value) : row.value,
+      // Convert decimal values to numbers using type-safe helper
+      value: parseDecimalValue(row.value),
       date: row.date,
       metric: row.metric,
       teamName: row.teamName,

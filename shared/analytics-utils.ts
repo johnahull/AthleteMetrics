@@ -314,3 +314,35 @@ export function validateAnalyticsFilters(filters: any): {
     errors
   };
 }
+
+/**
+ * Safely parses decimal values from database to numbers
+ * PostgreSQL DECIMAL type returns strings to preserve precision
+ * This function validates and converts with proper error handling
+ */
+export function parseDecimalValue(value: string | number | null | undefined): number {
+  // Handle null/undefined
+  if (value === null || value === undefined) {
+    throw new Error('Measurement value cannot be null or undefined');
+  }
+
+  // Already a number - validate it
+  if (typeof value === 'number') {
+    if (isNaN(value) || !isFinite(value)) {
+      throw new Error(`Invalid measurement value: ${value}`);
+    }
+    return value;
+  }
+
+  // Parse string to number
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    if (isNaN(parsed) || !isFinite(parsed)) {
+      throw new Error(`Invalid measurement value: "${value}"`);
+    }
+    return parsed;
+  }
+
+  // Unexpected type
+  throw new Error(`Unexpected value type: ${typeof value}`);
+}
