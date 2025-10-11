@@ -55,6 +55,11 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Link Railway Project
+        run: railway link --project ${{ secrets.RAILWAY_PROJECT_ID }} --environment staging
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
       - name: Deploy to Railway Staging
         run: railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
         env:
