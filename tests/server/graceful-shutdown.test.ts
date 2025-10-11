@@ -33,12 +33,38 @@ describe('Graceful Shutdown', () => {
 
     // Mock setTimeout to test timeout mechanism
     mockSetTimeout = vi.spyOn(global, 'setTimeout');
+
+    // Mock server to prevent startup errors (applied to all tests)
+    const mockServer = {
+      listen: vi.fn((_port: any, _host: any, callback: any) => {
+        if (callback) callback();
+        return mockServer;
+      }),
+      close: vi.fn((callback: any) => {
+        if (callback) callback();
+      })
+    };
+
+    // Mock registerRoutes to return mock server
+    vi.doMock('../../server/routes', () => ({
+      registerRoutes: vi.fn().mockResolvedValue(mockServer)
+    }));
+
+    // Mock setupVite and serveStatic to prevent build directory errors
+    vi.doMock('../../server/vite.js', () => ({
+      setupVite: vi.fn().mockResolvedValue(undefined),
+      serveStatic: vi.fn()
+    }));
   });
 
   afterEach(() => {
     process.env = originalEnv;
     mockExit.mockRestore();
     mockSetTimeout.mockRestore();
+
+    // Clean up module mocks
+    vi.doUnmock('../../server/routes');
+    vi.doUnmock('../../server/vite.js');
   });
 
   describe('SIGTERM handling', () => {
@@ -69,28 +95,6 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
-      // Mock server to prevent startup errors
-      const mockServer = {
-        listen: vi.fn((_port: any, _host: any, callback: any) => {
-          if (callback) callback();
-          return mockServer;
-        }),
-        close: vi.fn((callback: any) => {
-          if (callback) callback();
-        })
-      };
-
-      // Mock registerRoutes to return mock server
-      vi.doMock('../../server/routes', () => ({
-        registerRoutes: vi.fn().mockResolvedValue(mockServer)
-      }));
-
-      // Mock setupVite and serveStatic to prevent errors
-      vi.doMock('../../server/vite.js', () => ({
-        setupVite: vi.fn().mockResolvedValue(undefined),
-        serveStatic: vi.fn()
-      }));
-
       try {
         await import('../../server/index');
         // Wait for async IIFE to complete and assign shutdownHandler
@@ -109,8 +113,6 @@ describe('Graceful Shutdown', () => {
 
       mockConsoleLog.mockRestore();
       mockOn.mockRestore();
-      vi.doUnmock('../../server/routes');
-      vi.doUnmock('../../server/vite.js');
     });
   });
 
