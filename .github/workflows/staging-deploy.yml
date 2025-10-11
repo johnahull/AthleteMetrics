@@ -56,13 +56,9 @@ jobs:
           NODE_ENV: production
 
       - name: Deploy to Railway Staging
-        run: |
-          docker run --rm \
-            -v $(pwd):/app \
-            -w /app \
-            -e RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN }} \
-            ghcr.io/railwayapp/cli:latest \
-            sh -c "railway link --project ${{ secrets.RAILWAY_PROJECT_ID }} && railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach"
+        run: railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Wait for deployment
         run: sleep 30
