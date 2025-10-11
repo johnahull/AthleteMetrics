@@ -1340,30 +1340,36 @@ export class DatabaseStorage implements IStorage {
     // Use primary email or generate one
     const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
 
-    // Create new user directly without checking for existing emails
-    const [newUser] = await db.insert(users).values({
+    // Build insert object explicitly, omitting undefined fields entirely
+    const insertValues: any = {
       username, // This will be replaced when the athlete accepts their invitation
       emails, // Ensure emails array is always provided
       firstName: athlete.firstName!,
       lastName: athlete.lastName!,
-      birthDate: athlete.birthDate || null,
-      graduationYear: athlete.graduationYear || null,
-      school: athlete.school || null,
-      sports: athlete.sports || null,
-      phoneNumbers: athlete.phoneNumbers || null,
-      height: athlete.height || null,
-      weight: athlete.weight || null,
-      gender: athlete.gender || null,
-      positions: athlete.positions || null,
       fullName: `${athlete.firstName} ${athlete.lastName}`,
-      birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
       isActive: false, // Set to false until they complete registration
       isSiteAdmin: false, // Explicitly set to false
       mfaEnabled: false, // Explicitly set to false
       isEmailVerified: false, // Explicitly set to false
       requiresPasswordChange: false // Explicitly set to false
-    }).returning();
+    };
+
+    // Only add optional fields if they have values
+    if (athlete.birthDate) {
+      insertValues.birthDate = athlete.birthDate;
+      insertValues.birthYear = new Date(athlete.birthDate).getFullYear();
+    }
+    if (athlete.graduationYear) insertValues.graduationYear = athlete.graduationYear;
+    if (athlete.school) insertValues.school = athlete.school;
+    if (athlete.sports) insertValues.sports = athlete.sports;
+    if (athlete.phoneNumbers) insertValues.phoneNumbers = athlete.phoneNumbers;
+    if (athlete.height) insertValues.height = athlete.height;
+    if (athlete.weight) insertValues.weight = athlete.weight;
+    if (athlete.gender) insertValues.gender = athlete.gender;
+    if (athlete.positions) insertValues.positions = athlete.positions;
+
+    const [newUser] = await db.insert(users).values(insertValues).returning();
 
     // Determine organization for athlete association
     let organizationId: string | undefined = (athlete as any).organizationId;
