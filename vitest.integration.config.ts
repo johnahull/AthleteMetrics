@@ -9,6 +9,7 @@ export default mergeConfig(
   baseConfig,
   defineConfig({
     test: {
+      setupFiles: ['./tests/setup/integration-setup.ts'],
       include: [
         // Integration tests that require database
         'tests/integration/**/*.{test,spec}.{ts,tsx}',

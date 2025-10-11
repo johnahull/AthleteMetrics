@@ -555,21 +555,7 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganizationInvitations(organizationId: string): Promise<Invitation[]> {
     try {
-      const result = await db.select({
-        id: invitations.id,
-        email: invitations.email,
-        firstName: invitations.firstName,
-        lastName: invitations.lastName,
-        organizationId: invitations.organizationId,
-        teamIds: invitations.teamIds,
-        playerId: invitations.playerId,
-        role: invitations.role,
-        token: invitations.token,
-        invitedBy: invitations.invitedBy,
-        isUsed: invitations.isUsed,
-        createdAt: invitations.createdAt,
-        expiresAt: invitations.expiresAt
-      })
+      const result = await db.select()
         .from(invitations)
         .where(eq(invitations.organizationId, organizationId))
         .orderBy(desc(invitations.createdAt));
@@ -1831,7 +1817,7 @@ export class DatabaseStorage implements IStorage {
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;
     let season = measurement.season;
-    let teamContextAuto = "true";
+    let teamContextAuto = true;
 
     if (!teamId || teamId.trim() === "") {
       // Get athlete's active teams at measurement date
@@ -1841,20 +1827,20 @@ export class DatabaseStorage implements IStorage {
         // Single team - auto-assign
         teamId = activeTeams[0].teamId;
         season = activeTeams[0].season || undefined;
-        teamContextAuto = "true";
+        teamContextAuto = true;
         console.log(`Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})`);
       } else if (activeTeams.length > 1) {
         // Multiple teams - cannot auto-assign, will need manual selection
         console.log(`Athlete is on ${activeTeams.length} teams - team context not auto-assigned`);
-        teamContextAuto = "false";
+        teamContextAuto = false;
       } else {
         // No active teams - measurement without team context
         console.log('Athlete has no active teams - measurement created without team context');
-        teamContextAuto = "false";
+        teamContextAuto = false;
       }
     } else {
       // Team was explicitly provided
-      teamContextAuto = "false";
+      teamContextAuto = false;
     }
 
     // Get submitter info to determine if auto-verify

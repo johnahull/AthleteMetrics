@@ -1,14 +1,15 @@
 /**
  * Integration tests for analytics endpoints
- * Tests actual API endpoints with real Express app and in-memory database
+ * Tests actual API endpoints with real Express app and PostgreSQL database
+ *
+ * NOTE: Requires DATABASE_URL environment variable to be set to a PostgreSQL connection string
  */
 
-// Set environment variables before any imports
-process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:./test-integration.db';
-process.env.SESSION_SECRET = 'test-secret-key-for-integration-tests-only';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'password123456789';
+// Set environment variables before any imports (DATABASE_URL must be provided externally)
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password123456789';
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
@@ -57,6 +58,14 @@ const cleanupAgent = (agent: request.SuperAgentTest) => {
 
 describe('Analytics Endpoints Integration Tests', () => {
   beforeAll(async () => {
+    // Validate DATABASE_URL is set
+    if (!process.env.DATABASE_URL) {
+      throw new Error(
+        'DATABASE_URL must be set to run integration tests. ' +
+        'See README.md for PostgreSQL setup instructions.'
+      );
+    }
+
     // Create test app (environment already set at top of file)
     app = express();
     app.use(express.json());
@@ -77,8 +86,10 @@ describe('Analytics Endpoints Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // Cleanup test database if needed
-    // In production, this would clean up the test database
+    // Cleanup test data
+    // Note: Test data uses mock IDs that don't exist in the database,
+    // so no database cleanup is needed. In a real implementation,
+    // this would delete test organizations, users, and measurements.
 
     // Ensure all agents are cleaned up
     activeAgents.forEach(agent => {
