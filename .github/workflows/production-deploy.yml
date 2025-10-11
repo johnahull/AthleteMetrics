@@ -39,8 +39,9 @@ jobs:
           NODE_ENV: test
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           SESSION_SECRET: ${{ secrets.PRODUCTION_SESSION_SECRET }}
-          ADMIN_EMAIL: admin@test.com
-          ADMIN_PASSWORD: test-password-12-chars
+          ADMIN_USER: ${{ secrets.PRODUCTION_ADMIN_USER }}
+          ADMIN_EMAIL: ${{ secrets.PRODUCTION_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.PRODUCTION_ADMIN_PASSWORD }}
 
       - name: Run security audit
         id: audit

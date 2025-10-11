@@ -234,22 +234,42 @@ export class DatabaseStorage implements IStorage {
     // Ensure emails array is properly set
     const emails = user.emails || [`${user.username || 'user'}@temp.local`];
 
-    // Filter out undefined values from user object to prevent postgres UNDEFINED_VALUE errors
+    // List of actual database columns in users table (excluding id, createdAt, fullName, birthYear which are computed/defaults)
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    // Filter to only include valid database columns and non-undefined values
     const cleanedUser: any = {};
     Object.keys(user).forEach(key => {
       const value = (user as any)[key];
-      if (value !== undefined) {
+      if (value !== undefined && validUserColumns.includes(key)) {
         cleanedUser[key] = value;
       }
     });
 
-    const [newUser] = await db.insert(users).values({
+    // Build the final insert object with required fields
+    const insertData: any = {
       ...cleanedUser,
-      emails,
-      password: hashedPassword,
-      fullName,
+      emails, // Always override with sanitized emails
+      password: hashedPassword, // Always override with hashed password
+      fullName, // Always set computed fullName
       ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
-    }).returning();
+    };
+
+    // Final safety filter to remove any undefined values
+    const finalData: any = {};
+    Object.keys(insertData).forEach(key => {
+      if (insertData[key] !== undefined) {
+        finalData[key] = insertData[key];
+      }
+    });
+
+    const [newUser] = await db.insert(users).values(finalData).returning();
     return newUser;
   }
 
@@ -273,12 +293,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+    // List of valid database columns that can be updated
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
     const updateData: any = {};
 
-    // Only include defined fields in the update
+    // Only include defined fields that are actual database columns
     Object.keys(user).forEach(key => {
       const value = (user as any)[key];
-      if (value !== undefined) {
+      if (value !== undefined && validUserColumns.includes(key)) {
         updateData[key] = value;
       }
     });
@@ -1311,24 +1340,36 @@ export class DatabaseStorage implements IStorage {
     // Use primary email or generate one
     const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
 
-    // Create new user directly without checking for existing emails
-    const [newUser] = await db.insert(users).values({
+    // Build insert object explicitly, omitting undefined fields entirely
+    const insertValues: any = {
       username, // This will be replaced when the athlete accepts their invitation
       emails, // Ensure emails array is always provided
       firstName: athlete.firstName!,
       lastName: athlete.lastName!,
-      birthDate: athlete.birthDate || null,
-      graduationYear: athlete.graduationYear || null,
-      school: athlete.school || null,
-      sports: athlete.sports || null,
-      phoneNumbers: athlete.phoneNumbers || null,
-      height: athlete.height || null,
-      weight: athlete.weight || null,
       fullName: `${athlete.firstName} ${athlete.lastName}`,
-      birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: false // Set to false until they complete registration
-    }).returning();
+      isActive: false, // Set to false until they complete registration
+      isSiteAdmin: false, // Explicitly set to false
+      mfaEnabled: false, // Explicitly set to false
+      isEmailVerified: false, // Explicitly set to false
+      requiresPasswordChange: false // Explicitly set to false
+    };
+
+    // Only add optional fields if they have values
+    if (athlete.birthDate) {
+      insertValues.birthDate = athlete.birthDate;
+      insertValues.birthYear = new Date(athlete.birthDate).getFullYear();
+    }
+    if (athlete.graduationYear) insertValues.graduationYear = athlete.graduationYear;
+    if (athlete.school) insertValues.school = athlete.school;
+    if (athlete.sports) insertValues.sports = athlete.sports;
+    if (athlete.phoneNumbers) insertValues.phoneNumbers = athlete.phoneNumbers;
+    if (athlete.height) insertValues.height = athlete.height;
+    if (athlete.weight) insertValues.weight = athlete.weight;
+    if (athlete.gender) insertValues.gender = athlete.gender;
+    if (athlete.positions) insertValues.positions = athlete.positions;
+
+    const [newUser] = await db.insert(users).values(insertValues).returning();
 
     // Determine organization for athlete association
     let organizationId: string | undefined = (athlete as any).organizationId;
@@ -1373,7 +1414,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
-    const updateData: any = { ...athlete };
+    // List of valid database columns that can be updated
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors
+    const updateData: any = {};
+    Object.keys(athlete).forEach(key => {
+      const value = (athlete as any)[key];
+      if (value !== undefined && validUserColumns.includes(key)) {
+        updateData[key] = value;
+      }
+    });
 
     // Update full name if first or last name changed
     let finalFirstName: string | undefined;

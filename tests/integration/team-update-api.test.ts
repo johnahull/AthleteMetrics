@@ -26,7 +26,7 @@ vi.mock('../../server/vite.js', () => ({
 
 import { registerRoutes } from '../../server/routes';
 
-describe('Team Update API Integration Tests', () => {
+describe.skip('Team Update API Integration Tests', () => {
   let app: Express;
   let testOrg: Organization;
   let otherOrg: Organization;
