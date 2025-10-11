@@ -10,13 +10,13 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@l
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
-import { db } from '../db';
+import { db } from '../../server/db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import type { User } from '@shared/schema';
 
 // Mock vite module to prevent build directory errors
-vi.mock('../vite.js', () => ({
+vi.mock('../../server/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
@@ -38,12 +38,12 @@ describe('Admin User Initialization', () => {
     }
 
     // Import storage module
-    const storageModule = await import('../storage');
+    const storageModule = await import('../../server/storage');
     storage = storageModule.default;
 
     // Import and extract initializeDefaultUser function
     // We need to re-import the routes module to get the function
-    const routesModule = await import('../routes');
+    const routesModule = await import('../../server/routes');
     // Access the function through the module's exports if available
     // For now, we'll create a helper that mimics the behavior
     initializeDefaultUser = async () => {
