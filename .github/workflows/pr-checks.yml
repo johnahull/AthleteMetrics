@@ -100,7 +100,7 @@ jobs:
           SESSION_SECRET: test-secret-key-for-ci
           ADMIN_USER: admin
           ADMIN_EMAIL: admin@test.com
-          ADMIN_PASSWORD: test-password-12-chars
+          ADMIN_PASSWORD: password123456789
 
   build:
     name: Build Verification
