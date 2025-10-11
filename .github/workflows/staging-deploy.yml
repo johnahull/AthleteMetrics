@@ -37,7 +37,7 @@ jobs:
 
       - name: Link Railway Project
         run: |
-          railway link ${{ secrets.RAILWAY_PROJECT_ID }} --environment staging
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }} --environment staging
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
