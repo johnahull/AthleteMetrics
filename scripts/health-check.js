@@ -23,7 +23,9 @@ function sleep(ms) {
 function makeRequest(url) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
-    const healthUrl = url.endsWith('/api/health') ? url : `${url}/api/health`;
+    // Remove trailing slash to avoid double slashes
+    const baseUrl = url.replace(/\/$/, '');
+    const healthUrl = baseUrl.endsWith('/api/health') ? baseUrl : `${baseUrl}/api/health`;
 
     console.log(`🔍 Checking: ${healthUrl}`);
 
