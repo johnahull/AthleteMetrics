@@ -46,11 +46,11 @@ const createAuthenticatedSession = async (userType: 'admin' | 'athlete' = 'admin
   activeAgents.add(agent);
 
   // Login with test credentials
-  // Note: Auth endpoint expects 'username' field, but accepts email as username value
+  // Use ADMIN_USER for username (matches initializeDefaultUser in server/routes.ts)
   const loginResponse = await agent
     .post('/api/auth/login')
     .send({
-      username: process.env.ADMIN_EMAIL || 'admin@test.com',
+      username: process.env.ADMIN_USER || 'admin',
       password: process.env.ADMIN_PASSWORD || 'password123456789'
     });
 
