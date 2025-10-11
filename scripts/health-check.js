@@ -7,8 +7,8 @@
  * is running correctly on Railway staging or production.
  */
 
-const http = require('http');
-const https = require('https');
+import http from 'http';
+import https from 'https';
 
 // Configuration from environment variables
 const HEALTH_CHECK_URL = process.env.HEALTH_CHECK_URL || 'http://localhost:5000';
