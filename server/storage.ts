@@ -1335,10 +1335,17 @@ export class DatabaseStorage implements IStorage {
       phoneNumbers: athlete.phoneNumbers || null,
       height: athlete.height || null,
       weight: athlete.weight || null,
+      gender: athlete.gender || null,
+      positions: athlete.positions || null,
       fullName: `${athlete.firstName} ${athlete.lastName}`,
       birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      isActive: false // Set to false until they complete registration
+      role: 'athlete', // Explicitly set role
+      isActive: false, // Set to false until they complete registration
+      isSiteAdmin: false, // Explicitly set to false
+      mfaEnabled: false, // Explicitly set to false
+      isEmailVerified: false, // Explicitly set to false
+      requiresPasswordChange: false // Explicitly set to false
     }).returning();
 
     // Determine organization for athlete association
