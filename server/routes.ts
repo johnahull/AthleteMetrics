@@ -21,6 +21,7 @@ import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
 import { validateAnalyticsRequest } from "./validation/analytics-validation";
 import { METRIC_CONFIG } from "@shared/analytics-types";
+import { AuthSecurity } from "./auth/security";
 import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
@@ -212,7 +213,7 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 // Old requireSiteAdmin removed - now using middleware version
 
 // Initialize default site admin user
-async function initializeDefaultUser() {
+export async function initializeDefaultUser() {
   try {
     const adminUser = process.env.ADMIN_USER;
     const adminPassword = process.env.ADMIN_PASSWORD;
@@ -256,24 +257,70 @@ async function initializeDefaultUser() {
     } else {
       // User exists - check if password needs to be synced with environment variable
       const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
+      const needsPrivilegeRestore = existingUser.isSiteAdmin !== true;
 
-      if (!passwordMatches) {
-        // Password in environment has changed - update the database
-        // Note: updateUser will hash the password automatically
-        await storage.updateUser(existingUser.id, {
-          password: adminPassword
-        });
-        console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+      // Combine updates into single atomic operation to prevent race conditions
+      if (!passwordMatches || needsPrivilegeRestore) {
+        const updateData: any = {};
+
+        if (!passwordMatches) {
+          // Password in environment has changed - update the database
+          // Note: updateUser will hash the password automatically
+          updateData.password = adminPassword;
+          updateData.passwordChangedAt = new Date();
+        }
+
+        if (needsPrivilegeRestore) {
+          // Ensure isSiteAdmin flag is set (in case it was changed)
+          updateData.isSiteAdmin = true;
+        }
+
+        // Single atomic update to prevent race conditions
+        await storage.updateUser(existingUser.id, updateData);
+
+        // Revoke all existing sessions when password changes (security best practice)
+        if (!passwordMatches) {
+          await AuthSecurity.revokeAllSessions(existingUser.id);
+        }
+
+        // Create audit logs for security events
+        if (!passwordMatches) {
+          await storage.createAuditLog({
+            userId: existingUser.id,
+            action: 'admin_password_synced',
+            resourceType: 'user',
+            resourceId: existingUser.id,
+            details: JSON.stringify({
+              username: adminUser,
+              syncReason: 'environment_variable_mismatch',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: '0.0.0.0', // Server-initiated
+            userAgent: 'System',
+          });
+          console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+        }
+
+        if (needsPrivilegeRestore) {
+          await storage.createAuditLog({
+            userId: existingUser.id,
+            action: 'privilege_restored',
+            resourceType: 'user',
+            resourceId: existingUser.id,
+            details: JSON.stringify({
+              username: adminUser,
+              previousState: 'isSiteAdmin=false',
+              newState: 'isSiteAdmin=true',
+              restorationReason: 'startup_verification',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: '0.0.0.0',
+            userAgent: 'System',
+          });
+          console.log(`Site administrator privileges restored: ${adminUser}`);
+        }
       } else {
         console.log(`Site administrator account already exists: ${adminUser}`);
-      }
-
-      // Ensure isSiteAdmin flag is set (in case it was changed)
-      if (existingUser.isSiteAdmin !== true) {
-        await storage.updateUser(existingUser.id, {
-          isSiteAdmin: true
-        });
-        console.log(`Site administrator privileges restored: ${adminUser}`);
       }
     }
   } catch (error) {
