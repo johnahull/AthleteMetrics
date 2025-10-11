@@ -16,12 +16,17 @@ describe('Graceful Shutdown', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
+    // Clear module cache BEFORE setting up environment
+    vi.resetModules();
+
     originalEnv = { ...process.env };
 
     // Set required environment variables
     process.env.NODE_ENV = 'production';
     process.env.SESSION_SECRET = 'a'.repeat(64);
     process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
+    process.env.ADMIN_EMAIL = 'test@example.com';
+    process.env.ADMIN_PASSWORD = 'test-password-123';
 
     // Mock process.exit
     mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
@@ -34,7 +39,6 @@ describe('Graceful Shutdown', () => {
     process.env = originalEnv;
     mockExit.mockRestore();
     mockSetTimeout.mockRestore();
-    vi.resetModules();
   });
 
   describe('SIGTERM handling', () => {
@@ -43,6 +47,8 @@ describe('Graceful Shutdown', () => {
 
       try {
         await import('../../server/index');
+        // Give the async IIFE time to execute and register handlers
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         // Server may fail to start, but we're testing handler registration
       }
@@ -63,15 +69,34 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
-      // Mock server.close to prevent actual server shutdown
-      const mockServerClose = vi.fn((callback) => {
-        if (callback) callback();
-      });
+      // Mock server to prevent startup errors
+      const mockServer = {
+        listen: vi.fn((_port: any, _host: any, callback: any) => {
+          if (callback) callback();
+          return mockServer;
+        }),
+        close: vi.fn((callback: any) => {
+          if (callback) callback();
+        })
+      };
+
+      // Mock registerRoutes to return mock server
+      vi.doMock('../../server/routes', () => ({
+        registerRoutes: vi.fn().mockResolvedValue(mockServer)
+      }));
+
+      // Mock setupVite and serveStatic to prevent errors
+      vi.doMock('../../server/vite.js', () => ({
+        setupVite: vi.fn().mockResolvedValue(undefined),
+        serveStatic: vi.fn()
+      }));
 
       try {
         await import('../../server/index');
+        // Wait for async IIFE to complete and assign shutdownHandler
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
-        // Expected - server will fail to start in test environment
+        // May still have errors, but handler should be assigned
       }
 
       if (sigtermHandler) {
@@ -84,6 +109,8 @@ describe('Graceful Shutdown', () => {
 
       mockConsoleLog.mockRestore();
       mockOn.mockRestore();
+      vi.doUnmock('../../server/routes');
+      vi.doUnmock('../../server/vite.js');
     });
   });
 
@@ -93,6 +120,8 @@ describe('Graceful Shutdown', () => {
 
       try {
         await import('../../server/index');
+        // Give the async IIFE time to execute and register handlers
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         // Server may fail to start
       }
@@ -114,8 +143,29 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
+      // Mock server to prevent startup errors
+      const mockServer = {
+        listen: vi.fn((_port: any, _host: any, callback: any) => {
+          if (callback) callback();
+          return mockServer;
+        }),
+        close: vi.fn((callback: any) => {
+          if (callback) callback();
+        })
+      };
+
+      vi.doMock('../../server/routes', () => ({
+        registerRoutes: vi.fn().mockResolvedValue(mockServer)
+      }));
+
+      vi.doMock('../../server/vite.js', () => ({
+        setupVite: vi.fn().mockResolvedValue(undefined),
+        serveStatic: vi.fn()
+      }));
+
       try {
         await import('../../server/index');
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         // Expected
       }
@@ -133,6 +183,8 @@ describe('Graceful Shutdown', () => {
       }
 
       mockOn.mockRestore();
+      vi.doUnmock('../../server/routes');
+      vi.doUnmock('../../server/vite.js');
     });
 
     it('should force exit after timeout', async () => {
@@ -182,8 +234,8 @@ describe('Graceful Shutdown', () => {
     it('should close database connections during shutdown', async () => {
       const mockCloseDatabase = vi.fn().mockResolvedValue(undefined);
 
-      // Mock the db module
-      vi.doMock('../../server/db', () => ({
+      // Mock the db module (with .js extension as imported in server/index.ts)
+      vi.doMock('../../server/db.js', () => ({
         db: {},
         closeDatabase: mockCloseDatabase
       }));
@@ -197,31 +249,51 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
-      const mockServerClose = vi.fn((callback) => {
-        if (callback) callback();
-      });
+      const mockServer = {
+        listen: vi.fn((_port: any, _host: any, callback: any) => {
+          if (callback) callback();
+          return mockServer;
+        }),
+        close: vi.fn((callback: any) => {
+          if (callback) callback();
+        })
+      };
+
+      vi.doMock('../../server/routes', () => ({
+        registerRoutes: vi.fn().mockResolvedValue(mockServer)
+      }));
+
+      vi.doMock('../../server/vite.js', () => ({
+        setupVite: vi.fn().mockResolvedValue(undefined),
+        serveStatic: vi.fn()
+      }));
 
       try {
         await import('../../server/index');
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         // Expected
       }
 
       if (sigtermHandler) {
         await sigtermHandler();
+        // Wait for async shutdown to complete
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Database cleanup should be called
         expect(mockCloseDatabase).toHaveBeenCalled();
       }
 
       mockOn.mockRestore();
-      vi.doUnmock('../../server/db');
+      vi.doUnmock('../../server/db.js');
+      vi.doUnmock('../../server/routes');
+      vi.doUnmock('../../server/vite.js');
     });
 
     it('should exit with code 0 on successful shutdown', async () => {
       const mockCloseDatabase = vi.fn().mockResolvedValue(undefined);
 
-      vi.doMock('../../server/db', () => ({
+      vi.doMock('../../server/db.js', () => ({
         db: {},
         closeDatabase: mockCloseDatabase
       }));
@@ -235,32 +307,52 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
-      const mockServerClose = vi.fn((callback) => {
-        if (callback) callback();
-      });
+      const mockServer = {
+        listen: vi.fn((_port: any, _host: any, callback: any) => {
+          if (callback) callback();
+          return mockServer;
+        }),
+        close: vi.fn((callback: any) => {
+          if (callback) callback();
+        })
+      };
+
+      vi.doMock('../../server/routes', () => ({
+        registerRoutes: vi.fn().mockResolvedValue(mockServer)
+      }));
+
+      vi.doMock('../../server/vite.js', () => ({
+        setupVite: vi.fn().mockResolvedValue(undefined),
+        serveStatic: vi.fn()
+      }));
 
       try {
         await import('../../server/index');
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         // Expected
       }
 
       if (sigtermHandler) {
         await sigtermHandler();
+        // Wait for async shutdown to complete
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Should exit with success code
         expect(mockExit).toHaveBeenCalledWith(0);
       }
 
       mockOn.mockRestore();
-      vi.doUnmock('../../server/db');
+      vi.doUnmock('../../server/db.js');
+      vi.doUnmock('../../server/routes');
+      vi.doUnmock('../../server/vite.js');
     });
 
     it('should exit with code 1 on shutdown error', async () => {
       const mockConsoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const mockCloseDatabase = vi.fn().mockRejectedValue(new Error('Database close failed'));
 
-      vi.doMock('../../server/db', () => ({
+      vi.doMock('../../server/db.js', () => ({
         db: {},
         closeDatabase: mockCloseDatabase
       }));
@@ -274,29 +366,50 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
-      const mockServerClose = vi.fn((callback) => {
-        if (callback) callback();
-      });
+      const mockServer = {
+        listen: vi.fn((_port: any, _host: any, callback: any) => {
+          if (callback) callback();
+          return mockServer;
+        }),
+        close: vi.fn((callback: any) => {
+          if (callback) callback();
+        })
+      };
+
+      vi.doMock('../../server/routes', () => ({
+        registerRoutes: vi.fn().mockResolvedValue(mockServer)
+      }));
+
+      vi.doMock('../../server/vite.js', () => ({
+        setupVite: vi.fn().mockResolvedValue(undefined),
+        serveStatic: vi.fn()
+      }));
 
       try {
         await import('../../server/index');
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         // Expected
       }
 
       if (sigtermHandler) {
         await sigtermHandler();
+        // Wait for async shutdown to complete
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Should exit with error code
         expect(mockExit).toHaveBeenCalledWith(1);
         expect(mockConsoleError).toHaveBeenCalledWith(
-          expect.stringContaining('Error during shutdown')
+          'Error during shutdown:',
+          expect.any(Error)
         );
       }
 
       mockConsoleError.mockRestore();
       mockOn.mockRestore();
-      vi.doUnmock('../../server/db');
+      vi.doUnmock('../../server/db.js');
+      vi.doUnmock('../../server/routes');
+      vi.doUnmock('../../server/vite.js');
     });
   });
 
@@ -307,7 +420,7 @@ describe('Graceful Shutdown', () => {
         callOrder.push('database');
       });
 
-      vi.doMock('../../server/db', () => ({
+      vi.doMock('../../server/db.js', () => ({
         db: {},
         closeDatabase: mockCloseDatabase
       }));
@@ -321,19 +434,37 @@ describe('Graceful Shutdown', () => {
         return process;
       });
 
-      const mockServerClose = vi.fn((callback) => {
-        callOrder.push('server');
-        if (callback) callback();
-      });
+      const mockServer = {
+        listen: vi.fn((_port: any, _host: any, callback: any) => {
+          if (callback) callback();
+          return mockServer;
+        }),
+        close: vi.fn((callback: any) => {
+          callOrder.push('server');
+          if (callback) callback();
+        })
+      };
+
+      vi.doMock('../../server/routes', () => ({
+        registerRoutes: vi.fn().mockResolvedValue(mockServer)
+      }));
+
+      vi.doMock('../../server/vite.js', () => ({
+        setupVite: vi.fn().mockResolvedValue(undefined),
+        serveStatic: vi.fn()
+      }));
 
       try {
         await import('../../server/index');
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         // Expected
       }
 
       if (sigtermHandler) {
         await sigtermHandler();
+        // Wait for async shutdown to complete
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Server should close before database
         expect(callOrder[0]).toBe('server');
@@ -341,7 +472,9 @@ describe('Graceful Shutdown', () => {
       }
 
       mockOn.mockRestore();
-      vi.doUnmock('../../server/db');
+      vi.doUnmock('../../server/db.js');
+      vi.doUnmock('../../server/routes');
+      vi.doUnmock('../../server/vite.js');
     });
   });
 });

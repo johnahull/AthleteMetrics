@@ -155,6 +155,13 @@ app.use((req, res, next) => {
   next();
 });
 
+// Graceful shutdown handler - defined early so process.on can be registered immediately
+let shutdownHandler: ((signal: string) => Promise<void>) | null = null;
+
+// Register signal handlers immediately (before server starts)
+process.on('SIGTERM', () => shutdownHandler?.('SIGTERM'));
+process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
+
 (async () => {
   const server = await registerRoutes(app);
 
@@ -237,8 +244,8 @@ app.use((req, res, next) => {
     log(`serving on port ${port}`);
   });
 
-  // Graceful shutdown handler - properly close database connections on process termination
-  const gracefulShutdown = async (signal: string) => {
+  // Assign the graceful shutdown implementation - properly close database connections on process termination
+  shutdownHandler = async (signal: string) => {
     log(`${signal} received, starting graceful shutdown`);
 
     server.close(async () => {
@@ -261,7 +268,4 @@ app.use((req, res, next) => {
       process.exit(1);
     }, 30000);
   };
-
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();
