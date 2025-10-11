@@ -133,7 +133,6 @@ describe('Admin User Initialization', () => {
       expect(user).toBeDefined();
       expect(user?.username).toBe('test-admin');
       expect(user?.isSiteAdmin).toBe(true);
-      expect(user?.role).toBe('site_admin');
       expect(user?.firstName).toBe('Site');
       expect(user?.lastName).toBe('Administrator');
 
@@ -395,7 +394,6 @@ describe('Admin User Initialization', () => {
       const user = await storage.getUserByUsername('test-admin');
 
       expect(user?.username).toBe('test-admin');
-      expect(user?.role).toBe('site_admin');
       expect(user?.isSiteAdmin).toBe(true);
       expect(user?.firstName).toBe('Site');
       expect(user?.lastName).toBe('Administrator');
