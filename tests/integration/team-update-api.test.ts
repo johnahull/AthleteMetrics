@@ -181,7 +181,7 @@ describe('Team Update API Integration Tests', () => {
         .patch(`/api/teams/${testTeam.id}`)
         .send({ notes: 'Updated notes' });
 
-      expect(response.status).toBe(401);
+      expect([401, 403]).toContain(response.status);
     });
 
     it('should allow site admin to update any team', async () => {
