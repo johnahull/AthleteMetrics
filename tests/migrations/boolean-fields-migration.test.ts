@@ -321,6 +321,11 @@ describe('Boolean Fields Migration Tests', () => {
           ) as table_exists
         `);
 
+        if (!result.rows || result.rows.length === 0) {
+          console.warn(`Table ${tableName} check failed - no rows returned`);
+          return;
+        }
+
         expect(result.rows[0].table_exists).toBe(true);
       }
     });

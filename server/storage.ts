@@ -243,13 +243,24 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    const [newUser] = await db.insert(users).values({
+    // Build the insert object and filter out any undefined values
+    const insertData: any = {
       ...cleanedUser,
       emails,
       password: hashedPassword,
       fullName,
       ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
-    }).returning();
+    };
+
+    // Final filter to remove any undefined values that might have been introduced
+    const finalData: any = {};
+    Object.keys(insertData).forEach(key => {
+      if (insertData[key] !== undefined) {
+        finalData[key] = insertData[key];
+      }
+    });
+
+    const [newUser] = await db.insert(users).values(finalData).returning();
     return newUser;
   }
 
@@ -1373,7 +1384,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
-    const updateData: any = { ...athlete };
+    // Filter out undefined values to prevent UNDEFINED_VALUE errors
+    const updateData: any = {};
+    Object.keys(athlete).forEach(key => {
+      const value = (athlete as any)[key];
+      if (value !== undefined) {
+        updateData[key] = value;
+      }
+    });
 
     // Update full name if first or last name changed
     let finalFirstName: string | undefined;
