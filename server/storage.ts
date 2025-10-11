@@ -1340,7 +1340,6 @@ export class DatabaseStorage implements IStorage {
       fullName: `${athlete.firstName} ${athlete.lastName}`,
       birthYear: athlete.birthDate ? new Date(athlete.birthDate).getFullYear() : null,
       password: "INVITATION_PENDING", // Will be set when they accept invitation
-      role: 'athlete', // Explicitly set role
       isActive: false, // Set to false until they complete registration
       isSiteAdmin: false, // Explicitly set to false
       mfaEnabled: false, // Explicitly set to false
