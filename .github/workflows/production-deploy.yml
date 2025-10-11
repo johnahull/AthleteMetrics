@@ -99,6 +99,7 @@ jobs:
       - name: Backup production database
         run: node scripts/backup-database.js
         env:
+          USE_RAILWAY_BACKUPS: true
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
