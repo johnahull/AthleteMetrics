@@ -35,8 +35,14 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Link Railway Project
+        run: |
+          railway link ${{ secrets.RAILWAY_PROJECT_ID }} --environment staging
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
       - name: Run database migrations
-        run: railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
+        run: railway run npm run db:push
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
@@ -62,7 +68,7 @@ jobs:
       #     RAILWAY_ENVIRONMENT: staging
 
       - name: Deploy to Railway Staging
-        run: railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+        run: railway up --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
