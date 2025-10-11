@@ -254,7 +254,27 @@ async function initializeDefaultUser() {
       });
       console.log(`Site administrator account created successfully: ${adminUser}`);
     } else {
-      console.log(`Site administrator account already exists: ${adminUser}`);
+      // User exists - check if password needs to be synced with environment variable
+      const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
+
+      if (!passwordMatches) {
+        // Password in environment has changed - update the database
+        // Note: updateUser will hash the password automatically
+        await storage.updateUser(existingUser.id, {
+          password: adminPassword
+        });
+        console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+      } else {
+        console.log(`Site administrator account already exists: ${adminUser}`);
+      }
+
+      // Ensure isSiteAdmin flag is set (in case it was changed)
+      if (existingUser.isSiteAdmin !== true) {
+        await storage.updateUser(existingUser.id, {
+          isSiteAdmin: true
+        });
+        console.log(`Site administrator privileges restored: ${adminUser}`);
+      }
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
