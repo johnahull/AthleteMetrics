@@ -231,9 +231,28 @@ export async function initializeDefaultUser() {
       process.exit(1);
     }
 
-    // Validate password strength
+    // Validate password strength and complexity
     if (adminPassword.length < 12) {
       console.error("SECURITY: ADMIN_PASSWORD must be at least 12 characters long");
+      process.exit(1);
+    }
+
+    // Validate password complexity (same requirements as user passwords)
+    const { PASSWORD_REGEX } = await import("@shared/password-requirements");
+    if (!PASSWORD_REGEX.lowercase.test(adminPassword)) {
+      console.error("SECURITY: ADMIN_PASSWORD must contain at least one lowercase letter");
+      process.exit(1);
+    }
+    if (!PASSWORD_REGEX.uppercase.test(adminPassword)) {
+      console.error("SECURITY: ADMIN_PASSWORD must contain at least one uppercase letter");
+      process.exit(1);
+    }
+    if (!PASSWORD_REGEX.number.test(adminPassword)) {
+      console.error("SECURITY: ADMIN_PASSWORD must contain at least one number");
+      process.exit(1);
+    }
+    if (!PASSWORD_REGEX.specialChar.test(adminPassword)) {
+      console.error("SECURITY: ADMIN_PASSWORD must contain at least one special character");
       process.exit(1);
     }
 
@@ -250,7 +269,6 @@ export async function initializeDefaultUser() {
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
-        role: "site_admin",
         isSiteAdmin: true
       });
       console.log(`Site administrator account created successfully: ${adminUser}`);
@@ -387,7 +405,9 @@ export async function registerRoutes(app: Express) {
     }
   };
 
-  // Use Redis store if available, otherwise fall back to memory store
+  // Try Redis first (if available), then PostgreSQL, then fall back to memory store
+  let sessionStoreConfigured = false;
+
   if (redisClient) {
     try {
       // @ts-expect-error - connect-redis is an optional dependency that may not be installed
@@ -400,16 +420,32 @@ export async function registerRoutes(app: Express) {
           ttl: 24 * 60 * 60 // 24 hours in seconds
         });
         console.log('Using Redis session store');
-      } else {
-        console.warn('connect-redis module not available');
-        console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+        sessionStoreConfigured = true;
       }
     } catch (error: any) {
       console.warn('Failed to create Redis store:', error?.message || error);
+    }
+  }
+
+  // If Redis is not available, use PostgreSQL session store
+  if (!sessionStoreConfigured) {
+    try {
+      const connectPgSimple = await import("connect-pg-simple");
+      const PgStore = connectPgSimple.default(session);
+      const { db } = await import("./db");
+
+      sessionConfig.store = new PgStore({
+        pool: db as any, // Drizzle's db object is compatible with Pool interface
+        tableName: 'session',
+        createTableIfMissing: true, // Creates table if it doesn't exist
+        pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes
+      });
+      console.log('Using PostgreSQL session store');
+      sessionStoreConfigured = true;
+    } catch (error: any) {
+      console.warn('Failed to create PostgreSQL store:', error?.message || error);
       console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
     }
-  } else {
-    console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
   }
 
   app.use(session(sessionConfig));
