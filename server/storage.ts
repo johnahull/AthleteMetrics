@@ -234,25 +234,34 @@ export class DatabaseStorage implements IStorage {
     // Ensure emails array is properly set
     const emails = user.emails || [`${user.username || 'user'}@temp.local`];
 
-    // Filter out undefined values from user object to prevent postgres UNDEFINED_VALUE errors
+    // List of actual database columns in users table (excluding id, createdAt, fullName, birthYear which are computed/defaults)
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    // Filter to only include valid database columns and non-undefined values
     const cleanedUser: any = {};
     Object.keys(user).forEach(key => {
       const value = (user as any)[key];
-      if (value !== undefined) {
+      if (value !== undefined && validUserColumns.includes(key)) {
         cleanedUser[key] = value;
       }
     });
 
-    // Build the insert object and filter out any undefined values
+    // Build the final insert object with required fields
     const insertData: any = {
       ...cleanedUser,
-      emails,
-      password: hashedPassword,
-      fullName,
+      emails, // Always override with sanitized emails
+      password: hashedPassword, // Always override with hashed password
+      fullName, // Always set computed fullName
       ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
     };
 
-    // Final filter to remove any undefined values that might have been introduced
+    // Final safety filter to remove any undefined values
     const finalData: any = {};
     Object.keys(insertData).forEach(key => {
       if (insertData[key] !== undefined) {
