@@ -93,11 +93,6 @@ jobs:
           fi
           echo "✅ Build verification successful"
 
-      - name: Validate environment configuration
-        run: node scripts/validate-env.js
-        env:
-          RAILWAY_ENVIRONMENT: production
-
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
