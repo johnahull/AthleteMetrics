@@ -234,12 +234,21 @@ export class DatabaseStorage implements IStorage {
     // Ensure emails array is properly set
     const emails = user.emails || [`${user.username || 'user'}@temp.local`];
 
+    // Filter out undefined values from user object to prevent postgres UNDEFINED_VALUE errors
+    const cleanedUser: any = {};
+    Object.keys(user).forEach(key => {
+      const value = (user as any)[key];
+      if (value !== undefined) {
+        cleanedUser[key] = value;
+      }
+    });
+
     const [newUser] = await db.insert(users).values({
-      ...user,
+      ...cleanedUser,
       emails,
       password: hashedPassword,
       fullName,
-      birthYear
+      ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
     }).returning();
     return newUser;
   }
