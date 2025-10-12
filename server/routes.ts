@@ -289,6 +289,14 @@ export async function initializeDefaultUser() {
         // This eliminates race condition between session revocation and password update
         let revokedCount = 0;
         await db.transaction(async (tx) => {
+          // CRITICAL: Lock user row immediately to prevent concurrent authentication
+          // This prevents race condition where user logs in between session revocation and password update
+          const { sql } = await import("drizzle-orm");
+          await tx.select()
+            .from(users)
+            .where(eq(users.id, existingUser.id))
+            .for('update'); // SELECT ... FOR UPDATE (row-level lock)
+
           // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
           // For password changes, throwOnError=true ensures session revocation MUST succeed
           // Pass tx to ensure session deletion is part of the same transaction
@@ -317,63 +325,72 @@ export async function initializeDefaultUser() {
               .set(updateData)
               .where(eq(users.id, existingUser.id));
           }
+
+          // Create audit logs INSIDE transaction for atomicity
+          // Use consistent IP address for all server-initiated actions
+          const SYSTEM_IP = '127.0.0.1';
+          const { auditLogs } = await import("@shared/schema");
+
+          if (!passwordMatches) {
+            // Audit log for password sync
+            await tx.insert(auditLogs).values({
+              userId: existingUser.id,
+              action: 'admin_password_synced',
+              resourceType: 'user',
+              resourceId: existingUser.id,
+              details: JSON.stringify({
+                username: adminUser,
+                syncReason: 'environment_variable_mismatch',
+                timestamp: new Date().toISOString()
+              }),
+              ipAddress: SYSTEM_IP, // Server-initiated
+              userAgent: 'System',
+            });
+
+            // Audit log for session revocation with count
+            await tx.insert(auditLogs).values({
+              userId: existingUser.id,
+              action: 'sessions_revoked',
+              resourceType: 'user',
+              resourceId: existingUser.id,
+              details: JSON.stringify({
+                reason: 'password_sync',
+                revokedCount: revokedCount,
+                securityContext: 'password_change',
+                timestamp: new Date().toISOString()
+              }),
+              ipAddress: SYSTEM_IP,
+              userAgent: 'System',
+            });
+          }
+
+          if (needsPrivilegeRestore) {
+            // Audit log for privilege restoration
+            await tx.insert(auditLogs).values({
+              userId: existingUser.id,
+              action: 'privilege_restored',
+              resourceType: 'user',
+              resourceId: existingUser.id,
+              details: JSON.stringify({
+                username: adminUser,
+                previousState: 'isSiteAdmin=false',
+                newState: 'isSiteAdmin=true',
+                restorationReason: 'startup_verification',
+              timestamp: new Date().toISOString()
+              }),
+              ipAddress: SYSTEM_IP,
+              userAgent: 'System',
+            });
+          }
         });
 
-        // Create audit logs for security events
-        // Use consistent IP address for all server-initiated actions
-        const SYSTEM_IP = '127.0.0.1';
-
+        // Console logging after successful transaction
         if (!passwordMatches) {
-          await storage.createAuditLog({
-            userId: existingUser.id,
-            action: 'admin_password_synced',
-            resourceType: 'user',
-            resourceId: existingUser.id,
-            details: JSON.stringify({
-              username: adminUser,
-              syncReason: 'environment_variable_mismatch',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: SYSTEM_IP, // Server-initiated
-            userAgent: 'System',
-          });
-
-          // Audit log for session revocation with count
-          await storage.createAuditLog({
-            userId: existingUser.id,
-            action: 'sessions_revoked',
-            resourceType: 'user',
-            resourceId: existingUser.id,
-            details: JSON.stringify({
-              reason: 'password_sync',
-              revokedCount: revokedCount,
-              securityContext: 'password_change',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: SYSTEM_IP,
-            userAgent: 'System',
-          });
-
           console.log(`Site administrator password synced with environment variable: ${adminUser}`);
           console.log(`Revoked ${revokedCount} active session(s) for security`);
         }
 
         if (needsPrivilegeRestore) {
-          await storage.createAuditLog({
-            userId: existingUser.id,
-            action: 'privilege_restored',
-            resourceType: 'user',
-            resourceId: existingUser.id,
-            details: JSON.stringify({
-              username: adminUser,
-              previousState: 'isSiteAdmin=false',
-              newState: 'isSiteAdmin=true',
-              restorationReason: 'startup_verification',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: SYSTEM_IP,
-            userAgent: 'System',
-          });
           console.log(`Site administrator privileges restored: ${adminUser}`);
         }
       } else {
