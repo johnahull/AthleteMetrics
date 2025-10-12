@@ -164,7 +164,7 @@ export interface IStorage {
   findLoginSession(token: string): Promise<any>;
   updateSessionActivity(sessionId: string): Promise<void>;
   revokeLoginSession(token: string): Promise<void>;
-  revokeAllUserSessions(userId: string): Promise<void>;
+  revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number>;
   updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
   createSecurityEvent(event: any): Promise<void>;
   getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
@@ -2188,9 +2188,9 @@ export class DatabaseStorage implements IStorage {
       // Using simplified query - we only use sess.user.id format (not passport.js)
       const result = await db.delete(sessions).where(
         sql`${sessions.sess}->'user'->>'id' = ${userId}`
-      );
+      ).returning({ sid: sessions.sid });
 
-      const count = result.rowCount || 0;
+      const count = result.length;
       console.log(`Revoked ${count} session(s) for user: ${userId}`);
       return count;
     } catch (error) {
