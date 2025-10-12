@@ -579,17 +579,20 @@ describe('Admin User Initialization', () => {
         {
           sid: 'test-session-1',
           sess: { user: { id: user!.id } },
-          expire: new Date(Date.now() + 86400000) // 24 hours from now
+          expire: new Date(Date.now() + 86400000), // 24 hours from now
+          userId: user!.id // Set the userId column for proper foreign key relationship
         },
         {
           sid: 'test-session-2',
           sess: { user: { id: user!.id } },
-          expire: new Date(Date.now() + 86400000)
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id
         },
         {
           sid: 'test-session-3',
           sess: { user: { id: user!.id } },
-          expire: new Date(Date.now() + 86400000)
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id
         }
       ]);
 
@@ -625,7 +628,8 @@ describe('Admin User Initialization', () => {
       await db.insert(sessions).values({
         sid: 'test-session-persistent',
         sess: { user: { id: user!.id } },
-        expire: new Date(Date.now() + 86400000)
+        expire: new Date(Date.now() + 86400000),
+        userId: user!.id // Set the userId column for proper foreign key relationship
       });
 
       // Spy on revokeAllSessions to verify it's NOT called
@@ -706,7 +710,8 @@ describe('Admin User Initialization', () => {
       await db.insert(sessions).values({
         sid: 'test-session-privilege',
         sess: { user: { id: user!.id } },
-        expire: new Date(Date.now() + 86400000)
+        expire: new Date(Date.now() + 86400000),
+        userId: user!.id // Set the userId column for proper foreign key relationship
       });
 
       // Spy on revokeAllSessions
@@ -745,12 +750,14 @@ describe('Admin User Initialization', () => {
         {
           sid: 'test-session-1',
           sess: { user: { id: user!.id } },
-          expire: new Date(Date.now() + 86400000)
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id // Set the userId column for proper foreign key relationship
         },
         {
           sid: 'test-session-2',
           sess: { user: { id: user!.id } },
-          expire: new Date(Date.now() + 86400000)
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id
         }
       ]);
 
