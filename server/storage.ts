@@ -2178,20 +2178,17 @@ export class DatabaseStorage implements IStorage {
 
   async revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean; tx?: any }): Promise<number> {
     // Revoke all sessions for a user by deleting them from the session store
-    // Sessions are stored with user ID in the sess JSON field
+    // Sessions are stored with userId in a dedicated column (not JSONB)
     const { sessions } = await import('@shared/schema');
-    const { sql } = await import('drizzle-orm');
+    const { eq } = await import('drizzle-orm');
     const throwOnError = options?.throwOnError ?? false;
     const dbConnection = options?.tx || db; // Use transaction if provided, otherwise use global db
 
     try {
-      // Delete all sessions where the session data contains this user ID
-      // Using simplified query - we only use sess.user.id format (not passport.js)
-      // SECURITY: Drizzle's sql`` template tag automatically parameterizes ${userId} as a bound parameter
-      // This generates: WHERE (sess->'user'->>'id') = $1 with userId as a properly escaped parameter
-      // The JSONB operators (->, ->>) are PostgreSQL syntax and not user-controlled
+      // Delete all sessions using the native userId column (10-100x faster than JSONB extraction)
+      // Foreign key with CASCADE DELETE ensures sessions are automatically cleaned up on user deletion
       const result = await dbConnection.delete(sessions).where(
-        sql`${sessions.sess}->'user'->>'id' = ${userId}`
+        eq(sessions.userId, userId)
       ).returning({ sid: sessions.sid });
 
       const count = result.length;

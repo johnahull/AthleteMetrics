@@ -312,6 +312,7 @@ describe('Admin User Initialization', () => {
       // Create admin user
       process.env.ADMIN_USER = 'test-admin';
       process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE = 'true'; // Required for restoration
       await initializeDefaultUser();
 
       // Manually change isSiteAdmin to false (simulating privilege tampering)
@@ -352,6 +353,7 @@ describe('Admin User Initialization', () => {
       // Create admin user
       process.env.ADMIN_USER = 'test-admin';
       process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE = 'true'; // Required for restoration
       await initializeDefaultUser();
 
       // Tamper with privilege
@@ -375,11 +377,109 @@ describe('Admin User Initialization', () => {
     });
   });
 
+  describe('ALLOW_ADMIN_PRIVILEGE_RESTORE Feature', () => {
+    it('should NOT restore privileges when flag is false', async () => {
+      // Create admin user
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE = 'false';
+      await initializeDefaultUser();
+
+      // Manually change isSiteAdmin to false (simulating security demotion)
+      let user = await storage.getUserByUsername('test-admin');
+      await db.update(users)
+        .set({ isSiteAdmin: false })
+        .where(eq(users.id, user!.id));
+
+      // Verify flag is false
+      user = await storage.getUserByUsername('test-admin');
+      expect(user?.isSiteAdmin).toBe(false);
+
+      // Call initialization again - should NOT restore
+      await initializeDefaultUser();
+
+      // Verify isSiteAdmin flag is still false (not restored)
+      user = await storage.getUserByUsername('test-admin');
+      expect(user?.isSiteAdmin).toBe(false);
+    });
+
+    it('should NOT restore privileges by default (undefined)', async () => {
+      // Create admin user without setting the flag
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      delete process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE; // Ensure undefined
+      await initializeDefaultUser();
+
+      // Manually change isSiteAdmin to false
+      let user = await storage.getUserByUsername('test-admin');
+      await db.update(users)
+        .set({ isSiteAdmin: false })
+        .where(eq(users.id, user!.id));
+
+      // Call initialization again - should NOT restore (default deny)
+      await initializeDefaultUser();
+
+      // Verify isSiteAdmin flag is still false (not restored)
+      user = await storage.getUserByUsername('test-admin');
+      expect(user?.isSiteAdmin).toBe(false);
+    });
+
+    it('should restore privileges when flag is true', async () => {
+      // Create admin user with flag explicitly enabled
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE = 'true';
+      await initializeDefaultUser();
+
+      // Manually change isSiteAdmin to false
+      let user = await storage.getUserByUsername('test-admin');
+      await db.update(users)
+        .set({ isSiteAdmin: false })
+        .where(eq(users.id, user!.id));
+
+      // Verify flag is false
+      user = await storage.getUserByUsername('test-admin');
+      expect(user?.isSiteAdmin).toBe(false);
+
+      // Call initialization again - should restore
+      await initializeDefaultUser();
+
+      // Verify isSiteAdmin flag is restored
+      user = await storage.getUserByUsername('test-admin');
+      expect(user?.isSiteAdmin).toBe(true);
+    });
+
+    it('should log security alert when restoration blocked', async () => {
+      // Create admin user with flag disabled
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE = 'false';
+      await initializeDefaultUser();
+
+      // Manually change isSiteAdmin to false
+      let user = await storage.getUserByUsername('test-admin');
+      await db.update(users)
+        .set({ isSiteAdmin: false })
+        .where(eq(users.id, user!.id));
+
+      // Call initialization - should block restoration and log it
+      await initializeDefaultUser();
+
+      // Note: We can't easily verify console.error output in tests,
+      // but we verify that the user was NOT restored (which confirms the code path)
+      user = await storage.getUserByUsername('test-admin');
+      expect(user?.isSiteAdmin).toBe(false);
+
+      // The security alert should be logged to console but not cause test failure
+    });
+  });
+
   describe('Combined Scenarios', () => {
     it('should update both password and privilege flag in single operation', async () => {
       // Create admin user
       process.env.ADMIN_USER = 'test-admin';
       process.env.ADMIN_PASSWORD = 'InitialPass123!';
+      process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE = 'true'; // Required for privilege restoration
       await initializeDefaultUser();
 
       // Tamper with both password and flag

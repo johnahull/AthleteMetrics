@@ -287,10 +287,6 @@ export async function initializeDefaultUser() {
       // This eliminates race condition between session revocation and password update
       let revokedCount = 0;
       await db.transaction(async (tx) => {
-        // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and concurrent modifications
-        const { sql } = await import("drizzle-orm");
-        await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-
         // CRITICAL: Lock user row immediately to prevent concurrent authentication
         // This prevents race condition where user logs in between session revocation and password update
         await tx.select()
