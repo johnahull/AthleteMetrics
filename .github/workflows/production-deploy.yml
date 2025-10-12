@@ -111,7 +111,7 @@ jobs:
       - name: Run session table migration
         run: |
           echo "Running session table migration..."
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} -- bash -c 'psql "$DATABASE_URL" -f scripts/migrate-session-table.sql'
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} -- bash -c "psql \"\$DATABASE_URL\" -f scripts/migrate-session-table.sql"
           echo "✅ Session table migration completed"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
