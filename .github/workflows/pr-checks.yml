@@ -92,7 +92,7 @@ jobs:
           # Generate cryptographically secure random password for each test run
           # Ensures password is never stored in git history or visible in logs
           TEST_PASS="$(openssl rand -base64 12)Aa1!"
-          echo "ADMIN_PASSWORD=$TEST_PASS" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=${TEST_PASS}" >> "$GITHUB_ENV"
           echo "✅ Generated secure test credentials"
 
       - name: Run database migrations
