@@ -406,9 +406,6 @@ export async function initializeDefaultUser() {
       if (needsPrivilegeRestore) {
         console.log(`Site administrator privileges restored: ${adminUser}`);
       }
-      } else {
-        console.log(`Site administrator account already exists: ${adminUser}`);
-      }
     }
   } catch (error) {
     // Rethrow errors from test mocks (e.g., when process.exit is mocked)
