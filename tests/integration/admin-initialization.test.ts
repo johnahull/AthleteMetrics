@@ -451,4 +451,170 @@ describe('Admin User Initialization', () => {
       expect(user?.lastName).toBe('Administrator');
     });
   });
+
+  describe('Session Revocation', () => {
+    it('should revoke all sessions when password syncs', async () => {
+      // 1. Create admin with initial password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'InitialPass123!';
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user).toBeDefined();
+
+      // 2. Create active sessions in database
+      const { sessions } = await import('@shared/schema');
+      await db.insert(sessions).values([
+        {
+          sid: 'test-session-1',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000) // 24 hours from now
+        },
+        {
+          sid: 'test-session-2',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000)
+        },
+        {
+          sid: 'test-session-3',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000)
+        }
+      ]);
+
+      // Verify sessions were created
+      const { sql } = await import('drizzle-orm');
+      const sessionsBefore = await db.select()
+        .from(sessions)
+        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+      expect(sessionsBefore).toHaveLength(3);
+
+      // 3. Change password to trigger session revocation
+      process.env.ADMIN_PASSWORD = 'NewPassword456!';
+      await initializeDefaultUser();
+
+      // 4. Verify all sessions were deleted
+      const sessionsAfter = await db.select()
+        .from(sessions)
+        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+      expect(sessionsAfter).toHaveLength(0);
+    });
+
+    it('should NOT revoke sessions when password already matches', async () => {
+      // Create admin with password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'ConsistentPass789!';
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user).toBeDefined();
+
+      // Create a session
+      const { sessions } = await import('@shared/schema');
+      await db.insert(sessions).values({
+        sid: 'test-session-persistent',
+        sess: { user: { id: user!.id } },
+        expire: new Date(Date.now() + 86400000)
+      });
+
+      // Spy on revokeAllSessions to verify it's NOT called
+      const { AuthSecurity } = await import('../../server/auth/security');
+      const revokeSpy = vi.spyOn(AuthSecurity, 'revokeAllSessions');
+
+      // Call initialization with SAME password
+      await initializeDefaultUser();
+
+      // Verify revokeAllSessions was NOT called
+      expect(revokeSpy).not.toHaveBeenCalled();
+
+      // Verify session still exists
+      const { sql } = await import('drizzle-orm');
+      const remainingSessions = await db.select()
+        .from(sessions)
+        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+      expect(remainingSessions).toHaveLength(1);
+
+      revokeSpy.mockRestore();
+    });
+
+    it('should create audit log for session revocation', async () => {
+      // Create admin and change password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'InitialPass123!';
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+
+      // Change password to trigger revocation
+      process.env.ADMIN_PASSWORD = 'NewPassword456!';
+      await initializeDefaultUser();
+
+      // Check for audit log
+      const logs = await db.select()
+        .from(auditLogs)
+        .where(eq(auditLogs.userId, user!.id));
+
+      const revocationLog = logs.find(log => log.action === 'sessions_revoked');
+      expect(revocationLog).toBeDefined();
+
+      const details = JSON.parse(revocationLog!.details);
+      expect(details.reason).toBe('password_sync');
+      expect(details.revokedCount).toBeGreaterThanOrEqual(0);
+      expect(details.securityContext).toBe('password_change');
+    });
+
+    it('should throw error if session revocation fails during password sync', async () => {
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'InitialPass123!';
+      await initializeDefaultUser();
+
+      // Mock revocation to fail
+      const mockError = new Error('Database connection lost');
+      vi.spyOn(storage, 'revokeAllUserSessions').mockRejectedValueOnce(mockError);
+
+      // Change password - should throw because throwOnError=true
+      process.env.ADMIN_PASSWORD = 'NewPassword456!';
+      await expect(initializeDefaultUser()).rejects.toThrow();
+    });
+
+    it('should NOT revoke sessions when only privilege is restored', async () => {
+      // Create admin with password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'TestPassword123!';
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user).toBeDefined();
+
+      // Tamper with isSiteAdmin flag (simulate privilege removal)
+      await storage.updateUser(user!.id, { isSiteAdmin: false });
+
+      // Create a session
+      const { sessions } = await import('@shared/schema');
+      await db.insert(sessions).values({
+        sid: 'test-session-privilege',
+        sess: { user: { id: user!.id } },
+        expire: new Date(Date.now() + 86400000)
+      });
+
+      // Spy on revokeAllSessions
+      const { AuthSecurity } = await import('../../server/auth/security');
+      const revokeSpy = vi.spyOn(AuthSecurity, 'revokeAllSessions');
+
+      // Call initialization to restore privilege (NOT password change)
+      await initializeDefaultUser();
+
+      // Verify revokeAllSessions was NOT called (only privilege restored, not password)
+      expect(revokeSpy).not.toHaveBeenCalled();
+
+      // Verify session still exists
+      const { sql } = await import('drizzle-orm');
+      const remainingSessions = await db.select()
+        .from(sessions)
+        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+      expect(remainingSessions).toHaveLength(1);
+
+      revokeSpy.mockRestore();
+    });
+  });
 });
