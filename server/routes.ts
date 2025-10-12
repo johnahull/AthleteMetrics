@@ -322,90 +322,90 @@ export async function initializeDefaultUser() {
           // DEFAULT: false (requires explicit opt-in for security)
           const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE === 'true';
 
-            if (allowPrivilegeRestore) {
-              // Ensure isSiteAdmin flag is set (in case it was changed)
-              updateData.isSiteAdmin = true;
-              console.warn('SECURITY WARNING: Auto-restoring site admin privileges. Set ALLOW_ADMIN_PRIVILEGE_RESTORE=false to disable.');
-            } else {
-              console.error('SECURITY ALERT: Site admin privileges were revoked but auto-restore is disabled. Manual intervention required.');
-              console.error('To restore privileges, set ALLOW_ADMIN_PRIVILEGE_RESTORE=true and restart the server.');
-            }
+          if (allowPrivilegeRestore) {
+            // Ensure isSiteAdmin flag is set (in case it was changed)
+            updateData.isSiteAdmin = true;
+            console.warn('SECURITY WARNING: Auto-restoring site admin privileges. Set ALLOW_ADMIN_PRIVILEGE_RESTORE=false to disable.');
+          } else {
+            console.error('SECURITY ALERT: Site admin privileges were revoked but auto-restore is disabled. Manual intervention required.');
+            console.error('To restore privileges, set ALLOW_ADMIN_PRIVILEGE_RESTORE=true and restart the server.');
           }
+        }
 
-          // Single atomic update within transaction to prevent race conditions
-          if (Object.keys(updateData).length > 0) {
-            await tx.update(users)
-              .set(updateData)
-              .where(eq(users.id, existingUser.id));
-          }
+        // Single atomic update within transaction to prevent race conditions
+        if (Object.keys(updateData).length > 0) {
+          await tx.update(users)
+            .set(updateData)
+            .where(eq(users.id, existingUser.id));
+        }
 
-          // Create audit logs INSIDE transaction for atomicity
-          // Use consistent IP address for all server-initiated actions
-          const SYSTEM_IP = '127.0.0.1';
-          const { auditLogs } = await import("@shared/schema");
+        // Create audit logs INSIDE transaction for atomicity
+        // Use consistent IP address for all server-initiated actions
+        const SYSTEM_IP = '127.0.0.1';
+        const { auditLogs } = await import("@shared/schema");
 
-          if (!passwordMatches) {
-            // Audit log for password sync
-            await tx.insert(auditLogs).values({
-              userId: existingUser.id,
-              action: 'admin_password_synced',
-              resourceType: 'user',
-              resourceId: existingUser.id,
-              details: JSON.stringify({
-                username: adminUser,
-                syncReason: 'environment_variable_mismatch',
-                timestamp: new Date().toISOString()
-              }),
-              ipAddress: SYSTEM_IP, // Server-initiated
-              userAgent: 'System',
-            });
-
-            // Audit log for session revocation with count
-            await tx.insert(auditLogs).values({
-              userId: existingUser.id,
-              action: 'sessions_revoked',
-              resourceType: 'user',
-              resourceId: existingUser.id,
-              details: JSON.stringify({
-                reason: 'password_sync',
-                revokedCount: revokedCount,
-                securityContext: 'password_change',
-                timestamp: new Date().toISOString()
-              }),
-              ipAddress: SYSTEM_IP,
-              userAgent: 'System',
-            });
-          }
-
-          if (needsPrivilegeRestore) {
-            // Audit log for privilege restoration
-            await tx.insert(auditLogs).values({
-              userId: existingUser.id,
-              action: 'privilege_restored',
-              resourceType: 'user',
-              resourceId: existingUser.id,
-              details: JSON.stringify({
-                username: adminUser,
-                previousState: 'isSiteAdmin=false',
-                newState: 'isSiteAdmin=true',
-                restorationReason: 'startup_verification',
-              timestamp: new Date().toISOString()
-              }),
-              ipAddress: SYSTEM_IP,
-              userAgent: 'System',
-            });
-          }
-        });
-
-        // Console logging after successful transaction
         if (!passwordMatches) {
-          console.log(`Site administrator password synced with environment variable: ${adminUser}`);
-          console.log(`Revoked ${revokedCount} active session(s) for security`);
+          // Audit log for password sync
+          await tx.insert(auditLogs).values({
+            userId: existingUser.id,
+            action: 'admin_password_synced',
+            resourceType: 'user',
+            resourceId: existingUser.id,
+            details: JSON.stringify({
+              username: adminUser,
+              syncReason: 'environment_variable_mismatch',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: SYSTEM_IP, // Server-initiated
+            userAgent: 'System',
+          });
+
+          // Audit log for session revocation with count
+          await tx.insert(auditLogs).values({
+            userId: existingUser.id,
+            action: 'sessions_revoked',
+            resourceType: 'user',
+            resourceId: existingUser.id,
+            details: JSON.stringify({
+              reason: 'password_sync',
+              revokedCount: revokedCount,
+              securityContext: 'password_change',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: SYSTEM_IP,
+            userAgent: 'System',
+          });
         }
 
         if (needsPrivilegeRestore) {
-          console.log(`Site administrator privileges restored: ${adminUser}`);
+          // Audit log for privilege restoration
+          await tx.insert(auditLogs).values({
+            userId: existingUser.id,
+            action: 'privilege_restored',
+            resourceType: 'user',
+            resourceId: existingUser.id,
+            details: JSON.stringify({
+              username: adminUser,
+              previousState: 'isSiteAdmin=false',
+              newState: 'isSiteAdmin=true',
+              restorationReason: 'startup_verification',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: SYSTEM_IP,
+            userAgent: 'System',
+          });
         }
+      });
+
+      // Console logging after successful transaction
+      if (!passwordMatches) {
+        console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+        console.log(`Revoked ${revokedCount} active session(s) for security`);
+      }
+
+      if (needsPrivilegeRestore) {
+        console.log(`Site administrator privileges restored: ${adminUser}`);
+      }
       } else {
         console.log(`Site administrator account already exists: ${adminUser}`);
       }
