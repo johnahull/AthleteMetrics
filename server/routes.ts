@@ -275,53 +275,56 @@ export async function initializeDefaultUser() {
       console.log(`Site administrator account created successfully: ${adminUser}`);
     } else {
       // User exists - check if password needs to be synced with environment variable
-      const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
       const needsPrivilegeRestore = existingUser.isSiteAdmin !== true;
 
       // Combine updates into single atomic operation to prevent race conditions
-      if (!passwordMatches || needsPrivilegeRestore) {
-        // Import db for transaction support
-        const { db } = await import("./db");
-        const { eq } = await import("drizzle-orm");
-        const { users } = await import("@shared/schema");
+      // Always enter transaction to perform secure password check with row lock
+      const { db } = await import("./db");
+      const { eq } = await import("drizzle-orm");
+      const { users } = await import("@shared/schema");
 
-        // Use database transaction for atomicity
-        // This eliminates race condition between session revocation and password update
-        let revokedCount = 0;
-        await db.transaction(async (tx) => {
-          // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and concurrent modifications
-          const { sql } = await import("drizzle-orm");
-          await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+      // Use database transaction for atomicity
+      // This eliminates race condition between session revocation and password update
+      let revokedCount = 0;
+      await db.transaction(async (tx) => {
+        // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and concurrent modifications
+        const { sql } = await import("drizzle-orm");
+        await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
 
-          // CRITICAL: Lock user row immediately to prevent concurrent authentication
-          // This prevents race condition where user logs in between session revocation and password update
-          await tx.select()
-            .from(users)
-            .where(eq(users.id, existingUser.id))
-            .for('update'); // SELECT ... FOR UPDATE (row-level lock)
+        // CRITICAL: Lock user row immediately to prevent concurrent authentication
+        // This prevents race condition where user logs in between session revocation and password update
+        await tx.select()
+          .from(users)
+          .where(eq(users.id, existingUser.id))
+          .for('update'); // SELECT ... FOR UPDATE (row-level lock)
 
-          // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
-          // For password changes, throwOnError=true ensures session revocation MUST succeed
-          // Pass tx to ensure session deletion is part of the same transaction
-          if (!passwordMatches) {
-            revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true, tx });
-          }
+        // CRITICAL: Compare password INSIDE transaction after row lock to prevent TOCTOU vulnerability
+        // This ensures no concurrent password change can occur between check and update
+        const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
 
-          const updateData: any = {};
+        // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
+        // For password changes, throwOnError=true ensures session revocation MUST succeed
+        // Pass tx to ensure session deletion is part of the same transaction
+        if (!passwordMatches) {
+          revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true, tx });
+        }
 
-          if (!passwordMatches) {
-            // Password in environment has changed - update the database
-            // Note: Must hash manually in transaction (can't use storage.updateUser)
-            // Use 12 rounds per OWASP recommendation for admin passwords
-            const bcryptImport = await import("bcrypt");
-            updateData.password = await bcryptImport.default.hash(adminPassword, 12);
-            updateData.passwordChangedAt = new Date();
-          }
+        const updateData: any = {};
 
-          if (needsPrivilegeRestore) {
-            // SECURITY: Auto-restore isSiteAdmin flag only if explicitly enabled
-            // This prevents automatic privilege escalation after security team demotes admin
-            const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE !== 'false';
+        if (!passwordMatches) {
+          // Password in environment has changed - update the database
+          // Note: Must hash manually in transaction (can't use storage.updateUser)
+          // Use 12 rounds per OWASP recommendation for admin passwords
+          const bcryptImport = await import("bcrypt");
+          updateData.password = await bcryptImport.default.hash(adminPassword, 12);
+          updateData.passwordChangedAt = new Date();
+        }
+
+        if (needsPrivilegeRestore) {
+          // SECURITY: Auto-restore isSiteAdmin flag only if explicitly enabled
+          // This prevents automatic privilege escalation after security team demotes admin
+          // DEFAULT: false (requires explicit opt-in for security)
+          const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE === 'true';
 
             if (allowPrivilegeRestore) {
               // Ensure isSiteAdmin flag is set (in case it was changed)

@@ -2187,6 +2187,9 @@ export class DatabaseStorage implements IStorage {
     try {
       // Delete all sessions where the session data contains this user ID
       // Using simplified query - we only use sess.user.id format (not passport.js)
+      // SECURITY: Drizzle's sql`` template tag automatically parameterizes ${userId} as a bound parameter
+      // This generates: WHERE (sess->'user'->>'id') = $1 with userId as a properly escaped parameter
+      // The JSONB operators (->, ->>) are PostgreSQL syntax and not user-controlled
       const result = await dbConnection.delete(sessions).where(
         sql`${sessions.sess}->'user'->>'id' = ${userId}`
       ).returning({ sid: sessions.sid });
@@ -2198,20 +2201,40 @@ export class DatabaseStorage implements IStorage {
       console.error('SECURITY: Failed to revoke user sessions:', error);
 
       // Create audit log for failed session revocation
+      // If transaction context provided, use it for atomicity with password updates
       try {
-        await this.createAuditLog({
-          userId,
-          action: 'session_revocation_failed',
-          resourceType: 'user',
-          resourceId: userId,
-          details: JSON.stringify({
-            error: String(error),
-            securityContext: throwOnError ? 'password_sync' : 'general',
-            timestamp: new Date().toISOString()
-          }),
-          ipAddress: '127.0.0.1',
-          userAgent: 'System',
-        });
+        if (options?.tx) {
+          // Use transaction context if provided (for atomicity with password updates)
+          const { auditLogs } = await import('@shared/schema');
+          await options.tx.insert(auditLogs).values({
+            userId,
+            action: 'session_revocation_failed',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              error: String(error),
+              securityContext: throwOnError ? 'password_sync' : 'general',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          });
+        } else {
+          // No transaction context - use regular audit log method
+          await this.createAuditLog({
+            userId,
+            action: 'session_revocation_failed',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              error: String(error),
+              securityContext: throwOnError ? 'password_sync' : 'general',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          });
+        }
       } catch (auditError) {
         // If audit logging fails, just log to console
         console.error('Failed to create audit log for session revocation failure:', auditError);
