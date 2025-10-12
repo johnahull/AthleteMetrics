@@ -310,13 +310,6 @@ export async function initializeDefaultUser() {
       // Using lockedUser.password ensures we compare against current value
       passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
 
-      // CRITICAL: Always revoke sessions to prevent timing side-channel attack
-      // Executing session revocation regardless of password match eliminates timing difference
-      // that could leak information about password correctness through response time analysis
-      // For password changes, throwOnError=true ensures session revocation MUST succeed
-      // Pass tx to ensure session deletion is part of the same transaction
-      revokedCount = await AuthSecurity.revokeAllSessions(lockedUser.id, { throwOnError: !passwordMatches, tx });
-
       const updateData: any = {};
 
       if (!passwordMatches) {
@@ -327,6 +320,12 @@ export async function initializeDefaultUser() {
         const bcryptImport = await import("bcrypt");
         updateData.password = await bcryptImport.default.hash(adminPassword, 14);
         updateData.passwordChangedAt = new Date();
+
+        // CRITICAL: Revoke all sessions when password changes
+        // This ensures all active sessions are invalidated and users must re-authenticate
+        // with the new password for security
+        // Pass tx to ensure session deletion is part of the same transaction
+        revokedCount = await AuthSecurity.revokeAllSessions(lockedUser.id, { throwOnError: true, tx });
       }
 
       if (needsPrivilegeRestore) {
