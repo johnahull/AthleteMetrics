@@ -171,7 +171,8 @@ export const sessions = pgTable("session", {
   expire: timestamp("expire", { mode: 'date' }).notNull(),
   // Denormalized userId for efficient queries and foreign key constraint
   // Prevents orphaned sessions and provides 10-100x faster lookups than JSONB extraction
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  // NOT NULL constraint is safe because saveUninitialized: false prevents unauthenticated sessions
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
 }, (table) => ({
   // Index for efficient session cleanup and expiration queries
   expireIdx: index("IDX_session_expire").on(table.expire),
@@ -194,6 +195,12 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 }));
 
 // Relations
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   teams: many(teams),
   userOrganizations: many(userOrganizations),
@@ -216,6 +223,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   verifiedMeasurements: many(measurements, { relationName: "verifiedMeasurements" }),
   invitationsSent: many(invitations),
   emailVerificationTokens: many(emailVerificationTokens),
+  sessions: many(sessions),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
