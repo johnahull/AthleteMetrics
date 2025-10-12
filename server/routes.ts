@@ -214,48 +214,49 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 
 // Initialize default site admin user
 export async function initializeDefaultUser() {
+  // Environment validation is outside try-catch to allow process.exit errors to propagate in tests
+  const adminUser = process.env.ADMIN_USER;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminEmail = process.env.ADMIN_EMAIL; // Optional: email address for admin
+
+  // Require admin credentials to be set in environment variables
+  if (!adminUser || !adminPassword) {
+    console.error("SECURITY: ADMIN_USER and ADMIN_PASSWORD environment variables must be set");
+    process.exit(1);
+  }
+
+  // Validate username
+  if (adminUser.length < 3) {
+    console.error("SECURITY: ADMIN_USER must be at least 3 characters long");
+    process.exit(1);
+  }
+
+  // Validate password strength and complexity
+  if (adminPassword.length < 12) {
+    console.error("SECURITY: ADMIN_PASSWORD must be at least 12 characters long");
+    process.exit(1);
+  }
+
+  // Validate password complexity (same requirements as user passwords)
+  const { PASSWORD_REGEX } = await import("@shared/password-requirements");
+  if (!PASSWORD_REGEX.lowercase.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one lowercase letter");
+    process.exit(1);
+  }
+  if (!PASSWORD_REGEX.uppercase.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one uppercase letter");
+    process.exit(1);
+  }
+  if (!PASSWORD_REGEX.number.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one number");
+    process.exit(1);
+  }
+  if (!PASSWORD_REGEX.specialChar.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one special character");
+    process.exit(1);
+  }
+
   try {
-    const adminUser = process.env.ADMIN_USER;
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    const adminEmail = process.env.ADMIN_EMAIL; // Optional: email address for admin
-
-    // Require admin credentials to be set in environment variables
-    if (!adminUser || !adminPassword) {
-      console.error("SECURITY: ADMIN_USER and ADMIN_PASSWORD environment variables must be set");
-      process.exit(1);
-    }
-
-    // Validate username
-    if (adminUser.length < 3) {
-      console.error("SECURITY: ADMIN_USER must be at least 3 characters long");
-      process.exit(1);
-    }
-
-    // Validate password strength and complexity
-    if (adminPassword.length < 12) {
-      console.error("SECURITY: ADMIN_PASSWORD must be at least 12 characters long");
-      process.exit(1);
-    }
-
-    // Validate password complexity (same requirements as user passwords)
-    const { PASSWORD_REGEX } = await import("@shared/password-requirements");
-    if (!PASSWORD_REGEX.lowercase.test(adminPassword)) {
-      console.error("SECURITY: ADMIN_PASSWORD must contain at least one lowercase letter");
-      process.exit(1);
-    }
-    if (!PASSWORD_REGEX.uppercase.test(adminPassword)) {
-      console.error("SECURITY: ADMIN_PASSWORD must contain at least one uppercase letter");
-      process.exit(1);
-    }
-    if (!PASSWORD_REGEX.number.test(adminPassword)) {
-      console.error("SECURITY: ADMIN_PASSWORD must contain at least one number");
-      process.exit(1);
-    }
-    if (!PASSWORD_REGEX.specialChar.test(adminPassword)) {
-      console.error("SECURITY: ADMIN_PASSWORD must contain at least one special character");
-      process.exit(1);
-    }
-
     // Combine updates into single atomic operation to prevent race conditions
     // Always enter transaction to perform secure user lookup with row lock
     const { db } = await import("./db");
