@@ -292,7 +292,7 @@ export async function initializeDefaultUser() {
           passwordChangedAt: new Date(),
           firstName: "Site",
           lastName: "Administrator",
-          role: "site_admin",
+          fullName: "Site Administrator",
           isSiteAdmin: true
         });
 
