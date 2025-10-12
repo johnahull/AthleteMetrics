@@ -47,8 +47,7 @@ describe('Admin User Initialization', () => {
     if (testUser) {
       // Delete sessions first to avoid foreign key constraint violation
       const { sessions } = await import('@shared/schema');
-      const { sql } = await import('drizzle-orm');
-      await db.delete(sessions).where(sql`${sessions.sess}->'user'->>'id' = ${testUser.id}`);
+      await db.delete(sessions).where(eq(sessions.userId, testUser.id));
 
       // Delete audit logs next
       await db.delete(auditLogs).where(eq(auditLogs.userId, testUser.id));
@@ -73,8 +72,7 @@ describe('Admin User Initialization', () => {
       if (testUser) {
         // Delete sessions first
         const { sessions } = await import('@shared/schema');
-        const { sql } = await import('drizzle-orm');
-        await db.delete(sessions).where(sql`${sessions.sess}->'user'->>'id' = ${testUser.id}`);
+        await db.delete(sessions).where(eq(sessions.userId, testUser.id));
 
         // Delete audit logs next
         await db.delete(auditLogs).where(eq(auditLogs.userId, testUser.id));
@@ -597,10 +595,9 @@ describe('Admin User Initialization', () => {
       ]);
 
       // Verify sessions were created
-      const { sql } = await import('drizzle-orm');
       const sessionsBefore = await db.select()
         .from(sessions)
-        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+        .where(eq(sessions.userId, user!.id));
       expect(sessionsBefore).toHaveLength(3);
 
       // 3. Change password to trigger session revocation
@@ -610,7 +607,7 @@ describe('Admin User Initialization', () => {
       // 4. Verify all sessions were deleted
       const sessionsAfter = await db.select()
         .from(sessions)
-        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+        .where(eq(sessions.userId, user!.id));
       expect(sessionsAfter).toHaveLength(0);
     });
 
@@ -643,10 +640,9 @@ describe('Admin User Initialization', () => {
       expect(revokeSpy).not.toHaveBeenCalled();
 
       // Verify session still exists
-      const { sql } = await import('drizzle-orm');
       const remainingSessions = await db.select()
         .from(sessions)
-        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+        .where(eq(sessions.userId, user!.id));
       expect(remainingSessions).toHaveLength(1);
 
       revokeSpy.mockRestore();
@@ -725,10 +721,9 @@ describe('Admin User Initialization', () => {
       expect(revokeSpy).not.toHaveBeenCalled();
 
       // Verify session still exists
-      const { sql } = await import('drizzle-orm');
       const remainingSessions = await db.select()
         .from(sessions)
-        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+        .where(eq(sessions.userId, user!.id));
       expect(remainingSessions).toHaveLength(1);
 
       revokeSpy.mockRestore();
@@ -772,10 +767,9 @@ describe('Admin User Initialization', () => {
       ]);
 
       // Verify sessions exist before test
-      const { sql } = await import('drizzle-orm');
       const sessionsBefore = await db.select()
         .from(sessions)
-        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+        .where(eq(sessions.userId, user!.id));
       expect(sessionsBefore).toHaveLength(2);
 
       // Mock process.exit to throw instead of exiting
@@ -806,7 +800,7 @@ describe('Admin User Initialization', () => {
       // CRITICAL: Verify sessions were NOT deleted (transaction rolled back)
       const sessionsAfter = await db.select()
         .from(sessions)
-        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+        .where(eq(sessions.userId, user!.id));
       expect(sessionsAfter).toHaveLength(2);
       expect(sessionsAfter.map(s => s.sid)).toContain('test-session-1');
       expect(sessionsAfter.map(s => s.sid)).toContain('test-session-2');
