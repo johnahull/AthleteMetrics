@@ -282,9 +282,8 @@ export async function initializeDefaultUser() {
       if (!passwordMatches || needsPrivilegeRestore) {
         // CRITICAL: Revoke sessions BEFORE password update to prevent race condition
         // This ensures no one can log in during the window between update and revocation
-        let revokedCount = 0;
         if (!passwordMatches) {
-          revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id);
+          await AuthSecurity.revokeAllSessions(existingUser.id);
         }
 
         const updateData: any = {};
@@ -331,7 +330,6 @@ export async function initializeDefaultUser() {
             resourceId: existingUser.id,
             details: JSON.stringify({
               reason: 'password_sync',
-              count: revokedCount,
               timestamp: new Date().toISOString()
             }),
             ipAddress: '127.0.0.1',
@@ -339,7 +337,7 @@ export async function initializeDefaultUser() {
           });
 
           console.log(`Site administrator password synced with environment variable: ${adminUser}`);
-          console.log(`Revoked ${revokedCount} active session(s) for security`);
+          console.log(`Revoked all active sessions for security`);
         }
 
         if (needsPrivilegeRestore && updateData.isSiteAdmin) {
