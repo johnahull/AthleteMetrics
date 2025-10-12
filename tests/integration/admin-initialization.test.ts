@@ -243,6 +243,10 @@ describe('Admin User Initialization', () => {
     });
 
     it('should update passwordChangedAt when password syncs', async () => {
+      // Use fake timers for deterministic testing
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-01T00:00:00Z'));
+
       // Create admin with initial password
       process.env.ADMIN_USER = 'test-admin';
       process.env.ADMIN_PASSWORD = 'InitialPass123!';
@@ -252,12 +256,14 @@ describe('Admin User Initialization', () => {
       let user = await storage.getUserByUsername('test-admin');
       const initialPasswordChangedAt = user!.passwordChangedAt;
 
-      // Wait a moment to ensure timestamp changes
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Advance time by 1 minute
+      vi.setSystemTime(new Date('2025-01-01T00:01:00Z'));
 
       // Change environment password
       process.env.ADMIN_PASSWORD = 'NewPassword456!';
       await initializeDefaultUser();
+
+      vi.useRealTimers();
 
       // Verify passwordChangedAt was updated
       user = await storage.getUserByUsername('test-admin');
@@ -559,7 +565,8 @@ describe('Admin User Initialization', () => {
 
       const details = JSON.parse(revocationLog!.details);
       expect(details.reason).toBe('password_sync');
-      expect(details.revokedCount).toBeGreaterThanOrEqual(0);
+      // Should be exactly 0 since we didn't create any sessions before password change
+      expect(details.revokedCount).toBe(0);
       expect(details.securityContext).toBe('password_change');
     });
 

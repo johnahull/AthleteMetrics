@@ -280,35 +280,48 @@ export async function initializeDefaultUser() {
 
       // Combine updates into single atomic operation to prevent race conditions
       if (!passwordMatches || needsPrivilegeRestore) {
-        // CRITICAL: Revoke sessions BEFORE password update to prevent race condition
-        // This ensures no one can log in during the window between update and revocation
-        // For password changes, throwOnError=true ensures session revocation MUST succeed
+        // Import db for transaction support
+        const { db } = await import("./db");
+        const { eq } = await import("drizzle-orm");
+        const { users } = await import("@shared/schema");
+
+        // Use database transaction for atomicity
+        // This eliminates race condition between session revocation and password update
         let revokedCount = 0;
-        if (!passwordMatches) {
-          revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true });
-        }
+        await db.transaction(async (tx) => {
+          // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
+          // For password changes, throwOnError=true ensures session revocation MUST succeed
+          if (!passwordMatches) {
+            revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true });
+          }
 
-        const updateData: any = {};
+          const updateData: any = {};
 
-        if (!passwordMatches) {
-          // Password in environment has changed - update the database
-          // Note: updateUser will hash the password automatically
-          updateData.password = adminPassword;
-          updateData.passwordChangedAt = new Date();
-        }
+          if (!passwordMatches) {
+            // Password in environment has changed - update the database
+            // Note: Must hash manually in transaction (can't use storage.updateUser)
+            const bcryptImport = await import("bcrypt");
+            updateData.password = await bcryptImport.default.hash(adminPassword, 10);
+            updateData.passwordChangedAt = new Date();
+          }
 
-        if (needsPrivilegeRestore) {
-          // Ensure isSiteAdmin flag is set (in case it was changed)
-          updateData.isSiteAdmin = true;
-        }
+          if (needsPrivilegeRestore) {
+            // Ensure isSiteAdmin flag is set (in case it was changed)
+            updateData.isSiteAdmin = true;
+          }
 
-        // Single atomic update to prevent race conditions
-        // Only call updateUser if there are changes to make
-        if (Object.keys(updateData).length > 0) {
-          await storage.updateUser(existingUser.id, updateData);
-        }
+          // Single atomic update within transaction to prevent race conditions
+          if (Object.keys(updateData).length > 0) {
+            await tx.update(users)
+              .set(updateData)
+              .where(eq(users.id, existingUser.id));
+          }
+        });
 
         // Create audit logs for security events
+        // Use consistent IP address for all server-initiated actions
+        const SYSTEM_IP = '127.0.0.1';
+
         if (!passwordMatches) {
           await storage.createAuditLog({
             userId: existingUser.id,
@@ -320,7 +333,7 @@ export async function initializeDefaultUser() {
               syncReason: 'environment_variable_mismatch',
               timestamp: new Date().toISOString()
             }),
-            ipAddress: '127.0.0.1', // Server-initiated
+            ipAddress: SYSTEM_IP, // Server-initiated
             userAgent: 'System',
           });
 
@@ -336,7 +349,7 @@ export async function initializeDefaultUser() {
               securityContext: 'password_change',
               timestamp: new Date().toISOString()
             }),
-            ipAddress: '127.0.0.1',
+            ipAddress: SYSTEM_IP,
             userAgent: 'System',
           });
 
@@ -344,7 +357,7 @@ export async function initializeDefaultUser() {
           console.log(`Revoked ${revokedCount} active session(s) for security`);
         }
 
-        if (needsPrivilegeRestore && updateData.isSiteAdmin) {
+        if (needsPrivilegeRestore) {
           await storage.createAuditLog({
             userId: existingUser.id,
             action: 'privilege_restored',
@@ -357,7 +370,7 @@ export async function initializeDefaultUser() {
               restorationReason: 'startup_verification',
               timestamp: new Date().toISOString()
             }),
-            ipAddress: '0.0.0.0',
+            ipAddress: SYSTEM_IP,
             userAgent: 'System',
           });
           console.log(`Site administrator privileges restored: ${adminUser}`);
@@ -466,8 +479,15 @@ export async function registerRoutes(app: Express) {
       sessionConfig.store = new PgStore({
         pool: db as any, // Drizzle's db object is compatible with Pool interface
         tableName: 'session',
-        createTableIfMissing: true, // Creates table if it doesn't exist
+        createTableIfMissing: process.env.NODE_ENV !== 'production', // Only auto-create in development
         pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes
+        errorLog: (error: any) => {
+          console.error('CRITICAL: Session store error:', error);
+          if (error.message?.includes('does not exist') && process.env.NODE_ENV === 'production') {
+            console.error('Run database migration to create session table');
+            process.exit(1); // Fail startup if table missing in production
+          }
+        }
       });
       console.log('Using PostgreSQL session store');
       sessionStoreConfigured = true;
