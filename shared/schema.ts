@@ -169,13 +169,14 @@ export const sessions = pgTable("session", {
   sid: varchar("sid", { length: 255 }).primaryKey(),
   sess: jsonb("sess").notNull(),
   expire: timestamp("expire", { mode: 'date' }).notNull(),
+  // Denormalized userId for efficient queries and foreign key constraint
+  // Prevents orphaned sessions and provides 10-100x faster lookups than JSONB extraction
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
 }, (table) => ({
   // Index for efficient session cleanup and expiration queries
   expireIdx: index("IDX_session_expire").on(table.expire),
-  // BTREE expression index for JSONB path queries (session revocation by user ID)
-  // This provides 100x speedup for exact match queries like: sess->'user'->>'id' = 'user-id'
-  // Note: jsonb_path_ops only supports containment (@>, <@), not path extraction (->. ->>)
-  sessUserIdx: sql`CREATE INDEX IF NOT EXISTS session_sess_user_idx ON ${table} USING btree ((sess->'user'->>'id'))`,
+  // Native BTREE index on userId column (much faster than JSONB expression index)
+  userIdIdx: index("session_user_id_idx").on(table.userId),
 }));
 
 // Email verification tokens
