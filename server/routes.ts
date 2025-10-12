@@ -282,8 +282,10 @@ export async function initializeDefaultUser() {
       if (!passwordMatches || needsPrivilegeRestore) {
         // CRITICAL: Revoke sessions BEFORE password update to prevent race condition
         // This ensures no one can log in during the window between update and revocation
+        // For password changes, throwOnError=true ensures session revocation MUST succeed
+        let revokedCount = 0;
         if (!passwordMatches) {
-          await AuthSecurity.revokeAllSessions(existingUser.id);
+          revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true });
         }
 
         const updateData: any = {};
@@ -322,7 +324,7 @@ export async function initializeDefaultUser() {
             userAgent: 'System',
           });
 
-          // Audit log for session revocation
+          // Audit log for session revocation with count
           await storage.createAuditLog({
             userId: existingUser.id,
             action: 'sessions_revoked',
@@ -330,6 +332,8 @@ export async function initializeDefaultUser() {
             resourceId: existingUser.id,
             details: JSON.stringify({
               reason: 'password_sync',
+              revokedCount: revokedCount,
+              securityContext: 'password_change',
               timestamp: new Date().toISOString()
             }),
             ipAddress: '127.0.0.1',
@@ -337,7 +341,7 @@ export async function initializeDefaultUser() {
           });
 
           console.log(`Site administrator password synced with environment variable: ${adminUser}`);
-          console.log(`Revoked all active sessions for security`);
+          console.log(`Revoked ${revokedCount} active session(s) for security`);
         }
 
         if (needsPrivilegeRestore && updateData.isSiteAdmin) {

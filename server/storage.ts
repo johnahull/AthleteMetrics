@@ -2176,24 +2176,25 @@ export class DatabaseStorage implements IStorage {
     console.log('Revoking login session:', token);
   }
 
-  async revokeAllUserSessions(userId: string): Promise<void> {
+  async revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number> {
     // Revoke all sessions for a user by deleting them from the session store
     // Sessions are stored with user ID in the sess JSON field
     const { sessions } = await import('@shared/schema');
     const { sql } = await import('drizzle-orm');
+    const throwOnError = options?.throwOnError ?? false;
 
     try {
       // Delete all sessions where the session data contains this user ID
       // Using simplified query - we only use sess.user.id format (not passport.js)
-      await db.delete(sessions).where(
+      const result = await db.delete(sessions).where(
         sql`${sessions.sess}->'user'->>'id' = ${userId}`
       );
 
-      console.log(`Revoked all sessions for user: ${userId}`);
+      const count = result.rowCount || 0;
+      console.log(`Revoked ${count} session(s) for user: ${userId}`);
+      return count;
     } catch (error) {
       console.error('SECURITY: Failed to revoke user sessions:', error);
-      // Don't throw - session revocation is a best-effort operation
-      // The system should still function if session cleanup fails
 
       // Create audit log for failed session revocation
       try {
@@ -2204,6 +2205,7 @@ export class DatabaseStorage implements IStorage {
           resourceId: userId,
           details: JSON.stringify({
             error: String(error),
+            securityContext: throwOnError ? 'password_sync' : 'general',
             timestamp: new Date().toISOString()
           }),
           ipAddress: '127.0.0.1',
@@ -2213,6 +2215,14 @@ export class DatabaseStorage implements IStorage {
         // If audit logging fails, just log to console
         console.error('Failed to create audit log for session revocation failure:', auditError);
       }
+
+      // For critical security operations (password changes), session revocation MUST succeed
+      if (throwOnError) {
+        throw new Error(`Failed to revoke sessions for user ${userId}: ${error}`);
+      }
+
+      // For non-critical operations, session revocation is best-effort
+      return 0;
     }
   }
 

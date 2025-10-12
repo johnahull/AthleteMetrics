@@ -172,9 +172,10 @@ export const sessions = pgTable("session", {
 }, (table) => ({
   // Index for efficient session cleanup and expiration queries
   expireIdx: index("IDX_session_expire").on(table.expire),
-  // GIN index for JSONB path queries (session revocation by user ID)
-  // This provides 40-100x speedup for queries like: sess->'user'->>'id' = 'user-id'
-  sessUserIdx: sql`CREATE INDEX IF NOT EXISTS session_sess_user_idx ON ${table} USING GIN (sess jsonb_path_ops)`,
+  // BTREE expression index for JSONB path queries (session revocation by user ID)
+  // This provides 100x speedup for exact match queries like: sess->'user'->>'id' = 'user-id'
+  // Note: jsonb_path_ops only supports containment (@>, <@), not path extraction (->. ->>)
+  sessUserIdx: sql`CREATE INDEX IF NOT EXISTS session_sess_user_idx ON ${table} USING btree ((sess->'user'->>'id'))`,
 }));
 
 // Email verification tokens
