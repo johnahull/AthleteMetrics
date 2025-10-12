@@ -298,20 +298,14 @@ export async function initializeDefaultUser() {
 
         if (needsPrivilegeRestore) {
           // Ensure isSiteAdmin flag is set (in case it was changed)
-          // NOTE: This requires RESTORE_ADMIN_PRIVILEGE environment variable to be set
-          const restorePrivilege = process.env.RESTORE_ADMIN_PRIVILEGE === 'true';
-          if (restorePrivilege) {
-            updateData.isSiteAdmin = true;
-          } else {
-            console.error('SECURITY: Admin privilege mismatch detected. isSiteAdmin flag is not true.');
-            console.error('SECURITY: Set RESTORE_ADMIN_PRIVILEGE=true to automatically restore privileges.');
-            console.error('SECURITY: This is a security feature to prevent unauthorized privilege escalation.');
-            // Don't restore privilege without explicit opt-in
-          }
+          updateData.isSiteAdmin = true;
         }
 
         // Single atomic update to prevent race conditions
-        await storage.updateUser(existingUser.id, updateData);
+        // Only call updateUser if there are changes to make
+        if (Object.keys(updateData).length > 0) {
+          await storage.updateUser(existingUser.id, updateData);
+        }
 
         // Create audit logs for security events
         if (!passwordMatches) {
