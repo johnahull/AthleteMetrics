@@ -289,9 +289,12 @@ export async function initializeDefaultUser() {
         // This eliminates race condition between session revocation and password update
         let revokedCount = 0;
         await db.transaction(async (tx) => {
+          // CRITICAL: Use SERIALIZABLE isolation to prevent phantom reads and concurrent modifications
+          const { sql } = await import("drizzle-orm");
+          await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+
           // CRITICAL: Lock user row immediately to prevent concurrent authentication
           // This prevents race condition where user logs in between session revocation and password update
-          const { sql } = await import("drizzle-orm");
           await tx.select()
             .from(users)
             .where(eq(users.id, existingUser.id))
@@ -309,14 +312,25 @@ export async function initializeDefaultUser() {
           if (!passwordMatches) {
             // Password in environment has changed - update the database
             // Note: Must hash manually in transaction (can't use storage.updateUser)
+            // Use 12 rounds per OWASP recommendation for admin passwords
             const bcryptImport = await import("bcrypt");
-            updateData.password = await bcryptImport.default.hash(adminPassword, 10);
+            updateData.password = await bcryptImport.default.hash(adminPassword, 12);
             updateData.passwordChangedAt = new Date();
           }
 
           if (needsPrivilegeRestore) {
-            // Ensure isSiteAdmin flag is set (in case it was changed)
-            updateData.isSiteAdmin = true;
+            // SECURITY: Auto-restore isSiteAdmin flag only if explicitly enabled
+            // This prevents automatic privilege escalation after security team demotes admin
+            const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE !== 'false';
+
+            if (allowPrivilegeRestore) {
+              // Ensure isSiteAdmin flag is set (in case it was changed)
+              updateData.isSiteAdmin = true;
+              console.warn('SECURITY WARNING: Auto-restoring site admin privileges. Set ALLOW_ADMIN_PRIVILEGE_RESTORE=false to disable.');
+            } else {
+              console.error('SECURITY ALERT: Site admin privileges were revoked but auto-restore is disabled. Manual intervention required.');
+              console.error('To restore privileges, set ALLOW_ADMIN_PRIVILEGE_RESTORE=true and restart the server.');
+            }
           }
 
           // Single atomic update within transaction to prevent race conditions

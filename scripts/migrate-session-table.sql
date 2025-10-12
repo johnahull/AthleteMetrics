@@ -1,6 +1,9 @@
 -- Migration script for PostgreSQL session store
 -- Creates session table with proper indexes if it doesn't exist
 -- Safe to run multiple times (idempotent)
+-- Wrapped in transaction for atomicity
+
+BEGIN;
 
 -- Create session table for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (
@@ -28,3 +31,5 @@ BEGIN
     RAISE EXCEPTION 'Failed to create session table';
   END IF;
 END $$;
+
+COMMIT;
