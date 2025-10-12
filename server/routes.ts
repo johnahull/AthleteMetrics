@@ -286,6 +286,7 @@ export async function initializeDefaultUser() {
       // Use database transaction for atomicity
       // This eliminates race condition between session revocation and password update
       let revokedCount = 0;
+      let passwordMatches = false;
       await db.transaction(async (tx) => {
         // CRITICAL: Lock user row immediately to prevent concurrent authentication
         // This prevents race condition where user logs in between session revocation and password update
@@ -296,7 +297,7 @@ export async function initializeDefaultUser() {
 
         // CRITICAL: Compare password INSIDE transaction after row lock to prevent TOCTOU vulnerability
         // This ensures no concurrent password change can occur between check and update
-        const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
+        passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
 
         // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
         // For password changes, throwOnError=true ensures session revocation MUST succeed
