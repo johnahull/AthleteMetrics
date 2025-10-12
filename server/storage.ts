@@ -2176,7 +2176,7 @@ export class DatabaseStorage implements IStorage {
     console.log('Revoking login session:', token);
   }
 
-  async revokeAllUserSessions(userId: string): Promise<number> {
+  async revokeAllUserSessions(userId: string): Promise<void> {
     // Revoke all sessions for a user by deleting them from the session store
     // Sessions are stored with user ID in the sess JSON field
     const { sessions } = await import('@shared/schema');
@@ -2185,14 +2185,11 @@ export class DatabaseStorage implements IStorage {
     try {
       // Delete all sessions where the session data contains this user ID
       // Using simplified query - we only use sess.user.id format (not passport.js)
-      const result = await db.delete(sessions).where(
+      await db.delete(sessions).where(
         sql`${sessions.sess}->'user'->>'id' = ${userId}`
       );
 
-      const count = result.rowCount || 0;
-      console.log(`Revoked ${count} session(s) for user: ${userId}`);
-
-      return count;
+      console.log(`Revoked all sessions for user: ${userId}`);
     } catch (error) {
       console.error('SECURITY: Failed to revoke user sessions:', error);
       // Don't throw - session revocation is a best-effort operation
@@ -2216,8 +2213,6 @@ export class DatabaseStorage implements IStorage {
         // If audit logging fails, just log to console
         console.error('Failed to create audit log for session revocation failure:', auditError);
       }
-
-      return 0;
     }
   }
 
