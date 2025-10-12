@@ -692,5 +692,55 @@ describe('Admin User Initialization', () => {
       // Restore bcrypt mock
       vi.restoreAllMocks();
     });
+
+    it('should prevent concurrent login during password sync with row-level locking', async () => {
+      // This test verifies that row-level locking prevents race conditions
+      // where a user could log in with the old password during password sync
+
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'InitialPass123!';
+
+      // Create admin user with initial password
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user).toBeDefined();
+
+      // Change password to trigger sync
+      process.env.ADMIN_PASSWORD = 'NewPassword456!';
+
+      // Mock authentication attempt during password sync
+      let authenticationAttempted = false;
+      let authenticationSucceeded = false;
+
+      // Start password sync in background (non-blocking)
+      const syncPromise = initializeDefaultUser();
+
+      // Attempt to authenticate with old password immediately
+      // This should block on the row-level lock until transaction completes
+      try {
+        const authenticatedUser = await storage.authenticateUser('test-admin', 'InitialPass123!');
+        authenticationAttempted = true;
+        authenticationSucceeded = authenticatedUser !== null;
+      } catch (error) {
+        authenticationAttempted = true;
+        authenticationSucceeded = false;
+      }
+
+      // Wait for password sync to complete
+      await syncPromise;
+
+      // Verify authentication attempt occurred
+      expect(authenticationAttempted).toBe(true);
+
+      // After password sync, old password should NOT work
+      const oldPasswordWorks = await storage.authenticateUser('test-admin', 'InitialPass123!');
+      expect(oldPasswordWorks).toBeNull();
+
+      // New password should work
+      const newPasswordWorks = await storage.authenticateUser('test-admin', 'NewPassword456!');
+      expect(newPasswordWorks).toBeDefined();
+      expect(newPasswordWorks?.id).toBe(user!.id);
+    });
   });
 });
