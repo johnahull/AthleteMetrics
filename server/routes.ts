@@ -256,160 +256,186 @@ export async function initializeDefaultUser() {
       process.exit(1);
     }
 
-    // Check if admin user already exists by username
-    const existingUser = await storage.getUserByUsername(adminUser);
+    // Combine updates into single atomic operation to prevent race conditions
+    // Always enter transaction to perform secure user lookup with row lock
+    const { db } = await import("./db");
+    const { eq } = await import("drizzle-orm");
+    const { users } = await import("@shared/schema");
 
-    if (!existingUser) {
-      // Note: Site admins have role=site_admin and isSiteAdmin=true
-      // role is for organization-level permissions (athlete, coach, org_admin, site_admin)
-      // while isSiteAdmin grants platform-wide access independent of organizations
-      await storage.createUser({
-        username: adminUser,
-        emails: adminEmail ? [adminEmail] : [], // Optional email
-        password: adminPassword,
-        firstName: "Site",
-        lastName: "Administrator",
-        role: "site_admin",
-        isSiteAdmin: true
-      });
-      console.log(`Site administrator account created successfully: ${adminUser}`);
-    } else {
+    // Use database transaction for atomicity
+    // This eliminates TOCTOU vulnerability by fetching and locking user in single atomic operation
+    let revokedCount = 0;
+    let passwordMatches = false;
+    let userCreated = false;
+
+    await db.transaction(async (tx) => {
+      // CRITICAL: Fetch and lock user row inside transaction to prevent TOCTOU
+      // This prevents race condition where user data could change between fetch and lock
+      // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
+      const existingUsers = await tx.select()
+        .from(users)
+        .where(eq(users.username, adminUser))
+        .for('update'); // SELECT ... FOR UPDATE (row-level lock)
+
+      if (existingUsers.length === 0) {
+        // User doesn't exist - create new admin user
+        // Note: Site admins have role=site_admin and isSiteAdmin=true
+        // role is for organization-level permissions (athlete, coach, org_admin, site_admin)
+        // while isSiteAdmin grants platform-wide access independent of organizations
+        const bcryptImport = await import("bcrypt");
+        const hashedPassword = await bcryptImport.default.hash(adminPassword, 14);
+
+        await tx.insert(users).values({
+          username: adminUser,
+          emails: adminEmail ? [adminEmail] : [], // Optional email
+          password: hashedPassword,
+          passwordChangedAt: new Date(),
+          firstName: "Site",
+          lastName: "Administrator",
+          role: "site_admin",
+          isSiteAdmin: true
+        });
+
+        userCreated = true;
+        return; // Exit transaction early for new user creation
+      }
+
       // User exists - check if password needs to be synced with environment variable
-      const needsPrivilegeRestore = existingUser.isSiteAdmin !== true;
+      const lockedUser = existingUsers[0];
+      const needsPrivilegeRestore = lockedUser.isSiteAdmin !== true;
 
-      // Combine updates into single atomic operation to prevent race conditions
-      // Always enter transaction to perform secure password check with row lock
-      const { db } = await import("./db");
-      const { eq } = await import("drizzle-orm");
-      const { users } = await import("@shared/schema");
+      // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
+      // This prevents TOCTOU vulnerability where password could change between fetch and use
+      // Using lockedUser.password ensures we compare against current value
+      passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
 
-      // Use database transaction for atomicity
-      // This eliminates race condition between session revocation and password update
-      let revokedCount = 0;
-      let passwordMatches = false;
-      await db.transaction(async (tx) => {
-        // CRITICAL: Lock user row immediately to prevent concurrent authentication
-        // This prevents race condition where user logs in between session revocation and password update
-        // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
-        const [lockedUser] = await tx.select()
-          .from(users)
-          .where(eq(users.id, existingUser.id))
-          .for('update'); // SELECT ... FOR UPDATE (row-level lock)
+      // CRITICAL: Always revoke sessions to prevent timing side-channel attack
+      // Executing session revocation regardless of password match eliminates timing difference
+      // that could leak information about password correctness through response time analysis
+      // For password changes, throwOnError=true ensures session revocation MUST succeed
+      // Pass tx to ensure session deletion is part of the same transaction
+      revokedCount = await AuthSecurity.revokeAllSessions(lockedUser.id, { throwOnError: !passwordMatches, tx });
 
-        // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
-        // This prevents TOCTOU vulnerability where password could change between line 260 and here
-        // Using lockedUser.password instead of existingUser.password ensures we compare against current value
-        passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
+      const updateData: any = {};
 
-        // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
-        // For password changes, throwOnError=true ensures session revocation MUST succeed
-        // Pass tx to ensure session deletion is part of the same transaction
-        if (!passwordMatches) {
-          revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true, tx });
-        }
-
-        const updateData: any = {};
-
-        if (!passwordMatches) {
-          // Password in environment has changed - update the database
-          // Note: Must hash manually in transaction (can't use storage.updateUser)
-          // Use 14 rounds per OWASP recommendation for high-value admin accounts
-          // (Higher than standard 12 rounds due to elevated privilege level)
-          const bcryptImport = await import("bcrypt");
-          updateData.password = await bcryptImport.default.hash(adminPassword, 14);
-          updateData.passwordChangedAt = new Date();
-        }
-
-        if (needsPrivilegeRestore) {
-          // SECURITY: Auto-restore isSiteAdmin flag only if explicitly enabled
-          // This prevents automatic privilege escalation after security team demotes admin
-          // DEFAULT: false (requires explicit opt-in for security)
-          const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE === 'true';
-
-          if (allowPrivilegeRestore) {
-            // Ensure isSiteAdmin flag is set (in case it was changed)
-            updateData.isSiteAdmin = true;
-            console.warn('SECURITY WARNING: Auto-restoring site admin privileges. Set ALLOW_ADMIN_PRIVILEGE_RESTORE=false to disable.');
-          } else {
-            console.error('SECURITY ALERT: Site admin privileges were revoked but auto-restore is disabled. Manual intervention required.');
-            console.error('To restore privileges, set ALLOW_ADMIN_PRIVILEGE_RESTORE=true and restart the server.');
-          }
-        }
-
-        // Single atomic update within transaction to prevent race conditions
-        if (Object.keys(updateData).length > 0) {
-          await tx.update(users)
-            .set(updateData)
-            .where(eq(users.id, existingUser.id));
-        }
-
-        // Create audit logs INSIDE transaction for atomicity
-        // Use consistent IP address for all server-initiated actions
-        const SYSTEM_IP = '127.0.0.1';
-        const { auditLogs } = await import("@shared/schema");
-
-        if (!passwordMatches) {
-          // Audit log for password sync
-          await tx.insert(auditLogs).values({
-            userId: existingUser.id,
-            action: 'admin_password_synced',
-            resourceType: 'user',
-            resourceId: existingUser.id,
-            details: JSON.stringify({
-              username: adminUser,
-              syncReason: 'environment_variable_mismatch',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: SYSTEM_IP, // Server-initiated
-            userAgent: 'System',
-          });
-
-          // Audit log for session revocation with count
-          await tx.insert(auditLogs).values({
-            userId: existingUser.id,
-            action: 'sessions_revoked',
-            resourceType: 'user',
-            resourceId: existingUser.id,
-            details: JSON.stringify({
-              reason: 'password_sync',
-              revokedCount: revokedCount,
-              securityContext: 'password_change',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: SYSTEM_IP,
-            userAgent: 'System',
-          });
-        }
-
-        if (needsPrivilegeRestore) {
-          // Audit log for privilege restoration
-          await tx.insert(auditLogs).values({
-            userId: existingUser.id,
-            action: 'privilege_restored',
-            resourceType: 'user',
-            resourceId: existingUser.id,
-            details: JSON.stringify({
-              username: adminUser,
-              previousState: 'isSiteAdmin=false',
-              newState: 'isSiteAdmin=true',
-              restorationReason: 'startup_verification',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: SYSTEM_IP,
-            userAgent: 'System',
-          });
-        }
-      });
-
-      // Console logging after successful transaction
       if (!passwordMatches) {
-        console.log(`Site administrator password synced with environment variable: ${adminUser}`);
-        console.log(`Revoked ${revokedCount} active session(s) for security`);
+        // Password in environment has changed - update the database
+        // Note: Must hash manually in transaction (can't use storage.updateUser)
+        // Use 14 rounds per OWASP recommendation for high-value admin accounts
+        // (Higher than standard 12 rounds due to elevated privilege level)
+        const bcryptImport = await import("bcrypt");
+        updateData.password = await bcryptImport.default.hash(adminPassword, 14);
+        updateData.passwordChangedAt = new Date();
       }
 
       if (needsPrivilegeRestore) {
-        console.log(`Site administrator privileges restored: ${adminUser}`);
+        // SECURITY: Auto-restore isSiteAdmin flag only if explicitly enabled
+        // This prevents automatic privilege escalation after security team demotes admin
+        // DEFAULT: false (requires explicit opt-in for security)
+        const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE === 'true';
+
+        if (allowPrivilegeRestore) {
+          // Ensure isSiteAdmin flag is set (in case it was changed)
+          updateData.isSiteAdmin = true;
+          console.warn('SECURITY WARNING: Auto-restoring site admin privileges. Set ALLOW_ADMIN_PRIVILEGE_RESTORE=false to disable.');
+        } else {
+          console.error('SECURITY ALERT: Site admin privileges were revoked but auto-restore is disabled. Manual intervention required.');
+          console.error('To restore privileges, set ALLOW_ADMIN_PRIVILEGE_RESTORE=true and restart the server.');
+
+          // CRITICAL: Audit log for blocked privilege restoration attempt
+          // This creates a security audit trail when automatic privilege escalation is prevented
+          const { auditLogs } = await import("@shared/schema");
+          const SYSTEM_IP = '127.0.0.1';
+          await tx.insert(auditLogs).values({
+            userId: lockedUser.id,
+            action: 'privilege_restoration_blocked',
+            resourceType: 'user',
+            resourceId: lockedUser.id,
+            details: JSON.stringify({
+              username: adminUser,
+              currentState: 'isSiteAdmin=false',
+              attemptedAction: 'auto_restore_privileges',
+              blockReason: 'ALLOW_ADMIN_PRIVILEGE_RESTORE=false',
+              securityNote: 'Manual intervention required',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: SYSTEM_IP,
+            userAgent: 'System',
+          });
+        }
       }
+
+      // Single atomic update within transaction to prevent race conditions
+      if (Object.keys(updateData).length > 0) {
+        await tx.update(users)
+          .set(updateData)
+          .where(eq(users.id, lockedUser.id));
+      }
+
+      // Create audit logs INSIDE transaction for atomicity
+      // Use consistent IP address for all server-initiated actions
+      const SYSTEM_IP = '127.0.0.1';
+      const { auditLogs } = await import("@shared/schema");
+
+      if (!passwordMatches) {
+        // Audit log for password sync
+        await tx.insert(auditLogs).values({
+          userId: lockedUser.id,
+          action: 'admin_password_synced',
+          resourceType: 'user',
+          resourceId: lockedUser.id,
+          details: JSON.stringify({
+            username: adminUser,
+            syncReason: 'environment_variable_mismatch',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: SYSTEM_IP, // Server-initiated
+          userAgent: 'System',
+        });
+
+        // Audit log for session revocation with count
+        await tx.insert(auditLogs).values({
+          userId: lockedUser.id,
+          action: 'sessions_revoked',
+          resourceType: 'user',
+          resourceId: lockedUser.id,
+          details: JSON.stringify({
+            reason: 'password_sync',
+            revokedCount: revokedCount,
+            securityContext: 'password_change',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: SYSTEM_IP,
+          userAgent: 'System',
+        });
+      }
+
+      if (needsPrivilegeRestore) {
+        // Audit log for privilege restoration
+        await tx.insert(auditLogs).values({
+          userId: lockedUser.id,
+          action: 'privilege_restored',
+          resourceType: 'user',
+          resourceId: lockedUser.id,
+          details: JSON.stringify({
+            username: adminUser,
+            previousState: 'isSiteAdmin=false',
+            newState: 'isSiteAdmin=true',
+            restorationReason: 'startup_verification',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: SYSTEM_IP,
+          userAgent: 'System',
+        });
+      }
+    });
+
+    // Console logging after successful transaction
+    if (userCreated) {
+      console.log(`Site administrator account created successfully: ${adminUser}`);
+    } else if (!passwordMatches) {
+      console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+      console.log(`Revoked ${revokedCount} active session(s) for security`);
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
