@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS session (
   sid VARCHAR(255) PRIMARY KEY,
   sess JSONB NOT NULL,
   expire TIMESTAMP NOT NULL,
-  user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE
+  user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Create index for session expiration (used by automatic pruning)

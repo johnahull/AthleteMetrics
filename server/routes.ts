@@ -290,14 +290,16 @@ export async function initializeDefaultUser() {
       await db.transaction(async (tx) => {
         // CRITICAL: Lock user row immediately to prevent concurrent authentication
         // This prevents race condition where user logs in between session revocation and password update
-        await tx.select()
+        // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
+        const [lockedUser] = await tx.select()
           .from(users)
           .where(eq(users.id, existingUser.id))
           .for('update'); // SELECT ... FOR UPDATE (row-level lock)
 
-        // CRITICAL: Compare password INSIDE transaction after row lock to prevent TOCTOU vulnerability
-        // This ensures no concurrent password change can occur between check and update
-        passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
+        // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
+        // This prevents TOCTOU vulnerability where password could change between line 260 and here
+        // Using lockedUser.password instead of existingUser.password ensures we compare against current value
+        passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
 
         // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
         // For password changes, throwOnError=true ensures session revocation MUST succeed
@@ -311,9 +313,10 @@ export async function initializeDefaultUser() {
         if (!passwordMatches) {
           // Password in environment has changed - update the database
           // Note: Must hash manually in transaction (can't use storage.updateUser)
-          // Use 12 rounds per OWASP recommendation for admin passwords
+          // Use 14 rounds per OWASP recommendation for high-value admin accounts
+          // (Higher than standard 12 rounds due to elevated privilege level)
           const bcryptImport = await import("bcrypt");
-          updateData.password = await bcryptImport.default.hash(adminPassword, 12);
+          updateData.password = await bcryptImport.default.hash(adminPassword, 14);
           updateData.passwordChangedAt = new Date();
         }
 
