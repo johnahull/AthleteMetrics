@@ -8,8 +8,9 @@
 // Set environment variables before any imports (DATABASE_URL must be provided externally)
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password123456789';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
@@ -28,7 +29,6 @@ import { registerRoutes } from '../../server/routes';
 import { db } from '../../server/db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
-import bcrypt from 'bcrypt';
 
 // In-memory database for testing
 let app: Express;
@@ -40,28 +40,12 @@ let testAdminUserId: string;
 
 // Test data setup
 const setupTestData = async () => {
-  // Create admin user for authentication
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@test.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'password123456789';
-  const hashedPassword = await bcrypt.hash(adminPassword, 10);
-
-  const [adminUser] = await db.insert(users).values({
-    username: adminEmail,
-    password: hashedPassword,
-    firstName: 'Test',
-    lastName: 'Admin',
-    fullName: 'Test Admin',
-    emails: [adminEmail],
-    gender: 'Male',
-    birthYear: 1990,
-    isSiteAdmin: true,
-    isActive: true,
-    mfaEnabled: false,
-    isEmailVerified: true,
-    requiresPasswordChange: false
-  }).returning();
-
-  testAdminUserId = adminUser.id;
+  // Admin user is already created by initializeDefaultUser() in registerRoutes()
+  // Just get the user ID for cleanup
+  const adminUser = await db.select().from(users).where(eq(users.username, process.env.ADMIN_USER || 'admin')).limit(1);
+  if (adminUser.length > 0) {
+    testAdminUserId = adminUser[0].id;
+  }
 
   // Set up mock test data
   testOrgId = 'test-org-' + Date.now();
@@ -78,7 +62,7 @@ const createAuthenticatedSession = async (userType: 'admin' | 'athlete' = 'admin
     .post('/api/auth/login')
     .send({
       username: process.env.ADMIN_USER || 'admin',
-      password: process.env.ADMIN_PASSWORD || 'password123456789'
+      password: process.env.ADMIN_PASSWORD || 'TestPassword123!'
     });
 
   expect(loginResponse.status).toBe(200);

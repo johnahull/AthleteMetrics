@@ -371,6 +371,10 @@ export async function initializeDefaultUser() {
       }
     }
   } catch (error) {
+    // Rethrow errors from test mocks (e.g., when process.exit is mocked)
+    if (error instanceof Error && error.message === 'process.exit called') {
+      throw error;
+    }
     console.error("Error initializing default user:", error);
     process.exit(1);
   }
