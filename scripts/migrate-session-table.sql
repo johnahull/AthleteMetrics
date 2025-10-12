@@ -7,10 +7,10 @@ BEGIN;
 
 -- Create session table for connect-pg-simple
 CREATE TABLE IF NOT EXISTS session (
-  sid VARCHAR(255) PRIMARY KEY,
-  sess JSONB NOT NULL,
-  expire TIMESTAMP NOT NULL,
-  user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE
+  sid varchar(255) PRIMARY KEY,
+  sess jsonb NOT NULL,
+  expire timestamp NOT NULL,
+  user_id varchar REFERENCES users(id) ON DELETE cascade
 );
 
 -- Create index for session expiration (used by automatic pruning)

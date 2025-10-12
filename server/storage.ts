@@ -2239,6 +2239,10 @@ export class DatabaseStorage implements IStorage {
 
       // For critical security operations (password changes), session revocation MUST succeed
       if (throwOnError) {
+        // Schedule compensating transaction to clean up zombie sessions
+        // This runs outside the main transaction to handle edge cases where
+        // transaction rollback leaves orphaned sessions (e.g., network failures)
+        this.scheduleZombieSessionCleanup(userId);
         throw new Error(`Failed to revoke sessions for user ${userId}: ${error}`);
       }
 
@@ -2516,6 +2520,85 @@ export class DatabaseStorage implements IStorage {
     }
 
     return await query;
+  }
+
+  /**
+   * Schedule a compensating transaction to clean up zombie sessions
+   * This provides defense-in-depth for the rare case where:
+   * 1. Session revocation fails during a password change transaction
+   * 2. Transaction rollback succeeds BUT sessions weren't actually deleted
+   *    (e.g., network partition, database failover, etc.)
+   * 3. User sessions remain active despite failed password change
+   *
+   * The cleanup runs asynchronously to avoid blocking the main transaction failure path.
+   * Uses exponential backoff (5s, 15s, 45s) to handle transient failures.
+   */
+  private scheduleZombieSessionCleanup(userId: string): void {
+    const attemptCleanup = async (attempt: number = 1): Promise<void> => {
+      const maxAttempts = 3;
+      const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s
+
+      try {
+        // Wait before attempting cleanup (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, backoffDelays[attempt - 1]));
+
+        console.log(`SECURITY: Attempting zombie session cleanup for user ${userId} (attempt ${attempt}/${maxAttempts})`);
+
+        // Attempt to revoke sessions outside transaction context
+        const revokedCount = await this.revokeAllUserSessions(userId, { throwOnError: false });
+
+        if (revokedCount > 0) {
+          console.warn(`SECURITY: Cleaned up ${revokedCount} zombie session(s) for user ${userId}`);
+
+          // Create audit log for successful cleanup
+          await this.createAuditLog({
+            userId,
+            action: 'zombie_sessions_cleaned',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              revokedCount,
+              attempt,
+              timestamp: new Date().toISOString(),
+              reason: 'Compensating cleanup after failed session revocation'
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          });
+        } else {
+          console.log(`SECURITY: No zombie sessions found for user ${userId} on attempt ${attempt}`);
+        }
+      } catch (error) {
+        console.error(`SECURITY: Zombie session cleanup attempt ${attempt} failed for user ${userId}:`, error);
+
+        // Retry with exponential backoff if not at max attempts
+        if (attempt < maxAttempts) {
+          console.log(`SECURITY: Scheduling retry ${attempt + 1}/${maxAttempts} for zombie session cleanup`);
+          attemptCleanup(attempt + 1);
+        } else {
+          console.error(`SECURITY CRITICAL: Failed to clean up zombie sessions after ${maxAttempts} attempts for user ${userId}`);
+
+          // Final failure audit log (best effort - don't await)
+          this.createAuditLog({
+            userId,
+            action: 'zombie_cleanup_failed',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              attempts: maxAttempts,
+              lastError: String(error),
+              timestamp: new Date().toISOString(),
+              recommendation: 'Manual session cleanup required'
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          }).catch(err => console.error('Failed to log zombie cleanup failure:', err));
+        }
+      }
+    };
+
+    // Start async cleanup (non-blocking)
+    attemptCleanup(1);
   }
 
 }
