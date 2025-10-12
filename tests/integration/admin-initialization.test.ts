@@ -45,8 +45,15 @@ describe('Admin User Initialization', () => {
     // Clean up any existing test admin user
     const testUser = await storage.getUserByUsername('test-admin');
     if (testUser) {
-      // Delete audit logs first to avoid foreign key constraint violation
+      // Delete sessions first to avoid foreign key constraint violation
+      const { sessions } = await import('@shared/schema');
+      const { sql } = await import('drizzle-orm');
+      await db.delete(sessions).where(sql`${sessions.sess}->'user'->>'id' = ${testUser.id}`);
+
+      // Delete audit logs next
       await db.delete(auditLogs).where(eq(auditLogs.userId, testUser.id));
+
+      // Finally delete the user
       await db.delete(users).where(eq(users.id, testUser.id));
     }
   });
@@ -64,8 +71,15 @@ describe('Admin User Initialization', () => {
     try {
       const testUser = await storage.getUserByUsername('test-admin');
       if (testUser) {
-        // Delete audit logs first to avoid foreign key constraint violation
+        // Delete sessions first
+        const { sessions } = await import('@shared/schema');
+        const { sql } = await import('drizzle-orm');
+        await db.delete(sessions).where(sql`${sessions.sess}->'user'->>'id' = ${testUser.id}`);
+
+        // Delete audit logs next
         await db.delete(auditLogs).where(eq(auditLogs.userId, testUser.id));
+
+        // Finally delete the user
         await db.delete(users).where(eq(users.id, testUser.id));
       }
     } catch (error) {
