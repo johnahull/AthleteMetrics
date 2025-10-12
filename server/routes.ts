@@ -291,8 +291,9 @@ export async function initializeDefaultUser() {
         await db.transaction(async (tx) => {
           // CRITICAL: Revoke sessions BEFORE password update (both in same transaction)
           // For password changes, throwOnError=true ensures session revocation MUST succeed
+          // Pass tx to ensure session deletion is part of the same transaction
           if (!passwordMatches) {
-            revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true });
+            revokedCount = await AuthSecurity.revokeAllSessions(existingUser.id, { throwOnError: true, tx });
           }
 
           const updateData: any = {};

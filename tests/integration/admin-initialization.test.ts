@@ -624,4 +624,73 @@ describe('Admin User Initialization', () => {
       revokeSpy.mockRestore();
     });
   });
+
+  describe('Transaction Rollback', () => {
+    it('should rollback session revocation if password update fails', async () => {
+      // Create admin with initial password
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'InitialPass123!';
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+
+      // Create active sessions
+      const { sessions } = await import('@shared/schema');
+      await db.insert(sessions).values([
+        {
+          sid: 'test-session-1',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000)
+        },
+        {
+          sid: 'test-session-2',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000)
+        }
+      ]);
+
+      // Verify sessions exist before test
+      const { sql } = await import('drizzle-orm');
+      const sessionsBefore = await db.select()
+        .from(sessions)
+        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+      expect(sessionsBefore).toHaveLength(2);
+
+      // Mock bcrypt.hash to fail during password update (within transaction)
+      const bcrypt = await import('bcrypt');
+      const originalHash = bcrypt.default.hash;
+      let hashCallCount = 0;
+      vi.spyOn(bcrypt.default, 'hash').mockImplementation(async (...args: any[]) => {
+        hashCallCount++;
+        // Let the first hash call succeed (for initial user creation if needed)
+        // Fail the second hash call (password update in transaction)
+        if (hashCallCount > 1) {
+          throw new Error('Simulated bcrypt failure in transaction');
+        }
+        return originalHash.apply(bcrypt.default, args);
+      });
+
+      // Change password (should trigger transaction)
+      process.env.ADMIN_PASSWORD = 'NewPassword456!';
+
+      // Expect initializeDefaultUser to throw due to bcrypt failure
+      await expect(initializeDefaultUser()).rejects.toThrow('Simulated bcrypt failure in transaction');
+
+      // CRITICAL: Verify sessions were NOT deleted (transaction rolled back)
+      const sessionsAfter = await db.select()
+        .from(sessions)
+        .where(sql`${sessions.sess}->'user'->>'id' = ${user!.id}`);
+      expect(sessionsAfter).toHaveLength(2);
+      expect(sessionsAfter.map(s => s.sid)).toContain('test-session-1');
+      expect(sessionsAfter.map(s => s.sid)).toContain('test-session-2');
+
+      // Verify password was NOT changed (transaction rolled back)
+      const userAfter = await storage.getUserByUsername('test-admin');
+      const oldPasswordStillWorks = await bcrypt.default.compare('InitialPass123!', userAfter!.password);
+      expect(oldPasswordStillWorks).toBe(true);
+
+      // Restore bcrypt mock
+      vi.restoreAllMocks();
+    });
+  });
 });
