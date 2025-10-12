@@ -171,10 +171,10 @@ export class AuthSecurity {
   /**
    * Revoke all sessions for a user
    * @param userId - The user ID whose sessions should be revoked
-   * @param options - Optional settings (throwOnError: fail-secure for critical operations)
+   * @param options - Optional settings (throwOnError: fail-secure for critical operations, tx: database transaction)
    * @returns Number of sessions revoked
    */
-  static async revokeAllSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number> {
+  static async revokeAllSessions(userId: string, options?: { throwOnError?: boolean; tx?: any }): Promise<number> {
     return await storage.revokeAllUserSessions(userId, options);
   }
 

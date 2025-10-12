@@ -2176,17 +2176,18 @@ export class DatabaseStorage implements IStorage {
     console.log('Revoking login session:', token);
   }
 
-  async revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number> {
+  async revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean; tx?: any }): Promise<number> {
     // Revoke all sessions for a user by deleting them from the session store
     // Sessions are stored with user ID in the sess JSON field
     const { sessions } = await import('@shared/schema');
     const { sql } = await import('drizzle-orm');
     const throwOnError = options?.throwOnError ?? false;
+    const dbConnection = options?.tx || db; // Use transaction if provided, otherwise use global db
 
     try {
       // Delete all sessions where the session data contains this user ID
       // Using simplified query - we only use sess.user.id format (not passport.js)
-      const result = await db.delete(sessions).where(
+      const result = await dbConnection.delete(sessions).where(
         sql`${sessions.sess}->'user'->>'id' = ${userId}`
       ).returning({ sid: sessions.sid });
 
