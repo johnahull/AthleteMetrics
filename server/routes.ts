@@ -411,19 +411,17 @@ export async function initializeDefaultUser() {
   } catch (error) {
     console.error("Error initializing default user:", error);
 
-    // Rethrow errors from test mocks (e.g., when process.exit is mocked)
-    if (error instanceof Error && error.message === 'process.exit called') {
-      throw error;
-    }
-
-    // In test mode, when process.exit is mocked, it will throw
-    // We need to catch and rethrow that error
+    // In test mode, process.exit is mocked to throw an error
+    // We need to catch and rethrow that error for test assertions
     try {
       process.exit(1);
     } catch (exitError) {
       // If process.exit throws (due to test mock), rethrow it
       throw exitError;
     }
+
+    // If process.exit didn't throw (production), the process will have exited
+    // This line is unreachable in production
   }
 }
 
