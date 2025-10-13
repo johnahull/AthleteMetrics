@@ -5404,7 +5404,11 @@ export async function registerRoutes(app: Express) {
         'school', 'teamName'
       ];
 
-      const csvRows = (athletes as any[]).map((athlete: any) => {
+      // Check for multi-team athletes that will lose data in export
+      const multiTeamAthletes = athletes.filter(athlete => athlete.teams && athlete.teams.length > 1);
+      const hasMultiTeamAthletes = multiTeamAthletes.length > 0;
+
+      const csvRows = athletes.map(athlete => {
         // Export first team only as "teamName" (singular) to match import format
         const teamName = athlete.teams && athlete.teams.length > 0 ? athlete.teams[0].name : '';
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
@@ -5442,6 +5446,12 @@ export async function registerRoutes(app: Express) {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="athletes.csv"');
+
+      // Warn if multi-team athletes have data loss
+      if (hasMultiTeamAthletes) {
+        res.setHeader('X-Export-Warning', `${multiTeamAthletes.length} athlete(s) with multiple teams; only first team exported`);
+      }
+
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting athletes:", error);
@@ -5511,6 +5521,10 @@ export async function registerRoutes(app: Express) {
         'metric', 'value', 'units', 'flyInDistance', 'notes'
       ];
 
+      // Check for measurements with multi-team users that will lose data in export
+      const multiTeamMeasurements = measurements.filter(m => m.user?.teams && m.user.teams.length > 1);
+      const hasMultiTeamMeasurements = multiTeamMeasurements.length > 0;
+
       const csvRows = measurements.map(measurement => {
         const user = measurement.user;
         // Export first team only as "teamName" (singular) to match import format
@@ -5545,6 +5559,12 @@ export async function registerRoutes(app: Express) {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
+
+      // Warn if measurements have multi-team users with data loss
+      if (hasMultiTeamMeasurements) {
+        res.setHeader('X-Export-Warning', `${multiTeamMeasurements.length} measurement(s) from athletes with multiple teams; only first team exported`);
+      }
+
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting measurements:", error);
