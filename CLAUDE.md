@@ -500,6 +500,60 @@ custom_metric_values (id, measurement_id, custom_metric_id, value, validated)
 - Standard built-in metrics
 - Simple form field additions
 
+#### Monitoring & Observability Agent (`monitoring-observability-agent`) 📈
+**Color:** Chart (Upward Trend)
+**Auto-invoke when tasks involve:**
+- Production error tracking and monitoring setup (Sentry, Rollbar, LogRocket)
+- Application Performance Monitoring (APM) integration (DataDog, New Relic, AppDynamics)
+- Log aggregation and management (Splunk, ELK Stack, CloudWatch)
+- Uptime monitoring and health checks (Pingdom, UptimeRobot, StatusPage)
+- Real User Monitoring (RUM) and session replay
+- Alert configuration and incident response workflows
+- Metrics dashboards and observability tooling (Grafana, Prometheus)
+- Performance monitoring and bottleneck identification
+
+**Keywords that trigger:** `monitoring`, `observability`, `sentry`, `error tracking`, `logging`, `apm`, `application performance`, `metrics`, `alerting`, `uptime`, `health check`, `incident`, `log aggregation`, `grafana`, `prometheus`, `datadog`, `new relic`, `rum`, `session replay`, `error reporting`
+
+**Special Capabilities:**
+- Sentry integration for error tracking and crash reporting
+- APM tool setup for performance monitoring
+- Log aggregation pipeline configuration
+- Alert rule creation and incident management workflows
+- Dashboard creation for key metrics and KPIs
+- Real User Monitoring (RUM) and session replay setup
+- Performance regression detection and alerting
+- Cost-effective monitoring strategies for startups
+- **Consults monitoring platform documentation when needed**
+- **Uses WebFetch for latest observability best practices**
+
+**Reference Documentation:**
+- [Sentry Documentation](https://docs.sentry.io/)
+- [DataDog APM](https://docs.datadoghq.com/tracing/)
+- [Grafana Dashboards](https://grafana.com/docs/grafana/latest/)
+- [Prometheus Monitoring](https://prometheus.io/docs/introduction/overview/)
+- [New Relic APM](https://docs.newrelic.com/docs/apm/)
+
+**Integration Points:**
+- Works with `deployment-release-agent` for release tracking in Sentry
+- Coordinates with `performance-optimization-agent` to identify bottlenecks
+- Uses `security-authentication-agent` for monitoring security events
+- Integrates with `ci-cd-pipeline-agent` for build monitoring alerts
+- Collaborates with `api-route-architecture-agent` for endpoint monitoring
+
+**When to use:**
+- Setting up production error tracking
+- Configuring APM and performance monitoring
+- Creating monitoring dashboards
+- Setting up alerting and incident response
+- Implementing log aggregation
+- Tracking application health metrics
+- Identifying performance regressions
+
+**When NOT to use:**
+- Development/local debugging (use regular debugging tools)
+- Unit test failures (use `testing-qa-agent`)
+- Code profiling during development (use `performance-optimization-agent`)
+
 #### CI/CD Pipeline Agent (`ci-cd-pipeline-agent`) ⚙️
 **Color:** Gear (Automation)
 **Auto-invoke when tasks involve:**
@@ -781,6 +835,15 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Sport-specific metrics → `custom-metric-config-agent`
 - Metric builder UI → `custom-metric-config-agent` + `form-validation-agent`
 - Custom benchmarks → `custom-metric-config-agent` + `analytics-visualization-agent`
+
+#### Monitoring & Observability (NEW)
+- Setting up Sentry error tracking → `monitoring-observability-agent`
+- APM integration → `monitoring-observability-agent`
+- Log aggregation setup → `monitoring-observability-agent`
+- Alert configuration → `monitoring-observability-agent`
+- Monitoring dashboards → `monitoring-observability-agent`
+- Uptime monitoring → `monitoring-observability-agent`
+- Performance regression alerts → `monitoring-observability-agent` + `performance-optimization-agent`
 
 #### CI/CD & Workflows (NEW)
 - Creating GitHub Actions workflows → `ci-cd-pipeline-agent`
