@@ -17,13 +17,22 @@ process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
-import { app } from '../../server';
+import express, { type Express } from 'express';
 import { storage } from '../../server/storage';
 import type { Organization, User } from '@shared/schema';
 
+// Mock vite module before importing registerRoutes
+vi.mock('../../server/vite.js', () => ({
+  setupVite: vi.fn().mockResolvedValue(undefined),
+  serveStatic: vi.fn()
+}));
+
+import { registerRoutes } from '../../server/routes';
+
 describe('Organization Deletion Rate Limiting', () => {
+  let app: Express;
   let siteAdminUser: User;
   let agent: request.SuperAgentTest;
 
@@ -35,6 +44,10 @@ describe('Organization Deletion Rate Limiting', () => {
         'See README.md for PostgreSQL setup instructions.'
       );
     }
+
+    // Create Express app and register routes
+    app = express();
+    await registerRoutes(app);
 
     const timestamp = Date.now();
 
