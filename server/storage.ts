@@ -2198,40 +2198,24 @@ export class DatabaseStorage implements IStorage {
       console.error('SECURITY: Failed to revoke user sessions:', error);
 
       // Create audit log for failed session revocation
-      // If transaction context provided, use it for atomicity with password updates
+      // IMPORTANT: Use separate transaction for failure audit logs to ensure they persist
+      // even when the parent transaction rolls back
       try {
-        if (options?.tx) {
-          // Use transaction context if provided (for atomicity with password updates)
-          const { auditLogs } = await import('@shared/schema');
-          await options.tx.insert(auditLogs).values({
-            userId,
-            action: 'session_revocation_failed',
-            resourceType: 'user',
-            resourceId: userId,
-            details: JSON.stringify({
-              error: String(error),
-              securityContext: throwOnError ? 'password_sync' : 'general',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: '127.0.0.1',
-            userAgent: 'System',
-          });
-        } else {
-          // No transaction context - use regular audit log method
-          await this.createAuditLog({
-            userId,
-            action: 'session_revocation_failed',
-            resourceType: 'user',
-            resourceId: userId,
-            details: JSON.stringify({
-              error: String(error),
-              securityContext: throwOnError ? 'password_sync' : 'general',
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: '127.0.0.1',
-            userAgent: 'System',
-          });
-        }
+        // Always use separate transaction for failure logs to ensure persistence
+        const { auditLogs } = await import('@shared/schema');
+        await db.insert(auditLogs).values({
+          userId,
+          action: 'session_revocation_failed',
+          resourceType: 'user',
+          resourceId: userId,
+          details: JSON.stringify({
+            error: String(error),
+            securityContext: throwOnError ? 'password_sync' : 'general',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: '127.0.0.1',
+          userAgent: 'System',
+        });
       } catch (auditError) {
         // If audit logging fails, just log to console
         console.error('Failed to create audit log for session revocation failure:', auditError);

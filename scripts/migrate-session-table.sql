@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS session (
   sid varchar(255) PRIMARY KEY,
   sess jsonb NOT NULL,
   expire timestamp NOT NULL,
-  user_id varchar REFERENCES users(id) ON DELETE cascade
+  user_id varchar(255) REFERENCES users(id) ON DELETE cascade
 );
 
 -- Create index for session expiration (used by automatic pruning)
