@@ -782,10 +782,11 @@ describe('Admin User Initialization', () => {
     });
   });
 
-  describe('CASCADE DELETE Foreign Key Behavior', () => {
-    it('should automatically delete sessions when user is deleted via CASCADE DELETE', async () => {
-      // This test verifies that the foreign key constraint with CASCADE DELETE
-      // automatically cleans up sessions when a user is deleted
+  describe('SET NULL Foreign Key Behavior', () => {
+    it('should set userId to NULL when user is deleted (ON DELETE SET NULL)', async () => {
+      // This test verifies that the foreign key constraint with ON DELETE SET NULL
+      // preserves sessions but sets userId to NULL when a user is deleted
+      // This design requires explicit session revocation with audit logging before user deletion
 
       process.env.ADMIN_USER = 'test-admin';
       process.env.ADMIN_PASSWORD = 'TestPassword123!';
@@ -799,47 +800,67 @@ describe('Admin User Initialization', () => {
       const { sessions } = await import('@shared/schema');
       await db.insert(sessions).values([
         {
-          sid: 'cascade-test-1',
+          sid: 'setnull-test-1',
           sess: { user: { id: user!.id } },
           expire: new Date(Date.now() + 86400000),
           userId: user!.id
         },
         {
-          sid: 'cascade-test-2',
+          sid: 'setnull-test-2',
           sess: { user: { id: user!.id } },
           expire: new Date(Date.now() + 86400000),
           userId: user!.id
         },
         {
-          sid: 'cascade-test-3',
+          sid: 'setnull-test-3',
           sess: { user: { id: user!.id } },
           expire: new Date(Date.now() + 86400000),
           userId: user!.id
         }
       ]);
 
-      // Verify sessions exist
+      // Verify sessions exist with userId populated
       const sessionsBeforeDelete = await db.select()
         .from(sessions)
         .where(eq(sessions.userId, user!.id));
       expect(sessionsBeforeDelete).toHaveLength(3);
+      expect(sessionsBeforeDelete[0].userId).toBe(user!.id);
 
       // Delete audit logs first to avoid foreign key constraint violation
       await db.delete(auditLogs).where(eq(auditLogs.userId, user!.id));
 
       // Delete the user WITHOUT manually deleting sessions first
-      // CASCADE DELETE should automatically clean up the sessions
+      // ON DELETE SET NULL should preserve sessions but set userId to NULL
       await db.delete(users).where(eq(users.id, user!.id));
 
-      // Verify sessions were automatically deleted via CASCADE DELETE
+      // Verify sessions still exist but userId is now NULL
+      // Note: We can't query by userId anymore since it's NULL
+      // Instead, query by session IDs
+      const { isNull } = await import('drizzle-orm');
       const sessionsAfterDelete = await db.select()
         .from(sessions)
-        .where(eq(sessions.userId, user!.id));
-      expect(sessionsAfterDelete).toHaveLength(0);
+        .where(isNull(sessions.userId));
+
+      // Should find at least our 3 sessions (may be more from other tests)
+      expect(sessionsAfterDelete.length).toBeGreaterThanOrEqual(3);
+
+      // Verify our specific sessions have userId set to NULL
+      const ourSessions = sessionsAfterDelete.filter(s =>
+        s.sid === 'setnull-test-1' || s.sid === 'setnull-test-2' || s.sid === 'setnull-test-3'
+      );
+      expect(ourSessions).toHaveLength(3);
+      expect(ourSessions[0].userId).toBeNull();
+      expect(ourSessions[1].userId).toBeNull();
+      expect(ourSessions[2].userId).toBeNull();
 
       // Verify user was deleted
       const deletedUser = await storage.getUserByUsername('test-admin');
       expect(deletedUser).toBeNull();
+
+      // Cleanup: Delete the orphaned sessions
+      await db.delete(sessions).where(eq(sessions.sid, 'setnull-test-1'));
+      await db.delete(sessions).where(eq(sessions.sid, 'setnull-test-2'));
+      await db.delete(sessions).where(eq(sessions.sid, 'setnull-test-3'));
     });
 
     it('should allow sessions with null userId (pre-authentication sessions)', async () => {
