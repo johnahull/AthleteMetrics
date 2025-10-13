@@ -781,4 +781,90 @@ describe('Admin User Initialization', () => {
       expect(newPasswordWorks?.id).toBe(user!.id);
     });
   });
+
+  describe('CASCADE DELETE Foreign Key Behavior', () => {
+    it('should automatically delete sessions when user is deleted via CASCADE DELETE', async () => {
+      // This test verifies that the foreign key constraint with CASCADE DELETE
+      // automatically cleans up sessions when a user is deleted
+
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'TestPassword123!';
+
+      // Create admin user
+      await initializeDefaultUser();
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user).toBeDefined();
+
+      // Create multiple sessions for the user
+      const { sessions } = await import('@shared/schema');
+      await db.insert(sessions).values([
+        {
+          sid: 'cascade-test-1',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id
+        },
+        {
+          sid: 'cascade-test-2',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id
+        },
+        {
+          sid: 'cascade-test-3',
+          sess: { user: { id: user!.id } },
+          expire: new Date(Date.now() + 86400000),
+          userId: user!.id
+        }
+      ]);
+
+      // Verify sessions exist
+      const sessionsBeforeDelete = await db.select()
+        .from(sessions)
+        .where(eq(sessions.userId, user!.id));
+      expect(sessionsBeforeDelete).toHaveLength(3);
+
+      // Delete audit logs first to avoid foreign key constraint violation
+      await db.delete(auditLogs).where(eq(auditLogs.userId, user!.id));
+
+      // Delete the user WITHOUT manually deleting sessions first
+      // CASCADE DELETE should automatically clean up the sessions
+      await db.delete(users).where(eq(users.id, user!.id));
+
+      // Verify sessions were automatically deleted via CASCADE DELETE
+      const sessionsAfterDelete = await db.select()
+        .from(sessions)
+        .where(eq(sessions.userId, user!.id));
+      expect(sessionsAfterDelete).toHaveLength(0);
+
+      // Verify user was deleted
+      const deletedUser = await storage.getUserByUsername('test-admin');
+      expect(deletedUser).toBeNull();
+    });
+
+    it('should allow sessions with null userId (pre-authentication sessions)', async () => {
+      // This test verifies that the nullable userId design allows pre-authentication sessions
+      // (e.g., for flash messages, CSRF tokens, redirect tracking)
+
+      const { sessions } = await import('@shared/schema');
+
+      // Create a pre-authentication session (null userId)
+      await db.insert(sessions).values({
+        sid: 'pre-auth-session',
+        sess: { flash: { message: 'Welcome!' } },
+        expire: new Date(Date.now() + 86400000),
+        userId: null // Pre-authentication session
+      });
+
+      // Verify session was created
+      const preAuthSession = await db.select()
+        .from(sessions)
+        .where(eq(sessions.sid, 'pre-auth-session'));
+      expect(preAuthSession).toHaveLength(1);
+      expect(preAuthSession[0].userId).toBeNull();
+
+      // Clean up
+      await db.delete(sessions).where(eq(sessions.sid, 'pre-auth-session'));
+    });
+  });
 });

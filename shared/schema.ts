@@ -175,12 +175,12 @@ export const sessions = pgTable("session", {
   // Partial index on non-null values ensures performance for user session lookups
   userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
 }, (table) => ({
-  // Index for efficient session cleanup and expiration queries
+  // Index for efficient session cleanup and expiration queries (preserved for connect-pg-simple compatibility)
   expireIdx: index("IDX_session_expire").on(table.expire),
   // Partial BTREE index on userId column (only indexes non-null values)
   // Excludes pre-authentication sessions (null userId) for better performance
   // Native column index is 10-100x faster than JSONB expression index
-  userIdIdx: index("session_user_id_idx").on(table.userId).where(sql`${table.userId} IS NOT NULL`),
+  userIdIdx: sql`CREATE INDEX IF NOT EXISTS session_user_id_idx ON ${table} (${table.userId}) WHERE ${table.userId} IS NOT NULL`,
 }));
 
 // Email verification tokens
