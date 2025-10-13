@@ -2899,18 +2899,23 @@ export async function registerRoutes(app: Express) {
           return res.status(400).json({ message: "Organization ID required for team statistics" });
         }
       } else {
-        // Non-site admins see their organization stats only
-        organizationId = currentUser.primaryOrganizationId;
-        if (!organizationId) {
-          return res.json([]); // No organization context, return empty stats
-        }
-
-        // Validate user has access to requested organization if different from primary
-        if (requestedOrgId && requestedOrgId !== organizationId) {
+        // Non-site admins: use requested org if provided and accessible
+        if (requestedOrgId) {
           if (!await canAccessOrganization(currentUser, requestedOrgId)) {
             return res.status(403).json({ message: "Access denied to requested organization" });
           }
           organizationId = requestedOrgId;
+        } else {
+          // Fall back to primary organization
+          organizationId = currentUser.primaryOrganizationId;
+          if (!organizationId) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            organizationId = userOrgs[0]?.organizationId;
+            if (!organizationId) {
+              return res.json([]); // No organization context, return empty stats
+            }
+          }
         }
       }
 
