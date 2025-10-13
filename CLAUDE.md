@@ -256,6 +256,250 @@ When ENABLED:
 
 **Keywords that trigger:** `build component`, `create ui`, `visual feedback`, `develop component`, `ui development`, `live testing`, `component iteration`
 
+#### Code Quality & Linting Agent (`code-quality-linting-agent`) 🧹
+**Color:** Broom (Code Cleanup)
+**Auto-invoke when tasks involve:**
+- Setting up ESLint, Prettier, or code formatting tools
+- Configuring TypeScript strict mode or compiler options
+- Adding code style enforcement and pre-commit hooks
+- Fixing linting violations across the codebase
+- Code smell detection and refactoring suggestions
+- Import organization and sorting
+- Configuring Husky or lint-staged
+
+**Keywords that trigger:** `eslint`, `prettier`, `code style`, `formatting`, `lint`, `code quality`, `husky`, `pre-commit`, `typescript strict`, `code standards`, `import sorting`, `linter`
+
+**Special Capabilities:**
+- ESLint configuration for React, TypeScript, and accessibility
+- Prettier integration with ESLint
+- Automatic code formatting and fix application
+- Import sorting and organization
+- Pre-commit hook implementation (Husky + lint-staged)
+- Incremental migration to stricter linting rules
+- Custom rule configuration for project-specific patterns
+- Integration with CI/CD for automated checks
+
+**When to use:**
+- Setting up new linting infrastructure (PRIORITY: currently missing!)
+- Enforcing code standards across team
+- Automating code quality checks
+- Migrating to stricter TypeScript settings
+
+**When NOT to use:**
+- One-off manual formatting tasks
+- Simple style preference discussions
+
+#### Feature Flag & Settings Management Agent (`feature-flag-settings-agent`) 🎛️
+**Color:** Control Knobs
+**Auto-invoke when tasks involve:**
+- Implementing feature flag systems
+- Creating organization/team settings pages
+- Building settings inheritance hierarchies
+- Permission-based feature access control
+- A/B testing infrastructure
+- Feature rollout strategies
+- Percentage-based feature releases
+- User segment targeting
+
+**Keywords that trigger:** `feature flag`, `settings`, `configuration`, `feature toggle`, `a/b testing`, `rollout`, `settings inheritance`, `org settings`, `feature control`, `settings page`, `enable feature`, `disable feature`
+
+**Special Capabilities:**
+- Multi-level feature flags (global → org → team → user)
+- Settings inheritance and override logic
+- Feature flag UI with preview mode
+- Percentage-based rollouts (e.g., 50% of users)
+- User segment targeting (e.g., college orgs only)
+- Feature analytics and usage tracking
+- Graceful degradation when features disabled
+- Middleware for feature checking
+- React context for client-side feature access
+
+**Database Schema Examples:**
+```sql
+feature_flags (id, name, description, default_enabled, requires_tier, rollout_percentage)
+organization_settings (id, organization_id, feature_overrides JSONB, custom_settings JSONB)
+```
+
+**When to use:**
+- Implementing org-customizable features
+- Building settings management interfaces
+- Creating tier-based feature access
+- Rolling out experimental features
+
+**When NOT to use:**
+- Simple boolean flags in environment variables
+- One-time configuration changes
+
+#### Dependency Management Agent (`dependency-management-agent`) 📦
+**Color:** Package Box
+**Auto-invoke when tasks involve:**
+- Running `npm audit` or security vulnerability scans
+- Updating dependencies in `package.json` or `package-lock.json`
+- Resolving dependency conflicts and peer dependency issues
+- Security vulnerability remediation
+- Breaking change migrations when upgrading major versions
+- Lockfile maintenance and cleanup
+- Analyzing dependency tree and bundle impact
+
+**Keywords that trigger:** `npm`, `dependencies`, `package.json`, `security audit`, `vulnerability`, `npm update`, `breaking changes`, `semver`, `package upgrade`, `dependency conflict`, `npm audit`, `security patch`
+
+**Special Capabilities:**
+- Automated security patch application
+- Breaking change impact analysis across codebase
+- Dependency conflict resolution strategies
+- Version compatibility checking
+- Automated changelog review for upgrades
+- Test suite verification after updates
+- Incremental upgrade strategies for major versions
+- Bundle size impact analysis
+
+**When to use:**
+- Security vulnerabilities detected in CI
+- Upgrading major dependencies
+- Resolving npm install errors
+- Regular dependency maintenance
+
+**When NOT to use:**
+- Adding a single new dependency
+- Trivial patch version updates
+
+#### Deployment & Release Management Agent (`deployment-release-agent`) 🚀
+**Color:** Rocket (Deployment)
+**Auto-invoke when tasks involve:**
+- Creating GitHub releases and release notes
+- Managing Railway deployments and environments
+- Running deployment scripts (backup, smoke tests, health checks)
+- Updating deployment documentation
+- Managing environment variables across staging/production
+- Rollback operations and incident response
+- Pre-deployment validation checklists
+- Zero-downtime deployment strategies
+
+**Keywords that trigger:** `release`, `deploy`, `railway`, `production`, `staging`, `rollback`, `environment variables`, `smoke test`, `health check`, `deployment`, `release notes`, `environment parity`, `deploy script`
+
+**Special Capabilities:**
+- Automated release note generation from commits
+- Pre-deployment checklist validation
+- Environment parity verification (staging vs prod)
+- Automated rollback on health check failures
+- Database backup verification before migrations
+- Deployment status monitoring and alerting
+- Railway CLI automation
+- Semantic versioning enforcement
+- Deployment workflow orchestration
+
+**Integration with existing scripts:**
+- `scripts/backup-database.js` - Pre-deployment backups
+- `scripts/smoke-tests.js` - Post-deployment verification
+- `scripts/health-check.js` - Service health validation
+- `scripts/validate-env.js` - Environment configuration checks
+
+**When to use:**
+- Creating production releases
+- Deployment automation improvements
+- Rollback procedures
+- Environment configuration management
+
+**When NOT to use:**
+- Local development builds
+- Simple git operations
+
+#### Multi-Tenant Configuration Agent (`multi-tenant-profiles-agent`) 🏢
+**Color:** Building (Organizations)
+**Auto-invoke when tasks involve:**
+- Implementing organization type profiles (College, HS, Club, Youth, Pro)
+- Creating type-specific workflows and dashboards
+- Building customizable experiences per org type
+- White-labeling and custom branding features
+- Tenant isolation strategies and data boundaries
+- Cross-tenant data policies
+- Org type migration tools
+- Template libraries per organization type
+
+**Keywords that trigger:** `multi-tenant`, `org type`, `organization profiles`, `white-label`, `tenant isolation`, `customizable workflows`, `org-specific features`, `organization type`, `college org`, `high school`, `club team`, `branding`, `custom theme`
+
+**Special Capabilities:**
+- Org type taxonomy with inheritance (College, HS, Club, Youth, Pro)
+- Type-specific default configurations and feature sets
+- Custom workflow definitions per org type
+- White-label branding (logo, colors, custom domain)
+- Feature access by org type/tier
+- Data isolation and security boundaries (RLS policies)
+- Org type migration wizards
+- Dashboard customization per org type
+- Role variations per org type
+
+**Database Schema Examples:**
+```sql
+organization_types (id, name, default_features JSONB, default_settings JSONB)
+organization_profiles (id, organization_id, type_id, custom_branding JSONB, workflow_overrides JSONB)
+```
+
+**Integration Points:**
+- Works with `feature-flag-settings-agent` for type-specific features
+- Coordinates with `security-authentication-agent` for role variations
+- Uses `ui-component-library-agent` for themed interfaces
+
+**When to use:**
+- Building org type differentiation
+- Implementing white-label features
+- Creating org-specific workflows
+- Multi-tenant architecture design
+
+**When NOT to use:**
+- Single-tenant applications
+- Simple user preferences
+
+#### Custom Metric Configuration Agent (`custom-metric-config-agent`) 📊
+**Color:** Chart with Gear
+**Auto-invoke when tasks involve:**
+- Implementing dynamic metric definition systems
+- Creating custom test/measurement builders
+- Building validation rule engines for custom metrics
+- Implementing sport-specific measurement types
+- Custom data collection workflows
+- Metric versioning and schema evolution
+- Unit conversion systems
+- Formula-based derived metrics
+
+**Keywords that trigger:** `custom metric`, `test configuration`, `dynamic form`, `validation rules`, `sport-specific`, `measurement types`, `metric builder`, `custom test`, `define metric`, `measurement configuration`, `custom measurement`, `metric definition`
+
+**Special Capabilities:**
+- Dynamic schema for custom metrics (JSONB/JSON columns)
+- Visual metric builder UI (drag-and-drop form creation)
+- Validation rule engine (min/max, data type, regex, custom logic)
+- Unit conversion system (meters/feet, seconds/milliseconds)
+- Custom metric versioning (track definition changes over time)
+- Migration tools when metric definitions change
+- Sport-specific metric templates
+- Formula-based calculated metrics
+- Bulk metric import/export
+
+**Database Schema Examples:**
+```sql
+custom_metrics (
+  id, organization_id, name, data_type, unit,
+  validation_rules JSONB, calculation_formula, sport_specific, version
+)
+custom_metric_values (id, measurement_id, custom_metric_id, value, validated)
+```
+
+**Integration Points:**
+- Coordinates with `form-validation-agent` for dynamic validation
+- Works with `database-schema-agent` for flexible data models
+- Uses `ui-component-library-agent` for metric builder UI
+- Integrates with `analytics-visualization-agent` for custom charts
+
+**When to use:**
+- Allowing orgs to define custom tests
+- Building sport-specific measurement systems
+- Creating flexible data collection
+- Metric configuration interfaces
+
+**When NOT to use:**
+- Standard built-in metrics
+- Simple form field additions
+
 ### Proactive Agent Usage Guidelines
 
 #### Autonomous Feature Development
@@ -396,6 +640,42 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Accessibility audits → `visual-design-review-agent`
 - Responsive testing → `visual-design-review-agent` or `ui-development-agent`
 - Visual regression → `ui-testing-agent` + `visual-design-review-agent`
+
+#### Code Quality & Linting (NEW)
+- Setting up ESLint/Prettier → `code-quality-linting-agent`
+- Pre-commit hooks → `code-quality-linting-agent`
+- Code formatting standards → `code-quality-linting-agent`
+- TypeScript strict mode → `code-quality-linting-agent`
+
+#### Feature Flags & Settings (NEW)
+- Org settings pages → `feature-flag-settings-agent`
+- Feature toggles → `feature-flag-settings-agent`
+- A/B testing → `feature-flag-settings-agent`
+- Tier-based features → `feature-flag-settings-agent` + `multi-tenant-profiles-agent`
+
+#### Dependency Management (NEW)
+- Security vulnerabilities → `dependency-management-agent`
+- Dependency updates → `dependency-management-agent`
+- Breaking changes → `dependency-management-agent`
+- npm audit failures → `dependency-management-agent`
+
+#### Deployment & Releases (NEW)
+- Creating releases → `deployment-release-agent`
+- Railway deployments → `deployment-release-agent`
+- Environment variables → `deployment-release-agent`
+- Rollback procedures → `deployment-release-agent`
+
+#### Multi-Tenant Features (NEW)
+- Org type customization → `multi-tenant-profiles-agent`
+- White-labeling → `multi-tenant-profiles-agent`
+- College vs HS vs Club → `multi-tenant-profiles-agent`
+- Org-specific workflows → `multi-tenant-profiles-agent` + `feature-flag-settings-agent`
+
+#### Custom Metrics (NEW)
+- Custom test creation → `custom-metric-config-agent`
+- Sport-specific metrics → `custom-metric-config-agent`
+- Metric builder UI → `custom-metric-config-agent` + `form-validation-agent`
+- Custom benchmarks → `custom-metric-config-agent` + `analytics-visualization-agent`
 
 ## Development Commands
 
