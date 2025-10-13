@@ -72,12 +72,16 @@ class ApiClient {
         const rateLimitReset = response.headers.get('RateLimit-Reset');
         const retryAfter = response.headers.get('Retry-After');
 
-        if (rateLimitReset) {
+        if (rateLimitReset && !isNaN(parseInt(rateLimitReset))) {
           const resetTime = new Date(parseInt(rateLimitReset) * 1000);
           const now = new Date();
           const minutesUntilReset = Math.ceil((resetTime.getTime() - now.getTime()) / 60000);
-          error.message = `Rate limit exceeded. Please try again in ${minutesUntilReset} minute${minutesUntilReset !== 1 ? 's' : ''}.`;
-        } else if (retryAfter) {
+          if (minutesUntilReset > 0) {
+            error.message = `Rate limit exceeded. Please try again in ${minutesUntilReset} minute${minutesUntilReset !== 1 ? 's' : ''}.`;
+          } else {
+            error.message = 'Rate limit exceeded. Please try again shortly.';
+          }
+        } else if (retryAfter && !isNaN(parseInt(retryAfter))) {
           const seconds = parseInt(retryAfter);
           const minutes = Math.ceil(seconds / 60);
           error.message = `Rate limit exceeded. Please try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`;

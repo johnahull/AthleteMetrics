@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, Users, Building2, Activity } from "lucide-react";
+import { queries } from "@/lib/api";
 
 interface Organization {
   id: string;
@@ -35,18 +36,9 @@ export default function DeleteOrganizationModal({
     setConfirmationName("");
   }, [isOpen, organization.id]);
 
-  // Fetch dependency counts when modal opens
+  // Fetch dependency counts when modal opens using centralized API client
   const { data: dependencies } = useQuery<{ users: number; teams: number; measurements: number }>({
-    queryKey: ['organizations', organization.id, 'dependencies'],
-    queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organization.id}/dependencies`, {
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch dependencies');
-      }
-      return response.json();
-    },
+    ...queries.organizationDependencies(organization.id),
     enabled: isOpen && !!organization.id,
   });
 
