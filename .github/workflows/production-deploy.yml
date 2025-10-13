@@ -37,6 +37,19 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
 
+      - name: Setup test database schema
+        run: npm run db:push
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+      - name: Run session table migration for tests
+        run: |
+          echo "Running session table migration on test database..."
+          psql "$DATABASE_URL" -f scripts/migrate-session-table.sql
+          echo "✅ Session table migration completed"
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
       - name: Run integration tests
         run: npm run test:integration
         env:
