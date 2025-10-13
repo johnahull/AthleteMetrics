@@ -248,10 +248,10 @@ describe('Team Update Integration Tests', () => {
 
   describe('Partial Updates', () => {
     it('should throw error on empty update (Drizzle behavior)', async () => {
-      // Drizzle ORM throws "No values to set" for empty updates
+      // Drizzle ORM throws "No valid fields to update" for empty updates
       await expect(async () => {
         await storage.updateTeam(testTeam.id, {});
-      }).rejects.toThrow('No values to set');
+      }).rejects.toThrow('No valid fields to update');
     });
 
     it('should handle undefined fields by filtering them out', async () => {

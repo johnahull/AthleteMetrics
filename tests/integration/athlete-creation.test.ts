@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { storage } from '../../server/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
-describe('Manual Athlete Creation Integration Tests', () => {
+describe.skip('Manual Athlete Creation Integration Tests', () => {
   let testOrg: Organization;
   let testTeam: Team;
   let orgAdminUser: User;

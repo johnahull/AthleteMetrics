@@ -1,33 +1,50 @@
 /**
  * Setup file for integration tests
  * Configures test environment and database
+ *
+ * NOTE: Integration tests require a PostgreSQL database.
+ * Set DATABASE_URL, SESSION_SECRET, ADMIN_USER, ADMIN_EMAIL, and ADMIN_PASSWORD
+ * environment variables before running tests.
  */
 
 // Set test environment variables BEFORE any imports
-process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:./test-integration.db';
-process.env.SESSION_SECRET = 'test-secret-key-for-integration-tests-only';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'password123456789';
+// These will be overridden by actual env vars in CI/CD
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
+process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password123456789';
+
+// DATABASE_URL must be provided - no default
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL environment variable must be set for integration tests. ' +
+    'Use a PostgreSQL database URL (e.g., postgresql://user:pass@localhost:5432/testdb)'
+  );
+}
 
 import { beforeAll, afterAll } from 'vitest';
+import { closeDatabase } from '../../server/db.js';
+
+// Store original console methods
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
 
 beforeAll(async () => {
-
   // Suppress console logs during tests except for errors
-  const originalConsoleLog = console.log;
   console.log = () => {}; // Suppress normal logs
-  console.error = originalConsoleLog; // Keep errors visible
+  console.error = originalConsoleError; // Keep errors visible
 });
 
 afterAll(async () => {
-  // Cleanup test database
+  // Restore console methods
+  console.log = originalConsoleLog;
+  console.error = originalConsoleError;
+
+  // Close database connection to prevent leaks
   try {
-    const fs = await import('fs');
-    if (fs.existsSync('./test-integration.db')) {
-      fs.unlinkSync('./test-integration.db');
-    }
+    await closeDatabase();
   } catch (error) {
-    // Ignore cleanup errors
+    console.error('Error closing database connection:', error);
   }
 });

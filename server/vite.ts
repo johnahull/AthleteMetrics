@@ -2,23 +2,15 @@ import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
 import { type Server } from "http";
-
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
+import { log } from "./utils/logger.js";
 
 export async function setupVite(app: Express, server: Server) {
-  // Dynamic imports for dev-only dependencies
-  const { createServer: createViteServer, createLogger } = await import("vite");
-  const viteConfig = await import("../vite.config");
-  const { nanoid } = await import("nanoid");
+  // Dynamic imports for dev-only dependencies (with @vite-ignore to prevent bundling)
+  const { createServer: createViteServer, createLogger } = await import(/* @vite-ignore */ "vite");
+  // Use dynamic string import to prevent esbuild from bundling vite.config.ts
+  const configPath = "../vite.config.js";
+  const viteConfig = await import(/* @vite-ignore */ configPath);
+  const { nanoid } = await import(/* @vite-ignore */ "nanoid");
 
   const viteLogger = createLogger();
 

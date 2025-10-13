@@ -11,12 +11,14 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 const authService = new AuthService();
 
 // Rate limiting for authentication endpoints
+// Skip rate limiting in test environment to allow integration tests
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 5, // Limit each IP to 5 requests per windowMs
   message: { message: "Too many authentication attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 export function registerAuthRoutes(app: Express) {

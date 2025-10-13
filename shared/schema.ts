@@ -105,7 +105,7 @@ export const measurements = pgTable("measurements", {
   // Team context fields - auto-populated when measurement is created
   teamId: varchar("team_id").references(() => teams.id), // Team athlete was on when measurement was taken
   season: text("season"), // Season designation (e.g., "2024-Fall")
-  teamContextAuto: boolean("team_context_auto").default(true), // Whether team was auto-assigned vs manually selected
+  teamContextAuto: boolean("team_context_auto").default(true).notNull(), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -1,18 +1,14 @@
 import { defineConfig } from "drizzle-kit";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL, ensure the database is provisioned");
-}
-
-// Determine dialect based on DATABASE_URL
-const isFileDatabase = process.env.DATABASE_URL.startsWith("file:");
-const dialect = isFileDatabase ? "sqlite" : "postgresql";
+// DATABASE_URL will be injected by Railway CLI when using `railway run`
+// Use a placeholder for config file parsing, actual connection will use injected value
+const databaseUrl = process.env.DATABASE_URL || "postgresql://placeholder";
 
 export default defineConfig({
   out: "./migrations",
   schema: "./shared/schema.ts",
-  dialect,
-  dbCredentials: isFileDatabase
-    ? { url: process.env.DATABASE_URL.replace("file:", "") }
-    : { url: process.env.DATABASE_URL },
+  dialect: "postgresql",
+  dbCredentials: {
+    url: databaseUrl
+  },
 });
