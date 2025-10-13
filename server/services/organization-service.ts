@@ -302,4 +302,107 @@ export class OrganizationService extends BaseService {
       throw error;
     }
   }
+
+  /**
+   * Deactivate an organization (site admin only)
+   * Prevents users from logging into this organization
+   */
+  async deactivateOrganization(
+    organizationId: string,
+    requestingUserId: string
+  ): Promise<Organization> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can deactivate organizations");
+      }
+
+      // Check if organization exists
+      const organization = await this.storage.getOrganization(organizationId);
+      if (!organization) {
+        throw new Error("Organization not found");
+      }
+
+      // Check if already deactivated
+      if (organization.isActive === false) {
+        throw new Error("Organization is already deactivated");
+      }
+
+      // Update organization status
+      return await this.storage.updateOrganization(organizationId, { isActive: false });
+    } catch (error) {
+      console.error("OrganizationService.deactivateOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Activate a deactivated organization (site admin only)
+   */
+  async activateOrganization(
+    organizationId: string,
+    requestingUserId: string
+  ): Promise<Organization> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can activate organizations");
+      }
+
+      // Check if organization exists
+      const organization = await this.storage.getOrganization(organizationId);
+      if (!organization) {
+        throw new Error("Organization not found");
+      }
+
+      // Check if already active
+      if (organization.isActive === true) {
+        throw new Error("Organization is already active");
+      }
+
+      // Update organization status
+      return await this.storage.updateOrganization(organizationId, { isActive: true });
+    } catch (error) {
+      console.error("OrganizationService.activateOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete an organization and all related data (site admin only)
+   * This is a hard delete with cascading to:
+   * - Teams
+   * - User-organization relationships
+   * - Invitations
+   * - Related measurements (via team memberships)
+   */
+  async deleteOrganization(
+    organizationId: string,
+    requestingUserId: string
+  ): Promise<void> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can delete organizations");
+      }
+
+      // Check if organization exists
+      const organization = await this.storage.getOrganization(organizationId);
+      if (!organization) {
+        throw new Error("Organization not found");
+      }
+
+      // Get organization users for logging/audit purposes
+      const users = await this.storage.getOrganizationUsers(organizationId);
+      console.log(`Deleting organization ${organization.name} (${organizationId}) with ${users.length} users`);
+
+      // Delete organization (cascading deletes handled by database FK constraints)
+      await this.storage.deleteOrganization(organizationId);
+
+      console.log(`Successfully deleted organization ${organizationId}`);
+    } catch (error) {
+      console.error("OrganizationService.deleteOrganization:", error);
+      throw error;
+    }
+  }
 }

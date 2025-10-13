@@ -11,8 +11,12 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull().unique(),
   description: text("description"),
   location: text("location"),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Performance index for filtering active organizations
+  isActiveIndex: index("organizations_is_active_idx").on(table.isActive),
+}));
 
 export const teams = pgTable("teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

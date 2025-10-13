@@ -28,6 +28,15 @@ const userDeleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for organization deletion/deactivation
+const orgModifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // Limit each IP to 20 organization modification requests per windowMs
+  message: { message: "Too many organization modification attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerOrganizationRoutes(app: Express) {
   /**
    * Get all organizations (site admin only)
@@ -162,15 +171,64 @@ export function registerOrganizationRoutes(app: Express) {
   });
 
   /**
+   * Update organization status (activate/deactivate) (site admin only)
+   */
+  app.patch("/api/organizations/:id/status", orgModifyLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const organizationId = req.params.id;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ message: "isActive must be a boolean value" });
+      }
+
+      let organization;
+      if (isActive) {
+        organization = await organizationService.activateOrganization(organizationId, req.session.user!.id);
+      } else {
+        organization = await organizationService.deactivateOrganization(organizationId, req.session.user!.id);
+      }
+
+      res.json(organization);
+    } catch (error) {
+      console.error("Update organization status error:", error);
+      const message = error instanceof Error ? error.message : "Failed to update organization status";
+      const statusCode = message.includes("Unauthorized") ? 403 :
+                         message.includes("not found") ? 404 :
+                         message.includes("already") ? 400 : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Delete organization (site admin only)
+   */
+  app.delete("/api/organizations/:id", orgModifyLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const organizationId = req.params.id;
+
+      await organizationService.deleteOrganization(organizationId, req.session.user!.id);
+
+      res.json({ message: "Organization deleted successfully" });
+    } catch (error) {
+      console.error("Delete organization error:", error);
+      const message = error instanceof Error ? error.message : "Failed to delete organization";
+      const statusCode = message.includes("Unauthorized") ? 403 :
+                         message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
    * Get organizations with users (legacy endpoint for compatibility)
    */
   app.get("/api/organizations-with-users", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user!;
-      
+
       // Get user's organizations
       const userOrganizations = await organizationService.getAccessibleOrganizations(currentUser.id);
-      
+
       // For site admins, get all organizations
       if (currentUser.isSiteAdmin === true) {
         const allOrganizations = await organizationService.getAllOrganizations(currentUser.id);

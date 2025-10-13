@@ -217,6 +217,8 @@ export const mutations = {
   // Organizations
   createOrganization: (data: any) => apiClient.post('/organizations', data),
   updateOrganization: (id: string, data: any) => apiClient.put(`/organizations/${id}`, data),
+  updateOrganizationStatus: (id: string, isActive: boolean) =>
+    apiClient.patch(`/organizations/${id}/status`, { isActive }),
   deleteOrganization: (id: string) => apiClient.delete(`/organizations/${id}`),
 
   // Teams
