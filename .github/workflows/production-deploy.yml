@@ -117,14 +117,14 @@ jobs:
         run: node scripts/backup-database.js
         env:
           USE_RAILWAY_BACKUPS: true
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
       - name: Run database migrations
         run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
       - name: Run session table migration (idempotent)
         run: |
@@ -148,7 +148,7 @@ jobs:
           railway up --service "$SERVICE_ID" --environment production --detach
           echo "✅ Railway deployment initiated successfully"
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
       - name: Wait for deployment
         run: sleep 45
