@@ -38,7 +38,8 @@ const orgDeleteLimiter = rateLimit({
   // Combine IP and user ID to prevent bypass via IP spoofing
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
-    return userId ? `${req.ip}-${userId}` : req.ip;
+    const ip = req.ip || 'unknown';
+    return userId ? `${ip}-${userId}` : ip;
   },
 });
 
