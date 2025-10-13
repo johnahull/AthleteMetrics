@@ -1028,6 +1028,11 @@ export const customMetrics = pgTable("custom_metrics", {
 
 // Formula evaluation engine
 // server/services/metric-calculator.ts
+import { create, all } from 'mathjs';
+
+// Configure math.js for safe formula evaluation
+const math = create(all, {});
+
 export function calculateMetric(
   metric: CustomMetric,
   inputValues: Record<string, number>
@@ -1036,14 +1041,23 @@ export function calculateMetric(
     throw new Error("Metric is not calculated");
   }
 
-  // Parse and evaluate formula safely
+  // Parse and evaluate formula safely using math.js
   const formula = metric.calculationFormula;
   const scope = inputValues;
 
-  // Use math.js for safe formula evaluation
-  const result = evaluate(formula, scope);
+  // Safe formula evaluation with math.js (prevents code injection)
+  try {
+    const result = math.evaluate(formula, scope);
 
-  return result;
+    if (typeof result !== 'number' || !isFinite(result)) {
+      throw new Error('Formula must evaluate to a finite number');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Formula evaluation error:', error);
+    throw new Error(`Invalid formula: ${error.message}`);
+  }
 }
 
 // Example formula definition

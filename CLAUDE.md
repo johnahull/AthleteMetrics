@@ -70,7 +70,7 @@ When ENABLED:
 - "Implement X with tests" requests
 - Bug fixes with regression testing
 
-**Keywords that trigger:** `implement`, `feature`, `TDD`, `test-first`, `test-driven`, `autonomous`, `with tests`, `comprehensive testing`, `end-to-end implementation`
+**Keywords that trigger:** `implement feature`, `TDD`, `test-first`, `test-driven development`, `autonomous implementation`, `implement with tests`, `comprehensive testing`, `end-to-end implementation`, `feature implementation`
 
 **Special Capabilities:**
 - Writes tests BEFORE implementation (TDD methodology)
@@ -119,7 +119,7 @@ When ENABLED:
 - Organization-based data isolation
 - MFA, password policies, or security vulnerabilities
 
-**Keywords that trigger:** `auth`, `authentication`, `security`, `permission`, `role`, `rbac`, `session`, `mfa`, `password`, `login`, `admin`, `coach`, `athlete`, `organization`, `access control`
+**Keywords that trigger:** `auth`, `authentication`, `authorization`, `permission`, `role`, `rbac`, `session management`, `mfa`, `password policy`, `login`, `user roles`, `access control`, `authentication flow`
 
 #### OCR & Image Processing Agent (`ocr-image-processing-agent`) 🟡
 **Color:** Yellow
@@ -204,7 +204,7 @@ When ENABLED:
 - Bug fix verification and regression testing
 - **NEW**: Test-Driven Development (TDD) - writing tests BEFORE implementation
 
-**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`, `TDD`, `test-first`
+**Keywords that trigger:** `write test`, `test coverage`, `unit test`, `integration test`, `mock`, `test suite`, `quality assurance`, `regression test`, `test file`, `testing framework`, `vitest`, `jest`
 
 **TDD Mode:** When invoked by `test-driven-feature-agent`, this agent writes comprehensive failing tests before any implementation begins.
 
@@ -301,7 +301,7 @@ When ENABLED:
 - Percentage-based feature releases
 - User segment targeting
 
-**Keywords that trigger:** `feature flag`, `settings`, `configuration`, `feature toggle`, `a/b testing`, `rollout`, `settings inheritance`, `org settings`, `feature control`, `settings page`, `enable feature`, `disable feature`
+**Keywords that trigger:** `feature flag`, `feature toggle`, `a/b testing`, `rollout`, `settings inheritance`, `org settings`, `organization settings`, `feature control`, `settings page`, `enable feature`, `disable feature`, `feature configuration`
 
 **Special Capabilities:**
 - Multi-level feature flags (global → org → team → user)
@@ -341,7 +341,7 @@ organization_settings (id, organization_id, feature_overrides JSONB, custom_sett
 - Lockfile maintenance and cleanup
 - Analyzing dependency tree and bundle impact
 
-**Keywords that trigger:** `npm`, `dependencies`, `package.json`, `security audit`, `vulnerability`, `npm update`, `breaking changes`, `semver`, `package upgrade`, `dependency conflict`, `npm audit`, `security patch`
+**Keywords that trigger:** `npm`, `dependencies`, `package.json`, `npm audit`, `security vulnerability`, `npm update`, `breaking changes`, `semver`, `package upgrade`, `dependency conflict`, `security patch`, `dependency update`
 
 **Special Capabilities:**
 - Automated security patch application
@@ -564,7 +564,7 @@ custom_metric_values (id, measurement_id, custom_metric_id, value, validated)
 - Advanced GitHub queries and searches
 - GitHub App and webhook integration
 
-**Keywords that trigger:** `github issue`, `github project`, `triage issues`, `branch protection`, `repository settings`, `github api`, `issue labels`, `github search`, `bulk pr`, `github automation`, `issue triage`, `project board`, `repo config`, `issue template`, `codeowners`
+**Keywords that trigger:** `github issue`, `github project`, `triage issues`, `branch protection`, `repository settings`, `repo settings`, `github api`, `issue labels`, `github search`, `bulk pr`, `github automation`, `issue triage`, `project board`, `repo config`, `repo configuration`, `issue template`, `codeowners`
 
 **Special Capabilities:**
 - Issue automation (auto-label, auto-assign, bulk operations)
