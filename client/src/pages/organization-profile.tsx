@@ -906,10 +906,13 @@ export default function OrganizationProfile() {
       {(user?.isSiteAdmin || isOrgAdmin) && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserCog className="h-5 w-5" />
-              Coaches & Administrators ({organization.coaches?.length ?? 0})
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <UserCog className="h-5 w-5" />
+                Coaches & Administrators ({organization.coaches?.length ?? 0})
+              </CardTitle>
+              <UserManagementModal organizationId={id!} />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
