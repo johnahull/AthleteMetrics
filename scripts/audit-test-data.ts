@@ -11,32 +11,35 @@
  */
 
 import { db } from '../server/db';
-import { organizations, users, teams, measurements, auditLogs, sessions } from '@shared/schema';
-import { or, like, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 async function auditTestData() {
   console.log('🔍 Scanning database for test data...\n');
   console.log('='.repeat(80));
 
   try {
-    // Find test organizations
+    // Find test organizations using raw SQL to avoid schema version issues
     console.log('\n📊 Scanning Organizations...');
-    const testOrgs = await db.select()
-      .from(organizations)
-      .where(or(
-        // Name patterns
-        like(organizations.name, '%Test%'),
-        like(organizations.name, '%API%Test%'),
-        like(organizations.name, '%Bulk Ops%'),
-        like(organizations.name, '%Delete%'),
-        like(organizations.name, '%Deactivate%'),
-        like(organizations.name, '%Reactivate%'),
-        like(organizations.name, '%Update%Org%'),
-        // Email patterns
-        like(organizations.contactEmail, '%@example.com'),
-        like(organizations.contactEmail, '%@test.com'),
-        like(organizations.contactEmail, '%-1%@%'),  // Timestamp pattern
-      ));
+
+    const orgQuery = sql`
+      SELECT id, name, description, created_at
+      FROM organizations
+      WHERE name LIKE '%Test%'
+         OR name LIKE '%API%'
+         OR name LIKE '%Bulk%'
+         OR name LIKE '%Delete%'
+         OR name LIKE '%Deactivate%'
+         OR name LIKE '%Reactivate%'
+         OR name LIKE '%Update%Org%'
+    `;
+
+    const testOrgsResult = await db.execute(orgQuery);
+    const testOrgs = (Array.isArray(testOrgsResult) ? testOrgsResult : testOrgsResult.rows || []) as Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      created_at: Date;
+    }>;
 
     if (testOrgs.length === 0) {
       console.log('   ✅ No test organizations found');
@@ -44,38 +47,43 @@ async function auditTestData() {
       console.log(`   ⚠️  Found ${testOrgs.length} suspicious organizations:`);
       testOrgs.forEach(org => {
         console.log(`      - "${org.name}"`);
-        console.log(`        Email: ${org.contactEmail || 'none'}`);
-        console.log(`        Created: ${org.createdAt}`);
-        console.log(`        Active: ${org.isActive}`);
+        console.log(`        Description: ${org.description || 'none'}`);
+        console.log(`        Created: ${org.created_at}`);
         console.log(`        ID: ${org.id}`);
         console.log('');
       });
     }
 
-    // Find test users
+    // Find test users using raw SQL
     console.log('\n👤 Scanning Users...');
-    const testUsers = await db.select()
-      .from(users)
-      .where(or(
-        // Username patterns
-        like(users.username, 'test-%'),
-        like(users.username, '%-api-%'),
-        like(users.username, '%-creation-%'),
-        like(users.username, '%-del-%'),
-        like(users.username, '%-admin-%'),
-        like(users.username, '%orgadmin%'),
-        like(users.username, '%siteadmin%'),
-        like(users.username, 'bulk-ops-%'),
-        like(users.username, 'dep-user%'),
-        like(users.username, 'count-user%'),
-        like(users.username, 'meas-user%'),
-        like(users.username, 'preserve-user%'),
-        like(users.username, 'block-user%'),
-        // Email patterns (check JSON array)
-        sql`emails::text LIKE '%@test.com%'`,
-        sql`emails::text LIKE '%@example.com%'`,
-        sql`emails::text LIKE '%-${sql.raw('1')}%@%'`,  // Timestamp pattern
-      ));
+
+    const userQuery = sql`
+      SELECT id, username, emails, is_site_admin
+      FROM users
+      WHERE username LIKE 'test-%'
+         OR username LIKE '%-api-%'
+         OR username LIKE '%-creation-%'
+         OR username LIKE '%-del-%'
+         OR username LIKE '%-admin-%'
+         OR username LIKE '%orgadmin%'
+         OR username LIKE '%siteadmin%'
+         OR username LIKE 'bulk-ops-%'
+         OR username LIKE 'dep-user%'
+         OR username LIKE 'count-user%'
+         OR username LIKE 'meas-user%'
+         OR username LIKE 'preserve-user%'
+         OR username LIKE 'block-user%'
+         OR emails::text LIKE '%@test.com%'
+         OR emails::text LIKE '%@example.com%'
+    `;
+
+    const testUsersResult = await db.execute(userQuery);
+    const testUsers = (Array.isArray(testUsersResult) ? testUsersResult : testUsersResult.rows || []) as Array<{
+      id: string;
+      username: string;
+      emails: string[] | null;
+      is_site_admin: boolean;
+    }>;
 
     if (testUsers.length === 0) {
       console.log('   ✅ No test users found');
@@ -84,39 +92,51 @@ async function auditTestData() {
       testUsers.forEach(user => {
         console.log(`      - ${user.username}`);
         console.log(`        Email: ${user.emails?.[0] || 'none'}`);
-        console.log(`        Role: ${user.role || 'none'}`);
-        console.log(`        Site Admin: ${user.isSiteAdmin}`);
+        console.log(`        Site Admin: ${user.is_site_admin}`);
         console.log(`        ID: ${user.id}`);
         console.log('');
       });
     }
 
     // Get related data counts
-    if (testOrgs.length > 0) {
+    if (testOrgs.length > 0 || testUsers.length > 0) {
       const testOrgIds = testOrgs.map(o => o.id);
 
       console.log('\n🏃 Scanning Teams in Test Organizations...');
-      const testTeams = await db.select()
-        .from(teams)
-        .where(sql`organization_id = ANY(${testOrgIds})`);
+      if (testOrgIds.length > 0) {
+        const teamsQuery = sql`
+          SELECT id, name, level
+          FROM teams
+          WHERE organization_id = ANY(ARRAY[${sql.join(testOrgIds.map(id => sql`${id}`), sql`, `)}]::text[])
+        `;
+        const teamsResult = await db.execute(teamsQuery);
+        const testTeams = (Array.isArray(teamsResult) ? teamsResult : teamsResult.rows || []) as Array<{ id: string; name: string; level: string | null }>;
 
-      if (testTeams.length === 0) {
-        console.log('   ✅ No test teams found');
+        if (testTeams.length === 0) {
+          console.log('   ✅ No test teams found');
+        } else {
+          console.log(`   ⚠️  Found ${testTeams.length} teams in test organizations`);
+          testTeams.forEach(team => {
+            console.log(`      - ${team.name} (${team.level})`);
+          });
+        }
       } else {
-        console.log(`   ⚠️  Found ${testTeams.length} teams in test organizations`);
-        testTeams.forEach(team => {
-          console.log(`      - ${team.name} (${team.level})`);
-        });
+        console.log('   ✅ No test teams to check (no test organizations)');
       }
 
       console.log('\n📏 Scanning Measurements from Test Users...');
       if (testUsers.length > 0) {
         const testUserIds = testUsers.map(u => u.id);
-        const measurementCount = await db.select({ count: sql<number>`count(*)` })
-          .from(measurements)
-          .where(sql`user_id = ANY(${testUserIds})`);
+        const measurementQuery = sql`
+          SELECT COUNT(*) as count
+          FROM measurements
+          WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+        `;
+        const measurementResult = await db.execute(measurementQuery);
+        const measurementRows = Array.isArray(measurementResult) ? measurementResult : measurementResult.rows || [];
+        const measurementCount = (measurementRows[0] as any)?.count || 0;
 
-        console.log(`   ⚠️  Found ${measurementCount[0]?.count || 0} measurements from test users`);
+        console.log(`   ⚠️  Found ${measurementCount} measurements from test users`);
       } else {
         console.log('   ✅ No measurements to check (no test users)');
       }
@@ -124,23 +144,41 @@ async function auditTestData() {
       console.log('\n📋 Scanning Audit Logs from Test Users...');
       if (testUsers.length > 0) {
         const testUserIds = testUsers.map(u => u.id);
-        const auditLogCount = await db.select({ count: sql<number>`count(*)` })
-          .from(auditLogs)
-          .where(sql`user_id = ANY(${testUserIds})`);
+        const auditQuery = sql`
+          SELECT COUNT(*) as count
+          FROM audit_logs
+          WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+        `;
+        const auditResult = await db.execute(auditQuery);
+        const auditRows = Array.isArray(auditResult) ? auditResult : auditResult.rows || [];
+        const auditCount = (auditRows[0] as any)?.count || 0;
 
-        console.log(`   ⚠️  Found ${auditLogCount[0]?.count || 0} audit log entries from test users`);
+        console.log(`   ⚠️  Found ${auditCount} audit log entries from test users`);
       } else {
         console.log('   ✅ No audit logs to check (no test users)');
       }
 
       console.log('\n🔐 Scanning Sessions from Test Users...');
       if (testUsers.length > 0) {
-        const testUserIds = testUsers.map(u => u.id);
-        const sessionCount = await db.select({ count: sql<number>`count(*)` })
-          .from(sessions)
-          .where(sql`user_id = ANY(${testUserIds})`);
+        try {
+          const testUserIds = testUsers.map(u => u.id);
+          const sessionQuery = sql`
+            SELECT COUNT(*) as count
+            FROM sessions
+            WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+          `;
+          const sessionResult = await db.execute(sessionQuery);
+          const sessionRows = Array.isArray(sessionResult) ? sessionResult : sessionResult.rows || [];
+          const sessionCount = (sessionRows[0] as any)?.count || 0;
 
-        console.log(`   ⚠️  Found ${sessionCount[0]?.count || 0} active sessions from test users`);
+          console.log(`   ⚠️  Found ${sessionCount} active sessions from test users`);
+        } catch (error: any) {
+          if (error.code === '42P01') {
+            console.log('   ℹ️  Sessions table does not exist in this database (skipping)');
+          } else {
+            throw error;
+          }
+        }
       } else {
         console.log('   ✅ No sessions to check (no test users)');
       }

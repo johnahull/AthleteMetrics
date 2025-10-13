@@ -19,8 +19,7 @@
  */
 
 import { db } from '../server/db';
-import { organizations, users, teams, userOrganizations, userTeams, measurements, auditLogs, sessions } from '@shared/schema';
-import { eq, or, like, sql, inArray } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import * as readline from 'readline';
 
 // Safety check: Require explicit confirmation
@@ -56,29 +55,52 @@ async function cleanupTestData() {
   console.log('\n⚠️  WARNING: This will PERMANENTLY DELETE data!\n');
 
   try {
-    // Step 1: Find test organizations
+    // Step 1: Find test organizations using raw SQL
     console.log('📊 Finding test organizations...');
-    const testOrgs = await db.select()
-      .from(organizations)
-      .where(or(
-        like(organizations.name, '%Test%'),
-        like(organizations.name, '%API%Test%'),
-        like(organizations.contactEmail, '%@example.com'),
-        like(organizations.contactEmail, '%@test.com')
-      ));
+    const orgQuery = sql`
+      SELECT id, name
+      FROM organizations
+      WHERE name LIKE '%Test%'
+         OR name LIKE '%API%'
+         OR name LIKE '%Bulk%'
+         OR name LIKE '%Delete%'
+         OR name LIKE '%Deactivate%'
+         OR name LIKE '%Reactivate%'
+         OR name LIKE '%Update%Org%'
+    `;
+    const testOrgsResult = await db.execute(orgQuery);
+    const testOrgs = (Array.isArray(testOrgsResult) ? testOrgsResult : testOrgsResult.rows || []) as Array<{
+      id: string;
+      name: string;
+    }>;
 
-    // Step 2: Find test users
+    // Step 2: Find test users using raw SQL
     console.log('👤 Finding test users...');
-    const testUsers = await db.select()
-      .from(users)
-      .where(or(
-        like(users.username, 'test-%'),
-        like(users.username, '%-api-%'),
-        like(users.username, '%-creation-%'),
-        like(users.username, '%-del-%'),
-        sql`emails::text LIKE '%@test.com%'`,
-        sql`emails::text LIKE '%@example.com%'`
-      ));
+    const userQuery = sql`
+      SELECT id, username, emails
+      FROM users
+      WHERE username LIKE 'test-%'
+         OR username LIKE '%-api-%'
+         OR username LIKE '%-creation-%'
+         OR username LIKE '%-del-%'
+         OR username LIKE '%-admin-%'
+         OR username LIKE '%orgadmin%'
+         OR username LIKE '%siteadmin%'
+         OR username LIKE 'bulk-ops-%'
+         OR username LIKE 'dep-user%'
+         OR username LIKE 'count-user%'
+         OR username LIKE 'meas-user%'
+         OR username LIKE 'preserve-user%'
+         OR username LIKE 'block-user%'
+         OR emails::text LIKE '%@test.com%'
+         OR emails::text LIKE '%@example.com%'
+    `;
+    const testUsersResult = await db.execute(userQuery);
+    const testUsers = (Array.isArray(testUsersResult) ? testUsersResult : testUsersResult.rows || []) as Array<{
+      id: string;
+      username: string;
+      emails: string[] | null;
+    }>;
 
     if (testOrgs.length === 0 && testUsers.length === 0) {
       console.log('\n✅ No test data found. Database is clean!');
@@ -94,7 +116,7 @@ async function cleanupTestData() {
     if (testOrgs.length > 0) {
       console.log(`\n📊 ${testOrgs.length} Organizations:`);
       testOrgs.forEach(org => {
-        console.log(`   - ${org.name} (${org.contactEmail})`);
+        console.log(`   - ${org.name}`);
       });
     }
 
@@ -107,111 +129,187 @@ async function cleanupTestData() {
 
     console.log('\n' + '='.repeat(80));
 
-    // Require manual confirmation
-    console.log('\n⚠️  FINAL CONFIRMATION REQUIRED');
-    const confirmed = await promptConfirmation(
-      `\nYou are about to delete ${testOrgs.length} organizations and ${testUsers.length} users.`
-    );
+    // Require manual confirmation (unless SKIP_CONFIRMATION is set for automation)
+    if (process.env.SKIP_CONFIRMATION !== 'yes') {
+      console.log('\n⚠️  FINAL CONFIRMATION REQUIRED');
+      const confirmed = await promptConfirmation(
+        `\nYou are about to delete ${testOrgs.length} organizations and ${testUsers.length} users.`
+      );
 
-    if (!confirmed) {
-      console.log('\n❌ Cleanup cancelled by user');
-      console.log('='.repeat(80) + '\n');
-      return;
+      if (!confirmed) {
+        console.log('\n❌ Cleanup cancelled by user');
+        console.log('='.repeat(80) + '\n');
+        return;
+      }
+    } else {
+      console.log('\n⚠️  SKIP_CONFIRMATION=yes detected - proceeding automatically');
     }
 
     console.log('\n🗑️  Starting cleanup...\n');
 
     // Step 3: Delete test organizations and related data
     const testOrgIds = testOrgs.map(o => o.id);
+    const testUserIds = testUsers.map(u => u.id);
 
+    // FIRST: Delete ALL user-team relationships for teams in test organizations
+    // (This must happen before deleting teams due to foreign key constraints)
+    if (testOrgIds.length > 0) {
+      console.log('🔗 Deleting all user-team relationships for teams in test organizations...');
+      const deleteAllUserTeamsQuery = sql`
+        DELETE FROM user_teams
+        WHERE team_id IN (
+          SELECT id FROM teams WHERE organization_id = ANY(ARRAY[${sql.join(testOrgIds.map(id => sql`${id}`), sql`, `)}]::text[])
+        )
+        RETURNING user_id
+      `;
+      const deletedAllUserTeamsResult = await db.execute(deleteAllUserTeamsQuery);
+      const deletedAllUserTeams = Array.isArray(deletedAllUserTeamsResult) ? deletedAllUserTeamsResult : deletedAllUserTeamsResult.rows || [];
+      console.log(`   ✓ Deleted ${deletedAllUserTeams.length} user-team relationships\n`);
+    }
+
+    // SECOND: Process each organization
     for (const orgId of testOrgIds) {
       const org = testOrgs.find(o => o.id === orgId);
-      console.log(`\n📦 Processing: ${org?.name}`);
+      console.log(`📦 Processing: ${org?.name}`);
 
       // Get users in this organization
-      const orgUsers = await db.select()
-        .from(userOrganizations)
-        .where(eq(userOrganizations.organizationId, orgId));
-      const userIds = orgUsers.map(u => u.userId);
+      const orgUsersQuery = sql`
+        SELECT user_id
+        FROM user_organizations
+        WHERE organization_id = ${orgId}
+      `;
+      const orgUsersResult = await db.execute(orgUsersQuery);
+      const orgUsers = (Array.isArray(orgUsersResult) ? orgUsersResult : orgUsersResult.rows || []) as Array<{ user_id: string }>;
+      const userIds = orgUsers.map(u => u.user_id);
 
       if (userIds.length > 0) {
         // Delete measurements
-        const deletedMeasurements = await db.delete(measurements)
-          .where(inArray(measurements.userId, userIds))
-          .returning({ id: measurements.id });
+        const deleteMeasurementsQuery = sql`
+          DELETE FROM measurements
+          WHERE user_id = ANY(ARRAY[${sql.join(userIds.map(id => sql`${id}`), sql`, `)}]::text[])
+          RETURNING id
+        `;
+        const deletedMeasurementsResult = await db.execute(deleteMeasurementsQuery);
+        const deletedMeasurements = Array.isArray(deletedMeasurementsResult) ? deletedMeasurementsResult : deletedMeasurementsResult.rows || [];
         console.log(`   ✓ Deleted ${deletedMeasurements.length} measurements`);
 
-        // Delete user-team relationships
-        const deletedUserTeams = await db.delete(userTeams)
-          .where(inArray(userTeams.userId, userIds))
-          .returning({ userId: userTeams.userId });
-        console.log(`   ✓ Deleted ${deletedUserTeams.length} user-team relationships`);
-
         // Delete user-org relationships
-        const deletedUserOrgs = await db.delete(userOrganizations)
-          .where(eq(userOrganizations.organizationId, orgId))
-          .returning({ userId: userOrganizations.userId });
+        const deleteUserOrgsQuery = sql`
+          DELETE FROM user_organizations
+          WHERE organization_id = ${orgId}
+          RETURNING user_id
+        `;
+        const deletedUserOrgsResult = await db.execute(deleteUserOrgsQuery);
+        const deletedUserOrgs = Array.isArray(deletedUserOrgsResult) ? deletedUserOrgsResult : deletedUserOrgsResult.rows || [];
         console.log(`   ✓ Deleted ${deletedUserOrgs.length} user-org relationships`);
 
-        // Delete sessions
-        const deletedSessions = await db.delete(sessions)
-          .where(inArray(sessions.userId, userIds))
-          .returning({ sid: sessions.sid });
-        console.log(`   ✓ Deleted ${deletedSessions.length} sessions`);
+        // Delete sessions (if table exists)
+        try {
+          const deleteSessionsQuery = sql`
+            DELETE FROM sessions
+            WHERE user_id = ANY(ARRAY[${sql.join(userIds.map(id => sql`${id}`), sql`, `)}]::text[])
+            RETURNING sid
+          `;
+          const deletedSessionsResult = await db.execute(deleteSessionsQuery);
+          const deletedSessions = Array.isArray(deletedSessionsResult) ? deletedSessionsResult : deletedSessionsResult.rows || [];
+          console.log(`   ✓ Deleted ${deletedSessions.length} sessions`);
+        } catch (error: any) {
+          if (error.code === '42P01') {
+            console.log(`   ℹ️  Sessions table does not exist (skipping)`);
+          } else {
+            throw error;
+          }
+        }
 
         // Delete audit logs
-        const deletedAuditLogs = await db.delete(auditLogs)
-          .where(inArray(auditLogs.userId, userIds))
-          .returning({ id: auditLogs.id });
+        const deleteAuditLogsQuery = sql`
+          DELETE FROM audit_logs
+          WHERE user_id = ANY(ARRAY[${sql.join(userIds.map(id => sql`${id}`), sql`, `)}]::text[])
+          RETURNING id
+        `;
+        const deletedAuditLogsResult = await db.execute(deleteAuditLogsQuery);
+        const deletedAuditLogs = Array.isArray(deletedAuditLogsResult) ? deletedAuditLogsResult : deletedAuditLogsResult.rows || [];
         console.log(`   ✓ Deleted ${deletedAuditLogs.length} audit log entries`);
 
         // Delete users
-        const deletedUsers = await db.delete(users)
-          .where(inArray(users.id, userIds))
-          .returning({ id: users.id });
+        const deleteUsersQuery = sql`
+          DELETE FROM users
+          WHERE id = ANY(ARRAY[${sql.join(userIds.map(id => sql`${id}`), sql`, `)}]::text[])
+          RETURNING id
+        `;
+        const deletedUsersResult = await db.execute(deleteUsersQuery);
+        const deletedUsers = Array.isArray(deletedUsersResult) ? deletedUsersResult : deletedUsersResult.rows || [];
         console.log(`   ✓ Deleted ${deletedUsers.length} users`);
       }
 
-      // Delete teams
-      const deletedTeams = await db.delete(teams)
-        .where(eq(teams.organizationId, orgId))
-        .returning({ id: teams.id });
+      // Delete teams (now safe because user_teams were deleted first)
+      const deleteTeamsQuery = sql`
+        DELETE FROM teams
+        WHERE organization_id = ${orgId}
+        RETURNING id
+      `;
+      const deletedTeamsResult = await db.execute(deleteTeamsQuery);
+      const deletedTeams = Array.isArray(deletedTeamsResult) ? deletedTeamsResult : deletedTeamsResult.rows || [];
       console.log(`   ✓ Deleted ${deletedTeams.length} teams`);
 
       // Delete organization
-      await db.delete(organizations).where(eq(organizations.id, orgId));
-      console.log(`   ✓ Deleted organization: ${org?.name}`);
+      await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
+      console.log(`   ✓ Deleted organization: ${org?.name}\n`);
     }
 
-    // Step 4: Delete orphaned test users (not in any organization)
-    const testUserIds = testUsers.map(u => u.id);
-    const orphanedUserIds = testUserIds.filter(id => {
-      // Check if user is already deleted as part of org cleanup
-      return !testOrgIds.some(orgId =>
-        orgUsers.some(ou => ou.userId === id && ou.organizationId === orgId)
-      );
-    });
+    // Step 4: Delete orphaned test users (users not in test organizations)
+    // These are users that match test patterns but aren't in the test orgs we're deleting
+    console.log(`\n👤 Cleaning up orphaned test users...`);
 
-    if (orphanedUserIds.length > 0) {
-      console.log(`\n👤 Cleaning up ${orphanedUserIds.length} orphaned test users...`);
-
+    if (testUserIds.length > 0) {
       // Delete measurements
-      await db.delete(measurements).where(inArray(measurements.userId, orphanedUserIds));
+      const deleteMeasurementsQuery = sql`
+        DELETE FROM measurements
+        WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+      `;
+      await db.execute(deleteMeasurementsQuery);
 
       // Delete user relationships
-      await db.delete(userTeams).where(inArray(userTeams.userId, orphanedUserIds));
-      await db.delete(userOrganizations).where(inArray(userOrganizations.userId, orphanedUserIds));
+      const deleteUserTeamsQuery = sql`
+        DELETE FROM user_teams
+        WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+      `;
+      await db.execute(deleteUserTeamsQuery);
 
-      // Delete sessions
-      await db.delete(sessions).where(inArray(sessions.userId, orphanedUserIds));
+      const deleteUserOrgsQuery = sql`
+        DELETE FROM user_organizations
+        WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+      `;
+      await db.execute(deleteUserOrgsQuery);
+
+      // Delete sessions (if table exists)
+      try {
+        const deleteSessionsQuery = sql`
+          DELETE FROM sessions
+          WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+        `;
+        await db.execute(deleteSessionsQuery);
+      } catch (error: any) {
+        if (error.code !== '42P01') {
+          throw error;
+        }
+      }
 
       // Delete audit logs
-      await db.delete(auditLogs).where(inArray(auditLogs.userId, orphanedUserIds));
+      const deleteAuditLogsQuery = sql`
+        DELETE FROM audit_logs
+        WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+      `;
+      await db.execute(deleteAuditLogsQuery);
 
       // Delete users
-      const deletedOrphanUsers = await db.delete(users)
-        .where(inArray(users.id, orphanedUserIds))
-        .returning({ id: users.id });
+      const deleteUsersQuery = sql`
+        DELETE FROM users
+        WHERE id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
+        RETURNING id
+      `;
+      const deletedOrphanUsersResult = await db.execute(deleteUsersQuery);
+      const deletedOrphanUsers = Array.isArray(deletedOrphanUsersResult) ? deletedOrphanUsersResult : deletedOrphanUsersResult.rows || [];
       console.log(`   ✓ Deleted ${deletedOrphanUsers.length} orphaned users`);
     }
 
