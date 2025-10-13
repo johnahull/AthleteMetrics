@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,13 @@ export default function DeleteOrganizationModal({
   isLoading = false
 }: DeleteOrganizationModalProps) {
   const [confirmationName, setConfirmationName] = useState("");
+
+  // Reset confirmation input when modal closes or organization changes
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmationName("");
+    }
+  }, [isOpen, organization.id]);
 
   // Fetch dependency counts when modal opens
   const { data: dependencies } = useQuery<{ users: number; teams: number; measurements: number }>({

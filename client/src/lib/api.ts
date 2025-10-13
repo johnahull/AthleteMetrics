@@ -20,11 +20,27 @@ interface ApiError extends Error {
 class ApiClient {
   private baseUrl = '/api';
 
+  private async getCsrfToken(): Promise<string | null> {
+    try {
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include',
+      });
+
+      if (csrfResponse.ok) {
+        const { csrfToken } = await csrfResponse.json();
+        return csrfToken;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch CSRF token:', error);
+    }
+    return null;
+  }
+
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const error = new Error(`API Error: ${response.statusText}`) as ApiError;
       error.status = response.status;
-      
+
       try {
         const errorData = await response.json();
         error.details = errorData;
@@ -32,10 +48,10 @@ class ApiClient {
       } catch {
         // Response doesn't contain JSON
       }
-      
+
       throw error;
     }
-    
+
     return response.json();
   }
 
@@ -62,42 +78,74 @@ class ApiClient {
   }
 
   async post<T>(endpoint: string, data: any): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    // Add CSRF token for state-changing operations
+    const csrfToken = await this.getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
   async put<T>(endpoint: string, data: any): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    // Add CSRF token for state-changing operations
+    const csrfToken = await this.getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
   async patch<T>(endpoint: string, data: any): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    // Add CSRF token for state-changing operations
+    const csrfToken = await this.getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
   async delete<T = void>(endpoint: string, data?: any): Promise<T> {
+    const headers: Record<string, string> = data ? { 'Content-Type': 'application/json' } : {};
+
+    // Add CSRF token for state-changing operations
+    const csrfToken = await this.getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'DELETE',
-      headers: data ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       credentials: 'include',
       body: data ? JSON.stringify(data) : undefined,
     });
