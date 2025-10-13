@@ -52,8 +52,9 @@ const orgDeleteLimiter = rateLimit({
   // Uses ipKeyGenerator for proper IPv6 handling
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
-    const ip = ipKeyGenerator(req);
-    return userId ? `${ip}-${userId}` : ip;
+    const ip = req.ip || 'unknown';
+    const normalizedIp = ipKeyGenerator(ip);
+    return userId ? `${normalizedIp}-${userId}` : normalizedIp;
   },
 });
 
