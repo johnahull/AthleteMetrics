@@ -32,13 +32,18 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Run database migrations
-        run: railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
+      - name: Setup test database schema
+        run: npm run db:push
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+
+      - name: Run session table migration for tests
+        run: |
+          echo "Running session table migration on test database..."
+          psql "$DATABASE_URL" -f scripts/migrate-session-table.sql
+          echo "✅ Session table migration completed"
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
       - name: Run integration tests
         run: npm run test:integration
@@ -54,6 +59,38 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Run database migrations on staging
+        run: railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Run session table migration on staging (idempotent)
+        run: |
+          echo "Running session table migration on staging database..."
+          node -e "
+            const fs = require('fs');
+            const postgres = require('postgres');
+            const sql = postgres(process.env.STAGING_DATABASE_URL);
+            const migration = fs.readFileSync('scripts/migrate-session-table.sql', 'utf8');
+            (async () => {
+              try {
+                await sql.unsafe(migration);
+                console.log('✅ Session table migration completed');
+                process.exit(0);
+              } catch (error) {
+                console.error('Migration error:', error.message);
+                process.exit(1);
+              } finally {
+                await sql.end();
+              }
+            })();
+          "
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_PUBLIC_DATABASE_URL }}
 
       - name: Deploy to Railway Staging
         run: railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
