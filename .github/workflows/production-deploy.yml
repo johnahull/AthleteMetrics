@@ -143,7 +143,8 @@ jobs:
             exit 1
           fi
           echo "🚀 Deploying to Railway Production..."
-          railway up --service "$SERVICE_ID"
+          # Use --detach to actually deploy (CI mode only builds without deploying)
+          railway up --service "$SERVICE_ID" --detach
           echo "✅ Railway deployment initiated successfully"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
