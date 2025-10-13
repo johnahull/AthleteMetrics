@@ -32,9 +32,7 @@ vi.mock('../../server/vite.js', () => ({
 import { registerRoutes } from '../../server/routes';
 
 describe('Organization Deletion Rate Limiting', () => {
-  let app: Express;
   let siteAdminUser: User;
-  let agent: request.SuperAgentTest;
 
   beforeAll(async () => {
     // Validate DATABASE_URL is set
@@ -45,15 +43,9 @@ describe('Organization Deletion Rate Limiting', () => {
       );
     }
 
-    // Create Express app with middleware and register routes
-    app = express();
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: false }));
-    await registerRoutes(app);
-
     const timestamp = Date.now();
 
-    // Create site admin user
+    // Create site admin user once for all tests
     siteAdminUser = await storage.createUser({
       username: `test-ratelimit-admin-${timestamp}`,
       password: 'TestPass123!',
@@ -62,18 +54,6 @@ describe('Organization Deletion Rate Limiting', () => {
       lastName: 'Admin',
       isSiteAdmin: true,
     });
-
-    // Create authenticated agent
-    agent = request.agent(app);
-
-    // Login
-    await agent
-      .post('/api/auth/login')
-      .send({
-        username: siteAdminUser.username,
-        password: 'TestPass123!',
-      })
-      .expect(200);
   });
 
   afterAll(async () => {
@@ -85,8 +65,35 @@ describe('Organization Deletion Rate Limiting', () => {
     }
   });
 
+  /**
+   * Helper function to create a fresh Express app with authenticated agent
+   * This ensures complete rate limiter isolation between tests
+   */
+  async function createAuthenticatedAgent() {
+    // Create fresh Express app with middleware
+    const app = express();
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: false }));
+    await registerRoutes(app);
+
+    // Create authenticated agent
+    const agent = request.agent(app);
+
+    // Login
+    await agent
+      .post('/api/auth/login')
+      .send({
+        username: siteAdminUser.username,
+        password: 'TestPass123!',
+      })
+      .expect(200);
+
+    return agent;
+  }
+
   describe('Organization Deletion Rate Limiting', () => {
     it('should enforce rate limit after 5 deletion attempts in 15 minutes', async () => {
+      const agent = await createAuthenticatedAgent();
       const timestamp = Date.now();
       const orgs: Organization[] = [];
 
@@ -134,6 +141,7 @@ describe('Organization Deletion Rate Limiting', () => {
     }, 30000); // 30 second timeout
 
     it('should include rate limit headers in 429 response', async () => {
+      const agent = await createAuthenticatedAgent();
       const timestamp = Date.now();
       const orgs: Organization[] = [];
 
@@ -179,6 +187,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   describe('Organization Status Update Rate Limiting', () => {
     it('should enforce rate limit on deactivation endpoint', async () => {
+      const agent = await createAuthenticatedAgent();
       const timestamp = Date.now();
       const orgs: Organization[] = [];
 
@@ -224,6 +233,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   describe('Dependency Count Rate Limiting', () => {
     it('should NOT rate limit dependency count fetches (read operation)', async () => {
+      const agent = await createAuthenticatedAgent();
       const timestamp = Date.now();
       const org = await storage.createOrganization({
         name: `Dep Count Rate Limit Org ${timestamp}`,
@@ -253,6 +263,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   describe('Composite Key Rate Limiting (IP + User ID)', () => {
     it('should use composite key (IP + user ID) for rate limiting', async () => {
+      const agent = await createAuthenticatedAgent();
       // This test verifies the keyGenerator function works correctly
       // The actual composite key logic is tested indirectly through rate limit enforcement
 
@@ -301,6 +312,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   describe('Rate Limit Bypasses (Development Mode)', () => {
     it('should NOT bypass rate limits in test environment (production-safe)', async () => {
+      const agent = await createAuthenticatedAgent();
       // In test/production, rate limits should always be enforced
       // This verifies NODE_ENV=test doesn't accidentally bypass limits
 
@@ -365,6 +377,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   describe('Rate Limit Error Messages', () => {
     it('should provide clear error message when rate limited', async () => {
+      const agent = await createAuthenticatedAgent();
       const timestamp = Date.now();
       const orgs: Organization[] = [];
 
