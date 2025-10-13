@@ -24,11 +24,14 @@ export interface IStorage {
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
   // Organizations
-  getOrganizations(): Promise<Organization[]>;
+  getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
+  deactivateOrganization(id: string): Promise<void>;
+  reactivateOrganization(id: string): Promise<void>;
+  getOrganizationDependencyCounts(id: string): Promise<{ users: number; teams: number; measurements: number }>;
   getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]>;
   getOrganizationProfile(organizationId: string): Promise<Organization & {
     coaches: Array<{ user: User, role: string }>,
@@ -441,8 +444,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Organizations
-  async getOrganizations(): Promise<Organization[]> {
-    return db.select().from(organizations).orderBy(asc(organizations.name));
+  async getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]> {
+    const query = db.select().from(organizations);
+
+    // By default, exclude inactive organizations
+    if (!filters?.includeInactive) {
+      return query.where(eq(organizations.isActive, true)).orderBy(asc(organizations.name));
+    }
+
+    return query.orderBy(asc(organizations.name));
   }
 
   async getOrganization(id: string): Promise<Organization | undefined> {
@@ -462,6 +472,45 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOrganization(id: string): Promise<void> {
     await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  async deactivateOrganization(id: string): Promise<void> {
+    await db.update(organizations)
+      .set({ isActive: false, deletedAt: new Date() })
+      .where(eq(organizations.id, id));
+  }
+
+  async reactivateOrganization(id: string): Promise<void> {
+    await db.update(organizations)
+      .set({ isActive: true, deletedAt: null })
+      .where(eq(organizations.id, id));
+  }
+
+  async getOrganizationDependencyCounts(id: string): Promise<{ users: number; teams: number; measurements: number }> {
+    // Count users in organization
+    const usersResult = await db.select({ count: sql<number>`count(*)` })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.organizationId, id));
+    const usersCount = Number(usersResult[0]?.count || 0);
+
+    // Count teams in organization
+    const teamsResult = await db.select({ count: sql<number>`count(*)` })
+      .from(teams)
+      .where(eq(teams.organizationId, id));
+    const teamsCount = Number(teamsResult[0]?.count || 0);
+
+    // Count measurements for users in this organization
+    const measurementsResult = await db.select({ count: sql<number>`count(*)` })
+      .from(measurements)
+      .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+      .where(eq(userOrganizations.organizationId, id));
+    const measurementsCount = Number(measurementsResult[0]?.count || 0);
+
+    return {
+      users: usersCount,
+      teams: teamsCount,
+      measurements: measurementsCount,
+    };
   }
 
   async getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]> {

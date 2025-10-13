@@ -28,6 +28,15 @@ const userDeleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting for organization deletion operations
+const orgDeleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 5, // Limit each IP to 5 organization deletion requests per windowMs (very conservative)
+  message: { message: "Too many organization deletion attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerOrganizationRoutes(app: Express) {
   /**
    * Get all organizations (site admin only)
@@ -167,10 +176,10 @@ export function registerOrganizationRoutes(app: Express) {
   app.get("/api/organizations-with-users", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user!;
-      
+
       // Get user's organizations
       const userOrganizations = await organizationService.getAccessibleOrganizations(currentUser.id);
-      
+
       // For site admins, get all organizations
       if (currentUser.isSiteAdmin === true) {
         const allOrganizations = await organizationService.getAllOrganizations(currentUser.id);
@@ -210,6 +219,83 @@ export function registerOrganizationRoutes(app: Express) {
     } catch (error) {
       console.error("Get organizations with users error:", error);
       res.status(500).json({ message: "Failed to fetch organizations with users" });
+    }
+  });
+
+  /**
+   * Update organization status (deactivate/reactivate) (site admin only)
+   */
+  app.patch("/api/organizations/:id/status", orgDeleteLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const organizationId = req.params.id;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ message: "isActive must be a boolean" });
+      }
+
+      if (isActive) {
+        await organizationService.reactivateOrganization(organizationId, req.session.user!.id);
+        res.json({ message: "Organization reactivated successfully" });
+      } else {
+        await organizationService.deactivateOrganization(organizationId, req.session.user!.id);
+        res.json({ message: "Organization deactivated successfully" });
+      }
+    } catch (error) {
+      console.error("Update organization status error:", error);
+      const message = error instanceof Error ? error.message : "Failed to update organization status";
+      const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Get organization dependency counts (site admin only)
+   */
+  app.get("/api/organizations/:id/dependencies", requireSiteAdmin, async (req, res) => {
+    try {
+      const organizationId = req.params.id;
+      const counts = await organizationService.getOrganizationDependencyCounts(
+        organizationId,
+        req.session.user!.id
+      );
+      res.json(counts);
+    } catch (error) {
+      console.error("Get organization dependencies error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch organization dependencies";
+      const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Delete organization permanently (site admin only)
+   * Requires confirmation name and organization must have no dependencies
+   */
+  app.delete("/api/organizations/:id", orgDeleteLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const organizationId = req.params.id;
+      const { confirmationName } = req.body;
+
+      if (!confirmationName) {
+        return res.status(400).json({ message: "Confirmation name is required" });
+      }
+
+      await organizationService.deleteOrganization(
+        organizationId,
+        confirmationName,
+        req.session.user!.id
+      );
+
+      res.json({ message: "Organization deleted successfully" });
+    } catch (error) {
+      console.error("Delete organization error:", error);
+      const message = error instanceof Error ? error.message : "Failed to delete organization";
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
+        : message.includes("dependencies") || message.includes("confirmation") ? 400
+        : 500;
+      res.status(statusCode).json({ message });
     }
   });
 }

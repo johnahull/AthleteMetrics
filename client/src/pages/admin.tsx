@@ -12,7 +12,9 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { Plus, Building2, Users, UserPlus, Trash2, Edit3, Link } from "lucide-react";
+import { Plus, Building2, Users, UserPlus, Trash2, Edit3, Link, Ban, RotateCcw } from "lucide-react";
+import DeleteOrganizationModal from "@/components/delete-organization-modal";
+import { mutations } from "@/lib/api";
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
@@ -31,6 +33,8 @@ type Organization = {
   id: string;
   name: string;
   description?: string;
+  isActive: boolean;
+  deletedAt?: string | null;
   createdAt: string;
   users: {
     id: string;
@@ -57,6 +61,8 @@ export default function AdminPage() {
   const { user: currentUser } = useAuth();
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
 
   const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations-with-users"],
@@ -194,6 +200,83 @@ export default function AdminPage() {
     }
   };
 
+  const deactivateOrgMutation = useMutation({
+    mutationFn: async (orgId: string) => {
+      return mutations.deactivateOrganization(orgId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      toast({ title: "Organization deactivated successfully!" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error deactivating organization",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const reactivateOrgMutation = useMutation({
+    mutationFn: async (orgId: string) => {
+      return mutations.reactivateOrganization(orgId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      toast({ title: "Organization reactivated successfully!" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error reactivating organization",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const deleteOrgMutation = useMutation({
+    mutationFn: async ({ orgId, confirmationName }: { orgId: string; confirmationName: string }) => {
+      return mutations.deleteOrganization(orgId, confirmationName);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/organizations"] });
+      toast({ title: "Organization deleted successfully!" });
+      setDeleteModalOpen(false);
+      setSelectedOrganization(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error deleting organization",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const handleDeactivateOrg = (org: Organization) => {
+    if (confirm(`Are you sure you want to deactivate ${org.name}? This can be undone later.`)) {
+      deactivateOrgMutation.mutate(org.id);
+    }
+  };
+
+  const handleReactivateOrg = (org: Organization) => {
+    reactivateOrgMutation.mutate(org.id);
+  };
+
+  const handleDeleteOrg = (org: Organization) => {
+    setSelectedOrganization(org);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = (confirmationName: string) => {
+    if (selectedOrganization) {
+      deleteOrgMutation.mutate({ orgId: selectedOrganization.id, confirmationName });
+    }
+  };
+
   const generateInviteLink = async (email: string, firstName: string, lastName: string, role: string, organizationId?: string) => {
     try {
       const res = await apiRequest("POST", "/api/invitations", {
@@ -316,16 +399,69 @@ export default function AdminPage() {
           <CardContent>
             <div className="space-y-2">
               {organizations?.map((org: Organization) => (
-                <div key={org.id} className="p-3 border rounded-lg">
-                  <h3 className="font-semibold" data-testid={`org-name-${org.id}`}>{org.name}</h3>
-                  {org.description && (
-                    <p className="text-sm text-gray-600" data-testid={`org-description-${org.id}`}>
-                      {org.description}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    Created: {new Date(org.createdAt).toLocaleDateString()}
-                  </p>
+                <div
+                  key={org.id}
+                  className={`p-3 border rounded-lg ${org.isActive ? '' : 'bg-gray-100 opacity-60'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold" data-testid={`org-name-${org.id}`}>
+                          {org.name}
+                        </h3>
+                        {!org.isActive && (
+                          <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded border border-yellow-300">
+                            Deactivated
+                          </span>
+                        )}
+                      </div>
+                      {org.description && (
+                        <p className="text-sm text-gray-600 mt-1" data-testid={`org-description-${org.id}`}>
+                          {org.description}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Created: {new Date(org.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {org.isActive ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeactivateOrg(org)}
+                            disabled={deactivateOrgMutation.isPending}
+                            data-testid={`deactivate-org-${org.id}`}
+                            className="text-yellow-600 hover:text-yellow-700"
+                          >
+                            <Ban className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteOrg(org)}
+                            disabled={deleteOrgMutation.isPending}
+                            data-testid={`delete-org-${org.id}`}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReactivateOrg(org)}
+                          disabled={reactivateOrgMutation.isPending}
+                          data-testid={`reactivate-org-${org.id}`}
+                          className="text-green-600 hover:text-green-700"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
               {!organizations?.length && (
@@ -596,6 +732,20 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Organization Modal */}
+      {selectedOrganization && (
+        <DeleteOrganizationModal
+          organization={selectedOrganization}
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setSelectedOrganization(null);
+          }}
+          onConfirm={handleConfirmDelete}
+          isLoading={deleteOrgMutation.isPending}
+        />
+      )}
     </div>
   );
 }

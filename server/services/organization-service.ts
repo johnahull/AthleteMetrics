@@ -302,4 +302,166 @@ export class OrganizationService extends BaseService {
       throw error;
     }
   }
+
+  /**
+   * Deactivate organization (soft delete - site admin only)
+   */
+  async deactivateOrganization(
+    organizationId: string,
+    requestingUserId: string
+  ): Promise<void> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can deactivate organizations");
+      }
+
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      // Deactivate organization
+      await this.storage.deactivateOrganization(organizationId);
+
+      // Create audit log
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_deactivated',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({ organizationName: org.name }),
+        ipAddress: null,
+        userAgent: null,
+      });
+    } catch (error) {
+      console.error("OrganizationService.deactivateOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reactivate organization (site admin only)
+   */
+  async reactivateOrganization(
+    organizationId: string,
+    requestingUserId: string
+  ): Promise<void> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can reactivate organizations");
+      }
+
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      // Reactivate organization
+      await this.storage.reactivateOrganization(organizationId);
+
+      // Create audit log
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_reactivated',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({ organizationName: org.name }),
+        ipAddress: null,
+        userAgent: null,
+      });
+    } catch (error) {
+      console.error("OrganizationService.reactivateOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete organization permanently (site admin only)
+   * Only allowed if organization has no users, teams, or measurements
+   */
+  async deleteOrganization(
+    organizationId: string,
+    confirmationName: string,
+    requestingUserId: string
+  ): Promise<void> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can delete organizations");
+      }
+
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      // Verify confirmation name matches
+      if (confirmationName !== org.name) {
+        throw new Error("Organization name confirmation does not match");
+      }
+
+      // Check for dependencies
+      const counts = await this.storage.getOrganizationDependencyCounts(organizationId);
+
+      if (counts.users > 0 || counts.teams > 0 || counts.measurements > 0) {
+        const errors = [];
+        if (counts.users > 0) errors.push(`${counts.users} users`);
+        if (counts.teams > 0) errors.push(`${counts.teams} teams`);
+        if (counts.measurements > 0) errors.push(`${counts.measurements} measurements`);
+
+        throw new Error(
+          `Cannot delete organization with active dependencies: ${errors.join(', ')}. ` +
+          `Please remove all users, teams, and measurements first, or use deactivation instead.`
+        );
+      }
+
+      // Delete organization
+      await this.storage.deleteOrganization(organizationId);
+
+      // Create audit log
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_deleted',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({ organizationName: org.name }),
+        ipAddress: null,
+        userAgent: null,
+      });
+    } catch (error) {
+      console.error("OrganizationService.deleteOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get organization dependency counts (site admin only)
+   */
+  async getOrganizationDependencyCounts(
+    organizationId: string,
+    requestingUserId: string
+  ): Promise<{ users: number; teams: number; measurements: number }> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can view dependency counts");
+      }
+
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      return await this.storage.getOrganizationDependencyCounts(organizationId);
+    } catch (error) {
+      console.error("OrganizationService.getOrganizationDependencyCounts:", error);
+      throw error;
+    }
+  }
 }

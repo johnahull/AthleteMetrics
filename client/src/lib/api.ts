@@ -94,12 +94,14 @@ class ApiClient {
     return this.handleResponse<T>(response);
   }
 
-  async delete<T = void>(endpoint: string): Promise<T> {
+  async delete<T = void>(endpoint: string, data?: any): Promise<T> {
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'DELETE',
+      headers: data ? { 'Content-Type': 'application/json' } : undefined,
       credentials: 'include',
+      body: data ? JSON.stringify(data) : undefined,
     });
-    
+
     return this.handleResponse<T>(response);
   }
 }
@@ -122,6 +124,11 @@ export const queries = {
   organizationProfile: (id: string) => ({
     queryKey: ['organizations', id, 'profile'],
     queryFn: () => apiClient.get(`/organizations/${id}/profile`),
+  }),
+
+  organizationDependencies: (id: string) => ({
+    queryKey: ['organizations', id, 'dependencies'],
+    queryFn: () => apiClient.get(`/organizations/${id}/dependencies`),
   }),
 
   myOrganizations: () => ({
@@ -217,7 +224,10 @@ export const mutations = {
   // Organizations
   createOrganization: (data: any) => apiClient.post('/organizations', data),
   updateOrganization: (id: string, data: any) => apiClient.put(`/organizations/${id}`, data),
-  deleteOrganization: (id: string) => apiClient.delete(`/organizations/${id}`),
+  deactivateOrganization: (id: string) => apiClient.patch(`/organizations/${id}/status`, { isActive: false }),
+  reactivateOrganization: (id: string) => apiClient.patch(`/organizations/${id}/status`, { isActive: true }),
+  deleteOrganization: (id: string, confirmationName: string) =>
+    apiClient.delete(`/organizations/${id}`, { confirmationName }),
 
   // Teams
   createTeam: (data: any) => apiClient.post('/teams', data),
