@@ -5396,37 +5396,39 @@ export async function registerRoutes(app: Express) {
       // Get athletes filtered by organization
       const athletes = await storage.getAthletes({ organizationId: effectiveOrganizationId });
 
-      // Transform to CSV format with all database fields
+      // Transform to CSV format matching import template
+      // Headers match client/src/pages/import-export.tsx athletesTemplate (line 689)
       const csvHeaders = [
-        'id', 'firstName', 'lastName', 'fullName', 'username', 'emails', 'phoneNumbers',
-        'birthDate', 'birthYear', 'graduationYear', 'school', 'sports', 'height', 'weight',
-        'teams', 'isActive', 'createdAt'
+        'firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear',
+        'gender', 'emails', 'phoneNumbers', 'sports', 'height', 'weight',
+        'school', 'teamName'
       ];
 
-      const csvRows = (athletes as any[]).map((athlete: any) => {
-        const teams = athlete.teams ? athlete.teams.map((t: any) => t.name).join(';') : '';
+      // Check for multi-team athletes that will lose data in export
+      const multiTeamAthletes = athletes.filter(athlete => athlete.teams && athlete.teams.length > 1);
+      const hasMultiTeamAthletes = multiTeamAthletes.length > 0;
+
+      const csvRows = athletes.map(athlete => {
+        // Export first team only as "teamName" (singular) to match import format
+        const teamName = athlete.teams && athlete.teams.length > 0 ? athlete.teams[0].name : '';
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
         const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
         const sports = Array.isArray(athlete.sports) ? athlete.sports.join(';') : (athlete.sports || '');
 
         return [
-          athlete.id,
-          athlete.firstName,
-          athlete.lastName,
-          athlete.fullName,
-          athlete.username,
-          emails,
-          phoneNumbers,
+          athlete.firstName || '',
+          athlete.lastName || '',
           athlete.birthDate || '',
           athlete.birthYear || '',
           athlete.graduationYear || '',
-          athlete.school || '',
+          athlete.gender || '',
+          emails,
+          phoneNumbers,
           sports,
           athlete.height || '',
           athlete.weight || '',
-          teams,
-          athlete.isActive,
-          athlete.createdAt
+          athlete.school || '',
+          teamName
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
           let value = String(field || '');
@@ -5444,6 +5446,12 @@ export async function registerRoutes(app: Express) {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="athletes.csv"');
+
+      // Warn if multi-team athletes have data loss
+      if (hasMultiTeamAthletes) {
+        res.setHeader('X-Export-Warning', `${multiTeamAthletes.length} athlete(s) with multiple teams; only first team exported`);
+      }
+
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting athletes:", error);
@@ -5506,38 +5514,34 @@ export async function registerRoutes(app: Express) {
       // Get measurements with filtering
       const measurements = await storage.getMeasurements(filters);
 
-      // Transform to CSV format with all database fields including gender
+      // Transform to CSV format matching import template
+      // Headers match client/src/pages/import-export.tsx measurementsTemplate (line 694)
       const csvHeaders = [
-        'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'gender', 'teams',
-        'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes',
-        'submittedBy', 'verifiedBy', 'isVerified', 'createdAt'
+        'firstName', 'lastName', 'gender', 'teamName', 'date', 'age',
+        'metric', 'value', 'units', 'flyInDistance', 'notes'
       ];
+
+      // Check for measurements with multi-team users that will lose data in export
+      const multiTeamMeasurements = measurements.filter(m => m.user?.teams && m.user.teams.length > 1);
+      const hasMultiTeamMeasurements = multiTeamMeasurements.length > 0;
 
       const csvRows = measurements.map(measurement => {
         const user = measurement.user;
-        const teams = user?.teams ? user.teams.map((t: any) => t.name).join(';') : '';
-        const submittedBy = measurement.submittedBy || '';
-        const verifiedBy = measurement.verifiedBy || '';
+        // Export first team only as "teamName" (singular) to match import format
+        const teamName = user?.teams && user.teams.length > 0 ? user.teams[0].name : '';
 
         return [
-          measurement.id,
           user?.firstName || '',
           user?.lastName || '',
-          user?.fullName || '',
-          user?.birthYear || '',
           user?.gender || '',
-          teams,
-          measurement.date,
-          measurement.age,
-          measurement.metric,
-          measurement.value,
-          measurement.units,
+          teamName,
+          measurement.date || '',
+          measurement.age || '',
+          measurement.metric || '',
+          measurement.value || '',
+          measurement.units || '',
           measurement.flyInDistance || '',
-          measurement.notes || '',
-          submittedBy,
-          verifiedBy,
-          measurement.isVerified,
-          measurement.createdAt
+          measurement.notes || ''
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
           let value = String(field || '');
@@ -5555,6 +5559,12 @@ export async function registerRoutes(app: Express) {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
+
+      // Warn if measurements have multi-team users with data loss
+      if (hasMultiTeamMeasurements) {
+        res.setHeader('X-Export-Warning', `${multiTeamMeasurements.length} measurement(s) from athletes with multiple teams; only first team exported`);
+      }
+
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting measurements:", error);
