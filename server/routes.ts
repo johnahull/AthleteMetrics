@@ -410,7 +410,9 @@ export async function initializeDefaultUser() {
         });
       }
 
-      if (needsPrivilegeRestore) {
+      // Only create privilege_restored audit log if privileges were actually restored
+      // (not if restoration was blocked by ALLOW_ADMIN_PRIVILEGE_RESTORE=false)
+      if (needsPrivilegeRestore && updateData.isSiteAdmin === true) {
         // Audit log for privilege restoration
         await tx.insert(auditLogs).values({
           userId: lockedUser.id,

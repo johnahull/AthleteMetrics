@@ -26,7 +26,19 @@ CREATE TABLE IF NOT EXISTS session (
 
 -- Ensure user_id column is nullable for pre-authentication sessions
 -- Safe to run on existing tables (drops NOT NULL constraint if present)
-ALTER TABLE session ALTER COLUMN user_id DROP NOT NULL;
+-- Idempotent: only drops constraint if it exists
+DO $$
+BEGIN
+  -- Check if user_id column has NOT NULL constraint
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'session'
+    AND column_name = 'user_id'
+    AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE session ALTER COLUMN user_id DROP NOT NULL;
+  END IF;
+END $$;
 
 -- Create index for session expiration (used by automatic pruning)
 -- CONCURRENTLY prevents table locks during index creation (zero-downtime)
