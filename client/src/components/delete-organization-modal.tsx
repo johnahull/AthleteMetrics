@@ -32,9 +32,7 @@ export default function DeleteOrganizationModal({
 
   // Reset confirmation input when modal closes or organization changes
   useEffect(() => {
-    if (!isOpen) {
-      setConfirmationName("");
-    }
+    setConfirmationName("");
   }, [isOpen, organization.id]);
 
   // Fetch dependency counts when modal opens

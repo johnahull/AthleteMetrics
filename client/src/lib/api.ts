@@ -20,7 +20,9 @@ interface ApiError extends Error {
 class ApiClient {
   private baseUrl = '/api';
 
-  private async getCsrfToken(): Promise<string | null> {
+  private async getCsrfToken(retryCount = 0): Promise<string | null> {
+    const maxRetries = 2;
+
     try {
       const csrfResponse = await fetch('/api/csrf-token', {
         credentials: 'include',
@@ -30,9 +32,25 @@ class ApiClient {
         const { csrfToken } = await csrfResponse.json();
         return csrfToken;
       }
+
+      // Log non-OK responses for debugging
+      console.warn(`CSRF token fetch returned status ${csrfResponse.status}: ${csrfResponse.statusText}`);
+
+      // Retry on 5xx errors
+      if (csrfResponse.status >= 500 && retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (retryCount + 1))); // exponential backoff
+        return this.getCsrfToken(retryCount + 1);
+      }
     } catch (error) {
       console.warn('Failed to fetch CSRF token:', error);
+
+      // Retry on network errors
+      if (retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (retryCount + 1))); // exponential backoff
+        return this.getCsrfToken(retryCount + 1);
+      }
     }
+
     return null;
   }
 
@@ -47,6 +65,25 @@ class ApiClient {
         error.message = errorData.message || error.message;
       } catch {
         // Response doesn't contain JSON
+      }
+
+      // Enhanced 429 rate limit error message
+      if (response.status === 429) {
+        const rateLimitReset = response.headers.get('RateLimit-Reset');
+        const retryAfter = response.headers.get('Retry-After');
+
+        if (rateLimitReset) {
+          const resetTime = new Date(parseInt(rateLimitReset) * 1000);
+          const now = new Date();
+          const minutesUntilReset = Math.ceil((resetTime.getTime() - now.getTime()) / 60000);
+          error.message = `Rate limit exceeded. Please try again in ${minutesUntilReset} minute${minutesUntilReset !== 1 ? 's' : ''}.`;
+        } else if (retryAfter) {
+          const seconds = parseInt(retryAfter);
+          const minutes = Math.ceil(seconds / 60);
+          error.message = `Rate limit exceeded. Please try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`;
+        } else {
+          error.message = error.message || 'Rate limit exceeded. Please try again later.';
+        }
       }
 
       throw error;
@@ -82,9 +119,10 @@ class ApiClient {
 
     // Add CSRF token for state-changing operations
     const csrfToken = await this.getCsrfToken();
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
+    if (!csrfToken) {
+      throw new Error('Failed to obtain CSRF protection token. Please refresh the page and try again.');
     }
+    headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
@@ -101,9 +139,10 @@ class ApiClient {
 
     // Add CSRF token for state-changing operations
     const csrfToken = await this.getCsrfToken();
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
+    if (!csrfToken) {
+      throw new Error('Failed to obtain CSRF protection token. Please refresh the page and try again.');
     }
+    headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'PUT',
@@ -120,9 +159,10 @@ class ApiClient {
 
     // Add CSRF token for state-changing operations
     const csrfToken = await this.getCsrfToken();
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
+    if (!csrfToken) {
+      throw new Error('Failed to obtain CSRF protection token. Please refresh the page and try again.');
     }
+    headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'PATCH',
@@ -139,9 +179,10 @@ class ApiClient {
 
     // Add CSRF token for state-changing operations
     const csrfToken = await this.getCsrfToken();
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
+    if (!csrfToken) {
+      throw new Error('Failed to obtain CSRF protection token. Please refresh the page and try again.');
     }
+    headers['X-CSRF-Token'] = csrfToken;
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'DELETE',
