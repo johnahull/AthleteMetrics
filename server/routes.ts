@@ -2113,10 +2113,15 @@ export async function registerRoutes(app: Express) {
           orgContextForFiltering = requestedOrgId;
         } else {
           // Use user's primary organization
-          if (!currentUser.primaryOrganizationId) {
-            return res.json([]); // No primary org, so no athletes to show
-          }
           orgContextForFiltering = currentUser.primaryOrganizationId;
+          if (!orgContextForFiltering) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            orgContextForFiltering = userOrgs[0]?.organizationId;
+            if (!orgContextForFiltering) {
+              return res.json([]); // No primary org, so no athletes to show
+            }
+          }
         }
 
         // Athletes can only see their own athlete data
