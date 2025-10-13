@@ -543,10 +543,10 @@ export async function registerRoutes(app: Express) {
     try {
       const connectPgSimple = await import("connect-pg-simple");
       const PgStore = connectPgSimple.default(session);
-      const { pgClient } = await import("./db");
+      const { sessionPool } = await import("./db");
 
       sessionConfig.store = new PgStore({
-        pool: pgClient as any, // Use raw postgres client (required for connect-pg-simple compatibility)
+        pool: sessionPool, // Use pg.Pool (required for connect-pg-simple compatibility)
         tableName: 'session',
         createTableIfMissing: process.env.NODE_ENV !== 'production', // Only auto-create in development
         pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes

@@ -1,6 +1,8 @@
 import * as schema from "@shared/schema";
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import pkg from 'pg';
+const { Pool } = pkg;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -72,18 +74,32 @@ const client = postgres(DATABASE_URL, {
 
 const db = drizzle(client, { schema });
 
+// Create a separate pg.Pool specifically for connect-pg-simple session store
+// connect-pg-simple requires the pg library's Pool interface, not postgres-js
+const sessionPool = new Pool({
+  connectionString: DATABASE_URL,
+  max: Math.min(5, finalPoolConfig.max), // Use fewer connections for session store
+  idleTimeoutMillis: finalPoolConfig.idle_timeout * 1000,
+  connectionTimeoutMillis: 10000,
+  ssl: isProduction ? { rejectUnauthorized: false } : undefined,
+});
+
 // Export db for application use
 export { db };
 
-// Export raw postgres client for connect-pg-simple (requires Pool interface)
-// This is needed because connect-pg-simple expects methods like query(), connect(), end()
-// which are not available on the Drizzle wrapper
+// Export postgres-js client for raw SQL operations (migrations, etc.)
 export { client as pgClient };
 
-// Export cleanup function instead of raw client to prevent misuse
+// Export pg.Pool for connect-pg-simple session store
+export { sessionPool };
+
+// Export cleanup function to close both postgres-js and pg.Pool connections
 export async function closeDatabase() {
   try {
-    await client.end();
+    await Promise.all([
+      client.end(),
+      sessionPool.end()
+    ]);
   } catch (error) {
     // Already closed or connection error - safe to ignore
     if (process.env.NODE_ENV !== 'production') {
