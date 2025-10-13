@@ -239,7 +239,7 @@ export const queries = {
 
   organizationDependencies: (id: string) => ({
     queryKey: ['organizations', id, 'dependencies'],
-    queryFn: () => apiClient.get(`/organizations/${id}/dependencies`),
+    queryFn: () => apiClient.get<{ users: number; teams: number; measurements: number }>(`/organizations/${id}/dependencies`),
   }),
 
   myOrganizations: () => ({
