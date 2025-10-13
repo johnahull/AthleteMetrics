@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'happy-dom', // Switched from jsdom - 2-3x less memory usage
-    setupFiles: ['./vitest.setup.ts', './tests/setup.ts'],
+    setupFiles: ['./vitest.setup.ts'], // Unit tests don't need database validation
     hookTimeout: 30000, // Increase hook timeout to 30 seconds for cleanup operations
     testTimeout: 10000, // Reduce test timeout to 10 seconds (30s was too high, may mask slow tests)
 

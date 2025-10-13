@@ -125,21 +125,26 @@ The application has built-in safeguards to prevent this, but always double-check
 ### Quick Start
 
 ```bash
-# Create local test database
+# Run unit tests (no database required)
+npm run test:unit
+
+# For integration tests, create local test database
 createdb athletemetrics_test
 
 # Copy test environment template
 cp .env.test.example .env.test
 
-# Run tests
-npm test                  # All tests
-npm run test:unit         # Unit tests only
-npm run test:integration  # Integration tests (requires PostgreSQL)
+# Run all tests
+npm test                  # All tests (unit + integration)
+npm run test:integration  # Integration tests only (requires PostgreSQL)
 ```
 
 ### Safety Features
 
-Tests include automatic validation that BLOCKS execution if:
+**Unit Tests**: Run without a database. Test React components, utilities, and pure logic with mocked dependencies.
+
+**Integration Tests**: Automatically validate that BLOCKS execution if:
+- `DATABASE_URL` is not set
 - `DATABASE_URL` contains: `railway.app`, `neon.tech`, `prod`, `staging`
 - `DATABASE_URL` doesn't include: `localhost` or `test`
 

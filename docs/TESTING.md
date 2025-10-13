@@ -104,19 +104,25 @@ npm test
 
 ### Unit Tests
 
-Tests that don't require a database:
+Tests that don't require a database (React components, utilities, pure logic):
 
 ```bash
 npm run test:unit
 ```
 
+**Note**: Unit tests do NOT require `DATABASE_URL` to be set. They test client-side code, utilities, and server logic with mocked dependencies.
+
 ### Integration Tests
 
-Tests that require a PostgreSQL database:
+Tests that require a PostgreSQL database (API endpoints, database operations):
 
 ```bash
 npm run test:integration
 ```
+
+**Note**: Integration tests REQUIRE `DATABASE_URL` to be set and will fail if:
+- `DATABASE_URL` is not set
+- `DATABASE_URL` contains forbidden patterns (railway.app, neon.tech, prod, staging, etc.)
 
 ### Watch Mode
 
@@ -138,11 +144,11 @@ npm run test:ui
 
 ## Safety Features
 
-The application has multiple layers of protection to prevent running tests against production databases:
+The application has multiple layers of protection to prevent running integration tests against production databases:
 
-### 1. Pre-Test Validation (`tests/setup.ts`)
+### 1. Pre-Test Validation (`tests/setup/integration-setup.ts`)
 
-Before ANY test runs, the setup file validates:
+Before ANY integration test runs, the setup file validates:
 
 - ✅ `DATABASE_URL` is set
 - ✅ `DATABASE_URL` doesn't contain: `railway.app`, `neon.tech`, `prod`, `staging`
