@@ -5,6 +5,7 @@
 import { BaseService } from "./base-service";
 import { insertOrganizationSchema } from "@shared/schema";
 import type { Organization, InsertOrganization, User, UserOrganization } from "@shared/schema";
+import crypto from "crypto";
 
 export interface OrganizationFilters {
   search?: string;
@@ -13,6 +14,24 @@ export interface OrganizationFilters {
 
 interface UserOrganizationWithOrg extends UserOrganization {
   organization: Organization;
+}
+
+/**
+ * Constant-time string comparison to prevent timing attacks
+ * Pads strings to equal length before comparison
+ */
+function constantTimeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a.trim().toLowerCase());
+  const bufB = Buffer.from(b.trim().toLowerCase());
+  const maxLen = Math.max(bufA.length, bufB.length);
+  const paddedA = Buffer.concat([bufA, Buffer.alloc(maxLen - bufA.length)]);
+  const paddedB = Buffer.concat([bufB, Buffer.alloc(maxLen - bufB.length)]);
+
+  try {
+    return crypto.timingSafeEqual(paddedA, paddedB);
+  } catch {
+    return false;
+  }
 }
 
 export class OrganizationService extends BaseService {
@@ -412,13 +431,16 @@ export class OrganizationService extends BaseService {
         throw new Error("Confirmation name too long");
       }
 
-      // Verify confirmation name matches (case-insensitive with trimming for better UX)
-      if (confirmationName.trim().toLowerCase() !== org.name.trim().toLowerCase()) {
+      // Verify confirmation name matches using constant-time comparison to prevent timing attacks
+      if (!constantTimeCompare(confirmationName, org.name)) {
         throw new Error("Organization name confirmation does not match");
       }
 
       // Delete organization (transaction with race condition protection is handled in storage layer)
       await this.storage.deleteOrganization(organizationId);
+
+      // Sanitize confirmation name for audit log (prevent log injection)
+      const sanitizedConfirmation = confirmationName.trim().substring(0, 255);
 
       // Create audit log with request context
       await this.storage.createAuditLog({
@@ -428,7 +450,8 @@ export class OrganizationService extends BaseService {
         resourceId: organizationId,
         details: JSON.stringify({
           organizationName: org.name,
-          confirmationProvided: true
+          confirmationProvided: true,
+          confirmationName: sanitizedConfirmation
         }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,
