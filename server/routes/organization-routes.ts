@@ -3,7 +3,7 @@
  */
 
 import type { Express } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 // Session types are loaded globally
@@ -49,9 +49,10 @@ const orgDeleteLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   // Combine IP and user ID to prevent bypass via IP spoofing
+  // Uses ipKeyGenerator for proper IPv6 handling
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
-    const ip = req.ip || 'unknown';
+    const ip = ipKeyGenerator(req);
     return userId ? `${ip}-${userId}` : ip;
   },
 });
