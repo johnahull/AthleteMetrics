@@ -2333,10 +2333,15 @@ export async function registerRoutes(app: Express) {
           }
           orgContextForFiltering = requestedOrgId;
         } else {
-          if (!currentUser.primaryOrganizationId) {
-            return res.json([]);
-          }
           orgContextForFiltering = currentUser.primaryOrganizationId;
+          if (!orgContextForFiltering) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            orgContextForFiltering = userOrgs[0]?.organizationId;
+            if (!orgContextForFiltering) {
+              return res.json([]);
+            }
+          }
         }
       }
 
