@@ -70,7 +70,7 @@ When ENABLED:
 - "Implement X with tests" requests
 - Bug fixes with regression testing
 
-**Keywords that trigger:** `implement`, `feature`, `TDD`, `test-first`, `test-driven`, `autonomous`, `with tests`, `comprehensive testing`, `end-to-end implementation`
+**Keywords that trigger:** `implement feature`, `TDD`, `test-first`, `test-driven development`, `autonomous implementation`, `implement with tests`, `comprehensive testing`, `end-to-end implementation`, `feature implementation`
 
 **Special Capabilities:**
 - Writes tests BEFORE implementation (TDD methodology)
@@ -119,7 +119,7 @@ When ENABLED:
 - Organization-based data isolation
 - MFA, password policies, or security vulnerabilities
 
-**Keywords that trigger:** `auth`, `authentication`, `security`, `permission`, `role`, `rbac`, `session`, `mfa`, `password`, `login`, `admin`, `coach`, `athlete`, `organization`, `access control`
+**Keywords that trigger:** `auth`, `authentication`, `authorization`, `permission`, `role`, `rbac`, `session management`, `mfa`, `password policy`, `login`, `user roles`, `access control`, `authentication flow`
 
 #### OCR & Image Processing Agent (`ocr-image-processing-agent`) 🟡
 **Color:** Yellow
@@ -204,7 +204,7 @@ When ENABLED:
 - Bug fix verification and regression testing
 - **NEW**: Test-Driven Development (TDD) - writing tests BEFORE implementation
 
-**Keywords that trigger:** `test`, `testing`, `coverage`, `mock`, `unit test`, `integration test`, `e2e`, `bug fix`, `quality assurance`, `regression`, `TDD`, `test-first`
+**Keywords that trigger:** `write test`, `test coverage`, `unit test`, `integration test`, `mock`, `test suite`, `quality assurance`, `regression test`, `test file`, `testing framework`, `vitest`, `jest`
 
 **TDD Mode:** When invoked by `test-driven-feature-agent`, this agent writes comprehensive failing tests before any implementation begins.
 
@@ -255,6 +255,409 @@ When ENABLED:
 - Accessibility checks during build
 
 **Keywords that trigger:** `build component`, `create ui`, `visual feedback`, `develop component`, `ui development`, `live testing`, `component iteration`
+
+#### Code Quality & Linting Agent (`code-quality-linting-agent`) 🧹
+**Color:** Broom (Code Cleanup)
+**Auto-invoke when tasks involve:**
+- Setting up ESLint, Prettier, or code formatting tools
+- Configuring TypeScript strict mode or compiler options
+- Adding code style enforcement and pre-commit hooks
+- Fixing linting violations across the codebase
+- Code smell detection and refactoring suggestions
+- Import organization and sorting
+- Configuring Husky or lint-staged
+
+**Keywords that trigger:** `eslint`, `prettier`, `code style`, `formatting`, `lint`, `code quality`, `husky`, `pre-commit`, `typescript strict`, `code standards`, `import sorting`, `linter`
+
+**Special Capabilities:**
+- ESLint configuration for React, TypeScript, and accessibility
+- Prettier integration with ESLint
+- Automatic code formatting and fix application
+- Import sorting and organization
+- Pre-commit hook implementation (Husky + lint-staged)
+- Incremental migration to stricter linting rules
+- Custom rule configuration for project-specific patterns
+- Integration with CI/CD for automated checks
+
+**When to use:**
+- Setting up new linting infrastructure (PRIORITY: currently missing!)
+- Enforcing code standards across team
+- Automating code quality checks
+- Migrating to stricter TypeScript settings
+
+**When NOT to use:**
+- One-off manual formatting tasks
+- Simple style preference discussions
+
+#### Feature Flag & Settings Management Agent (`feature-flag-settings-agent`) 🎛️
+**Color:** Control Knobs
+**Auto-invoke when tasks involve:**
+- Implementing feature flag systems
+- Creating organization/team settings pages
+- Building settings inheritance hierarchies
+- Permission-based feature access control
+- A/B testing infrastructure
+- Feature rollout strategies
+- Percentage-based feature releases
+- User segment targeting
+
+**Keywords that trigger:** `feature flag`, `feature toggle`, `a/b testing`, `rollout`, `settings inheritance`, `org settings`, `organization settings`, `feature control`, `settings page`, `enable feature`, `disable feature`, `feature configuration`
+
+**Special Capabilities:**
+- Multi-level feature flags (global → org → team → user)
+- Settings inheritance and override logic
+- Feature flag UI with preview mode
+- Percentage-based rollouts (e.g., 50% of users)
+- User segment targeting (e.g., college orgs only)
+- Feature analytics and usage tracking
+- Graceful degradation when features disabled
+- Middleware for feature checking
+- React context for client-side feature access
+
+**Database Schema Examples:**
+```sql
+feature_flags (id, name, description, default_enabled, requires_tier, rollout_percentage)
+organization_settings (id, organization_id, feature_overrides JSONB, custom_settings JSONB)
+```
+
+**When to use:**
+- Implementing org-customizable features
+- Building settings management interfaces
+- Creating tier-based feature access
+- Rolling out experimental features
+
+**When NOT to use:**
+- Simple boolean flags in environment variables
+- One-time configuration changes
+
+#### Dependency Management Agent (`dependency-management-agent`) 📦
+**Color:** Package Box
+**Auto-invoke when tasks involve:**
+- Running `npm audit` or security vulnerability scans
+- Updating dependencies in `package.json` or `package-lock.json`
+- Resolving dependency conflicts and peer dependency issues
+- Security vulnerability remediation
+- Breaking change migrations when upgrading major versions
+- Lockfile maintenance and cleanup
+- Analyzing dependency tree and bundle impact
+
+**Keywords that trigger:** `npm`, `dependencies`, `package.json`, `npm audit`, `security vulnerability`, `npm update`, `breaking changes`, `semver`, `package upgrade`, `dependency conflict`, `security patch`, `dependency update`
+
+**Special Capabilities:**
+- Automated security patch application
+- Breaking change impact analysis across codebase
+- Dependency conflict resolution strategies
+- Version compatibility checking
+- Automated changelog review for upgrades
+- Test suite verification after updates
+- Incremental upgrade strategies for major versions
+- Bundle size impact analysis
+
+**When to use:**
+- Security vulnerabilities detected in CI
+- Upgrading major dependencies
+- Resolving npm install errors
+- Regular dependency maintenance
+
+**When NOT to use:**
+- Adding a single new dependency
+- Trivial patch version updates
+
+#### Deployment & Release Management Agent (`deployment-release-agent`) 🚀
+**Color:** Rocket (Deployment)
+**Auto-invoke when tasks involve:**
+- Creating GitHub releases and release notes
+- Managing Railway deployments and environments
+- Running deployment scripts (backup, smoke tests, health checks)
+- Updating deployment documentation
+- Managing environment variables across staging/production
+- Rollback operations and incident response
+- Pre-deployment validation checklists
+- Zero-downtime deployment strategies
+
+**Keywords that trigger:** `release`, `deploy`, `railway`, `production`, `staging`, `rollback`, `environment variables`, `smoke test`, `health check`, `deployment`, `release notes`, `environment parity`, `deploy script`
+
+**Special Capabilities:**
+- Automated release note generation from commits
+- Pre-deployment checklist validation
+- Environment parity verification (staging vs prod)
+- Automated rollback on health check failures
+- Database backup verification before migrations
+- Deployment status monitoring and alerting
+- Railway CLI automation
+- Semantic versioning enforcement
+- Deployment workflow orchestration
+
+**Integration with existing scripts:**
+- `scripts/backup-database.js` - Pre-deployment backups
+- `scripts/smoke-tests.js` - Post-deployment verification
+- `scripts/health-check.js` - Service health validation
+- `scripts/validate-env.js` - Environment configuration checks
+
+**When to use:**
+- Creating production releases
+- Deployment automation improvements
+- Rollback procedures
+- Environment configuration management
+
+**When NOT to use:**
+- Local development builds
+- Simple git operations
+
+#### Multi-Tenant Configuration Agent (`multi-tenant-profiles-agent`) 🏢
+**Color:** Building (Organizations)
+**Auto-invoke when tasks involve:**
+- Implementing organization type profiles (College, HS, Club, Youth, Pro)
+- Creating type-specific workflows and dashboards
+- Building customizable experiences per org type
+- White-labeling and custom branding features
+- Tenant isolation strategies and data boundaries
+- Cross-tenant data policies
+- Org type migration tools
+- Template libraries per organization type
+
+**Keywords that trigger:** `multi-tenant`, `org type`, `organization profiles`, `white-label`, `tenant isolation`, `customizable workflows`, `org-specific features`, `organization type`, `college org`, `high school`, `club team`, `branding`, `custom theme`
+
+**Special Capabilities:**
+- Org type taxonomy with inheritance (College, HS, Club, Youth, Pro)
+- Type-specific default configurations and feature sets
+- Custom workflow definitions per org type
+- White-label branding (logo, colors, custom domain)
+- Feature access by org type/tier
+- Data isolation and security boundaries (RLS policies)
+- Org type migration wizards
+- Dashboard customization per org type
+- Role variations per org type
+
+**Database Schema Examples:**
+```sql
+organization_types (id, name, default_features JSONB, default_settings JSONB)
+organization_profiles (id, organization_id, type_id, custom_branding JSONB, workflow_overrides JSONB)
+```
+
+**Integration Points:**
+- Works with `feature-flag-settings-agent` for type-specific features
+- Coordinates with `security-authentication-agent` for role variations
+- Uses `ui-component-library-agent` for themed interfaces
+
+**When to use:**
+- Building org type differentiation
+- Implementing white-label features
+- Creating org-specific workflows
+- Multi-tenant architecture design
+
+**When NOT to use:**
+- Single-tenant applications
+- Simple user preferences
+
+#### Custom Metric Configuration Agent (`custom-metric-config-agent`) 📊
+**Color:** Chart with Gear
+**Auto-invoke when tasks involve:**
+- Implementing dynamic metric definition systems
+- Creating custom test/measurement builders
+- Building validation rule engines for custom metrics
+- Implementing sport-specific measurement types
+- Custom data collection workflows
+- Metric versioning and schema evolution
+- Unit conversion systems
+- Formula-based derived metrics
+
+**Keywords that trigger:** `custom metric`, `test configuration`, `dynamic form`, `validation rules`, `sport-specific`, `measurement types`, `metric builder`, `custom test`, `define metric`, `measurement configuration`, `custom measurement`, `metric definition`
+
+**Special Capabilities:**
+- Dynamic schema for custom metrics (JSONB/JSON columns)
+- Visual metric builder UI (drag-and-drop form creation)
+- Validation rule engine (min/max, data type, regex, custom logic)
+- Unit conversion system (meters/feet, seconds/milliseconds)
+- Custom metric versioning (track definition changes over time)
+- Migration tools when metric definitions change
+- Sport-specific metric templates
+- Formula-based calculated metrics
+- Bulk metric import/export
+
+**Database Schema Examples:**
+```sql
+custom_metrics (
+  id, organization_id, name, data_type, unit,
+  validation_rules JSONB, calculation_formula, sport_specific, version
+)
+custom_metric_values (id, measurement_id, custom_metric_id, value, validated)
+```
+
+**Integration Points:**
+- Coordinates with `form-validation-agent` for dynamic validation
+- Works with `database-schema-agent` for flexible data models
+- Uses `ui-component-library-agent` for metric builder UI
+- Integrates with `analytics-visualization-agent` for custom charts
+
+**When to use:**
+- Allowing orgs to define custom tests
+- Building sport-specific measurement systems
+- Creating flexible data collection
+- Metric configuration interfaces
+
+**When NOT to use:**
+- Standard built-in metrics
+- Simple form field additions
+
+#### Monitoring & Observability Agent (`monitoring-observability-agent`) 📈
+**Color:** Chart (Upward Trend)
+**Auto-invoke when tasks involve:**
+- Production error tracking and monitoring setup (Sentry, Rollbar, LogRocket)
+- Application Performance Monitoring (APM) integration (DataDog, New Relic, AppDynamics)
+- Log aggregation and management (Splunk, ELK Stack, CloudWatch)
+- Uptime monitoring and health checks (Pingdom, UptimeRobot, StatusPage)
+- Real User Monitoring (RUM) and session replay
+- Alert configuration and incident response workflows
+- Metrics dashboards and observability tooling (Grafana, Prometheus)
+- Performance monitoring and bottleneck identification
+
+**Keywords that trigger:** `monitoring`, `observability`, `sentry`, `error tracking`, `logging`, `apm`, `application performance`, `metrics`, `alerting`, `uptime`, `health check`, `incident`, `log aggregation`, `grafana`, `prometheus`, `datadog`, `new relic`, `rum`, `session replay`, `error reporting`
+
+**Special Capabilities:**
+- Sentry integration for error tracking and crash reporting
+- APM tool setup for performance monitoring
+- Log aggregation pipeline configuration
+- Alert rule creation and incident management workflows
+- Dashboard creation for key metrics and KPIs
+- Real User Monitoring (RUM) and session replay setup
+- Performance regression detection and alerting
+- Cost-effective monitoring strategies for startups
+- **Consults monitoring platform documentation when needed**
+- **Uses WebFetch for latest observability best practices**
+
+**Reference Documentation:**
+- [Sentry Documentation](https://docs.sentry.io/)
+- [DataDog APM](https://docs.datadoghq.com/tracing/)
+- [Grafana Dashboards](https://grafana.com/docs/grafana/latest/)
+- [Prometheus Monitoring](https://prometheus.io/docs/introduction/overview/)
+- [New Relic APM](https://docs.newrelic.com/docs/apm/)
+
+**Integration Points:**
+- Works with `deployment-release-agent` for release tracking in Sentry
+- Coordinates with `performance-optimization-agent` to identify bottlenecks
+- Uses `security-authentication-agent` for monitoring security events
+- Integrates with `ci-cd-pipeline-agent` for build monitoring alerts
+- Collaborates with `api-route-architecture-agent` for endpoint monitoring
+
+**When to use:**
+- Setting up production error tracking
+- Configuring APM and performance monitoring
+- Creating monitoring dashboards
+- Setting up alerting and incident response
+- Implementing log aggregation
+- Tracking application health metrics
+- Identifying performance regressions
+
+**When NOT to use:**
+- Development/local debugging (use regular debugging tools)
+- Unit test failures (use `testing-qa-agent`)
+- Code profiling during development (use `performance-optimization-agent`)
+
+#### CI/CD Pipeline Agent (`ci-cd-pipeline-agent`) ⚙️
+**Color:** Gear (Automation)
+**Auto-invoke when tasks involve:**
+- Creating or modifying GitHub Actions workflows
+- CI/CD pipeline optimization (caching, parallelization)
+- Workflow debugging and troubleshooting
+- Matrix builds and multi-environment testing
+- Custom GitHub Actions development
+- CI/CD security best practices
+- Pipeline performance optimization
+- Artifact management and caching strategies
+
+**Keywords that trigger:** `github actions`, `workflow`, `ci/cd`, `pipeline`, `continuous integration`, `continuous deployment`, `.github/workflows`, `workflow optimization`, `ci cache`, `matrix build`, `workflow debugging`, `github action`, `workflow file`, `ci pipeline`, `build pipeline`
+
+**Special Capabilities:**
+- GitHub Actions YAML workflow generation
+- Job orchestration (parallel jobs, dependencies, conditional execution)
+- Optimal caching strategies for npm, build artifacts, and dependencies
+- Matrix builds for multi-OS and multi-version testing
+- Custom composite and Docker actions creation
+- Workflow security (secret management, OIDC, environment protection)
+- Pipeline performance optimization and run time reduction
+- Workflow debugging and failure analysis
+- **Consults GitHub Actions documentation when needed**
+- **Uses WebFetch for latest workflow syntax and best practices**
+
+**Reference Documentation:**
+- [GitHub Actions Syntax](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
+- [GitHub Actions Best Practices](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions)
+- [Caching Dependencies](https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows)
+- [Using Matrix Strategies](https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs)
+
+**Integration Points:**
+- Works with `testing-qa-agent` to add test jobs to workflows
+- Coordinates with `deployment-release-agent` for deployment jobs
+- Uses `code-quality-linting-agent` for linting jobs in CI
+- Integrates with `security-authentication-agent` for secret management
+
+**When to use:**
+- Creating new GitHub Actions workflows
+- Optimizing existing CI/CD pipelines
+- Debugging workflow failures
+- Adding caching strategies
+- Setting up matrix builds
+- Performance tuning CI pipelines
+
+**When NOT to use:**
+- Actually deploying to production (use `deployment-release-agent`)
+- Writing tests themselves (use `testing-qa-agent`)
+- Repository settings (use `github-operations-agent`)
+
+#### GitHub Operations Agent (`github-operations-agent`) 🐙
+**Color:** Octocat (Purple)
+**Auto-invoke when tasks involve:**
+- GitHub issue creation, triage, and management
+- GitHub Projects board configuration and automation
+- Repository settings and configuration
+- Branch protection rules and merge strategies
+- GitHub Actions workflow debugging (not creation)
+- Bulk PR/issue operations
+- GitHub API automation and scripting
+- Advanced GitHub queries and searches
+- GitHub App and webhook integration
+
+**Keywords that trigger:** `github issue`, `github project`, `triage issues`, `branch protection`, `repository settings`, `repo settings`, `github api`, `issue labels`, `github search`, `bulk pr`, `github automation`, `issue triage`, `project board`, `repo config`, `repo configuration`, `issue template`, `codeowners`
+
+**Special Capabilities:**
+- Issue automation (auto-label, auto-assign, bulk operations)
+- GitHub Projects board management and automation rules
+- Repository configuration (branch protection, merge strategies, settings)
+- GitHub Actions workflow debugging and log analysis
+- GitHub API automation for bulk operations
+- Advanced GitHub search queries across issues, PRs, and code
+- GitHub App integration and webhook setup
+- Issue template and PR template creation
+- CODEOWNERS file management
+- **Consults GitHub documentation when needed**
+- **Uses WebFetch for latest API reference and best practices**
+
+**Reference Documentation:**
+- [GitHub REST API](https://docs.github.com/en/rest)
+- [GitHub CLI Manual](https://cli.github.com/manual/)
+- [Managing Issues](https://docs.github.com/en/issues/tracking-your-work-with-issues)
+- [Branch Protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)
+- [GitHub Projects](https://docs.github.com/en/issues/planning-and-tracking-with-projects)
+
+**Integration Points:**
+- Works with `pr-lifecycle-agent` for PR management
+- Coordinates with `deployment-release-agent` for release automation
+- Uses `ci-cd-pipeline-agent` for workflow configuration (not creation)
+- Integrates with `security-authentication-agent` for access control
+
+**When to use:**
+- Managing GitHub issues and projects
+- Configuring repository settings
+- Debugging GitHub Actions failures (log analysis)
+- Bulk operations on PRs/issues
+- GitHub API automation
+- Setting up issue/PR templates
+
+**When NOT to use:**
+- Creating/reviewing individual PRs (use `pr-lifecycle-agent`)
+- Creating GitHub releases (use `deployment-release-agent`)
+- Writing new workflows (use `ci-cd-pipeline-agent`)
 
 ### Proactive Agent Usage Guidelines
 
@@ -396,6 +799,66 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Accessibility audits → `visual-design-review-agent`
 - Responsive testing → `visual-design-review-agent` or `ui-development-agent`
 - Visual regression → `ui-testing-agent` + `visual-design-review-agent`
+
+#### Code Quality & Linting (NEW)
+- Setting up ESLint/Prettier → `code-quality-linting-agent`
+- Pre-commit hooks → `code-quality-linting-agent`
+- Code formatting standards → `code-quality-linting-agent`
+- TypeScript strict mode → `code-quality-linting-agent`
+
+#### Feature Flags & Settings (NEW)
+- Org settings pages → `feature-flag-settings-agent`
+- Feature toggles → `feature-flag-settings-agent`
+- A/B testing → `feature-flag-settings-agent`
+- Tier-based features → `feature-flag-settings-agent` + `multi-tenant-profiles-agent`
+
+#### Dependency Management (NEW)
+- Security vulnerabilities → `dependency-management-agent`
+- Dependency updates → `dependency-management-agent`
+- Breaking changes → `dependency-management-agent`
+- npm audit failures → `dependency-management-agent`
+
+#### Deployment & Releases (NEW)
+- Creating releases → `deployment-release-agent`
+- Railway deployments → `deployment-release-agent`
+- Environment variables → `deployment-release-agent`
+- Rollback procedures → `deployment-release-agent`
+
+#### Multi-Tenant Features (NEW)
+- Org type customization → `multi-tenant-profiles-agent`
+- White-labeling → `multi-tenant-profiles-agent`
+- College vs HS vs Club → `multi-tenant-profiles-agent`
+- Org-specific workflows → `multi-tenant-profiles-agent` + `feature-flag-settings-agent`
+
+#### Custom Metrics (NEW)
+- Custom test creation → `custom-metric-config-agent`
+- Sport-specific metrics → `custom-metric-config-agent`
+- Metric builder UI → `custom-metric-config-agent` + `form-validation-agent`
+- Custom benchmarks → `custom-metric-config-agent` + `analytics-visualization-agent`
+
+#### Monitoring & Observability (NEW)
+- Setting up Sentry error tracking → `monitoring-observability-agent`
+- APM integration → `monitoring-observability-agent`
+- Log aggregation setup → `monitoring-observability-agent`
+- Alert configuration → `monitoring-observability-agent`
+- Monitoring dashboards → `monitoring-observability-agent`
+- Uptime monitoring → `monitoring-observability-agent`
+- Performance regression alerts → `monitoring-observability-agent` + `performance-optimization-agent`
+
+#### CI/CD & Workflows (NEW)
+- Creating GitHub Actions workflows → `ci-cd-pipeline-agent`
+- Optimizing CI/CD pipelines → `ci-cd-pipeline-agent`
+- Workflow debugging → `ci-cd-pipeline-agent`
+- Matrix builds → `ci-cd-pipeline-agent`
+- Cache strategies → `ci-cd-pipeline-agent`
+
+#### GitHub Operations (NEW)
+- GitHub issue management → `github-operations-agent`
+- Issue triage and labeling → `github-operations-agent`
+- Branch protection setup → `github-operations-agent`
+- Repository configuration → `github-operations-agent`
+- Bulk PR/issue operations → `github-operations-agent`
+- GitHub API automation → `github-operations-agent`
 
 ## Development Commands
 
