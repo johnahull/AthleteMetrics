@@ -284,36 +284,42 @@ export class OrganizationService extends BaseService {
   ): Promise<Map<string, any>> {
     try {
       const profilesMap = new Map<string, any>();
+      const BATCH_SIZE = 50; // Process 50 organizations at a time to prevent memory issues
 
-      // Fetch all organizations in parallel
-      const orgsPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganization(id))
-      );
+      // Process organizations in batches to prevent memory issues with large numbers
+      for (let i = 0; i < organizationIds.length; i += BATCH_SIZE) {
+        const batch = organizationIds.slice(i, i + BATCH_SIZE);
 
-      // Fetch all users for all organizations in parallel
-      const usersPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganizationUsers(id))
-      );
+        // Fetch all organizations in this batch in parallel
+        const orgsPromise = Promise.all(
+          batch.map(id => this.storage.getOrganization(id))
+        );
 
-      // Fetch all invitations for all organizations in parallel
-      const invitationsPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganizationInvitations(id))
-      );
+        // Fetch all users for all organizations in this batch in parallel
+        const usersPromise = Promise.all(
+          batch.map(id => this.storage.getOrganizationUsers(id))
+        );
 
-      const [orgs, usersArrays, invitationsArrays] = await Promise.all([
-        orgsPromise,
-        usersPromise,
-        invitationsPromise
-      ]);
+        // Fetch all invitations for all organizations in this batch in parallel
+        const invitationsPromise = Promise.all(
+          batch.map(id => this.storage.getOrganizationInvitations(id))
+        );
 
-      // Build the profiles map
-      organizationIds.forEach((orgId, index) => {
-        profilesMap.set(orgId, {
-          organization: orgs[index],
-          users: usersArrays[index] || [],
-          invitations: invitationsArrays[index] || []
+        const [orgs, usersArrays, invitationsArrays] = await Promise.all([
+          orgsPromise,
+          usersPromise,
+          invitationsPromise
+        ]);
+
+        // Build the profiles map for this batch
+        batch.forEach((orgId, index) => {
+          profilesMap.set(orgId, {
+            organization: orgs[index],
+            users: usersArrays[index] || [],
+            invitations: invitationsArrays[index] || []
+          });
         });
-      });
+      }
 
       return profilesMap;
     } catch (error) {

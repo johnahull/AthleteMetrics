@@ -26,13 +26,43 @@ class ApiClient {
   private baseUrl = '/api';
   private csrfToken: string | null = null;
   private csrfTokenExpiry: number = 0;
+  private csrfTokenFetching: Promise<string | null> | null = null;
 
+  /**
+   * Get CSRF token with caching and automatic retry.
+   * Prevents concurrent token fetches using a mutex pattern.
+   * @param retryCount - Current retry attempt (used internally for exponential backoff)
+   * @returns The CSRF token or null if unavailable after retries
+   */
   private async getCsrfToken(retryCount = 0): Promise<string | null> {
+    // If already fetching, wait for that request to complete
+    if (this.csrfTokenFetching) {
+      return this.csrfTokenFetching;
+    }
+
     // Return cached token if still valid
     const now = Date.now();
     if (this.csrfToken && now < this.csrfTokenExpiry) {
       return this.csrfToken;
     }
+
+    // Start fetch and cache the promise to prevent concurrent fetches
+    this.csrfTokenFetching = this._fetchCsrfToken(retryCount);
+    try {
+      const result = await this.csrfTokenFetching;
+      return result;
+    } finally {
+      this.csrfTokenFetching = null;
+    }
+  }
+
+  /**
+   * Internal method to fetch CSRF token from the server.
+   * @param retryCount - Current retry attempt
+   * @returns The CSRF token or null if unavailable
+   */
+  private async _fetchCsrfToken(retryCount: number): Promise<string | null> {
+    const now = Date.now();
 
     try {
       const csrfResponse = await fetch('/api/csrf-token', {
@@ -47,21 +77,26 @@ class ApiClient {
         return csrfToken;
       }
 
-      // Log non-OK responses for debugging
-      console.warn(`CSRF token fetch returned status ${csrfResponse.status}: ${csrfResponse.statusText}`);
+      // Log non-OK responses for debugging (only in development)
+      if (import.meta.env.DEV) {
+        console.warn(`CSRF token fetch returned status ${csrfResponse.status}: ${csrfResponse.statusText}`);
+      }
 
       // Retry on 5xx errors
       if (csrfResponse.status >= 500 && retryCount < CSRF_MAX_RETRIES) {
         await new Promise(resolve => setTimeout(resolve, CSRF_RETRY_BASE_DELAY_MS * (retryCount + 1)));
-        return this.getCsrfToken(retryCount + 1);
+        return this._fetchCsrfToken(retryCount + 1);
       }
     } catch (error) {
-      console.warn('Failed to fetch CSRF token:', error);
+      // Log network errors (only in development)
+      if (import.meta.env.DEV) {
+        console.warn('Failed to fetch CSRF token:', error);
+      }
 
       // Retry on network errors
       if (retryCount < CSRF_MAX_RETRIES) {
         await new Promise(resolve => setTimeout(resolve, CSRF_RETRY_BASE_DELAY_MS * (retryCount + 1)));
-        return this.getCsrfToken(retryCount + 1);
+        return this._fetchCsrfToken(retryCount + 1);
       }
     }
 
@@ -72,13 +107,21 @@ class ApiClient {
   }
 
   /**
-   * Clear the cached CSRF token. Useful when token becomes invalid (e.g., after 403 response or logout).
+   * Clear the cached CSRF token.
+   * Useful when token becomes invalid (e.g., after 403 response or logout).
+   * The token will be automatically refetched on the next state-changing request.
    */
   clearCsrfTokenCache(): void {
     this.csrfToken = null;
     this.csrfTokenExpiry = 0;
   }
 
+  /**
+   * Handle API response, extracting error information and parsing JSON.
+   * @param response - The fetch Response object
+   * @returns Promise resolving to the parsed response data
+   * @throws ApiError with status code and details
+   */
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const error = new Error(`API Error: ${response.statusText}`) as ApiError;
@@ -138,9 +181,15 @@ class ApiClient {
     headers['X-CSRF-Token'] = csrfToken;
   }
 
+  /**
+   * Send a GET request.
+   * @param endpoint - API endpoint path
+   * @param filters - Optional query parameters to filter the results
+   * @returns Promise resolving to the response data
+   */
   async get<T>(endpoint: string, filters?: ApiFilters): Promise<T> {
     const url = new URL(`${this.baseUrl}${endpoint}`, window.location.origin);
-    
+
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -156,10 +205,16 @@ class ApiClient {
     const response = await fetch(url.toString(), {
       credentials: 'include' // Important for session cookies
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
+  /**
+   * Send a POST request with CSRF protection.
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
   async post<T>(endpoint: string, data: any): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     await this.addCsrfHeader(headers);
@@ -174,6 +229,12 @@ class ApiClient {
     return this.handleResponse<T>(response);
   }
 
+  /**
+   * Send a PUT request with CSRF protection.
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
   async put<T>(endpoint: string, data: any): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     await this.addCsrfHeader(headers);
@@ -188,6 +249,12 @@ class ApiClient {
     return this.handleResponse<T>(response);
   }
 
+  /**
+   * Send a PATCH request with CSRF protection.
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
   async patch<T>(endpoint: string, data: any): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     await this.addCsrfHeader(headers);
@@ -202,8 +269,17 @@ class ApiClient {
     return this.handleResponse<T>(response);
   }
 
-  async delete<T = void>(endpoint: string, data?: any): Promise<T> {
-    const headers: Record<string, string> = data ? { 'Content-Type': 'application/json' } : {};
+  /**
+   * Send a DELETE request.
+   * @param endpoint - API endpoint path
+   * @param data - Optional request body (if provided, will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
+  async delete<T = void>(endpoint: string, data?: Record<string, unknown>): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (data) {
+      headers['Content-Type'] = 'application/json';
+    }
     await this.addCsrfHeader(headers);
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {

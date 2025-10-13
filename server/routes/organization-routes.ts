@@ -10,10 +10,23 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 
 const organizationService = new OrganizationService();
 
+/**
+ * Rate limit configuration constants
+ * These values balance security with usability for different operations
+ */
+const RATE_LIMITS = {
+  /** Conservative: Prevent organization spam while allowing legitimate admin work */
+  ORG_CREATION: 5,
+  /** Moderate: Balance safety with usability for user management */
+  USER_DELETION: 10,
+  /** Very conservative: Destructive operation requiring extra caution */
+  ORG_DELETION: 5,
+} as const;
+
 // Rate limiting for organization creation
 const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5, // Limit each IP to 5 organization creation requests per windowMs
+  limit: RATE_LIMITS.ORG_CREATION,
   message: { message: "Too many organization creation attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
@@ -22,7 +35,7 @@ const createLimiter = rateLimit({
 // Stricter rate limiting for user deletion operations
 const userDeleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 10, // Limit each IP to 10 user deletion requests per windowMs (conservative for safety)
+  limit: RATE_LIMITS.USER_DELETION,
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
@@ -31,7 +44,7 @@ const userDeleteLimiter = rateLimit({
 // Rate limiting for organization deletion operations
 const orgDeleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5, // Limit each IP+user to 5 organization deletion requests per windowMs (very conservative)
+  limit: RATE_LIMITS.ORG_DELETION,
   message: { message: "Too many organization deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
