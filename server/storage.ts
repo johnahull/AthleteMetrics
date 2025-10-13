@@ -2181,12 +2181,14 @@ export class DatabaseStorage implements IStorage {
     // Sessions are stored with userId in a dedicated column (not JSONB)
     const { sessions } = await import('@shared/schema');
     const { eq } = await import('drizzle-orm');
-    const throwOnError = options?.throwOnError ?? false;
+    // SECURITY: Default to fail-secure (throwOnError = true)
+    // Critical operations like password changes MUST ensure session revocation succeeds
+    const throwOnError = options?.throwOnError ?? true;
     const dbConnection = options?.tx || db; // Use transaction if provided, otherwise use global db
 
     try {
       // Delete all sessions using the native userId column (10-100x faster than JSONB extraction)
-      // Foreign key with CASCADE DELETE ensures sessions are automatically cleaned up on user deletion
+      // Foreign key uses SET NULL on user deletion to require explicit session revocation with audit logging
       const result = await dbConnection.delete(sessions).where(
         eq(sessions.userId, userId)
       ).returning({ sid: sessions.sid });

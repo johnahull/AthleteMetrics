@@ -171,9 +171,10 @@ export const sessions = pgTable("session", {
   expire: timestamp("expire", { mode: 'date' }).notNull(),
   // Denormalized userId for efficient queries and foreign key constraint
   // Nullable to support pre-authentication sessions (flash messages, CSRF tokens, redirect tracking)
-  // Prevents orphaned sessions and provides 10-100x faster lookups than JSONB extraction
+  // Provides 10-100x faster lookups than JSONB extraction
   // Partial index on non-null values ensures performance for user session lookups
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  // Uses 'set null' instead of 'cascade' to require explicit session revocation with audit logging
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
 }, (table) => ({
   // Index for efficient session cleanup and expiration queries (preserved for connect-pg-simple compatibility)
   expireIdx: index("IDX_session_expire").on(table.expire),

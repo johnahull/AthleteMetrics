@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS session (
   sid varchar(255) PRIMARY KEY,
   sess jsonb NOT NULL,
   expire timestamp NOT NULL,
-  user_id varchar(255) REFERENCES users(id) ON DELETE cascade
+  user_id varchar(255) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- Ensure user_id column is nullable for pre-authentication sessions
@@ -47,7 +47,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "IDX_session_expire" ON session (expire)
 -- Create partial BTREE index on userId column for efficient user session lookups
 -- Only indexes non-null userId values, excluding pre-authentication sessions
 -- This provides 10-100x faster lookups than JSONB expression index
--- Foreign key with CASCADE DELETE ensures automatic cleanup when users are deleted
+-- Foreign key with SET NULL requires explicit session revocation with audit logging before user deletion
 -- CONCURRENTLY prevents table locks during index creation (zero-downtime)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS session_user_id_idx ON session (user_id) WHERE user_id IS NOT NULL;
 

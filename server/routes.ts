@@ -303,12 +303,14 @@ export async function initializeDefaultUser() {
 
       // User exists - check if password needs to be synced with environment variable
       const lockedUser = existingUsers[0];
-      const needsPrivilegeRestore = lockedUser.isSiteAdmin !== true;
 
       // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
       // This prevents TOCTOU vulnerability where password could change between fetch and use
       // Using lockedUser.password ensures we compare against current value
       passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
+
+      // Check privilege restoration AFTER password comparison to use fresh transaction context
+      const needsPrivilegeRestore = lockedUser.isSiteAdmin !== true;
 
       const updateData: any = {};
 
@@ -541,10 +543,10 @@ export async function registerRoutes(app: Express) {
     try {
       const connectPgSimple = await import("connect-pg-simple");
       const PgStore = connectPgSimple.default(session);
-      const { db } = await import("./db");
+      const { pgClient } = await import("./db");
 
       sessionConfig.store = new PgStore({
-        pool: db as any, // Drizzle's db object is compatible with Pool interface
+        pool: pgClient as any, // Use raw postgres client (required for connect-pg-simple compatibility)
         tableName: 'session',
         createTableIfMissing: process.env.NODE_ENV !== 'production', // Only auto-create in development
         pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes
