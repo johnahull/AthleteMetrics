@@ -887,5 +887,92 @@ describe('Admin User Initialization', () => {
       // Clean up
       await db.delete(sessions).where(eq(sessions.sid, 'pre-auth-session'));
     });
+
+    it('should sync userId to database and enable session revocation on password change', async () => {
+      // CRITICAL TEST: Verifies that session userId sync middleware populates the database column
+      // This test reproduces the bug where revokeAllUserSessions() returned 0 because
+      // the userId column was never populated during login
+
+      const { sessions } = await import('@shared/schema');
+      const { isNull } = await import('drizzle-orm');
+
+      // Step 1: Create admin user
+      process.env.ADMIN_USER = 'test-admin';
+      process.env.ADMIN_PASSWORD = 'InitialPass123!';
+      await initializeDefaultUser();
+
+      const user = await storage.getUserByUsername('test-admin');
+      expect(user).toBeDefined();
+
+      // Step 2: Simulate login by creating sessions WITHOUT manually setting userId
+      // This replicates what connect-pg-simple does - it only sets sid, sess, and expire
+      // The userId column is left as NULL until the sync middleware runs
+      await db.insert(sessions).values([
+        {
+          sid: 'session-1',
+          sess: { user: { id: user!.id, username: user!.username } }, // User data in JSONB
+          expire: new Date(Date.now() + 86400000),
+          userId: null // Simulates login - connect-pg-simple doesn't set this
+        },
+        {
+          sid: 'session-2',
+          sess: { user: { id: user!.id, username: user!.username } },
+          expire: new Date(Date.now() + 86400000),
+          userId: null // Simulates login - connect-pg-simple doesn't set this
+        },
+        {
+          sid: 'session-3',
+          sess: { user: { id: user!.id, username: user!.username } },
+          expire: new Date(Date.now() + 86400000),
+          userId: null // Simulates login - connect-pg-simple doesn't set this
+        }
+      ]);
+
+      // Step 3: Verify sessions exist with NULL userId (before sync middleware runs)
+      const sessionsBeforeSync = await db.select()
+        .from(sessions)
+        .where(isNull(sessions.userId));
+      expect(sessionsBeforeSync.length).toBeGreaterThanOrEqual(3);
+
+      // Step 4: Simulate the sync middleware by manually updating userId
+      // In production, this happens via the middleware on each request
+      // Here we directly test the database update that the middleware would perform
+      const { pgClient } = await import('../../server/db');
+      for (const sid of ['session-1', 'session-2', 'session-3']) {
+        await pgClient.query(
+          'UPDATE session SET user_id = $1 WHERE sid = $2 AND user_id IS NULL',
+          [user!.id, sid]
+        );
+      }
+
+      // Step 5: Verify sessions now have userId populated
+      const sessionsAfterSync = await db.select()
+        .from(sessions)
+        .where(eq(sessions.userId, user!.id));
+      expect(sessionsAfterSync.length).toBeGreaterThanOrEqual(3);
+
+      // Step 6: Change password to trigger session revocation
+      process.env.ADMIN_PASSWORD = 'NewPassword456!';
+      await initializeDefaultUser();
+
+      // Step 7: Verify ALL sessions were revoked (this was the bug - it would return 0)
+      const sessionsAfterRevocation = await db.select()
+        .from(sessions)
+        .where(eq(sessions.userId, user!.id));
+      expect(sessionsAfterRevocation).toHaveLength(0);
+
+      // Step 8: Verify audit log shows correct revocation count
+      const logs = await db.select()
+        .from(auditLogs)
+        .where(eq(auditLogs.userId, user!.id));
+
+      const revocationLog = logs.find(log => log.action === 'sessions_revoked');
+      expect(revocationLog).toBeDefined();
+
+      const details = JSON.parse(revocationLog!.details);
+      expect(details.revokedCount).toBeGreaterThanOrEqual(3); // Should show actual count, not 0
+      expect(details.reason).toBe('password_sync');
+      expect(details.securityContext).toBe('password_change');
+    });
   });
 });

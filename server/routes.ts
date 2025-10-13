@@ -568,6 +568,36 @@ export async function registerRoutes(app: Express) {
 
   app.use(session(sessionConfig));
 
+  // CRITICAL: Sync req.session.user.id to database userId column for session revocation
+  // connect-pg-simple does NOT automatically sync custom columns - we must do this manually
+  // This middleware ensures that when password changes trigger revokeAllUserSessions(),
+  // the query on the userId column actually finds sessions to delete
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
+    // Only sync if user is authenticated and session exists
+    if (req.session && (req.session as any).user?.id) {
+      const sessionUserId = (req.session as any).user.id;
+
+      // Check if we need to update the database userId column
+      // Only update if the session has a user but the database column is not yet set
+      if (sessionUserId && req.sessionID) {
+        try {
+          const { pgClient } = await import("./db");
+
+          // Update the userId column in the database to match req.session.user.id
+          // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
+          await pgClient.query(
+            'UPDATE session SET user_id = $1 WHERE sid = $2 AND user_id IS NULL',
+            [sessionUserId, req.sessionID]
+          );
+        } catch (error) {
+          // Log error but don't block the request - session is still valid
+          console.error('Failed to sync session userId:', error);
+        }
+      }
+    }
+    next();
+  });
+
   // Register new refactored routes - AFTER session middleware
   registerAllRoutes(app);
 
