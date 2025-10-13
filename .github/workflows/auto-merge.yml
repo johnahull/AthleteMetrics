@@ -39,19 +39,18 @@ jobs:
 
           if [ -z "$PR_NUMBER" ]; then
             echo "No PR found, skipping auto-merge"
-            echo "should_merge=false" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
           # Get PR details
-          PR_DATA=$(gh pr view $PR_NUMBER --json reviewDecision,mergeable,statusCheckRollup,files,additions,deletions)
+          PR_DATA=$(gh pr view "$PR_NUMBER" --json reviewDecision,mergeable,statusCheckRollup,files,additions,deletions)
 
           # Extract data
           REVIEW_DECISION=$(echo "$PR_DATA" | jq -r '.reviewDecision')
           MERGEABLE=$(echo "$PR_DATA" | jq -r '.mergeable')
-          FILES_COUNT=$(echo "$PR_DATA" | jq '.files | length')
           ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
           DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
           TOTAL_CHANGES=$((ADDITIONS + DELETIONS))
@@ -78,51 +77,38 @@ jobs:
 
           # Check 3: Review decision
           if [ "$REVIEW_DECISION" != "APPROVED" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=Not approved (status: $REVIEW_DECISION)" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Not approved (status: $REVIEW_DECISION)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check 4: Mergeable state
           if [ "$MERGEABLE" != "MERGEABLE" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=Not in mergeable state (status: $MERGEABLE)" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Not in mergeable state (status: $MERGEABLE)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check 5: Status checks
           if [ -n "$STATUS_CHECKS" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=Failing checks: $STATUS_CHECKS" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Failing checks: $STATUS_CHECKS" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check 6: Safety checks
           if [ "$SAFETY_PASS" = "false" ]; then
-            echo "should_merge=false" >> $GITHUB_OUTPUT
-            echo "reason=$SAFETY_REASON" >> $GITHUB_OUTPUT
+            echo "should_merge=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$SAFETY_REASON" >> "$GITHUB_OUTPUT"
 
             # Comment on PR about why auto-merge is blocked
-            gh pr comment "$PR_NUMBER" --body "$(cat <<'EOF'
-## 🔒 Auto-Merge Blocked
-
-**Reason**: $SAFETY_REASON
-
-This PR requires human review and manual merge for safety.
-
-**Current Status**:
-- ✅ Code review: Approved
-- ✅ CI checks: Passing
-- ⚠️ Safety check: **Requires human approval**
-
-Please review and merge manually if appropriate.
-EOF
-)"
+            printf -v COMMENT_BODY "## 🔒 Auto-Merge Blocked\n\n**Reason**: %s\n\nThis PR requires human review and manual merge for safety.\n\n**Current Status**:\n- ✅ Code review: Approved\n- ✅ CI checks: Passing\n- ⚠️ Safety check: **Requires human approval**\n\nPlease review and merge manually if appropriate." "${SAFETY_REASON}"
+            gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
             exit 0
           fi
 
           # All checks passed
-          echo "should_merge=true" >> $GITHUB_OUTPUT
+          echo "should_merge=true" >> "$GITHUB_OUTPUT"
 
       - name: Auto-merge PR
         if: steps.merge-check.outputs.should_merge == 'true'
@@ -132,18 +118,11 @@ EOF
           PR_NUMBER="${{ steps.merge-check.outputs.pr_number }}"
 
           # Comment before merging
-          gh pr comment $PR_NUMBER --body "## ✅ Auto-Merge Initiated
-
-All merge criteria met:
-- ✅ Code review: Approved
-- ✅ CI checks: Passing
-- ✅ Safety checks: Passed
-- ✅ No conflicts
-
-Merging with squash strategy..."
+          printf -v MERGE_COMMENT "## ✅ Auto-Merge Initiated\n\nAll merge criteria met:\n- ✅ Code review: Approved\n- ✅ CI checks: Passing\n- ✅ Safety checks: Passed\n- ✅ No conflicts\n\nMerging with squash strategy..."
+          gh pr comment "$PR_NUMBER" --body "$MERGE_COMMENT"
 
           # Perform squash merge
-          gh pr merge $PR_NUMBER --squash --auto
+          gh pr merge "$PR_NUMBER" --squash --auto
 
           # Comment success
           echo "✅ PR #$PR_NUMBER auto-merged successfully"
@@ -157,11 +136,6 @@ Merging with squash strategy..."
           REASON="${{ steps.merge-check.outputs.reason }}"
 
           if [ -n "$PR_NUMBER" ]; then
-            gh pr comment $PR_NUMBER --body "## ℹ️ Auto-Merge Status
-
-**Status**: Not ready for auto-merge
-
-**Reason**: $REASON
-
-The PR will be eligible for auto-merge once all criteria are met."
+            printf -v STATUS_COMMENT "## ℹ️ Auto-Merge Status\n\n**Status**: Not ready for auto-merge\n\n**Reason**: %s\n\nThe PR will be eligible for auto-merge once all criteria are met." "$REASON"
+            gh pr comment "$PR_NUMBER" --body "$STATUS_COMMENT"
           fi

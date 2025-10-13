@@ -27,13 +27,13 @@ A full-stack web application for tracking and analyzing athlete performance data
 ### Backend
 - **Node.js** with Express
 - **TypeScript** throughout
-- **Prisma ORM** with PostgreSQL/SQLite support
+- **Drizzle ORM** with PostgreSQL
 - **Session-based authentication**
 - **CSV parsing and generation**
 - **Comprehensive REST API**
 
 ### Database
-- **PostgreSQL** (production) / **SQLite** (development)
+- **PostgreSQL** (required for all environments)
 - **Drizzle ORM** for type-safe database access
 - **Schema validation** with Zod
 
@@ -42,4 +42,146 @@ A full-stack web application for tracking and analyzing athlete performance data
 1. **Install dependencies:**
    ```bash
    npm install
-   
+   ```
+
+2. **Set up environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Run database migrations:**
+   ```bash
+   npm run db:push
+   ```
+
+4. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+
+## Production Deployment
+
+### Required Environment Variables
+
+When deploying to production, you **must** set the following environment variables:
+
+- **`NODE_ENV=production`** - **RECOMMENDED** for production deployments
+  - Enables production error handling (prevents sensitive error details from being exposed)
+  - Activates rate limiting protections
+  - Optimizes performance settings
+  - **Note:** If not set, the application defaults to `production` mode for safety. However, explicitly setting it is recommended for clarity.
+
+- **`DATABASE_URL`** - PostgreSQL connection string (SQLite is no longer supported)
+- **`NEON_TIER`** - **IMPORTANT** for Neon PostgreSQL deployments
+  - Options: `"free"`, `"pro"`, or `"scale"`
+  - Default: `"pro"` if not set
+  - **Free tier**: 1 connection limit - set `NEON_TIER=free` to prevent connection exhaustion
+  - **Pro tier**: Up to 20 connections - set `NEON_TIER=pro` (default)
+  - **Scale tier**: Up to 100+ connections - set `NEON_TIER=scale`
+  - This optimizes connection pooling for your Neon plan and prevents unexpected costs
+  - See [Neon connection pooling docs](https://neon.tech/docs/connect/connection-pooling)
+- **`SESSION_SECRET`** - Secure random string for session encryption
+- **`ADMIN_USER`** and **`ADMIN_PASS`** - Admin credentials
+
+### Deployment Examples
+
+**Heroku:**
+```bash
+heroku config:set NODE_ENV=production
+heroku config:set DATABASE_URL="postgresql://..."
+heroku config:set NEON_TIER="pro"  # Set to match your Neon plan
+heroku config:set SESSION_SECRET="..."
+```
+
+**Docker:**
+```dockerfile
+ENV NODE_ENV=production
+ENV DATABASE_URL="postgresql://..."
+ENV NEON_TIER="pro"
+```
+
+**Replit:**
+Set environment variables in the Secrets tab:
+- `NODE_ENV` = `production`
+- `DATABASE_URL` = `postgresql://...`
+- `NEON_TIER` = `pro` (or `free`/`scale` based on your Neon plan)
+
+**Other platforms:** Consult your platform's documentation for setting environment variables.
+
+### Build and Start
+
+```bash
+npm run build
+npm start
+```
+
+## Running Tests
+
+### Unit Tests
+```bash
+npm run test:unit
+```
+
+### Integration Tests
+
+**Prerequisites:** Integration tests require a PostgreSQL database.
+
+**Setup:**
+1. Create a test database:
+   ```bash
+   # Using psql
+   createdb athletemetrics_test
+   # Or using PostgreSQL CLI
+   psql -c "CREATE DATABASE athletemetrics_test;"
+   ```
+
+2. Set environment variables:
+   ```bash
+   export DATABASE_URL="postgresql://user:pass@localhost:5432/athletemetrics_test"
+   export NODE_ENV="test"  # Optional - automatically set by test scripts
+   export SESSION_SECRET="test-secret"  # Optional - has default in test setup
+   ```
+
+3. Run integration tests:
+   ```bash
+   npm run test:integration
+   ```
+
+**Note:** Tests will automatically create and clean up test data. Ensure you're using a dedicated test database, not your development or production database.
+
+### CI/CD Setup
+
+For continuous integration pipelines (GitHub Actions, CircleCI, etc.), you'll need to:
+
+1. **Provision a PostgreSQL service** in your CI configuration
+2. **Set environment variables:**
+   - `DATABASE_URL` - Connection string to CI PostgreSQL instance
+   - `NODE_ENV=test`
+   - `SESSION_SECRET` - Test secret value
+
+**Example GitHub Actions:**
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+      NODE_ENV: test
+      SESSION_SECRET: test-secret
+    steps:
+      - uses: actions/checkout@v3
+      - run: npm install
+      - run: npm run db:push
+      - run: npm run test:integration
+```

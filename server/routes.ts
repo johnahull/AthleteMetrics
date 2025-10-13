@@ -214,12 +214,19 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 // Initialize default site admin user
 async function initializeDefaultUser() {
   try {
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminUser = process.env.ADMIN_USER;
     const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminEmail = process.env.ADMIN_EMAIL; // Optional: email address for admin
 
     // Require admin credentials to be set in environment variables
-    if (!adminEmail || !adminPassword) {
-      console.error("SECURITY: ADMIN_EMAIL and ADMIN_PASSWORD environment variables must be set");
+    if (!adminUser || !adminPassword) {
+      console.error("SECURITY: ADMIN_USER and ADMIN_PASSWORD environment variables must be set");
+      process.exit(1);
+    }
+
+    // Validate username
+    if (adminUser.length < 3) {
+      console.error("SECURITY: ADMIN_USER must be at least 3 characters long");
       process.exit(1);
     }
 
@@ -229,26 +236,45 @@ async function initializeDefaultUser() {
       process.exit(1);
     }
 
-    // Check if admin user already exists by email or username
-    const existingUserByEmail = await storage.getUserByEmail(adminEmail);
-    const existingUserByUsername = await storage.getUserByUsername("admin");
+    // Check if admin user already exists by username
+    const existingUser = await storage.getUserByUsername(adminUser);
 
-    if (!existingUserByEmail && !existingUserByUsername) {
+    if (!existingUser) {
       // Note: Site admins don't have a role field - they are identified by isSiteAdmin flag
       // This is intentional: role is for organization-level permissions (athlete, coach, org_admin)
       // while isSiteAdmin grants platform-wide access independent of organizations
       await storage.createUser({
-        username: "admin",
-        emails: [adminEmail],
+        username: adminUser,
+        emails: adminEmail ? [adminEmail] : [], // Optional email
         password: adminPassword,
         firstName: "Site",
         lastName: "Administrator",
         role: "site_admin",
         isSiteAdmin: true
       });
-      console.log("Site administrator account created successfully");
+      console.log(`Site administrator account created successfully: ${adminUser}`);
     } else {
-      console.log("Site administrator account already exists");
+      // User exists - check if password needs to be synced with environment variable
+      const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
+
+      if (!passwordMatches) {
+        // Password in environment has changed - update the database
+        // Note: updateUser will hash the password automatically
+        await storage.updateUser(existingUser.id, {
+          password: adminPassword
+        });
+        console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+      } else {
+        console.log(`Site administrator account already exists: ${adminUser}`);
+      }
+
+      // Ensure isSiteAdmin flag is set (in case it was changed)
+      if (existingUser.isSiteAdmin !== true) {
+        await storage.updateUser(existingUser.id, {
+          isSiteAdmin: true
+        });
+        console.log(`Site administrator privileges restored: ${adminUser}`);
+      }
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
@@ -260,16 +286,8 @@ export async function registerRoutes(app: Express) {
   const server = createServer(app);
 
   // Session setup with security best practices - MUST BE BEFORE ROUTES
-  const sessionSecret = process.env.SESSION_SECRET;
-  if (!sessionSecret) {
-    console.error("SECURITY: SESSION_SECRET environment variable must be set");
-    process.exit(1);
-  }
-
-  if (sessionSecret.length < 32) {
-    console.error("SECURITY: SESSION_SECRET must be at least 32 characters long");
-    process.exit(1);
-  }
+  // Note: SESSION_SECRET validation is now done at startup in server/index.ts
+  const sessionSecret = process.env.SESSION_SECRET!; // Already validated at startup
 
   // Initialize Redis client for session storage (optional)
   let redisClient = null;
@@ -2503,6 +2521,11 @@ export async function registerRoutes(app: Express) {
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     skip: (req) => {
+      // Skip rate limiting in test environment to allow integration tests
+      if (process.env.NODE_ENV === 'test') {
+        return true;
+      }
+
       // Production safeguard: Never bypass rate limiting in production environment
       const isProduction = process.env.NODE_ENV === 'production';
       if (isProduction) {

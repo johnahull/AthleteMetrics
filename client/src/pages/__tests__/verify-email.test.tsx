@@ -1,10 +1,11 @@
 /**
  * Tests for email verification page
+ * Rewritten to properly mock window.location using vi.stubGlobal
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import VerifyEmail from '../verify-email';
 
@@ -15,18 +16,24 @@ vi.mock('wouter', () => ({
 }));
 
 // Mock fetch
-global.fetch = vi.fn();
+const mockFetch = vi.fn();
 
 describe('VerifyEmail Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete (window as any).location;
-    window.location = { search: '' } as any;
+    // Setup fetch mock
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
   });
 
   describe('Token Validation', () => {
     it('should show error when token is missing', async () => {
-      window.location.search = '';
+      // Mock window.location.search with no token
+      vi.stubGlobal('location', { search: '' });
 
       render(<VerifyEmail />);
 
@@ -37,7 +44,10 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should show verifying state initially', () => {
-      window.location.search = '?token=valid-token-123';
+      vi.stubGlobal('location', { search: '?token=valid-token-123' });
+
+      // Mock fetch to delay response
+      mockFetch.mockImplementation(() => new Promise(() => {}));
 
       render(<VerifyEmail />);
 
@@ -48,9 +58,9 @@ describe('VerifyEmail Page', () => {
 
   describe('Successful Verification', () => {
     it('should show success message on valid token', async () => {
-      window.location.search = '?token=valid-token-123';
+      vi.stubGlobal('location', { search: '?token=valid-token-123' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           success: true,
@@ -67,9 +77,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should make API call with correct token', async () => {
-      window.location.search = '?token=test-token-456';
+      vi.stubGlobal('location', { search: '?token=test-token-456' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
@@ -77,7 +87,7 @@ describe('VerifyEmail Page', () => {
       render(<VerifyEmail />);
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
+        expect(mockFetch).toHaveBeenCalledWith(
           '/api/auth/verify-email/test-token-456',
           expect.objectContaining({
             method: 'POST',
@@ -88,9 +98,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should display dashboard navigation button', async () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
@@ -104,29 +114,27 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should navigate to dashboard on button click', async () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
 
       render(<VerifyEmail />);
 
-      await waitFor(async () => {
-        const dashboardButton = screen.getByRole('button', { name: /go to dashboard/i });
-        dashboardButton.click();
+      const dashboardButton = await screen.findByRole('button', { name: /go to dashboard/i });
+      dashboardButton.click();
 
-        expect(mockSetLocation).toHaveBeenCalledWith('/dashboard');
-      });
+      expect(mockSetLocation).toHaveBeenCalledWith('/dashboard');
     });
   });
 
   describe('Failed Verification', () => {
     it('should show error message on invalid token', async () => {
-      window.location.search = '?token=invalid-token';
+      vi.stubGlobal('location', { search: '?token=invalid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({
           message: 'Invalid or expired verification token',
@@ -142,9 +150,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should show error message on network failure', async () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
 
-      (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       render(<VerifyEmail />);
 
@@ -155,9 +163,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should display profile navigation button on error', async () => {
-      window.location.search = '?token=expired-token';
+      vi.stubGlobal('location', { search: '?token=expired-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({ message: 'Token expired' }),
       });
@@ -171,38 +179,40 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should navigate to profile on button click', async () => {
-      window.location.search = '?token=expired-token';
+      vi.stubGlobal('location', { search: '?token=expired-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({ message: 'Token expired' }),
       });
 
       render(<VerifyEmail />);
 
-      await waitFor(async () => {
-        const profileButton = screen.getByRole('button', { name: /go to profile/i });
-        profileButton.click();
+      const profileButton = await screen.findByRole('button', { name: /go to profile/i });
+      profileButton.click();
 
-        expect(mockSetLocation).toHaveBeenCalledWith('/profile');
-      });
+      expect(mockSetLocation).toHaveBeenCalledWith('/profile');
     });
   });
 
   describe('Visual States', () => {
     it('should show loading spinner while verifying', () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
+
+      // Mock fetch to delay response
+      mockFetch.mockImplementation(() => new Promise(() => {}));
 
       render(<VerifyEmail />);
 
-      const spinner = screen.getByTestId('lucide-icon'); // Loading icon
+      // Look for the Loader2 component by its className
+      const spinner = document.querySelector('.animate-spin');
       expect(spinner).toBeInTheDocument();
     });
 
     it('should show success icon after verification', async () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
       });
@@ -210,15 +220,14 @@ describe('VerifyEmail Page', () => {
       render(<VerifyEmail />);
 
       await waitFor(() => {
-        // CheckCircle2 icon should be visible
         expect(screen.getByText('Email Verified!')).toBeInTheDocument();
       });
     });
 
     it('should show error icon on failure', async () => {
-      window.location.search = '?token=invalid-token';
+      vi.stubGlobal('location', { search: '?token=invalid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({ message: 'Invalid token' }),
       });
@@ -226,7 +235,6 @@ describe('VerifyEmail Page', () => {
       render(<VerifyEmail />);
 
       await waitFor(() => {
-        // XCircle icon should be visible
         expect(screen.getByText('Verification Failed')).toBeInTheDocument();
       });
     });
@@ -234,7 +242,7 @@ describe('VerifyEmail Page', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty token parameter', async () => {
-      window.location.search = '?token=';
+      vi.stubGlobal('location', { search: '?token=' });
 
       render(<VerifyEmail />);
 
@@ -244,7 +252,7 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should handle malformed URL parameters', async () => {
-      window.location.search = '?nottoken=123';
+      vi.stubGlobal('location', { search: '?nottoken=123' });
 
       render(<VerifyEmail />);
 
@@ -255,9 +263,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should handle JSON parse errors', async () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => {
           throw new Error('Invalid JSON');
@@ -274,9 +282,9 @@ describe('VerifyEmail Page', () => {
 
   describe('User Messages', () => {
     it('should display custom success message from API', async () => {
-      window.location.search = '?token=valid-token';
+      vi.stubGlobal('location', { search: '?token=valid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           success: true,
@@ -292,9 +300,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should display custom error message from API', async () => {
-      window.location.search = '?token=invalid-token';
+      vi.stubGlobal('location', { search: '?token=invalid-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({
           message: 'Custom error message',
@@ -309,9 +317,9 @@ describe('VerifyEmail Page', () => {
     });
 
     it('should show helpful text for expired tokens', async () => {
-      window.location.search = '?token=expired-token';
+      vi.stubGlobal('location', { search: '?token=expired-token' });
 
-      (global.fetch as any).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         json: async () => ({ message: 'Token expired' }),
       });

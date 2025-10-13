@@ -35,12 +35,17 @@ const REQUIRED_VARS = {
   },
   ADMIN_USER: {
     required: true,
-    description: 'Admin username'
+    description: 'Admin username',
+    validator: (val) => val.length >= 3
   },
-  ADMIN_PASS: {
+  ADMIN_PASSWORD: {
     required: true,
     description: 'Admin password',
-    validator: (val) => val.length >= 8
+    validator: (val) => val.length >= 12
+  },
+  ADMIN_EMAIL: {
+    required: false,
+    description: 'Admin email address (optional)'
   },
 
   // Email service
@@ -137,9 +142,9 @@ function validateEnv() {
       hasErrors = true;
     }
 
-    // Ensure ADMIN_PASS is not default
-    if (process.env.ADMIN_PASS === 'password' || process.env.ADMIN_PASS === 'admin') {
-      console.error('❌ ERROR: ADMIN_PASS must not be a default value in production');
+    // Ensure ADMIN_PASSWORD is not default
+    if (process.env.ADMIN_PASSWORD === 'password' || process.env.ADMIN_PASSWORD === 'admin' || process.env.ADMIN_PASSWORD === 'admin-password-123') {
+      console.error('❌ ERROR: ADMIN_PASSWORD must not be a default value in production');
       hasErrors = true;
     }
 
