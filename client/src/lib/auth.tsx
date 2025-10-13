@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startImpersonation = async (userId: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const data = await apiClient.post(`/admin/impersonate/${userId}`, {});
+      const data = await apiClient.post<{ user: EnhancedUser; impersonationStatus: ImpersonationStatus; message: string }>(`/admin/impersonate/${userId}`, {});
       setUser(data.user);
       setImpersonationStatus(data.impersonationStatus);
       return { success: true, message: data.message };
@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const stopImpersonation = async (): Promise<{ success: boolean; message?: string }> => {
     try {
-      const data = await apiClient.post('/admin/stop-impersonation', {});
+      const data = await apiClient.post<{ user: EnhancedUser; impersonationStatus: ImpersonationStatus; message: string }>('/admin/stop-impersonation', {});
       setUser(data.user);
       setImpersonationStatus(data.impersonationStatus);
       return { success: true, message: data.message };
