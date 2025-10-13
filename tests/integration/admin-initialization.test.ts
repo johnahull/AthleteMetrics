@@ -937,12 +937,15 @@ describe('Admin User Initialization', () => {
       // Step 4: Simulate the sync middleware by manually updating userId
       // In production, this happens via the middleware on each request
       // Here we directly test the database update that the middleware would perform
+      // Note: postgres-js uses SQL template strings, not .query() method
       const { pgClient } = await import('../../server/db');
       for (const sid of ['session-1', 'session-2', 'session-3']) {
-        await pgClient.query(
-          'UPDATE session SET user_id = $1 WHERE sid = $2 AND user_id IS NULL',
-          [user!.id, sid]
-        );
+        await pgClient`
+          UPDATE session
+          SET user_id = ${user!.id}
+          WHERE sid = ${sid}
+          AND user_id IS NULL
+        `;
       }
 
       // Step 5: Verify sessions now have userId populated

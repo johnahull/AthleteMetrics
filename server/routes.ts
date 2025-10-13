@@ -585,10 +585,13 @@ export async function registerRoutes(app: Express) {
 
           // Update the userId column in the database to match req.session.user.id
           // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
-          await pgClient.query(
-            'UPDATE session SET user_id = $1 WHERE sid = $2 AND user_id IS NULL',
-            [sessionUserId, req.sessionID]
-          );
+          // Note: postgres-js uses SQL template strings, not .query() method
+          await pgClient`
+            UPDATE session
+            SET user_id = ${sessionUserId}
+            WHERE sid = ${req.sessionID}
+            AND user_id IS NULL
+          `;
         } catch (error) {
           // Log error but don't block the request - session is still valid
           console.error('Failed to sync session userId:', error);
