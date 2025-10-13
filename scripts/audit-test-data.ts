@@ -104,6 +104,7 @@ async function auditTestData() {
 
       console.log('\n🏃 Scanning Teams in Test Organizations...');
       if (testOrgIds.length > 0) {
+        // Safe: Each ID is parameterized via sql`${id}` before join
         const teamsQuery = sql`
           SELECT id, name, level
           FROM teams

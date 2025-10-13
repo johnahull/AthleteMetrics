@@ -117,7 +117,6 @@ export default function AdminPage() {
 
   const sendInviteMutation = useMutation({
     mutationFn: async (data: z.infer<typeof inviteSchema>) => {
-      console.log("Sending invitation data:", data);
       const res = await apiRequest("POST", "/api/invitations", data);
       return res.json();
     },
@@ -287,9 +286,7 @@ export default function AdminPage() {
         organizationId
       });
       const data = await res.json();
-      
-      console.log("Invitation response:", data);
-      
+
       if (data.inviteLink) {
         await navigator.clipboard.writeText(data.inviteLink);
         toast({

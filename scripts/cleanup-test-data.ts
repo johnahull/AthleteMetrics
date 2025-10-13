@@ -155,6 +155,7 @@ async function cleanupTestData() {
     // (This must happen before deleting teams due to foreign key constraints)
     if (testOrgIds.length > 0) {
       console.log('🔗 Deleting all user-team relationships for teams in test organizations...');
+      // Safe: Each ID is parameterized via sql`${id}` before join
       const deleteAllUserTeamsQuery = sql`
         DELETE FROM user_teams
         WHERE team_id IN (
