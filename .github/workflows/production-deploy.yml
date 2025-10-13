@@ -108,16 +108,16 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
-      - name: Run session table migration
+      - name: Run database migrations
+        run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Run session table migration (idempotent)
         run: |
           echo "Running session table migration..."
           railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} -- bash -c "psql \"\$DATABASE_URL\" -f scripts/migrate-session-table.sql"
           echo "✅ Session table migration completed"
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      - name: Run database migrations
-        run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
