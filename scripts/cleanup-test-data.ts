@@ -57,6 +57,25 @@ if (process.env.CONFIRM_CLEANUP !== 'yes') {
   process.exit(1);
 }
 
+// Safety check: Validate DATABASE_URL to prevent production/staging cleanup
+const dbUrl = process.env.DATABASE_URL || '';
+const FORBIDDEN_PATTERNS = ['railway.app', 'neon.tech', '.prod.', '.staging.'];
+const REQUIRED_PATTERNS = ['localhost', 'test'];
+
+const hasForbidden = FORBIDDEN_PATTERNS.some(pattern => dbUrl.toLowerCase().includes(pattern));
+const hasRequired = REQUIRED_PATTERNS.some(pattern => dbUrl.toLowerCase().includes(pattern));
+
+if (hasForbidden && !hasRequired) {
+  console.error('\n' + '='.repeat(80));
+  console.error('🚨 DANGER: DATABASE_URL appears to be a production/staging database!');
+  console.error('='.repeat(80));
+  console.error('\nCleanup script blocked for safety.');
+  console.error(`Detected pattern: ${FORBIDDEN_PATTERNS.find(p => dbUrl.toLowerCase().includes(p))}`);
+  console.error('\nThis script should only be run against local test databases.');
+  console.error('='.repeat(80) + '\n');
+  process.exit(1);
+}
+
 async function promptConfirmation(message: string): Promise<boolean> {
   const rl = readline.createInterface({
     input: process.stdin,

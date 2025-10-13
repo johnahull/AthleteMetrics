@@ -58,6 +58,14 @@ const orgDeleteLimiter = rateLimit({
   },
 });
 
+/**
+ * Validate that a string is a valid UUIDv4
+ */
+function isValidUUID(id: string): boolean {
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return UUID_REGEX.test(id);
+}
+
 export function registerOrganizationRoutes(app: Express) {
   /**
    * Get all organizations (site admin only)
@@ -79,6 +87,11 @@ export function registerOrganizationRoutes(app: Express) {
   app.get("/api/organizations/:id", requireAuth, async (req, res) => {
     try {
       const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
       const organization = await organizationService.getOrganizationById(
         organizationId, 
         req.session.user!.id
@@ -133,6 +146,11 @@ export function registerOrganizationRoutes(app: Express) {
   app.get("/api/organizations/:id/profile", requireAuth, async (req, res) => {
     try {
       const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
       const profile = await organizationService.getOrganizationProfile(
         organizationId, 
         req.session.user!.id
@@ -153,6 +171,11 @@ export function registerOrganizationRoutes(app: Express) {
   app.delete("/api/organizations/:id/users/:userId", userDeleteLimiter, requireAuth, async (req, res) => {
     try {
       const { id: organizationId, userId } = req.params;
+
+      // Validate UUID formats
+      if (!isValidUUID(organizationId) || !isValidUUID(userId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
       
       await organizationService.removeUserFromOrganization(
         organizationId,
@@ -175,6 +198,11 @@ export function registerOrganizationRoutes(app: Express) {
   app.post("/api/organizations/:id/users", requireAuth, async (req, res) => {
     try {
       const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
       
       const user = await organizationService.addUserToOrganization(
         organizationId,
@@ -249,6 +277,12 @@ export function registerOrganizationRoutes(app: Express) {
   app.patch("/api/organizations/:id/status", orgDeleteLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+
       const { isActive } = req.body;
 
       if (typeof isActive !== 'boolean') {
@@ -283,6 +317,11 @@ export function registerOrganizationRoutes(app: Express) {
     try {
       const organizationId = req.params.id;
 
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+
       // Capture request context for audit logging
       const context = {
         ipAddress: req.ip,
@@ -310,6 +349,12 @@ export function registerOrganizationRoutes(app: Express) {
   app.delete("/api/organizations/:id", orgDeleteLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+
       const { confirmationName } = req.body;
 
       if (!confirmationName) {

@@ -112,43 +112,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startImpersonation = async (userId: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const response = await fetch(`/api/admin/impersonate/${userId}`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setUser(data.user);
-        setImpersonationStatus(data.impersonationStatus);
-        return { success: true, message: data.message };
-      } else {
-        return { success: false, message: data.message || 'Failed to start impersonation' };
-      }
+      const data = await apiClient.post(`/admin/impersonate/${userId}`, {});
+      setUser(data.user);
+      setImpersonationStatus(data.impersonationStatus);
+      return { success: true, message: data.message };
     } catch (error) {
-      return { success: false, message: 'Network error occurred' };
+      const message = error instanceof Error ? error.message : 'Network error occurred';
+      return { success: false, message };
     }
   };
 
   const stopImpersonation = async (): Promise<{ success: boolean; message?: string }> => {
     try {
-      const response = await fetch('/api/admin/stop-impersonation', {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setUser(data.user);
-        setImpersonationStatus(data.impersonationStatus);
-        return { success: true, message: data.message };
-      } else {
-        return { success: false, message: data.message || 'Failed to stop impersonation' };
-      }
+      const data = await apiClient.post('/admin/stop-impersonation', {});
+      setUser(data.user);
+      setImpersonationStatus(data.impersonationStatus);
+      return { success: true, message: data.message };
     } catch (error) {
-      return { success: false, message: 'Network error occurred' };
+      const message = error instanceof Error ? error.message : 'Network error occurred';
+      return { success: false, message };
     }
   };
 

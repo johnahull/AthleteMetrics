@@ -37,6 +37,21 @@ interface CountResult {
   count: number;
 }
 
+// Safety check: Validate DATABASE_URL to warn about production/staging usage
+const dbUrl = process.env.DATABASE_URL || '';
+const PRODUCTION_PATTERNS = ['railway.app', 'neon.tech', '.prod.', '.staging.'];
+
+const hasProductionPattern = PRODUCTION_PATTERNS.some(pattern => dbUrl.toLowerCase().includes(pattern));
+
+if (hasProductionPattern) {
+  console.warn('\n' + '='.repeat(80));
+  console.warn('⚠️  WARNING: Running audit against what appears to be a production/staging database!');
+  console.warn('='.repeat(80));
+  console.warn(`Detected pattern: ${PRODUCTION_PATTERNS.find(p => dbUrl.toLowerCase().includes(p))}`);
+  console.warn('\nThis script is safe to run (read-only), but test data in production is unusual.');
+  console.warn('='.repeat(80) + '\n');
+}
+
 async function auditTestData() {
   console.log('🔍 Scanning database for test data...\n');
   console.log('='.repeat(80));
