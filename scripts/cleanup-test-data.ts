@@ -22,6 +22,29 @@ import { db } from '../server/db';
 import { sql } from 'drizzle-orm';
 import * as readline from 'readline';
 
+interface Organization {
+  id: string;
+  name: string;
+}
+
+interface User {
+  id: string;
+  username: string;
+  emails: string[] | null;
+}
+
+interface UserIdResult {
+  user_id: string;
+}
+
+interface IdResult {
+  id: string;
+}
+
+interface SidResult {
+  sid: string;
+}
+
 // Safety check: Require explicit confirmation
 if (process.env.CONFIRM_CLEANUP !== 'yes') {
   console.error('\n' + '='.repeat(80));
@@ -69,10 +92,7 @@ async function cleanupTestData() {
          OR name LIKE '%Update%Org%'
     `;
     const testOrgsResult = await db.execute(orgQuery);
-    const testOrgs = (Array.isArray(testOrgsResult) ? testOrgsResult : testOrgsResult.rows || []) as Array<{
-      id: string;
-      name: string;
-    }>;
+    const testOrgs = (Array.isArray(testOrgsResult) ? testOrgsResult : testOrgsResult.rows || []) as Organization[];
 
     // Step 2: Find test users using raw SQL
     console.log('👤 Finding test users...');
@@ -96,11 +116,7 @@ async function cleanupTestData() {
          OR emails::text LIKE '%@example.com%'
     `;
     const testUsersResult = await db.execute(userQuery);
-    const testUsers = (Array.isArray(testUsersResult) ? testUsersResult : testUsersResult.rows || []) as Array<{
-      id: string;
-      username: string;
-      emails: string[] | null;
-    }>;
+    const testUsers = (Array.isArray(testUsersResult) ? testUsersResult : testUsersResult.rows || []) as User[];
 
     if (testOrgs.length === 0 && testUsers.length === 0) {
       console.log('\n✅ No test data found. Database is clean!');
@@ -164,7 +180,7 @@ async function cleanupTestData() {
         RETURNING user_id
       `;
       const deletedAllUserTeamsResult = await db.execute(deleteAllUserTeamsQuery);
-      const deletedAllUserTeams = Array.isArray(deletedAllUserTeamsResult) ? deletedAllUserTeamsResult : deletedAllUserTeamsResult.rows || [];
+      const deletedAllUserTeams = (Array.isArray(deletedAllUserTeamsResult) ? deletedAllUserTeamsResult : deletedAllUserTeamsResult.rows || []) as UserIdResult[];
       console.log(`   ✓ Deleted ${deletedAllUserTeams.length} user-team relationships\n`);
     }
 
@@ -180,7 +196,7 @@ async function cleanupTestData() {
         WHERE organization_id = ${orgId}
       `;
       const orgUsersResult = await db.execute(orgUsersQuery);
-      const orgUsers = (Array.isArray(orgUsersResult) ? orgUsersResult : orgUsersResult.rows || []) as Array<{ user_id: string }>;
+      const orgUsers = (Array.isArray(orgUsersResult) ? orgUsersResult : orgUsersResult.rows || []) as UserIdResult[];
       const userIds = orgUsers.map(u => u.user_id);
 
       if (userIds.length > 0) {
@@ -191,7 +207,7 @@ async function cleanupTestData() {
           RETURNING id
         `;
         const deletedMeasurementsResult = await db.execute(deleteMeasurementsQuery);
-        const deletedMeasurements = Array.isArray(deletedMeasurementsResult) ? deletedMeasurementsResult : deletedMeasurementsResult.rows || [];
+        const deletedMeasurements = (Array.isArray(deletedMeasurementsResult) ? deletedMeasurementsResult : deletedMeasurementsResult.rows || []) as IdResult[];
         console.log(`   ✓ Deleted ${deletedMeasurements.length} measurements`);
 
         // Delete user-org relationships
@@ -201,7 +217,7 @@ async function cleanupTestData() {
           RETURNING user_id
         `;
         const deletedUserOrgsResult = await db.execute(deleteUserOrgsQuery);
-        const deletedUserOrgs = Array.isArray(deletedUserOrgsResult) ? deletedUserOrgsResult : deletedUserOrgsResult.rows || [];
+        const deletedUserOrgs = (Array.isArray(deletedUserOrgsResult) ? deletedUserOrgsResult : deletedUserOrgsResult.rows || []) as UserIdResult[];
         console.log(`   ✓ Deleted ${deletedUserOrgs.length} user-org relationships`);
 
         // Delete sessions (if table exists)
@@ -212,10 +228,10 @@ async function cleanupTestData() {
             RETURNING sid
           `;
           const deletedSessionsResult = await db.execute(deleteSessionsQuery);
-          const deletedSessions = Array.isArray(deletedSessionsResult) ? deletedSessionsResult : deletedSessionsResult.rows || [];
+          const deletedSessions = (Array.isArray(deletedSessionsResult) ? deletedSessionsResult : deletedSessionsResult.rows || []) as SidResult[];
           console.log(`   ✓ Deleted ${deletedSessions.length} sessions`);
-        } catch (error: any) {
-          if (error.code === '42P01') {
+        } catch (error) {
+          if (error && typeof error === 'object' && 'code' in error && error.code === '42P01') {
             console.log(`   ℹ️  Sessions table does not exist (skipping)`);
           } else {
             throw error;
@@ -229,7 +245,7 @@ async function cleanupTestData() {
           RETURNING id
         `;
         const deletedAuditLogsResult = await db.execute(deleteAuditLogsQuery);
-        const deletedAuditLogs = Array.isArray(deletedAuditLogsResult) ? deletedAuditLogsResult : deletedAuditLogsResult.rows || [];
+        const deletedAuditLogs = (Array.isArray(deletedAuditLogsResult) ? deletedAuditLogsResult : deletedAuditLogsResult.rows || []) as IdResult[];
         console.log(`   ✓ Deleted ${deletedAuditLogs.length} audit log entries`);
 
         // Delete users
@@ -239,7 +255,7 @@ async function cleanupTestData() {
           RETURNING id
         `;
         const deletedUsersResult = await db.execute(deleteUsersQuery);
-        const deletedUsers = Array.isArray(deletedUsersResult) ? deletedUsersResult : deletedUsersResult.rows || [];
+        const deletedUsers = (Array.isArray(deletedUsersResult) ? deletedUsersResult : deletedUsersResult.rows || []) as IdResult[];
         console.log(`   ✓ Deleted ${deletedUsers.length} users`);
       }
 
@@ -250,7 +266,7 @@ async function cleanupTestData() {
         RETURNING id
       `;
       const deletedTeamsResult = await db.execute(deleteTeamsQuery);
-      const deletedTeams = Array.isArray(deletedTeamsResult) ? deletedTeamsResult : deletedTeamsResult.rows || [];
+      const deletedTeams = (Array.isArray(deletedTeamsResult) ? deletedTeamsResult : deletedTeamsResult.rows || []) as IdResult[];
       console.log(`   ✓ Deleted ${deletedTeams.length} teams`);
 
       // Delete organization
@@ -290,8 +306,8 @@ async function cleanupTestData() {
           WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
         `;
         await db.execute(deleteSessionsQuery);
-      } catch (error: any) {
-        if (error.code !== '42P01') {
+      } catch (error) {
+        if (!(error && typeof error === 'object' && 'code' in error && error.code === '42P01')) {
           throw error;
         }
       }
@@ -310,7 +326,7 @@ async function cleanupTestData() {
         RETURNING id
       `;
       const deletedOrphanUsersResult = await db.execute(deleteUsersQuery);
-      const deletedOrphanUsers = Array.isArray(deletedOrphanUsersResult) ? deletedOrphanUsersResult : deletedOrphanUsersResult.rows || [];
+      const deletedOrphanUsers = (Array.isArray(deletedOrphanUsersResult) ? deletedOrphanUsersResult : deletedOrphanUsersResult.rows || []) as IdResult[];
       console.log(`   ✓ Deleted ${deletedOrphanUsers.length} orphaned users`);
     }
 

@@ -13,6 +13,30 @@
 import { db } from '../server/db';
 import { sql } from 'drizzle-orm';
 
+interface Organization {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: Date;
+}
+
+interface User {
+  id: string;
+  username: string;
+  emails: string[] | null;
+  is_site_admin: boolean;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  level: string | null;
+}
+
+interface CountResult {
+  count: number;
+}
+
 async function auditTestData() {
   console.log('🔍 Scanning database for test data...\n');
   console.log('='.repeat(80));
@@ -34,12 +58,7 @@ async function auditTestData() {
     `;
 
     const testOrgsResult = await db.execute(orgQuery);
-    const testOrgs = (Array.isArray(testOrgsResult) ? testOrgsResult : testOrgsResult.rows || []) as Array<{
-      id: string;
-      name: string;
-      description: string | null;
-      created_at: Date;
-    }>;
+    const testOrgs = (Array.isArray(testOrgsResult) ? testOrgsResult : testOrgsResult.rows || []) as Organization[];
 
     if (testOrgs.length === 0) {
       console.log('   ✅ No test organizations found');
@@ -78,12 +97,7 @@ async function auditTestData() {
     `;
 
     const testUsersResult = await db.execute(userQuery);
-    const testUsers = (Array.isArray(testUsersResult) ? testUsersResult : testUsersResult.rows || []) as Array<{
-      id: string;
-      username: string;
-      emails: string[] | null;
-      is_site_admin: boolean;
-    }>;
+    const testUsers = (Array.isArray(testUsersResult) ? testUsersResult : testUsersResult.rows || []) as User[];
 
     if (testUsers.length === 0) {
       console.log('   ✅ No test users found');
@@ -111,7 +125,7 @@ async function auditTestData() {
           WHERE organization_id = ANY(ARRAY[${sql.join(testOrgIds.map(id => sql`${id}`), sql`, `)}]::text[])
         `;
         const teamsResult = await db.execute(teamsQuery);
-        const testTeams = (Array.isArray(teamsResult) ? teamsResult : teamsResult.rows || []) as Array<{ id: string; name: string; level: string | null }>;
+        const testTeams = (Array.isArray(teamsResult) ? teamsResult : teamsResult.rows || []) as Team[];
 
         if (testTeams.length === 0) {
           console.log('   ✅ No test teams found');
@@ -134,8 +148,8 @@ async function auditTestData() {
           WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
         `;
         const measurementResult = await db.execute(measurementQuery);
-        const measurementRows = Array.isArray(measurementResult) ? measurementResult : measurementResult.rows || [];
-        const measurementCount = (measurementRows[0] as any)?.count || 0;
+        const measurementRows = (Array.isArray(measurementResult) ? measurementResult : measurementResult.rows || []) as CountResult[];
+        const measurementCount = measurementRows[0]?.count || 0;
 
         console.log(`   ⚠️  Found ${measurementCount} measurements from test users`);
       } else {
@@ -151,8 +165,8 @@ async function auditTestData() {
           WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
         `;
         const auditResult = await db.execute(auditQuery);
-        const auditRows = Array.isArray(auditResult) ? auditResult : auditResult.rows || [];
-        const auditCount = (auditRows[0] as any)?.count || 0;
+        const auditRows = (Array.isArray(auditResult) ? auditResult : auditResult.rows || []) as CountResult[];
+        const auditCount = auditRows[0]?.count || 0;
 
         console.log(`   ⚠️  Found ${auditCount} audit log entries from test users`);
       } else {
@@ -169,12 +183,12 @@ async function auditTestData() {
             WHERE user_id = ANY(ARRAY[${sql.join(testUserIds.map(id => sql`${id}`), sql`, `)}]::text[])
           `;
           const sessionResult = await db.execute(sessionQuery);
-          const sessionRows = Array.isArray(sessionResult) ? sessionResult : sessionResult.rows || [];
-          const sessionCount = (sessionRows[0] as any)?.count || 0;
+          const sessionRows = (Array.isArray(sessionResult) ? sessionResult : sessionResult.rows || []) as CountResult[];
+          const sessionCount = sessionRows[0]?.count || 0;
 
           console.log(`   ⚠️  Found ${sessionCount} active sessions from test users`);
-        } catch (error: any) {
-          if (error.code === '42P01') {
+        } catch (error) {
+          if (error && typeof error === 'object' && 'code' in error && error.code === '42P01') {
             console.log('   ℹ️  Sessions table does not exist in this database (skipping)');
           } else {
             throw error;

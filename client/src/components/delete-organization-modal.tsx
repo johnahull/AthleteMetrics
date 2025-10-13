@@ -37,20 +37,22 @@ export default function DeleteOrganizationModal({
   }, [isOpen, organization.id]);
 
   // Fetch dependency counts when modal opens using centralized API client
-  const { data: dependencies } = useQuery<{ users: number; teams: number; measurements: number }>({
+  const { data: dependencies, isError: isDependenciesError, error: dependenciesError } = useQuery<{ users: number; teams: number; measurements: number }>({
     ...queries.organizationDependencies(organization.id),
     enabled: isOpen && !!organization.id,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (confirmationName === organization.name) {
+    // Case-insensitive comparison with trimming
+    if (confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase()) {
       onConfirm(confirmationName);
     }
   };
 
   const hasDependencies = dependencies && (dependencies.users > 0 || dependencies.teams > 0 || dependencies.measurements > 0);
-  const confirmationMatches = confirmationName === organization.name;
+  // Case-insensitive comparison with trimming
+  const confirmationMatches = confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -63,6 +65,17 @@ export default function DeleteOrganizationModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Error loading dependencies */}
+          {isDependenciesError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error Loading Dependencies</AlertTitle>
+              <AlertDescription>
+                {dependenciesError instanceof Error ? dependenciesError.message : 'Failed to load organization dependencies. Please try again.'}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Dependency Counts */}
           {dependencies && (
             <div className="space-y-2">
@@ -155,7 +168,7 @@ export default function DeleteOrganizationModal({
             <Button
               type="submit"
               variant="destructive"
-              disabled={isLoading || !confirmationMatches || hasDependencies}
+              disabled={isLoading || !confirmationMatches || hasDependencies || isDependenciesError}
               data-testid="confirm-delete-org-button"
             >
               {isLoading ? "Deleting..." : "Delete Organization"}
