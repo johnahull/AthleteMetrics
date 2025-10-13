@@ -45,8 +45,10 @@ describe('Organization Deletion Rate Limiting', () => {
       );
     }
 
-    // Create Express app and register routes
+    // Create Express app with middleware and register routes
     app = express();
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: false }));
     await registerRoutes(app);
 
     const timestamp = Date.now();
