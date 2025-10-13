@@ -14,6 +14,14 @@ Real-world examples of how to use AthleteMetrics' autonomous agent system for de
 | UI components | `ui-component-library-agent` | "Build responsive form for X" |
 | Tests only | `testing-qa-agent` | "Add tests for existing feature X" |
 | Bug fix | `test-driven-feature-agent` | "Fix: X not working, TDD approach" |
+| **Code formatting** | `code-quality-linting-agent` | "Setup ESLint and Prettier" |
+| **Feature flags** | `feature-flag-settings-agent` | "Add feature toggle for X" |
+| **Dependencies** | `dependency-management-agent` | "Update dependencies and fix vulnerabilities" |
+| **Deployment** | `deployment-release-agent` | "Create release v1.2.0" |
+| **Org customization** | `multi-tenant-profiles-agent` | "Add college org type profile" |
+| **Custom metrics** | `custom-metric-config-agent` | "Allow orgs to create custom tests" |
+| **CI/CD workflows** | `ci-cd-pipeline-agent` | "Create GitHub Actions workflow for tests" |
+| **GitHub operations** | `github-operations-agent` | "Setup automatic issue labeling" |
 
 ---
 
@@ -455,6 +463,984 @@ export function scoreOCRResult(result: OCRResult): number {
 // Manual correction UI
 
 // Accuracy improved: 72% → 89%
+```
+
+---
+
+### Code Quality & Linting Agent
+
+**Example 1: Setup ESLint and Prettier**
+
+**Prompt:**
+```
+Setup ESLint and Prettier for this project:
+- ESLint config for React, TypeScript, and accessibility
+- Prettier integration (no conflicts with ESLint)
+- Pre-commit hooks with Husky + lint-staged
+- Import sorting with eslint-plugin-import
+- CI integration for automated checks
+```
+
+**Output:**
+```json
+// .eslintrc.json
+{
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended",
+    "plugin:jsx-a11y/recommended",
+    "prettier"
+  ],
+  "plugins": ["@typescript-eslint", "react", "jsx-a11y", "import"],
+  "rules": {
+    "import/order": ["error", { "groups": ["builtin", "external", "internal"] }],
+    "react/react-in-jsx-scope": "off"
+  }
+}
+
+// .prettierrc
+{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": false,
+  "printWidth": 100,
+  "tabWidth": 2
+}
+
+// .husky/pre-commit
+#!/bin/sh
+npx lint-staged
+
+// .lintstagedrc.json
+{
+  "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
+  "*.{json,md}": ["prettier --write"]
+}
+
+// Updated package.json with scripts:
+"lint": "eslint . --ext .ts,.tsx",
+"lint:fix": "eslint . --ext .ts,.tsx --fix",
+"format": "prettier --write \"**/*.{ts,tsx,json,md}\""
+```
+
+**Example 2: Migrate to TypeScript Strict Mode**
+
+**Prompt:**
+```
+Migrate codebase to TypeScript strict mode incrementally:
+- Enable strict mode in tsconfig.json
+- Fix all type errors file by file
+- Add proper type annotations where missing
+- Remove 'any' types
+```
+
+**Output:**
+```typescript
+// tsconfig.json - Updated
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}
+
+// Fixed 47 type errors across 23 files
+// Removed 31 'any' types
+// Added proper type annotations to 89 functions
+```
+
+---
+
+### Feature Flag & Settings Management Agent
+
+**Example 1: Org Settings Page**
+
+**Prompt:**
+```
+Create organization settings page where org admins can configure features:
+- Enable/disable AI insights
+- Enable/disable custom reports
+- Enable/disable video analysis
+- Custom branding (logo, colors)
+- Email notification preferences
+```
+
+**Output:**
+```typescript
+// Database schema
+export const organizationSettings = pgTable("organization_settings", {
+  id: varchar("id").primaryKey(),
+  organizationId: varchar("organization_id").references(() => organizations.id),
+  featureFlags: jsonb("feature_flags").$type<{
+    aiInsights: boolean;
+    customReports: boolean;
+    videoAnalysis: boolean;
+  }>(),
+  branding: jsonb("branding").$type<{
+    logo?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+  }>(),
+  notificationPreferences: jsonb("notification_preferences"),
+});
+
+// API endpoint
+// server/routes/organization-settings.ts
+
+// UI component
+// client/src/pages/OrganizationSettings.tsx
+export function OrganizationSettings() {
+  const { organization } = useAuth();
+  const form = useForm<OrgSettingsForm>({ ... });
+
+  // Feature toggle switches
+  // Branding customization
+  // Notification preferences
+}
+
+// React context for feature flags
+// client/src/contexts/FeatureFlagContext.tsx
+export function useFeatureFlag(flag: string): boolean {
+  const { settings } = useOrganizationSettings();
+  return settings?.featureFlags?.[flag] ?? false;
+}
+```
+
+**Example 2: A/B Testing Infrastructure**
+
+**Prompt:**
+```
+Add A/B testing capability for new features:
+- Percentage-based rollout (e.g., 50% of users see new UI)
+- User segment targeting (college orgs only)
+- Feature analytics tracking
+- Admin dashboard to control experiments
+```
+
+**Output:**
+```typescript
+// server/middleware/feature-flag.ts
+export function checkFeatureFlag(flagName: string) {
+  return async (req, res, next) => {
+    const user = req.user;
+    const flag = await db.query.featureFlags.findFirst({
+      where: eq(featureFlags.name, flagName)
+    });
+
+    // Percentage rollout logic
+    if (flag.rolloutPercentage < 100) {
+      const hash = hashUserId(user.id);
+      if (hash % 100 >= flag.rolloutPercentage) {
+        return res.status(403).json({ message: "Feature not enabled" });
+      }
+    }
+
+    // User segment targeting
+    if (flag.targetSegments && !matchesSegment(user, flag.targetSegments)) {
+      return res.status(403).json({ message: "Feature not available" });
+    }
+
+    req.featureEnabled = true;
+    next();
+  };
+}
+```
+
+---
+
+### Dependency Management Agent
+
+**Example 1: Security Vulnerability Fixes**
+
+**Prompt:**
+```
+Fix all security vulnerabilities detected by npm audit:
+- Update packages with high/critical vulnerabilities
+- Test after each update to ensure nothing breaks
+- Document breaking changes if any
+```
+
+**Output:**
+```bash
+# Analysis of vulnerabilities
+Found 3 high severity vulnerabilities:
+- webpack 5.88.0 (requires 5.94.0)
+- semver 6.3.0 (requires 7.6.0)
+- @babel/traverse 7.22.0 (requires 7.23.2)
+
+# Updates applied
+npm update webpack@5.94.0
+npm update semver@7.6.0
+npm update @babel/traverse@7.23.2
+
+# Tests run after each update
+✅ All tests passing (167 tests)
+✅ Build successful
+✅ No breaking changes detected
+
+# Security audit results
+Before: 3 high, 2 moderate
+After: 0 high, 0 moderate ✅
+```
+
+**Example 2: Major Version Upgrade**
+
+**Prompt:**
+```
+Upgrade React Query from v4 to v5:
+- Review breaking changes in changelog
+- Update all usages across codebase
+- Update types and imports
+- Verify all queries still work
+```
+
+**Output:**
+```typescript
+// Breaking changes identified:
+1. useQuery key must be array (was string)
+2. onSuccess/onError callbacks moved to mutate()
+3. cacheTime renamed to gcTime
+
+// Files updated: 23 files
+// Changes:
+- Updated 47 useQuery calls
+- Updated 12 useMutation calls
+- Updated query keys to array format
+- Moved callbacks to appropriate locations
+
+// Testing results
+✅ All 167 tests passing
+✅ Manual testing: queries working correctly
+✅ Type checking passed
+```
+
+---
+
+### Deployment & Release Management Agent
+
+**Example 1: Create Production Release**
+
+**Prompt:**
+```
+Create production release v1.5.0:
+- Generate release notes from commits since v1.4.0
+- Verify all tests pass
+- Create GitHub release
+- Trigger deployment to Railway production
+```
+
+**Output:**
+```markdown
+# Release Notes Generated
+
+## v1.5.0 - 2025-10-10
+
+### Features
+- Added custom metric builder for organizations (#123)
+- Implemented team comparison analytics (#125)
+- Added PDF export for reports (#128)
+
+### Bug Fixes
+- Fixed archived team filtering in analytics (#124)
+- Resolved CSV import validation issue (#126)
+
+### Improvements
+- Optimized database queries (200ms → 45ms) (#127)
+- Enhanced mobile responsive design (#129)
+
+---
+
+# Pre-release checks
+✅ All tests passing (173 tests)
+✅ Type checking passed
+✅ Build successful
+✅ Security audit passed (0 vulnerabilities)
+✅ Environment variables validated
+
+# GitHub Release Created
+Tag: v1.5.0
+Branch: main
+Release URL: https://github.com/org/repo/releases/tag/v1.5.0
+
+# Railway Deployment Triggered
+Environment: production
+Status: Deploying...
+Health check: ✅ Passed
+Deployment complete: https://athletemetrics.io
+```
+
+**Example 2: Rollback After Failed Deployment**
+
+**Prompt:**
+```
+Production deployment failed health checks. Rollback to v1.4.0:
+- Restore previous Railway deployment
+- Verify rollback successful
+- Document what went wrong
+```
+
+**Output:**
+```bash
+# Rollback initiated
+Previous deployment ID: d7f9e3a1
+Target version: v1.4.0
+
+# Railway rollback
+railway rollback d7f9e3a1 --service athletemetrics-production
+
+# Health check verification
+✅ Health endpoint responding (200 OK)
+✅ Database connection successful
+✅ All critical services running
+
+# Post-mortem
+Issue: Database migration failed due to missing column
+Root cause: Migration script had syntax error
+Action items:
+1. Add migration testing to CI/CD
+2. Require manual migration approval for production
+3. Improve pre-deployment validation
+
+# Rollback complete
+Current version: v1.4.0 ✅
+Status: Stable
+```
+
+---
+
+### Multi-Tenant Configuration Agent
+
+**Example 1: College Organization Profile**
+
+**Prompt:**
+```
+Create a "College Program" organization type profile:
+- Features: Recruitment tools, NCAA compliance, scholarship tracking
+- Custom branding: School colors, athletic department logo
+- Role customization: Add "Recruiting Coordinator" role
+- Default metrics: College-specific benchmarks
+```
+
+**Output:**
+```typescript
+// Database schema
+export const organizationTypes = pgTable("organization_types", {
+  id: varchar("id").primaryKey(),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  defaultFeatures: jsonb("default_features").$type<{
+    recruitmentTools: boolean;
+    ncaaCompliance: boolean;
+    scholarshipTracking: boolean;
+    advancedAnalytics: boolean;
+  }>(),
+  defaultRoles: jsonb("default_roles").$type<string[]>(),
+});
+
+// Seeded college profile
+{
+  id: "college-program",
+  name: "College Program",
+  description: "NCAA college athletic programs",
+  defaultFeatures: {
+    recruitmentTools: true,
+    ncaaCompliance: true,
+    scholarshipTracking: true,
+    advancedAnalytics: true
+  },
+  defaultRoles: ["athlete", "coach", "recruiting-coordinator", "athletic-director"]
+}
+
+// UI customization
+// client/src/pages/CollegeDashboard.tsx
+export function CollegeDashboard() {
+  const { organizationType } = useOrganization();
+
+  if (organizationType === "college-program") {
+    return (
+      <>
+        <RecruitmentPipeline />
+        <NCAAComplianceChecklist />
+        <ScholarshipAllocation />
+        <TeamAnalytics />
+      </>
+    );
+  }
+}
+```
+
+**Example 2: White-Label Branding**
+
+**Prompt:**
+```
+Implement white-label branding for organizations:
+- Custom logo upload
+- Primary/secondary color picker
+- Custom domain support (e.g., athletics.university.edu)
+- Branded email templates
+- Custom login page design
+```
+
+**Output:**
+```typescript
+// Organization branding schema
+export const organizationBranding = pgTable("organization_branding", {
+  id: varchar("id").primaryKey(),
+  organizationId: varchar("organization_id").references(() => organizations.id),
+  logoUrl: text("logo_url"),
+  primaryColor: varchar("primary_color"),
+  secondaryColor: varchar("secondary_color"),
+  customDomain: varchar("custom_domain"),
+  emailFromName: varchar("email_from_name"),
+});
+
+// Theme provider
+// client/src/contexts/ThemeContext.tsx
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { branding } = useOrganization();
+
+  useEffect(() => {
+    if (branding) {
+      document.documentElement.style.setProperty(
+        '--color-primary',
+        branding.primaryColor
+      );
+      document.documentElement.style.setProperty(
+        '--color-secondary',
+        branding.secondaryColor
+      );
+    }
+  }, [branding]);
+
+  return <>{children}</>;
+}
+
+// Branded email templates
+// server/services/email-templates.ts
+export function getBrandedTemplate(org: Organization, templateType: string) {
+  const branding = org.branding;
+  return `
+    <div style="background-color: ${branding.primaryColor}">
+      <img src="${branding.logoUrl}" alt="${org.name}" />
+      ${getTemplateContent(templateType)}
+    </div>
+  `;
+}
+```
+
+---
+
+### Custom Metric Configuration Agent
+
+**Example 1: Sport-Specific Metric Builder**
+
+**Prompt:**
+```
+Create custom metric builder UI for organization admins:
+- Define metric name, data type (number, time, distance)
+- Set validation rules (min/max, required)
+- Specify unit (inches, seconds, meters, etc.)
+- Add sport-specific tags
+- Create custom form for data entry
+```
+
+**Output:**
+```typescript
+// Database schema
+export const customMetrics = pgTable("custom_metrics", {
+  id: varchar("id").primaryKey(),
+  organizationId: varchar("organization_id").references(() => organizations.id),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  dataType: varchar("data_type").$type<"number" | "time" | "distance">(),
+  unit: varchar("unit"),
+  validationRules: jsonb("validation_rules").$type<{
+    min?: number;
+    max?: number;
+    required: boolean;
+    decimalPlaces?: number;
+  }>(),
+  sportSpecific: varchar("sport_specific"),
+  active: boolean("active").default(true),
+});
+
+// Custom metric values
+export const customMetricValues = pgTable("custom_metric_values", {
+  id: varchar("id").primaryKey(),
+  measurementId: varchar("measurement_id").references(() => measurements.id),
+  customMetricId: varchar("custom_metric_id").references(() => customMetrics.id),
+  value: numeric("value").notNull(),
+  validated: boolean("validated").default(false),
+});
+
+// Metric builder UI
+// client/src/components/admin/MetricBuilder.tsx
+export function MetricBuilder() {
+  const form = useForm<CustomMetricForm>({
+    resolver: zodResolver(customMetricSchema),
+  });
+
+  return (
+    <Form {...form}>
+      <FormField name="name" label="Metric Name" />
+      <FormField name="dataType" label="Data Type">
+        <Select>
+          <SelectItem value="number">Number</SelectItem>
+          <SelectItem value="time">Time</SelectItem>
+          <SelectItem value="distance">Distance</SelectItem>
+        </Select>
+      </FormField>
+      <FormField name="unit" label="Unit" />
+      <FormField name="validationRules.min" label="Minimum Value" />
+      <FormField name="validationRules.max" label="Maximum Value" />
+      <Button type="submit">Create Metric</Button>
+    </Form>
+  );
+}
+```
+
+**Example 2: Formula-Based Derived Metrics**
+
+**Prompt:**
+```
+Add support for calculated metrics based on formulas:
+- Example: Power = (Force × Distance) / Time
+- Example: Speed Score = (40yd time × weight) / vertical jump
+- Allow admins to define custom formulas
+- Auto-calculate when component values are entered
+```
+
+**Output:**
+```typescript
+// Extended custom metrics schema
+export const customMetrics = pgTable("custom_metrics", {
+  // ... existing columns
+  calculationFormula: text("calculation_formula"),
+  formulaInputs: jsonb("formula_inputs").$type<string[]>(),
+  isCalculated: boolean("is_calculated").default(false),
+});
+
+// Formula evaluation engine
+// server/services/metric-calculator.ts
+export function calculateMetric(
+  metric: CustomMetric,
+  inputValues: Record<string, number>
+): number {
+  if (!metric.calculationFormula) {
+    throw new Error("Metric is not calculated");
+  }
+
+  // Parse and evaluate formula safely
+  const formula = metric.calculationFormula;
+  const scope = inputValues;
+
+  // Use math.js for safe formula evaluation
+  const result = evaluate(formula, scope);
+
+  return result;
+}
+
+// Example formula definition
+{
+  name: "Explosive Power Index",
+  calculationFormula: "(vertical_jump * 0.6) + (broad_jump * 0.4)",
+  formulaInputs: ["vertical_jump", "broad_jump"],
+  isCalculated: true,
+  unit: "composite"
+}
+
+// Auto-calculation on data entry
+// client/src/components/forms/MeasurementEntry.tsx
+export function MeasurementEntry() {
+  const { calculatedMetrics } = useCustomMetrics();
+  const form = useForm();
+
+  useEffect(() => {
+    const values = form.getValues();
+
+    calculatedMetrics.forEach(metric => {
+      const inputs = metric.formulaInputs.reduce((acc, input) => {
+        acc[input] = values[input];
+        return acc;
+      }, {});
+
+      if (Object.values(inputs).every(v => v != null)) {
+        const calculated = calculateMetricClient(metric, inputs);
+        form.setValue(metric.id, calculated);
+      }
+    });
+  }, [form.watch()]);
+}
+```
+
+---
+
+### CI/CD Pipeline Agent
+
+**Example 1: Create E2E Test Workflow**
+
+**Prompt:**
+```
+Create GitHub Actions workflow for running E2E tests on PRs:
+- Trigger on pull_request to main
+- Install dependencies with caching
+- Run Playwright tests
+- Upload test artifacts on failure
+- Add status check
+```
+
+**Output:**
+```yaml
+# .github/workflows/e2e-tests.yml
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-coverage
+          path: coverage/
+          retention-days: 30
+
+# Also updates: package.json with test:e2e script
+# Also creates: playwright.config.ts if not exists
+```
+
+**Example 2: Optimize Slow Workflow**
+
+**Prompt:**
+```
+Optimize pr-checks.yml workflow - it's taking 8 minutes to run:
+- Type check takes 2 min
+- Tests take 4 min
+- Build takes 2 min
+```
+
+**Output:**
+```yaml
+# .github/workflows/pr-checks.yml (optimized)
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Run jobs in parallel instead of sequentially
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Cache node_modules for faster installs
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - run: npm ci --prefer-offline
+      - run: npm run check
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      # Cache Vitest cache for faster test runs
+      - name: Cache Vitest
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vitest
+          key: ${{ runner.os }}-vitest-${{ hashFiles('vitest.config.ts') }}
+
+      - run: npm ci --prefer-offline
+      - run: npm run test:run
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      # Cache build output
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            .vite
+          key: ${{ runner.os }}-build-${{ hashFiles('vite.config.ts', 'src/**') }}
+
+      - run: npm ci --prefer-offline
+      - run: npm run build
+
+# Improvements:
+# ✅ Parallel jobs (8min → 4min)
+# ✅ node_modules cache (saves 90s per job)
+# ✅ Vitest cache (saves 60s)
+# ✅ Build cache (saves 30s on cache hit)
+# ✅ Concurrency control (cancels old runs)
+# Total: 8 minutes → ~2 minutes
+```
+
+---
+
+### GitHub Operations Agent
+
+**Example 1: Automatic Issue Triage**
+
+**Prompt:**
+```
+Setup automatic issue labeling and triage:
+- Label bugs, features, docs, performance based on content
+- Auto-assign to team members based on area
+- Add "needs-triage" label to unlabeled issues
+- Comment with template on new issues
+```
+
+**Output:**
+```yaml
+# .github/workflows/issue-triage.yml
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Label bug issues
+        if: contains(github.event.issue.body, 'bug') || contains(github.event.issue.title, 'bug') || contains(github.event.issue.title, 'fix')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['bug', 'needs-review']
+            });
+
+      - name: Label feature requests
+        if: contains(github.event.issue.body, 'feature') || contains(github.event.issue.title, 'feature') || contains(github.event.issue.title, 'add')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['enhancement', 'needs-triage']
+            });
+
+      - name: Label documentation issues
+        if: contains(github.event.issue.body, 'documentation') || contains(github.event.issue.title, 'docs')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['documentation']
+            });
+
+            // Auto-assign to docs team
+            github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: ['docs-team-member']
+            });
+
+      - name: Comment on new issues
+        if: github.event.action == 'opened'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Thanks for opening this issue! 🎉\n\nOur team will review it shortly. In the meantime:\n- Make sure you've provided reproduction steps\n- Check if this is related to any existing issues\n- Review our [contributing guidelines](CONTRIBUTING.md)`
+            });
+
+# Also creates:
+# - .github/ISSUE_TEMPLATE/bug_report.yml
+# - .github/ISSUE_TEMPLATE/feature_request.yml
+# - .github/ISSUE_TEMPLATE/config.yml
+```
+
+**Example 2: Branch Protection Setup**
+
+**Prompt:**
+```
+Configure branch protection for main branch:
+- Require PR reviews (2 approvals)
+- Require status checks: type-check, tests, build
+- Require branches to be up to date
+- Require linear history
+- Include administrators
+- Setup CODEOWNERS
+```
+
+**Output:**
+```javascript
+// Script: scripts/setup-branch-protection.js
+import { Octokit } from "@octokit/rest";
+
+const octokit = new Octokit({
+  auth: process.env.GITHUB_TOKEN
+});
+
+async function setupBranchProtection() {
+  const owner = "johnahull";
+  const repo = "AthleteMetrics";
+  const branch = "main";
+
+  // Update branch protection
+  await octokit.rest.repos.updateBranchProtection({
+    owner,
+    repo,
+    branch,
+    required_status_checks: {
+      strict: true, // Require branches to be up to date
+      contexts: [
+        "type-check",
+        "tests",
+        "build",
+        "security-audit"
+      ]
+    },
+    enforce_admins: true,
+    required_pull_request_reviews: {
+      dismissal_restrictions: {},
+      dismiss_stale_reviews: true,
+      require_code_owner_reviews: true,
+      required_approving_review_count: 2,
+      require_last_push_approval: true
+    },
+    restrictions: null,
+    required_linear_history: true,
+    allow_force_pushes: false,
+    allow_deletions: false,
+    required_conversation_resolution: true
+  });
+
+  console.log("✅ Branch protection rules updated");
+}
+
+setupBranchProtection();
+```
+
+```
+# CODEOWNERS file created
+# AthleteMetrics CODEOWNERS
+
+# Global owners
+* @johnahull
+
+# Database schema changes
+/shared/schema.ts @johnahull @database-team
+/server/db.ts @johnahull @database-team
+
+# Security-related changes
+/server/auth/ @johnahull @security-team
+/server/permissions.ts @johnahull @security-team
+
+# CI/CD workflows
+/.github/workflows/ @johnahull @devops-team
+
+# Documentation
+*.md @johnahull @docs-team
+/docs/ @johnahull @docs-team
+
+# Frontend components
+/client/src/components/ @johnahull @frontend-team
+
+# API routes
+/server/routes/ @johnahull @backend-team
 ```
 
 ---
