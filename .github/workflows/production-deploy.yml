@@ -129,10 +129,10 @@ jobs:
       - name: Run session table migration (idempotent)
         run: |
           echo "Running session table migration..."
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} node -e "
+          node -e "
             const fs = require('fs');
             const postgres = require('postgres');
-            const sql = postgres(process.env.DATABASE_URL);
+            const sql = postgres(process.env.PRODUCTION_DATABASE_URL);
             const migration = fs.readFileSync('scripts/migrate-session-table.sql', 'utf8');
             (async () => {
               try {
@@ -148,7 +148,7 @@ jobs:
             })();
           "
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_PUBLIC_DATABASE_URL }}
 
       - name: Get current deployment ID (for rollback)
         id: current-deploy
