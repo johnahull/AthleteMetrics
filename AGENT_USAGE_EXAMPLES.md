@@ -20,6 +20,8 @@ Real-world examples of how to use AthleteMetrics' autonomous agent system for de
 | **Deployment** | `deployment-release-agent` | "Create release v1.2.0" |
 | **Org customization** | `multi-tenant-profiles-agent` | "Add college org type profile" |
 | **Custom metrics** | `custom-metric-config-agent` | "Allow orgs to create custom tests" |
+| **CI/CD workflows** | `ci-cd-pipeline-agent` | "Create GitHub Actions workflow for tests" |
+| **GitHub operations** | `github-operations-agent` | "Setup automatic issue labeling" |
 
 ---
 
@@ -1075,6 +1077,370 @@ export function MeasurementEntry() {
     });
   }, [form.watch()]);
 }
+```
+
+---
+
+### CI/CD Pipeline Agent
+
+**Example 1: Create E2E Test Workflow**
+
+**Prompt:**
+```
+Create GitHub Actions workflow for running E2E tests on PRs:
+- Trigger on pull_request to main
+- Install dependencies with caching
+- Run Playwright tests
+- Upload test artifacts on failure
+- Add status check
+```
+
+**Output:**
+```yaml
+# .github/workflows/e2e-tests.yml
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-coverage
+          path: coverage/
+          retention-days: 30
+
+# Also updates: package.json with test:e2e script
+# Also creates: playwright.config.ts if not exists
+```
+
+**Example 2: Optimize Slow Workflow**
+
+**Prompt:**
+```
+Optimize pr-checks.yml workflow - it's taking 8 minutes to run:
+- Type check takes 2 min
+- Tests take 4 min
+- Build takes 2 min
+```
+
+**Output:**
+```yaml
+# .github/workflows/pr-checks.yml (optimized)
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Run jobs in parallel instead of sequentially
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Cache node_modules for faster installs
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - run: npm ci --prefer-offline
+      - run: npm run check
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      # Cache Vitest cache for faster test runs
+      - name: Cache Vitest
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vitest
+          key: ${{ runner.os }}-vitest-${{ hashFiles('vitest.config.ts') }}
+
+      - run: npm ci --prefer-offline
+      - run: npm run test:run
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
+      # Cache build output
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            .vite
+          key: ${{ runner.os }}-build-${{ hashFiles('vite.config.ts', 'src/**') }}
+
+      - run: npm ci --prefer-offline
+      - run: npm run build
+
+# Improvements:
+# ✅ Parallel jobs (8min → 4min)
+# ✅ node_modules cache (saves 90s per job)
+# ✅ Vitest cache (saves 60s)
+# ✅ Build cache (saves 30s on cache hit)
+# ✅ Concurrency control (cancels old runs)
+# Total: 8 minutes → ~2 minutes
+```
+
+---
+
+### GitHub Operations Agent
+
+**Example 1: Automatic Issue Triage**
+
+**Prompt:**
+```
+Setup automatic issue labeling and triage:
+- Label bugs, features, docs, performance based on content
+- Auto-assign to team members based on area
+- Add "needs-triage" label to unlabeled issues
+- Comment with template on new issues
+```
+
+**Output:**
+```yaml
+# .github/workflows/issue-triage.yml
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Label bug issues
+        if: contains(github.event.issue.body, 'bug') || contains(github.event.issue.title, 'bug') || contains(github.event.issue.title, 'fix')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['bug', 'needs-review']
+            });
+
+      - name: Label feature requests
+        if: contains(github.event.issue.body, 'feature') || contains(github.event.issue.title, 'feature') || contains(github.event.issue.title, 'add')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['enhancement', 'needs-triage']
+            });
+
+      - name: Label documentation issues
+        if: contains(github.event.issue.body, 'documentation') || contains(github.event.issue.title, 'docs')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['documentation']
+            });
+
+            // Auto-assign to docs team
+            github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: ['docs-team-member']
+            });
+
+      - name: Comment on new issues
+        if: github.event.action == 'opened'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Thanks for opening this issue! 🎉\n\nOur team will review it shortly. In the meantime:\n- Make sure you've provided reproduction steps\n- Check if this is related to any existing issues\n- Review our [contributing guidelines](CONTRIBUTING.md)`
+            });
+
+# Also creates:
+# - .github/ISSUE_TEMPLATE/bug_report.yml
+# - .github/ISSUE_TEMPLATE/feature_request.yml
+# - .github/ISSUE_TEMPLATE/config.yml
+```
+
+**Example 2: Branch Protection Setup**
+
+**Prompt:**
+```
+Configure branch protection for main branch:
+- Require PR reviews (2 approvals)
+- Require status checks: type-check, tests, build
+- Require branches to be up to date
+- Require linear history
+- Include administrators
+- Setup CODEOWNERS
+```
+
+**Output:**
+```javascript
+// Script: scripts/setup-branch-protection.js
+import { Octokit } from "@octokit/rest";
+
+const octokit = new Octokit({
+  auth: process.env.GITHUB_TOKEN
+});
+
+async function setupBranchProtection() {
+  const owner = "johnahull";
+  const repo = "AthleteMetrics";
+  const branch = "main";
+
+  // Update branch protection
+  await octokit.rest.repos.updateBranchProtection({
+    owner,
+    repo,
+    branch,
+    required_status_checks: {
+      strict: true, // Require branches to be up to date
+      contexts: [
+        "type-check",
+        "tests",
+        "build",
+        "security-audit"
+      ]
+    },
+    enforce_admins: true,
+    required_pull_request_reviews: {
+      dismissal_restrictions: {},
+      dismiss_stale_reviews: true,
+      require_code_owner_reviews: true,
+      required_approving_review_count: 2,
+      require_last_push_approval: true
+    },
+    restrictions: null,
+    required_linear_history: true,
+    allow_force_pushes: false,
+    allow_deletions: false,
+    required_conversation_resolution: true
+  });
+
+  console.log("✅ Branch protection rules updated");
+}
+
+setupBranchProtection();
+```
+
+```
+# CODEOWNERS file created
+# AthleteMetrics CODEOWNERS
+
+# Global owners
+* @johnahull
+
+# Database schema changes
+/shared/schema.ts @johnahull @database-team
+/server/db.ts @johnahull @database-team
+
+# Security-related changes
+/server/auth/ @johnahull @security-team
+/server/permissions.ts @johnahull @security-team
+
+# CI/CD workflows
+/.github/workflows/ @johnahull @devops-team
+
+# Documentation
+*.md @johnahull @docs-team
+/docs/ @johnahull @docs-team
+
+# Frontend components
+/client/src/components/ @johnahull @frontend-team
+
+# API routes
+/server/routes/ @johnahull @backend-team
 ```
 
 ---

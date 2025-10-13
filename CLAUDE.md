@@ -500,6 +500,111 @@ custom_metric_values (id, measurement_id, custom_metric_id, value, validated)
 - Standard built-in metrics
 - Simple form field additions
 
+#### CI/CD Pipeline Agent (`ci-cd-pipeline-agent`) ⚙️
+**Color:** Gear (Automation)
+**Auto-invoke when tasks involve:**
+- Creating or modifying GitHub Actions workflows
+- CI/CD pipeline optimization (caching, parallelization)
+- Workflow debugging and troubleshooting
+- Matrix builds and multi-environment testing
+- Custom GitHub Actions development
+- CI/CD security best practices
+- Pipeline performance optimization
+- Artifact management and caching strategies
+
+**Keywords that trigger:** `github actions`, `workflow`, `ci/cd`, `pipeline`, `continuous integration`, `continuous deployment`, `.github/workflows`, `workflow optimization`, `ci cache`, `matrix build`, `workflow debugging`, `github action`, `workflow file`, `ci pipeline`, `build pipeline`
+
+**Special Capabilities:**
+- GitHub Actions YAML workflow generation
+- Job orchestration (parallel jobs, dependencies, conditional execution)
+- Optimal caching strategies for npm, build artifacts, and dependencies
+- Matrix builds for multi-OS and multi-version testing
+- Custom composite and Docker actions creation
+- Workflow security (secret management, OIDC, environment protection)
+- Pipeline performance optimization and run time reduction
+- Workflow debugging and failure analysis
+- **Consults GitHub Actions documentation when needed**
+- **Uses WebFetch for latest workflow syntax and best practices**
+
+**Reference Documentation:**
+- [GitHub Actions Syntax](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
+- [GitHub Actions Best Practices](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions)
+- [Caching Dependencies](https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows)
+- [Using Matrix Strategies](https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs)
+
+**Integration Points:**
+- Works with `testing-qa-agent` to add test jobs to workflows
+- Coordinates with `deployment-release-agent` for deployment jobs
+- Uses `code-quality-linting-agent` for linting jobs in CI
+- Integrates with `security-authentication-agent` for secret management
+
+**When to use:**
+- Creating new GitHub Actions workflows
+- Optimizing existing CI/CD pipelines
+- Debugging workflow failures
+- Adding caching strategies
+- Setting up matrix builds
+- Performance tuning CI pipelines
+
+**When NOT to use:**
+- Actually deploying to production (use `deployment-release-agent`)
+- Writing tests themselves (use `testing-qa-agent`)
+- Repository settings (use `github-operations-agent`)
+
+#### GitHub Operations Agent (`github-operations-agent`) 🐙
+**Color:** Octocat (Purple)
+**Auto-invoke when tasks involve:**
+- GitHub issue creation, triage, and management
+- GitHub Projects board configuration and automation
+- Repository settings and configuration
+- Branch protection rules and merge strategies
+- GitHub Actions workflow debugging (not creation)
+- Bulk PR/issue operations
+- GitHub API automation and scripting
+- Advanced GitHub queries and searches
+- GitHub App and webhook integration
+
+**Keywords that trigger:** `github issue`, `github project`, `triage issues`, `branch protection`, `repository settings`, `github api`, `issue labels`, `github search`, `bulk pr`, `github automation`, `issue triage`, `project board`, `repo config`, `issue template`, `codeowners`
+
+**Special Capabilities:**
+- Issue automation (auto-label, auto-assign, bulk operations)
+- GitHub Projects board management and automation rules
+- Repository configuration (branch protection, merge strategies, settings)
+- GitHub Actions workflow debugging and log analysis
+- GitHub API automation for bulk operations
+- Advanced GitHub search queries across issues, PRs, and code
+- GitHub App integration and webhook setup
+- Issue template and PR template creation
+- CODEOWNERS file management
+- **Consults GitHub documentation when needed**
+- **Uses WebFetch for latest API reference and best practices**
+
+**Reference Documentation:**
+- [GitHub REST API](https://docs.github.com/en/rest)
+- [GitHub CLI Manual](https://cli.github.com/manual/)
+- [Managing Issues](https://docs.github.com/en/issues/tracking-your-work-with-issues)
+- [Branch Protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)
+- [GitHub Projects](https://docs.github.com/en/issues/planning-and-tracking-with-projects)
+
+**Integration Points:**
+- Works with `pr-lifecycle-agent` for PR management
+- Coordinates with `deployment-release-agent` for release automation
+- Uses `ci-cd-pipeline-agent` for workflow configuration (not creation)
+- Integrates with `security-authentication-agent` for access control
+
+**When to use:**
+- Managing GitHub issues and projects
+- Configuring repository settings
+- Debugging GitHub Actions failures (log analysis)
+- Bulk operations on PRs/issues
+- GitHub API automation
+- Setting up issue/PR templates
+
+**When NOT to use:**
+- Creating/reviewing individual PRs (use `pr-lifecycle-agent`)
+- Creating GitHub releases (use `deployment-release-agent`)
+- Writing new workflows (use `ci-cd-pipeline-agent`)
+
 ### Proactive Agent Usage Guidelines
 
 #### Autonomous Feature Development
@@ -676,6 +781,21 @@ When invoking agents, provide AthleteMetrics-specific context:
 - Sport-specific metrics → `custom-metric-config-agent`
 - Metric builder UI → `custom-metric-config-agent` + `form-validation-agent`
 - Custom benchmarks → `custom-metric-config-agent` + `analytics-visualization-agent`
+
+#### CI/CD & Workflows (NEW)
+- Creating GitHub Actions workflows → `ci-cd-pipeline-agent`
+- Optimizing CI/CD pipelines → `ci-cd-pipeline-agent`
+- Workflow debugging → `ci-cd-pipeline-agent`
+- Matrix builds → `ci-cd-pipeline-agent`
+- Cache strategies → `ci-cd-pipeline-agent`
+
+#### GitHub Operations (NEW)
+- GitHub issue management → `github-operations-agent`
+- Issue triage and labeling → `github-operations-agent`
+- Branch protection setup → `github-operations-agent`
+- Repository configuration → `github-operations-agent`
+- Bulk PR/issue operations → `github-operations-agent`
+- GitHub API automation → `github-operations-agent`
 
 ## Development Commands
 
