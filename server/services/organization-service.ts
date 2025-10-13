@@ -60,6 +60,7 @@ export class OrganizationService extends BaseService {
 
   /**
    * Get all organizations (site admin only)
+   * Includes inactive organizations for site admins to manage deactivation/reactivation
    */
   async getAllOrganizations(requestingUserId: string): Promise<Organization[]> {
     try {
@@ -68,7 +69,8 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Only site administrators can view all organizations");
       }
 
-      return await this.storage.getOrganizations();
+      // Site admins need to see inactive orgs for reactivation functionality
+      return await this.storage.getOrganizations({ includeInactive: true });
     } catch (error) {
       console.error("OrganizationService.getAllOrganizations:", error);
       return [];
