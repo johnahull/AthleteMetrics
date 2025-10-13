@@ -20,6 +20,7 @@ Real-world examples of how to use AthleteMetrics' autonomous agent system for de
 | **Deployment** | `deployment-release-agent` | "Create release v1.2.0" |
 | **Org customization** | `multi-tenant-profiles-agent` | "Add college org type profile" |
 | **Custom metrics** | `custom-metric-config-agent` | "Allow orgs to create custom tests" |
+| **Monitoring** | `monitoring-observability-agent` | "Setup Sentry error tracking" |
 | **CI/CD workflows** | `ci-cd-pipeline-agent` | "Create GitHub Actions workflow for tests" |
 | **GitHub operations** | `github-operations-agent` | "Setup automatic issue labeling" |
 
@@ -1028,6 +1029,11 @@ export const customMetrics = pgTable("custom_metrics", {
 
 // Formula evaluation engine
 // server/services/metric-calculator.ts
+import { create, all } from 'mathjs';
+
+// Configure math.js for safe formula evaluation
+const math = create(all, {});
+
 export function calculateMetric(
   metric: CustomMetric,
   inputValues: Record<string, number>
@@ -1036,14 +1042,23 @@ export function calculateMetric(
     throw new Error("Metric is not calculated");
   }
 
-  // Parse and evaluate formula safely
+  // Parse and evaluate formula safely using math.js
   const formula = metric.calculationFormula;
   const scope = inputValues;
 
-  // Use math.js for safe formula evaluation
-  const result = evaluate(formula, scope);
+  // Safe formula evaluation with math.js (prevents code injection)
+  try {
+    const result = math.evaluate(formula, scope);
 
-  return result;
+    if (typeof result !== 'number' || !isFinite(result)) {
+      throw new Error('Formula must evaluate to a finite number');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Formula evaluation error:', error);
+    throw new Error(`Invalid formula: ${error.message}`);
+  }
 }
 
 // Example formula definition
@@ -1442,6 +1457,434 @@ setupBranchProtection();
 # API routes
 /server/routes/ @johnahull @backend-team
 ```
+
+---
+
+## Monitoring & Observability Agent
+
+### Example 1: Sentry Integration for Error Tracking
+
+**Scenario:** Setup production error tracking with Sentry to monitor crashes, exceptions, and user-reported issues.
+
+**Prompt:**
+```
+Setup Sentry error tracking for AthleteMetrics production environment.
+
+Requirements:
+- Install and configure Sentry SDK for both frontend and backend
+- Capture unhandled errors and promise rejections
+- Track user context (org, role, user ID)
+- Set up release tracking for deployments
+- Configure source maps for readable stack traces
+- Add custom error boundaries for React components
+- Create alerts for high-priority errors (auth, data loss)
+- Exclude PII from error reports
+- Setup rate limiting to prevent quota exhaustion
+
+Environment: Production Railway deployment
+```
+
+**Agent Actions:**
+
+1. **Install Dependencies**
+```bash
+npm install @sentry/react @sentry/node @sentry/tracing
+```
+
+2. **Frontend Configuration** (`client/src/sentry.ts`)
+```typescript
+import * as Sentry from "@sentry/react";
+import { BrowserTracing } from "@sentry/tracing";
+
+if (import.meta.env.PROD) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    integrations: [
+      new BrowserTracing({
+        tracePropagationTargets: ["localhost", /^https:\/\/api\.athletemetrics\.com/],
+      }),
+    ],
+    tracesSampleRate: 0.1, // 10% of transactions
+    environment: import.meta.env.MODE,
+    release: `athletemetrics@${import.meta.env.VITE_APP_VERSION}`,
+
+    // Exclude PII
+    beforeSend(event, hint) {
+      // Remove sensitive data
+      if (event.request) {
+        delete event.request.cookies;
+      }
+      return event;
+    },
+
+    // User context (without PII)
+    beforeSendTransaction(event) {
+      // Add user context if authenticated
+      const user = getCurrentUser();
+      if (user) {
+        event.contexts = {
+          ...event.contexts,
+          user: {
+            id: user.id,
+            role: user.role,
+            orgId: user.organizationId,
+          },
+        };
+      }
+      return event;
+    },
+  });
+}
+```
+
+3. **Backend Configuration** (`server/sentry.ts`)
+```typescript
+import * as Sentry from "@sentry/node";
+import { ProfilingIntegration } from "@sentry/profiling-node";
+
+export function initSentry() {
+  if (process.env.NODE_ENV === "production") {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      integrations: [
+        new ProfilingIntegration(),
+      ],
+      tracesSampleRate: 0.1,
+      profilesSampleRate: 0.1,
+      environment: process.env.NODE_ENV,
+      release: `athletemetrics@${process.env.npm_package_version}`,
+
+      // Filter sensitive routes
+      beforeSend(event) {
+        // Don't capture /api/login or /api/register errors
+        if (event.request?.url?.includes('/login') ||
+            event.request?.url?.includes('/register')) {
+          return null;
+        }
+        return event;
+      },
+    });
+  }
+}
+```
+
+4. **Express Middleware** (`server/index.ts`)
+```typescript
+import * as Sentry from "@sentry/node";
+import { initSentry } from "./sentry";
+
+initSentry();
+
+// Request handler must be first middleware
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
+// ... your routes ...
+
+// Error handler must be last middleware
+app.use(Sentry.Handlers.errorHandler());
+```
+
+5. **React Error Boundary** (`client/src/App.tsx`)
+```typescript
+import * as Sentry from "@sentry/react";
+
+function FallbackComponent({ error, resetError }: { error: Error; resetError: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen">
+      <h1 className="text-2xl font-bold mb-4">Something went wrong</h1>
+      <p className="text-gray-600 mb-4">{error.message}</p>
+      <Button onClick={resetError}>Try again</Button>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Sentry.ErrorBoundary fallback={FallbackComponent} showDialog>
+      <Router>
+        {/* Your app routes */}
+      </Router>
+    </Sentry.ErrorBoundary>
+  );
+}
+```
+
+6. **Environment Variables** (`.env.production`)
+```bash
+# Sentry Configuration
+VITE_SENTRY_DSN=https://abc123@o123456.ingest.sentry.io/789
+SENTRY_DSN=https://abc123@o123456.ingest.sentry.io/789
+VITE_APP_VERSION=1.2.0
+```
+
+7. **Alert Configuration** (Sentry Dashboard)
+- **Critical Errors**: Authentication failures, database connection errors
+  - Trigger: >5 errors in 5 minutes
+  - Notify: Slack #alerts + Email
+- **Data Loss**: Failed measurement saves, import failures
+  - Trigger: Any occurrence
+  - Notify: Slack #urgent + PagerDuty
+- **Performance Degradation**: P95 response time >2s
+  - Trigger: Sustained for 10 minutes
+  - Notify: Slack #performance
+
+**Outcome:**
+✅ Sentry integrated for frontend and backend
+✅ Error tracking with user context (no PII)
+✅ Source maps uploaded for readable stack traces
+✅ Critical alerts configured
+✅ 10% transaction sampling (cost-effective)
+✅ PII automatically filtered
+
+**Monitoring Dashboard:**
+- **Error Rate**: 0.2% (baseline)
+- **P95 Response Time**: 180ms
+- **Affected Users**: Real-time tracking
+- **Release Health**: Version comparison
+
+---
+
+### Example 2: APM and Performance Monitoring
+
+**Scenario:** Identify and monitor performance bottlenecks in production, particularly for the analytics dashboard which has been reported as slow.
+
+**Prompt:**
+```
+Setup comprehensive performance monitoring for AthleteMetrics to identify slow queries and bottlenecks.
+
+Focus Areas:
+- Analytics dashboard (reported slow)
+- Database query performance
+- API endpoint response times
+- Frontend rendering performance
+- User experience metrics (Core Web Vitals)
+
+Requirements:
+- Setup lightweight APM solution (avoid DataDog's high cost)
+- Monitor database query performance
+- Track API endpoint latency (P50, P95, P99)
+- Identify N+1 query problems
+- Monitor Core Web Vitals (LCP, FID, CLS)
+- Create performance regression alerts
+- Cost-effective solution (prefer open-source or cheap options)
+```
+
+**Agent Actions:**
+
+1. **Choose APM Stack**
+```
+Recommendation: Sentry Performance + Custom DB Logging
+- Sentry Performance: $26/month (already have Sentry)
+- Custom query logging: Free
+- Grafana Cloud Free Tier: 10k series
+```
+
+2. **Sentry Performance Monitoring** (Already integrated from Example 1)
+```typescript
+// Additional configuration for performance
+import * as Sentry from "@sentry/react";
+
+Sentry.init({
+  // ... existing config ...
+  integrations: [
+    new BrowserTracing({
+      routingInstrumentation: Sentry.reactRouterV6Instrumentation(
+        React.useEffect,
+        useLocation,
+        useNavigationType,
+        createRoutesFromChildren,
+        matchRoutes,
+      ),
+    }),
+  ],
+  tracesSampleRate: 0.1, // 10% for performance monitoring
+});
+```
+
+3. **Custom Database Query Logging** (`server/db/logger.ts`)
+```typescript
+import { db } from "./index";
+import * as Sentry from "@sentry/node";
+
+export function logSlowQuery(query: string, duration: number, params?: any) {
+  // Log queries slower than 500ms
+  if (duration > 500) {
+    console.warn(`[SLOW QUERY] ${duration}ms: ${query}`, params);
+
+    // Track in Sentry as breadcrumb
+    Sentry.addBreadcrumb({
+      category: "database",
+      message: `Slow query: ${query}`,
+      level: "warning",
+      data: {
+        duration,
+        params,
+      },
+    });
+  }
+}
+
+// Wrap database queries
+export async function timedQuery<T>(
+  queryFn: () => Promise<T>,
+  queryName: string,
+): Promise<T> {
+  const start = performance.now();
+  try {
+    const result = await queryFn();
+    const duration = performance.now() - start;
+    logSlowQuery(queryName, duration);
+    return result;
+  } catch (error) {
+    const duration = performance.now() - start;
+    Sentry.captureException(error, {
+      contexts: {
+        query: {
+          name: queryName,
+          duration,
+        },
+      },
+    });
+    throw error;
+  }
+}
+```
+
+4. **Instrument Analytics Queries** (`server/routes/analytics.ts`)
+```typescript
+import { timedQuery } from "../db/logger";
+
+// Before (slow query)
+router.get("/api/analytics/team/:teamId", async (req, res) => {
+  const measurements = await db.query.measurements.findMany({
+    where: eq(measurements.teamId, req.params.teamId),
+    with: {
+      athlete: true,
+      team: true,
+    },
+  });
+  // ... more logic
+});
+
+// After (instrumented)
+router.get("/api/analytics/team/:teamId", async (req, res) => {
+  const measurements = await timedQuery(
+    () => db.query.measurements.findMany({
+      where: eq(measurements.teamId, req.params.teamId),
+      with: {
+        athlete: true,
+        team: true,
+      },
+    }),
+    "analytics.team.measurements",
+  );
+  // ... more logic
+});
+```
+
+5. **Core Web Vitals Tracking** (`client/src/monitoring/web-vitals.ts`)
+```typescript
+import { onCLS, onFID, onLCP } from 'web-vitals';
+import * as Sentry from "@sentry/react";
+
+function sendToAnalytics({ name, delta, id }: { name: string; delta: number; id: string }) {
+  // Track in Sentry
+  Sentry.setMeasurement(name, delta, 'millisecond');
+
+  // Log poor scores
+  if (name === 'LCP' && delta > 2500) {
+    console.warn(`Poor LCP: ${delta}ms`);
+  }
+  if (name === 'FID' && delta > 100) {
+    console.warn(`Poor FID: ${delta}ms`);
+  }
+  if (name === 'CLS' && delta > 0.1) {
+    console.warn(`Poor CLS: ${delta}`);
+  }
+}
+
+onCLS(sendToAnalytics);
+onFID(sendToAnalytics);
+onLCP(sendToAnalytics);
+```
+
+6. **Performance Regression Alerts** (Sentry Dashboard)
+```yaml
+Alert Rules:
+  - name: "Slow Analytics Endpoint"
+    conditions:
+      - metric: p95(transaction.duration)
+      - filter: transaction:"GET /api/analytics/*"
+      - threshold: > 2000ms
+    frequency: 5 minutes
+    actions:
+      - Slack: #performance
+
+  - name: "Database Query Slowdown"
+    conditions:
+      - metric: avg(span.duration)
+      - filter: span.op:"db.query"
+      - threshold: > 500ms
+    frequency: 10 minutes
+    actions:
+      - Email: dev-team@athletemetrics.com
+
+  - name: "Poor Core Web Vitals"
+    conditions:
+      - metric: p75(measurements.lcp)
+      - threshold: > 2500ms
+    frequency: 1 hour
+    actions:
+      - Slack: #frontend-team
+```
+
+7. **Performance Dashboard** (Grafana/Sentry)
+```
+Key Metrics:
+├── API Performance
+│   ├── P50, P95, P99 latency by endpoint
+│   ├── Throughput (requests/second)
+│   ├── Error rate (%)
+│   └── Slow query count (>500ms)
+├── Database Performance
+│   ├── Query duration (avg, p95, p99)
+│   ├── Connection pool usage
+│   ├── Slow queries (>500ms)
+│   └── N+1 query detection
+├── Frontend Performance
+│   ├── LCP (Largest Contentful Paint)
+│   ├── FID (First Input Delay)
+│   ├── CLS (Cumulative Layout Shift)
+│   └── Bundle size
+└── User Experience
+    ├── Page load time
+    ├── Time to interactive
+    └── Session duration
+```
+
+**Results After Implementation:**
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Analytics Dashboard Load | 3.2s | 0.8s | **75% faster** |
+| P95 API Latency | 1200ms | 380ms | **68% faster** |
+| Slow Queries (>500ms) | 24/day | 2/day | **92% reduction** |
+| LCP Score | 3.1s (Poor) | 1.8s (Good) | **42% faster** |
+
+**Key Findings:**
+1. ✅ **N+1 Query Identified**: Analytics dashboard was making 150+ queries
+   - Fixed with: Drizzle `.with()` for eager loading
+2. ✅ **Missing Index**: `measurements.teamId` was not indexed
+   - Added: Index on `(teamId, measurementDate)`
+3. ✅ **Over-fetching**: Fetching all athlete data when only names needed
+   - Fixed: Select only required columns
+
+**Cost:**
+- **Sentry Performance**: $26/month (includes 100k transactions)
+- **Grafana Cloud Free Tier**: $0
+- **Custom Logging**: $0
+- **Total: $26/month** (vs $200+/month for DataDog)
 
 ---
 
