@@ -678,12 +678,14 @@ export async function registerRoutes(app: Express) {
 
   // Generate CSRF token endpoint
   app.get('/api/csrf-token', (req: Request, res: Response) => {
-    const secret = csrfTokens.secretSync();
+    // Reuse existing secret to prevent multi-tab invalidation
+    let secret = (req.session as any)?.csrfSecret;
+    if (!secret) {
+      secret = csrfTokens.secretSync();
+      (req.session as any).csrfSecret = secret;
+    }
+
     const token = csrfTokens.create(secret);
-
-    // Store secret in session
-    (req.session as any).csrfSecret = secret;
-
     res.json({ csrfToken: token });
   });
 

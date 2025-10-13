@@ -17,14 +17,116 @@ interface ApiError extends Error {
   details?: any;
 }
 
+// Constants for CSRF token handling
+const CSRF_TOKEN_CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const CSRF_MAX_RETRIES = 2;
+const CSRF_RETRY_BASE_DELAY_MS = 100;
+
 class ApiClient {
   private baseUrl = '/api';
+  private csrfToken: string | null = null;
+  private csrfTokenExpiry: number = 0;
+  private csrfTokenFetching: Promise<string | null> | null = null;
 
+  /**
+   * Get CSRF token with caching and automatic retry.
+   * Prevents concurrent token fetches using a mutex pattern.
+   * @param retryCount - Current retry attempt (used internally for exponential backoff)
+   * @returns The CSRF token or null if unavailable after retries
+   */
+  private async getCsrfToken(retryCount = 0): Promise<string | null> {
+    // If already fetching, wait for that request to complete
+    if (this.csrfTokenFetching) {
+      return this.csrfTokenFetching;
+    }
+
+    // Return cached token if still valid
+    const now = Date.now();
+    if (this.csrfToken && now < this.csrfTokenExpiry) {
+      return this.csrfToken;
+    }
+
+    // Start fetch and cache the promise to prevent concurrent fetches
+    this.csrfTokenFetching = this._fetchCsrfToken(retryCount);
+    try {
+      const result = await this.csrfTokenFetching;
+      return result;
+    } finally {
+      this.csrfTokenFetching = null;
+    }
+  }
+
+  /**
+   * Internal method to fetch CSRF token from the server.
+   * @param retryCount - Current retry attempt
+   * @returns The CSRF token or null if unavailable
+   */
+  private async _fetchCsrfToken(retryCount: number): Promise<string | null> {
+    const now = Date.now();
+
+    try {
+      const csrfResponse = await fetch('/api/csrf-token', {
+        credentials: 'include',
+      });
+
+      if (csrfResponse.ok) {
+        const { csrfToken } = await csrfResponse.json();
+        // Cache the token
+        this.csrfToken = csrfToken;
+        this.csrfTokenExpiry = now + CSRF_TOKEN_CACHE_DURATION_MS;
+        return csrfToken;
+      }
+
+      // Log non-OK responses for debugging (only in development)
+      if (import.meta.env.DEV) {
+        console.warn(`CSRF token fetch returned status ${csrfResponse.status}: ${csrfResponse.statusText}`);
+      }
+
+      // Retry on 5xx errors
+      if (csrfResponse.status >= 500 && retryCount < CSRF_MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, CSRF_RETRY_BASE_DELAY_MS * (retryCount + 1)));
+        return this._fetchCsrfToken(retryCount + 1);
+      }
+    } catch (error) {
+      // Log network errors (only in development)
+      if (import.meta.env.DEV) {
+        console.warn('Failed to fetch CSRF token:', error);
+      }
+
+      // Retry on network errors
+      if (retryCount < CSRF_MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, CSRF_RETRY_BASE_DELAY_MS * (retryCount + 1)));
+        return this._fetchCsrfToken(retryCount + 1);
+      }
+    }
+
+    // Clear cache on failure
+    this.csrfToken = null;
+    this.csrfTokenExpiry = 0;
+    return null;
+  }
+
+  /**
+   * Clear the cached CSRF token.
+   * Useful when token becomes invalid (e.g., after 403 response or logout).
+   * The token will be automatically refetched on the next state-changing request.
+   */
+  clearCsrfTokenCache(): void {
+    this.csrfToken = null;
+    this.csrfTokenExpiry = 0;
+  }
+
+  /**
+   * Handle API response, extracting error information and parsing JSON.
+   * @param response - The fetch Response object
+   * @returns Promise resolving to the parsed response data
+   * @throws ApiError with status code and details
+   */
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const error = new Error(`API Error: ${response.statusText}`) as ApiError;
       error.status = response.status;
-      
+
       try {
         const errorData = await response.json();
         error.details = errorData;
@@ -32,16 +134,62 @@ class ApiClient {
       } catch {
         // Response doesn't contain JSON
       }
-      
+
+      // Clear CSRF token cache on 403 Forbidden (likely invalid token)
+      if (response.status === 403) {
+        this.clearCsrfTokenCache();
+      }
+
+      // Enhanced 429 rate limit error message
+      if (response.status === 429) {
+        const rateLimitReset = response.headers.get('RateLimit-Reset');
+        const retryAfter = response.headers.get('Retry-After');
+
+        if (rateLimitReset && !isNaN(parseInt(rateLimitReset))) {
+          const resetTime = new Date(parseInt(rateLimitReset) * 1000);
+          const now = new Date();
+          const minutesUntilReset = Math.ceil((resetTime.getTime() - now.getTime()) / 60000);
+          if (minutesUntilReset > 0) {
+            error.message = `Rate limit exceeded. Please try again in ${minutesUntilReset} minute${minutesUntilReset !== 1 ? 's' : ''}.`;
+          } else {
+            error.message = 'Rate limit exceeded. Please try again shortly.';
+          }
+        } else if (retryAfter && !isNaN(parseInt(retryAfter))) {
+          const seconds = parseInt(retryAfter);
+          const minutes = Math.ceil(seconds / 60);
+          error.message = `Rate limit exceeded. Please try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`;
+        } else {
+          error.message = error.message || 'Rate limit exceeded. Please try again later.';
+        }
+      }
+
       throw error;
     }
-    
+
     return response.json();
   }
 
+  /**
+   * Add CSRF token to request headers for state-changing operations.
+   * Throws error if CSRF token cannot be obtained.
+   */
+  private async addCsrfHeader(headers: Record<string, string>): Promise<void> {
+    const csrfToken = await this.getCsrfToken();
+    if (!csrfToken) {
+      throw new Error('Failed to obtain CSRF protection token. Please refresh the page and try again.');
+    }
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+
+  /**
+   * Send a GET request.
+   * @param endpoint - API endpoint path
+   * @param filters - Optional query parameters to filter the results
+   * @returns Promise resolving to the response data
+   */
   async get<T>(endpoint: string, filters?: ApiFilters): Promise<T> {
     const url = new URL(`${this.baseUrl}${endpoint}`, window.location.origin);
-    
+
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -57,49 +205,90 @@ class ApiClient {
     const response = await fetch(url.toString(), {
       credentials: 'include' // Important for session cookies
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
+  /**
+   * Send a POST request with CSRF protection.
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
   async post<T>(endpoint: string, data: any): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    await this.addCsrfHeader(headers);
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
+  /**
+   * Send a PUT request with CSRF protection.
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
   async put<T>(endpoint: string, data: any): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    await this.addCsrfHeader(headers);
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
+  /**
+   * Send a PATCH request with CSRF protection.
+   * @param endpoint - API endpoint path
+   * @param data - Request body data (will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
   async patch<T>(endpoint: string, data: any): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    await this.addCsrfHeader(headers);
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify(data),
     });
-    
+
     return this.handleResponse<T>(response);
   }
 
-  async delete<T = void>(endpoint: string): Promise<T> {
+  /**
+   * Send a DELETE request.
+   * @param endpoint - API endpoint path
+   * @param data - Optional request body (if provided, will be sent as JSON)
+   * @returns Promise resolving to the response data
+   */
+  async delete<T = void>(endpoint: string, data?: Record<string, unknown>): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (data) {
+      headers['Content-Type'] = 'application/json';
+    }
+    await this.addCsrfHeader(headers);
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       method: 'DELETE',
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       credentials: 'include',
+      body: data ? JSON.stringify(data) : undefined,
     });
-    
+
     return this.handleResponse<T>(response);
   }
 }
@@ -122,6 +311,11 @@ export const queries = {
   organizationProfile: (id: string) => ({
     queryKey: ['organizations', id, 'profile'],
     queryFn: () => apiClient.get(`/organizations/${id}/profile`),
+  }),
+
+  organizationDependencies: (id: string) => ({
+    queryKey: ['organizations', id, 'dependencies'],
+    queryFn: () => apiClient.get<{ users: number; teams: number; measurements: number }>(`/organizations/${id}/dependencies`),
   }),
 
   myOrganizations: () => ({
@@ -217,7 +411,10 @@ export const mutations = {
   // Organizations
   createOrganization: (data: any) => apiClient.post('/organizations', data),
   updateOrganization: (id: string, data: any) => apiClient.put(`/organizations/${id}`, data),
-  deleteOrganization: (id: string) => apiClient.delete(`/organizations/${id}`),
+  deactivateOrganization: (id: string) => apiClient.patch(`/organizations/${id}/status`, { isActive: false }),
+  reactivateOrganization: (id: string) => apiClient.patch(`/organizations/${id}/status`, { isActive: true }),
+  deleteOrganization: (id: string, confirmationName: string) =>
+    apiClient.delete(`/organizations/${id}`, { confirmationName }),
 
   // Teams
   createTeam: (data: any) => apiClient.post('/teams', data),
