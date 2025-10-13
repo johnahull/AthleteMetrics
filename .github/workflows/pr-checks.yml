@@ -32,7 +32,7 @@ jobs:
         run: npm run check
 
   tests:
-    name: Unit Tests (No Database)
+    name: Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -87,6 +87,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate test credentials
+        run: |
+          # Generate cryptographically secure random password for each test run
+          # Ensures password is never stored in git history or visible in logs
+          TEST_PASS="$(openssl rand -base64 12)Aa1!"
+          echo "ADMIN_PASSWORD=${TEST_PASS}" >> "$GITHUB_ENV"
+          echo "✅ Generated secure test credentials"
+
+      - name: Run database migrations
+        run: npm run db:push
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+
       - name: Run integration tests
         run: npm run test:integration
         env:
@@ -95,7 +108,7 @@ jobs:
           SESSION_SECRET: test-secret-key-for-ci
           ADMIN_USER: admin
           ADMIN_EMAIL: admin@test.com
-          ADMIN_PASSWORD: test-password-12-chars
+          ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
 
   build:
     name: Build Verification

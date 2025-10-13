@@ -72,8 +72,13 @@ const client = postgres(DATABASE_URL, {
 
 const db = drizzle(client, { schema });
 
-// Only export db for application use
+// Export db for application use
 export { db };
+
+// Export raw postgres client for connect-pg-simple (requires Pool interface)
+// This is needed because connect-pg-simple expects methods like query(), connect(), end()
+// which are not available on the Drizzle wrapper
+export { client as pgClient };
 
 // Export cleanup function instead of raw client to prevent misuse
 export async function closeDatabase() {

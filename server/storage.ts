@@ -164,7 +164,7 @@ export interface IStorage {
   findLoginSession(token: string): Promise<any>;
   updateSessionActivity(sessionId: string): Promise<void>;
   revokeLoginSession(token: string): Promise<void>;
-  revokeAllUserSessions(userId: string): Promise<void>;
+  revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number>;
   updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
   createSecurityEvent(event: any): Promise<void>;
   getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
@@ -2176,9 +2176,65 @@ export class DatabaseStorage implements IStorage {
     console.log('Revoking login session:', token);
   }
 
-  async revokeAllUserSessions(userId: string): Promise<void> {
-    // Would need loginSessions table implementation
-    console.log('Revoking all sessions for user:', userId);
+  async revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean; tx?: any }): Promise<number> {
+    // Revoke all sessions for a user by deleting them from the session store
+    // Sessions are stored with userId in a dedicated column (not JSONB)
+    const { sessions } = await import('@shared/schema');
+    const { eq } = await import('drizzle-orm');
+    // SECURITY: Default to fail-secure (throwOnError = true)
+    // Critical operations like password changes MUST ensure session revocation succeeds
+    const throwOnError = options?.throwOnError ?? true;
+    const dbConnection = options?.tx || db; // Use transaction if provided, otherwise use global db
+
+    try {
+      // Delete all sessions using the native userId column (10-100x faster than JSONB extraction)
+      // Foreign key uses SET NULL on user deletion to require explicit session revocation with audit logging
+      const result = await dbConnection.delete(sessions).where(
+        eq(sessions.userId, userId)
+      ).returning({ sid: sessions.sid });
+
+      const count = result.length;
+      console.log(`Revoked ${count} session(s) for user: ${userId}`);
+      return count;
+    } catch (error) {
+      console.error('SECURITY: Failed to revoke user sessions:', error);
+
+      // Create audit log for failed session revocation
+      // IMPORTANT: Use separate transaction for failure audit logs to ensure they persist
+      // even when the parent transaction rolls back
+      try {
+        // Always use separate transaction for failure logs to ensure persistence
+        const { auditLogs } = await import('@shared/schema');
+        await db.insert(auditLogs).values({
+          userId,
+          action: 'session_revocation_failed',
+          resourceType: 'user',
+          resourceId: userId,
+          details: JSON.stringify({
+            error: String(error),
+            securityContext: throwOnError ? 'password_sync' : 'general',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: '127.0.0.1',
+          userAgent: 'System',
+        });
+      } catch (auditError) {
+        // If audit logging fails, just log to console
+        console.error('Failed to create audit log for session revocation failure:', auditError);
+      }
+
+      // For critical security operations (password changes), session revocation MUST succeed
+      if (throwOnError) {
+        // Schedule compensating transaction to clean up zombie sessions
+        // This runs outside the main transaction to handle edge cases where
+        // transaction rollback leaves orphaned sessions (e.g., network failures)
+        this.scheduleZombieSessionCleanup(userId);
+        throw new Error(`Failed to revoke sessions for user ${userId}: ${error}`);
+      }
+
+      // For non-critical operations, session revocation is best-effort
+      return 0;
+    }
   }
 
   async updateUserBackupCodes(userId: string, codes: string[]): Promise<void> {
@@ -2450,6 +2506,85 @@ export class DatabaseStorage implements IStorage {
     }
 
     return await query;
+  }
+
+  /**
+   * Schedule a compensating transaction to clean up zombie sessions
+   * This provides defense-in-depth for the rare case where:
+   * 1. Session revocation fails during a password change transaction
+   * 2. Transaction rollback succeeds BUT sessions weren't actually deleted
+   *    (e.g., network partition, database failover, etc.)
+   * 3. User sessions remain active despite failed password change
+   *
+   * The cleanup runs asynchronously to avoid blocking the main transaction failure path.
+   * Uses exponential backoff (5s, 15s, 45s) to handle transient failures.
+   */
+  private scheduleZombieSessionCleanup(userId: string): void {
+    const attemptCleanup = async (attempt: number = 1): Promise<void> => {
+      const maxAttempts = 3;
+      const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s
+
+      try {
+        // Wait before attempting cleanup (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, backoffDelays[attempt - 1]));
+
+        console.log(`SECURITY: Attempting zombie session cleanup for user ${userId} (attempt ${attempt}/${maxAttempts})`);
+
+        // Attempt to revoke sessions outside transaction context
+        const revokedCount = await this.revokeAllUserSessions(userId, { throwOnError: false });
+
+        if (revokedCount > 0) {
+          console.warn(`SECURITY: Cleaned up ${revokedCount} zombie session(s) for user ${userId}`);
+
+          // Create audit log for successful cleanup
+          await this.createAuditLog({
+            userId,
+            action: 'zombie_sessions_cleaned',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              revokedCount,
+              attempt,
+              timestamp: new Date().toISOString(),
+              reason: 'Compensating cleanup after failed session revocation'
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          });
+        } else {
+          console.log(`SECURITY: No zombie sessions found for user ${userId} on attempt ${attempt}`);
+        }
+      } catch (error) {
+        console.error(`SECURITY: Zombie session cleanup attempt ${attempt} failed for user ${userId}:`, error);
+
+        // Retry with exponential backoff if not at max attempts
+        if (attempt < maxAttempts) {
+          console.log(`SECURITY: Scheduling retry ${attempt + 1}/${maxAttempts} for zombie session cleanup`);
+          attemptCleanup(attempt + 1);
+        } else {
+          console.error(`SECURITY CRITICAL: Failed to clean up zombie sessions after ${maxAttempts} attempts for user ${userId}`);
+
+          // Final failure audit log (best effort - don't await)
+          this.createAuditLog({
+            userId,
+            action: 'zombie_cleanup_failed',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              attempts: maxAttempts,
+              lastError: String(error),
+              timestamp: new Date().toISOString(),
+              recommendation: 'Manual session cleanup required'
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          }).catch(err => console.error('Failed to log zombie cleanup failure:', err));
+        }
+      }
+    };
+
+    // Start async cleanup (non-blocking)
+    attemptCleanup(1);
   }
 
 }

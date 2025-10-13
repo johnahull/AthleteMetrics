@@ -113,6 +113,14 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
+      - name: Run session table migration (idempotent)
+        run: |
+          echo "Running session table migration..."
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} -- bash -c "psql \"\$DATABASE_URL\" -f scripts/migrate-session-table.sql"
+          echo "✅ Session table migration completed"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
       - name: Get current deployment ID (for rollback)
         id: current-deploy
         run: |
