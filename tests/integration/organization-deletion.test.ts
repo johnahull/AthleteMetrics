@@ -385,7 +385,7 @@ describe('Organization Deletion and Deactivation', () => {
           `Has Users Org ${timestamp}`,
           siteAdminUser.id
         );
-      }).rejects.toThrow(/Cannot delete organization with active users/i);
+      }).rejects.toThrow(/Cannot delete organization with active dependencies.*users/i);
 
       // Cleanup
       await storage.removeUserFromOrganization(user.id, org.id);
@@ -414,7 +414,7 @@ describe('Organization Deletion and Deactivation', () => {
           `Has Teams Org ${timestamp}`,
           siteAdminUser.id
         );
-      }).rejects.toThrow(/Cannot delete organization with active teams/i);
+      }).rejects.toThrow(/Cannot delete organization with active dependencies.*teams/i);
 
       // Cleanup
       await storage.deleteTeam(team.id);
@@ -454,7 +454,7 @@ describe('Organization Deletion and Deactivation', () => {
           `Has Measurements Org ${timestamp}`,
           siteAdminUser.id
         );
-      }).rejects.toThrow(/Cannot delete organization with measurements/i);
+      }).rejects.toThrow(/Cannot delete organization with active dependencies.*measurements/i);
 
       // Cleanup
       await storage.deleteMeasurement(measurement.id);
