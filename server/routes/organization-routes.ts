@@ -31,10 +31,15 @@ const userDeleteLimiter = rateLimit({
 // Rate limiting for organization deletion operations
 const orgDeleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5, // Limit each IP to 5 organization deletion requests per windowMs (very conservative)
+  limit: 5, // Limit each IP+user to 5 organization deletion requests per windowMs (very conservative)
   message: { message: "Too many organization deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  // Combine IP and user ID to prevent bypass via IP spoofing
+  keyGenerator: (req) => {
+    const userId = req.session?.user?.id;
+    return userId ? `${req.ip}-${userId}` : req.ip;
+  },
 });
 
 export function registerOrganizationRoutes(app: Express) {
@@ -234,11 +239,17 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "isActive must be a boolean" });
       }
 
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
       if (isActive) {
-        await organizationService.reactivateOrganization(organizationId, req.session.user!.id);
+        await organizationService.reactivateOrganization(organizationId, req.session.user!.id, context);
         res.json({ message: "Organization reactivated successfully" });
       } else {
-        await organizationService.deactivateOrganization(organizationId, req.session.user!.id);
+        await organizationService.deactivateOrganization(organizationId, req.session.user!.id, context);
         res.json({ message: "Organization deactivated successfully" });
       }
     } catch (error) {
@@ -255,9 +266,17 @@ export function registerOrganizationRoutes(app: Express) {
   app.get("/api/organizations/:id/dependencies", requireSiteAdmin, async (req, res) => {
     try {
       const organizationId = req.params.id;
+
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
       const counts = await organizationService.getOrganizationDependencyCounts(
         organizationId,
-        req.session.user!.id
+        req.session.user!.id,
+        context
       );
       res.json(counts);
     } catch (error) {
@@ -281,10 +300,17 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Confirmation name is required" });
       }
 
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
       await organizationService.deleteOrganization(
         organizationId,
         confirmationName,
-        req.session.user!.id
+        req.session.user!.id,
+        context
       );
 
       res.json({ message: "Organization deleted successfully" });

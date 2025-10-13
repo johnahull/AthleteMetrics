@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { EnhancedUser, ImpersonationStatus, UserOrganization } from './types/user';
+import { apiClient } from './api';
 
 interface AuthContextType {
   user: EnhancedUser | null;
@@ -191,6 +192,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserOrganizations(null);
       setOrganizationContext(null);
       setImpersonationStatus(null);
+      // Clear CSRF token cache to prevent session desync on re-login
+      apiClient.clearCsrfTokenCache();
       setLocation('/login');
     } catch (error) {
       console.error('Logout failed:', error);
@@ -198,6 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserOrganizations(null);
       setOrganizationContext(null);
       setImpersonationStatus(null);
+      // Clear CSRF token cache even on error
+      apiClient.clearCsrfTokenCache();
       setLocation('/login');
     }
   };

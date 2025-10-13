@@ -308,7 +308,8 @@ export class OrganizationService extends BaseService {
    */
   async deactivateOrganization(
     organizationId: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
   ): Promise<void> {
     try {
       // Verify permissions
@@ -325,15 +326,15 @@ export class OrganizationService extends BaseService {
       // Deactivate organization
       await this.storage.deactivateOrganization(organizationId);
 
-      // Create audit log
+      // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_deactivated',
         resourceType: 'organization',
         resourceId: organizationId,
         details: JSON.stringify({ organizationName: org.name }),
-        ipAddress: null,
-        userAgent: null,
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
       });
     } catch (error) {
       console.error("OrganizationService.deactivateOrganization:", error);
@@ -346,7 +347,8 @@ export class OrganizationService extends BaseService {
    */
   async reactivateOrganization(
     organizationId: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
   ): Promise<void> {
     try {
       // Verify permissions
@@ -363,15 +365,15 @@ export class OrganizationService extends BaseService {
       // Reactivate organization
       await this.storage.reactivateOrganization(organizationId);
 
-      // Create audit log
+      // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_reactivated',
         resourceType: 'organization',
         resourceId: organizationId,
         details: JSON.stringify({ organizationName: org.name }),
-        ipAddress: null,
-        userAgent: null,
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
       });
     } catch (error) {
       console.error("OrganizationService.reactivateOrganization:", error);
@@ -386,7 +388,8 @@ export class OrganizationService extends BaseService {
   async deleteOrganization(
     organizationId: string,
     confirmationName: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
   ): Promise<void> {
     try {
       // Verify permissions
@@ -400,38 +403,35 @@ export class OrganizationService extends BaseService {
         throw new Error("Organization not found");
       }
 
-      // Verify confirmation name matches
-      if (confirmationName !== org.name) {
+      // Validate confirmation name type and length to prevent DoS
+      if (!confirmationName || typeof confirmationName !== 'string') {
+        throw new Error("Confirmation name is required");
+      }
+
+      if (confirmationName.length > 255) {
+        throw new Error("Confirmation name too long");
+      }
+
+      // Verify confirmation name matches (case-insensitive with trimming for better UX)
+      if (confirmationName.trim().toLowerCase() !== org.name.trim().toLowerCase()) {
         throw new Error("Organization name confirmation does not match");
       }
 
-      // Check for dependencies
-      const counts = await this.storage.getOrganizationDependencyCounts(organizationId);
-
-      if (counts.users > 0 || counts.teams > 0 || counts.measurements > 0) {
-        const errors = [];
-        if (counts.users > 0) errors.push(`${counts.users} users`);
-        if (counts.teams > 0) errors.push(`${counts.teams} teams`);
-        if (counts.measurements > 0) errors.push(`${counts.measurements} measurements`);
-
-        throw new Error(
-          `Cannot delete organization with active dependencies: ${errors.join(', ')}. ` +
-          `Please remove all users, teams, and measurements first, or use deactivation instead.`
-        );
-      }
-
-      // Delete organization
+      // Delete organization (transaction with race condition protection is handled in storage layer)
       await this.storage.deleteOrganization(organizationId);
 
-      // Create audit log
+      // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_deleted',
         resourceType: 'organization',
         resourceId: organizationId,
-        details: JSON.stringify({ organizationName: org.name }),
-        ipAddress: null,
-        userAgent: null,
+        details: JSON.stringify({
+          organizationName: org.name,
+          confirmationProvided: true
+        }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
       });
     } catch (error) {
       console.error("OrganizationService.deleteOrganization:", error);
@@ -444,7 +444,8 @@ export class OrganizationService extends BaseService {
    */
   async getOrganizationDependencyCounts(
     organizationId: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
   ): Promise<{ users: number; teams: number; measurements: number }> {
     try {
       // Verify permissions
@@ -458,7 +459,23 @@ export class OrganizationService extends BaseService {
         throw new Error("Organization not found");
       }
 
-      return await this.storage.getOrganizationDependencyCounts(organizationId);
+      const counts = await this.storage.getOrganizationDependencyCounts(organizationId);
+
+      // Create audit log for security monitoring
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_dependencies_viewed',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({
+          organizationName: org.name,
+          counts
+        }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
+      });
+
+      return counts;
     } catch (error) {
       console.error("OrganizationService.getOrganizationDependencyCounts:", error);
       throw error;

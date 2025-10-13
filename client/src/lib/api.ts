@@ -72,9 +72,9 @@ class ApiClient {
   }
 
   /**
-   * Clear the cached CSRF token. Useful when token becomes invalid (e.g., after 403 response).
+   * Clear the cached CSRF token. Useful when token becomes invalid (e.g., after 403 response or logout).
    */
-  private clearCsrfTokenCache(): void {
+  clearCsrfTokenCache(): void {
     this.csrfToken = null;
     this.csrfTokenExpiry = 0;
   }

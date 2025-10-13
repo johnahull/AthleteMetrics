@@ -471,7 +471,46 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOrganization(id: string): Promise<void> {
-    await db.delete(organizations).where(eq(organizations.id, id));
+    // Use transaction with row-level locking to prevent race conditions
+    await db.transaction(async (tx: any) => {
+      // 1. Lock the organization row to prevent concurrent modifications
+      const org = await tx.select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .for('update'); // Row-level lock
+
+      if (!org || org.length === 0) {
+        throw new Error("Organization not found");
+      }
+
+      // 2. Re-check dependencies inside transaction (TOCTOU protection)
+      const usersResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, id));
+      const usersCount = Number(usersResult[0]?.count || 0);
+
+      const teamsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(teams)
+        .where(eq(teams.organizationId, id));
+      const teamsCount = Number(teamsResult[0]?.count || 0);
+
+      const measurementsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(measurements)
+        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+        .where(eq(userOrganizations.organizationId, id));
+      const measurementsCount = Number(measurementsResult[0]?.count || 0);
+
+      if (usersCount > 0 || teamsCount > 0 || measurementsCount > 0) {
+        const errors = [];
+        if (usersCount > 0) errors.push(`${usersCount} users`);
+        if (teamsCount > 0) errors.push(`${teamsCount} teams`);
+        if (measurementsCount > 0) errors.push(`${measurementsCount} measurements`);
+        throw new Error(`Cannot delete organization with active dependencies: ${errors.join(', ')}`);
+      }
+
+      // 3. Delete organization atomically
+      await tx.delete(organizations).where(eq(organizations.id, id));
+    });
   }
 
   async deactivateOrganization(id: string): Promise<void> {
