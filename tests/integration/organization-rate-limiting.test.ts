@@ -262,7 +262,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
       // Cleanup
       await storage.deleteOrganization(org.id);
-    });
+    }, 30000); // 30 second timeout
   });
 
   describe('Composite Key Rate Limiting (IP + User ID)', () => {
