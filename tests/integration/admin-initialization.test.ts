@@ -855,7 +855,7 @@ describe('Admin User Initialization', () => {
 
       // Verify user was deleted
       const deletedUser = await storage.getUserByUsername('test-admin');
-      expect(deletedUser).toBeNull();
+      expect(deletedUser).toBeUndefined();
 
       // Cleanup: Delete the orphaned sessions
       await db.delete(sessions).where(eq(sessions.sid, 'setnull-test-1'));
