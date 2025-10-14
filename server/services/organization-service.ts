@@ -19,18 +19,20 @@ interface UserOrganizationWithOrg extends UserOrganization {
 /**
  * Constant-time string comparison to prevent timing attacks
  * Uses crypto.timingSafeEqual on equal-length buffers
+ * Pads strings to prevent length leakage via timing
  */
 function constantTimeCompare(a: string, b: string): boolean {
   const normalizedA = a.trim().toLowerCase();
   const normalizedB = b.trim().toLowerCase();
 
-  // Early length check (not timing-sensitive as length is public information)
-  if (normalizedA.length !== normalizedB.length) {
-    return false;
-  }
+  // Pad to maximum organization name length (255 chars) to prevent length leakage
+  // This ensures timing is consistent regardless of actual string lengths
+  const maxLen = 255;
+  const paddedA = normalizedA.padEnd(maxLen, '\0');
+  const paddedB = normalizedB.padEnd(maxLen, '\0');
 
-  const bufA = Buffer.from(normalizedA);
-  const bufB = Buffer.from(normalizedB);
+  const bufA = Buffer.from(paddedA);
+  const bufB = Buffer.from(paddedB);
 
   try {
     return crypto.timingSafeEqual(bufA, bufB);
@@ -378,13 +380,16 @@ export class OrganizationService extends BaseService {
       // Deactivate organization
       await this.storage.deactivateOrganization(organizationId);
 
+      // Sanitize organization name for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+
       // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_deactivated',
         resourceType: 'organization',
         resourceId: organizationId,
-        details: JSON.stringify({ organizationName: org.name }),
+        details: JSON.stringify({ organizationName: sanitizedOrgName }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,
       });
@@ -422,13 +427,16 @@ export class OrganizationService extends BaseService {
       // Reactivate organization
       await this.storage.reactivateOrganization(organizationId);
 
+      // Sanitize organization name for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+
       // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_reactivated',
         resourceType: 'organization',
         resourceId: organizationId,
-        details: JSON.stringify({ organizationName: org.name }),
+        details: JSON.stringify({ organizationName: sanitizedOrgName }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,
       });
@@ -525,6 +533,9 @@ export class OrganizationService extends BaseService {
 
       const counts = await this.storage.getOrganizationDependencyCounts(organizationId);
 
+      // Sanitize all user inputs and organization data for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+
       // Create audit log for security monitoring
       await this.storage.createAuditLog({
         userId: requestingUserId,
@@ -532,8 +543,12 @@ export class OrganizationService extends BaseService {
         resourceType: 'organization',
         resourceId: organizationId,
         details: JSON.stringify({
-          organizationName: org.name,
-          counts
+          organizationName: sanitizedOrgName,
+          counts: {
+            users: Number(counts.users),
+            teams: Number(counts.teams),
+            measurements: Number(counts.measurements)
+          }
         }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,

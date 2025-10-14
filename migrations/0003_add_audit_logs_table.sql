@@ -4,20 +4,37 @@
 
 -- Create audit_logs table
 CREATE TABLE IF NOT EXISTS audit_logs (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id VARCHAR,  -- Nullable to preserve audit logs when users are deleted
-  action TEXT NOT NULL,
-  resource_type TEXT,
-  resource_id VARCHAR,
-  details TEXT,
-  ip_address TEXT,
-  user_agent TEXT,
+  id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id VARCHAR(36),  -- Nullable to preserve audit logs when users are deleted
+  action VARCHAR(100) NOT NULL,
+  resource_type VARCHAR(50),
+  resource_id VARCHAR(255),
+  details TEXT,  -- JSON string, can be longer
+  ip_address VARCHAR(45),  -- IPv6 max length is 45 characters
+  user_agent VARCHAR(500),  -- User agents can be long, but limit to prevent abuse
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
   -- Foreign key with ON DELETE SET NULL to preserve audit trail
   -- Audit logs maintain compliance/forensic value even after user deletion
   CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id)
-    REFERENCES users(id) ON DELETE SET NULL
+    REFERENCES users(id) ON DELETE SET NULL,
+
+  -- CHECK constraints for data validation
+  CONSTRAINT audit_logs_action_valid CHECK (action IN (
+    'organization_created', 'organization_deactivated', 'organization_reactivated',
+    'organization_deleted', 'organization_dependencies_viewed', 'site_admin_access',
+    'user_created', 'user_updated', 'user_deleted', 'user_role_changed',
+    'team_created', 'team_updated', 'team_deleted', 'team_archived',
+    'measurement_created', 'measurement_updated', 'measurement_deleted',
+    'invitation_created', 'invitation_accepted', 'invitation_revoked'
+  )),
+
+  CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
+    'organization', 'user', 'team', 'measurement', 'invitation'
+  )),
+
+  -- Prevent abuse: limit details field to 10,000 characters
+  CONSTRAINT audit_logs_details_length CHECK (LENGTH(details) <= 10000)
 );
 
 -- Create index for efficient querying by user and time
@@ -25,6 +42,12 @@ CREATE INDEX IF NOT EXISTS audit_logs_user_time_idx ON audit_logs (user_id, crea
 
 -- Create index for querying by action type
 CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON audit_logs (action, created_at DESC);
+
+-- Create index for querying by resource type and ID (compliance queries)
+CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs (resource_type, resource_id, created_at DESC);
+
+-- Create index for time-based queries (data retention policies)
+CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at DESC);
 
 -- Add comment for documentation
 COMMENT ON TABLE audit_logs IS 'Audit log for security-sensitive operations preserving records after user deletion';
