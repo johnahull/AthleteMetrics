@@ -125,15 +125,15 @@ jobs:
           echo "🚀 Deploying to Railway Production..."
           npm install -g @railway/cli
 
-          # Capture current deployment ID for potential rollback
+          # Capture current deployment ID for potential rollback (BEFORE deploying)
           CURRENT_DEPLOYMENT=$(railway status --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.deployments[0].id' || echo "")
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
-          echo "📝 Current deployment: $CURRENT_DEPLOYMENT"
+          echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
 
           # Run migrations on production database
           railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
 
-          # Deploy the application
+          # Deploy the application (this creates NEW deployment)
           railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
 
           echo "✅ Deployment initiated"
@@ -174,8 +174,8 @@ jobs:
           if [ -n "$PREVIOUS_DEPLOYMENT" ] && [ "$PREVIOUS_DEPLOYMENT" != "null" ]; then
             echo "📝 Rolling back to deployment: $PREVIOUS_DEPLOYMENT"
 
-            # Attempt rollback using Railway CLI
-            railway rollback --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} "$PREVIOUS_DEPLOYMENT" || {
+            # Attempt rollback using Railway CLI v3+ (redeploy previous deployment)
+            railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --detach "$PREVIOUS_DEPLOYMENT" || {
               echo "❌ Automated rollback failed!"
               echo "🔧 Manual intervention required."
               echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
