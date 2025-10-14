@@ -5365,8 +5365,36 @@ export async function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Get all athletes with comprehensive data
-      const athletes = await storage.getAthletes();
+      // Extract organizationId query parameter
+      const { organizationId: requestedOrgId } = req.query;
+
+      // Determine effective organization ID based on user permissions
+      let effectiveOrganizationId: string | undefined;
+
+      if (currentUser.isSiteAdmin) {
+        // Site admins can export from all organizations or a specific one
+        effectiveOrganizationId = requestedOrgId as string | undefined;
+      } else {
+        // Non-site-admin users can only export from their organization(s)
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+
+        if (requestedOrgId) {
+          // Validate user has access to requested organization
+          const hasAccess = userOrgs.some(uo => uo.organizationId === requestedOrgId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "You do not have access to export athletes from this organization"
+            });
+          }
+          effectiveOrganizationId = requestedOrgId as string;
+        } else {
+          // Use user's first organization as default
+          effectiveOrganizationId = userOrgs[0]?.organizationId;
+        }
+      }
+
+      // Get athletes filtered by organization
+      const athletes = await storage.getAthletes({ organizationId: effectiveOrganizationId });
 
       // Transform to CSV format with all database fields
       const csvHeaders = [
@@ -5433,6 +5461,31 @@ export async function registerRoutes(app: Express) {
       // Extract query parameters for filtering
       const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
 
+      // Determine effective organization ID based on user permissions
+      let effectiveOrganizationId: string | undefined;
+
+      if (currentUser.isSiteAdmin) {
+        // Site admins can export from all organizations or a specific one
+        effectiveOrganizationId = organizationId as string | undefined;
+      } else {
+        // Non-site-admin users can only export from their organization(s)
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+
+        if (organizationId) {
+          // Validate user has access to requested organization
+          const hasAccess = userOrgs.some(uo => uo.organizationId === organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "You do not have access to export measurements from this organization"
+            });
+          }
+          effectiveOrganizationId = organizationId as string;
+        } else {
+          // Use user's first organization as default
+          effectiveOrganizationId = userOrgs[0]?.organizationId;
+        }
+      }
+
       const filters: MeasurementFilters = {
         playerId: playerId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
@@ -5446,7 +5499,7 @@ export async function registerRoutes(app: Express) {
         search: search as string,
         sport: sport as string,
         gender: gender as string,
-        organizationId: organizationId as string,
+        organizationId: effectiveOrganizationId,
         includeUnverified: true
       };
 
