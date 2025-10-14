@@ -13,13 +13,21 @@ process.env.ADMIN_USER = 'admin';
 process.env.ADMIN_EMAIL = 'admin@test.com';
 process.env.ADMIN_PASSWORD = 'TestPassword123!';
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
-import { app } from '../../server';
+import express, { type Express } from 'express';
 import { db } from '../../server/db';
 import { organizations, users, userOrganizations, teams, userTeams, measurements, auditLogs } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
+
+// Mock vite module before importing registerRoutes
+vi.mock('../../server/vite.js', () => ({
+  setupVite: vi.fn().mockResolvedValue(undefined),
+  serveStatic: vi.fn()
+}));
+
+import { registerRoutes } from '../../server/routes';
 
 // Helper function for password hashing
 async function hashPassword(password: string): Promise<string> {
@@ -27,11 +35,18 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 // Test data
+let app: Express;
 let testSiteAdmin: any;
 let testOrg: any;
 let authCookie: string;
 
 beforeAll(async () => {
+  // Create Express app and register routes
+  app = express();
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
+  await registerRoutes(app);
+
   // Create test site admin
   const hashedPassword = await bcrypt.hash('TestPassword123!', 10);
   [testSiteAdmin] = await db.insert(users).values({
