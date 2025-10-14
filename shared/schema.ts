@@ -150,17 +150,17 @@ export const invitations = pgTable("invitations", {
 
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   // Foreign key with ON DELETE SET NULL to preserve audit logs when user is deleted
   // Maintains compliance trail while allowing user cleanup
   // Note: Nullable by default in Drizzle (no .notNull() call)
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
-  action: text("action").notNull(), // e.g., "site_admin_access", "role_change", "user_create"
-  resourceType: text("resource_type"), // e.g., "organization", "user", "team"
-  resourceId: varchar("resource_id"), // ID of the affected resource
+  userId: varchar("user_id", { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  action: varchar("action", { length: 100 }).notNull(), // e.g., "site_admin_access", "role_change", "user_create"
+  resourceType: varchar("resource_type", { length: 50 }), // e.g., "organization", "user", "team"
+  resourceId: varchar("resource_id", { length: 255 }), // ID of the affected resource
   details: text("details"), // JSON string with additional context (sanitized to prevent log injection)
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
+  ipAddress: varchar("ip_address", { length: 45 }), // IPv6 max length is 45 characters
+  userAgent: varchar("user_agent", { length: 500 }), // User agents can be long, but limit to prevent abuse
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Index for efficient querying by user and time

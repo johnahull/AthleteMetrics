@@ -21,13 +21,22 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
   -- CHECK constraints for data validation
   CONSTRAINT audit_logs_action_valid CHECK (action IN (
+    -- Organization actions
     'organization_created', 'organization_deactivated', 'organization_reactivated',
-    'organization_deleted', 'organization_dependencies_viewed', 'site_admin_access',
-    'user_created', 'user_updated', 'user_deleted', 'user_role_changed',
+    'organization_deleted', 'organization_dependencies_viewed',
+    -- User & authentication actions
+    'site_admin_access', 'site_admin_organization_access', 'user_created', 'user_updated',
+    'user_deleted', 'user_role_changed', 'role_changed',
+    'password_reset_unknown_email', 'email_verification_requested', 'password_change_failed',
+    'privilege_restoration_blocked', 'admin_password_synced', 'privilege_restored',
+    -- Team actions
     'team_created', 'team_updated', 'team_deleted', 'team_archived',
+    -- Measurement actions
     'measurement_created', 'measurement_updated', 'measurement_deleted',
-    'invitation_created', 'invitation_accepted', 'invitation_revoked', 'invitation_cancelled',
-    'zombie_sessions_cleaned', 'zombie_cleanup_failed', 'session_revocation_failed'
+    -- Invitation actions
+    'invitation_created', 'invitation_accepted', 'invitation_cancelled', 'invitation_resent',
+    -- Session management actions
+    'sessions_revoked', 'zombie_sessions_cleaned', 'zombie_cleanup_failed', 'session_revocation_failed'
   )),
 
   CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
