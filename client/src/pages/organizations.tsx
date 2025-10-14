@@ -194,8 +194,9 @@ export default function Organizations() {
   }, [user, organizations, setLocation]);
 
   // Filter organizations based on status filter
+  // Explicit boolean checks to avoid undefined/null edge cases
   const filteredOrganizations = organizations?.filter(org => {
-    if (statusFilter === "active") return org.isActive !== false;
+    if (statusFilter === "active") return org.isActive === true;
     if (statusFilter === "inactive") return org.isActive === false;
     return true; // "all"
   }) || [];

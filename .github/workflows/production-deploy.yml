@@ -181,35 +181,26 @@ jobs:
           PREVIOUS_DEPLOYMENT="${{ steps.deploy.outputs.current_deployment_id }}"
 
           if [ -n "$PREVIOUS_DEPLOYMENT" ] && [ "$PREVIOUS_DEPLOYMENT" != "null" ]; then
-            echo "📝 Rolling back to deployment: $PREVIOUS_DEPLOYMENT"
-
-            # Attempt rollback using Railway CLI v3+
-            # Railway CLI v3 doesn't have a dedicated rollback command
-            # Use 'railway redeploy' to redeploy a previous deployment
-            railway redeploy --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} "$PREVIOUS_DEPLOYMENT" || {
-              echo "❌ Automated rollback failed!"
-              echo "🔧 Manual intervention required."
-              echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-              exit 1
-            }
-
-            echo "✅ Rollback completed successfully"
-            echo "⏳ Waiting for rollback to stabilize..."
-            sleep 15
-
-            # Verify rollback health
-            echo "🔍 Verifying rollback health..."
-            node scripts/health-check.js || {
-              echo "⚠️ Rollback health check failed - manual verification required"
-              echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-              exit 1
-            }
-
-            echo "✅ Rollback verified - service is healthy"
+            echo "📝 Previous deployment: $PREVIOUS_DEPLOYMENT"
+            echo ""
+            echo "⚠️  AUTOMATED ROLLBACK NOT AVAILABLE"
+            echo "Railway CLI v3 does not support programmatic rollback to specific deployment IDs."
+            echo ""
+            echo "🔧 MANUAL ROLLBACK REQUIRED:"
+            echo "1. Go to Railway Dashboard: https://railway.app"
+            echo "2. Navigate to your production service"
+            echo "3. Find deployment: $PREVIOUS_DEPLOYMENT"
+            echo "4. Click the three dots (...) and select 'Rollback'"
+            echo "5. Confirm the rollback"
+            echo ""
+            echo "📊 Deployment Health Status:"
+            echo "   - Health Check: ${{ steps.health-check.outcome }}"
+            echo "   - Smoke Tests: ${{ steps.smoke-tests.outcome }}"
+            echo ""
           else
-            echo "⚠️ No previous deployment found - cannot rollback automatically"
+            echo "⚠️ No previous deployment found"
             echo "🔧 Manual intervention required."
-            echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
+            echo "Railway Dashboard: https://railway.app"
           fi
 
           exit 1

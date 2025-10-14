@@ -153,6 +153,7 @@ export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   // Foreign key with ON DELETE SET NULL to preserve audit logs when user is deleted
   // Maintains compliance trail while allowing user cleanup
+  // Note: Nullable by default in Drizzle (no .notNull() call)
   userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
   action: text("action").notNull(), // e.g., "site_admin_access", "role_change", "user_create"
   resourceType: text("resource_type"), // e.g., "organization", "user", "team"

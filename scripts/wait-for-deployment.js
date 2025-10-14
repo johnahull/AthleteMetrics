@@ -59,7 +59,9 @@ async function railwayCommand(args) {
         try {
           resolve(JSON.parse(stdout));
         } catch (err) {
-          reject(new Error(`Failed to parse Railway CLI output: ${err.message}`));
+          // Include partial stdout for debugging
+          const preview = stdout.length > 200 ? stdout.substring(0, 200) + '...' : stdout;
+          reject(new Error(`Failed to parse Railway CLI output: ${err.message}\nOutput preview: ${preview}`));
         }
       }
     });
