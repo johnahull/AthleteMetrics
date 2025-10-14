@@ -126,14 +126,11 @@ jobs:
           npm install -g @railway/cli
 
           # Capture current deployment ID for potential rollback (BEFORE deploying)
-          CURRENT_DEPLOYMENT=$(railway status --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.deployments[0].id' || echo "")
+          CURRENT_DEPLOYMENT=$(railway deployments list --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.data[0].id' || echo "")
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
           echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
 
-          # Run migrations on production database
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
-
-          # Deploy the application (this creates NEW deployment)
+          # Deploy the application first (this creates NEW deployment)
           railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
 
           echo "✅ Deployment initiated"
@@ -154,6 +151,15 @@ jobs:
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
         continue-on-error: true
+
+      - name: Run database migrations
+        if: steps.health-check.outcome == 'success'
+        run: |
+          echo "🔄 Running database migrations after successful health check..."
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+          echo "✅ Migrations completed"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
       - name: Run smoke tests
         id: smoke-tests

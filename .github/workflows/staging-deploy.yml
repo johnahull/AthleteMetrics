@@ -70,15 +70,12 @@ jobs:
           echo "🚀 Deploying to Railway Staging..."
           npm install -g @railway/cli
 
-          # Run migrations on staging database
-          railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
-
-          # Deploy the application
+          # Deploy the application first (without migrations)
           railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
 
           echo "✅ Deployment initiated, waiting for Railway to complete..."
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
 
       - name: Wait for Railway deployment
         run: |
@@ -92,6 +89,14 @@ jobs:
           HEALTH_CHECK_URL: ${{ secrets.STAGING_URL }}
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
+
+      - name: Run database migrations
+        run: |
+          echo "🔄 Running database migrations after successful deployment..."
+          railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
+          echo "✅ Migrations completed"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
 
       - name: Notify deployment success
         if: success()
