@@ -11,6 +11,39 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 const organizationService = new OrganizationService();
 
 /**
+ * Sanitize error messages for production
+ * Prevents leaking sensitive implementation details in error responses
+ */
+function sanitizeError(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  // In production, only return safe error messages to prevent info disclosure
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Allowlist of error messages safe to expose (don't reveal internal paths, SQL, etc.)
+  const safeErrors = [
+    'Unauthorized',
+    'not found',
+    'access denied',
+    'Invalid',
+    'confirmation',
+    'dependencies',
+    'already exists',
+    'already'
+  ];
+
+  if (isProduction) {
+    const isSafeError = safeErrors.some(safe => error.message.includes(safe));
+    return isSafeError ? error.message : fallback;
+  }
+
+  // In development, return full error message for debugging
+  return error.message;
+}
+
+/**
  * Rate limit configuration constants
  * These values balance security with usability for different operations
  */
@@ -30,6 +63,7 @@ const createLimiter = rateLimit({
   message: { message: "Too many organization creation attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => process.env.BYPASS_GENERAL_RATE_LIMIT === 'true',
 });
 
 // Stricter rate limiting for user deletion operations
@@ -39,6 +73,7 @@ const userDeleteLimiter = rateLimit({
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => process.env.BYPASS_GENERAL_RATE_LIMIT === 'true',
 });
 
 // Rate limiting for organization deletion operations
@@ -48,8 +83,15 @@ const orgDeleteLimiter = rateLimit({
   message: { message: "Too many organization deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => process.env.BYPASS_GENERAL_RATE_LIMIT === 'true',
   // Combine IP and user ID to prevent bypass via IP spoofing
   // Uses ipKeyGenerator for proper IPv6 handling
+  // SECURITY NOTE: This mitigates but does not completely prevent bypass via IP rotation
+  // (e.g., cloud VPN services, mobile networks, proxy rotation). Additional protections:
+  // - Audit logging captures all attempts for forensic analysis
+  // - CSRF protection prevents automated attacks without valid session
+  // - User account-based limiting (userId in key) prevents single-user abuse
+  // - For advanced protection, consider: device fingerprinting, behavior analysis, or CAPTCHA
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
     const ip = req.ip || 'unknown';
@@ -60,8 +102,13 @@ const orgDeleteLimiter = rateLimit({
 
 /**
  * Validate that a string is a valid UUIDv4
+ * Includes length check to prevent ReDoS attacks
  */
 function isValidUUID(id: string): boolean {
+  // Validate length first to prevent ReDoS (UUIDs are always 36 characters)
+  if (!id || id.length !== 36) {
+    return false;
+  }
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return UUID_REGEX.test(id);
 }
@@ -76,8 +123,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(organizations);
     } catch (error) {
       console.error("Get organizations error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organizations";
-      res.status(500).json({ message });
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch organizations") });
     }
   });
 
@@ -104,8 +150,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(organization);
     } catch (error) {
       console.error("Get organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organization";
-      res.status(500).json({ message });
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch organization") });
     }
   });
 
@@ -135,8 +180,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.status(201).json(organization);
     } catch (error) {
       console.error("Create organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to create organization";
-      res.status(400).json({ message });
+      res.status(400).json({ message: sanitizeError(error, "Failed to create organization") });
     }
   });
 
@@ -159,7 +203,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(profile);
     } catch (error) {
       console.error("Get organization profile error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organization profile";
+      const message = sanitizeError(error, "Failed to fetch organization profile");
       const statusCode = message.includes("Unauthorized") ? 403 : 500;
       res.status(statusCode).json({ message });
     }
@@ -186,7 +230,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json({ message: "User removed from organization successfully" });
     } catch (error) {
       console.error("Remove user from organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to remove user from organization";
+      const message = sanitizeError(error, "Failed to remove user from organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 500;
       res.status(statusCode).json({ message });
     }
@@ -213,7 +257,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.status(201).json(user);
     } catch (error) {
       console.error("Add user to organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to add user to organization";
+      const message = sanitizeError(error, "Failed to add user to organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 400;
       res.status(statusCode).json({ message });
     }
@@ -304,8 +348,11 @@ export function registerOrganizationRoutes(app: Express) {
       }
     } catch (error) {
       console.error("Update organization status error:", error);
-      const message = error instanceof Error ? error.message : "Failed to update organization status";
-      const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
+      const message = sanitizeError(error, "Failed to update organization status");
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
+        : message.includes("already") ? 400
+        : 500;
       res.status(statusCode).json({ message });
     }
   });
@@ -336,7 +383,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(counts);
     } catch (error) {
       console.error("Get organization dependencies error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organization dependencies";
+      const message = sanitizeError(error, "Failed to fetch organization dependencies");
       const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
       res.status(statusCode).json({ message });
     }
@@ -377,7 +424,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json({ message: "Organization deleted successfully" });
     } catch (error) {
       console.error("Delete organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to delete organization";
+      const message = sanitizeError(error, "Failed to delete organization");
       const statusCode = message.includes("Unauthorized") ? 403
         : message.includes("not found") ? 404
         : message.includes("dependencies") || message.includes("confirmation") ? 400

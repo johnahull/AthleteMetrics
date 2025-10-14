@@ -26,6 +26,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: athletemetrics_test
+          POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -66,9 +67,33 @@ jobs:
           ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
 
       - name: Run security audit
-        uses: ./.github/workflows/security-audit.yml
-        with:
-          fail-on-severity: high
+        run: |
+          # Run audit and capture output
+          npm audit --audit-level=moderate --json > audit-results.json || true
+
+          # Check for vulnerabilities
+          CRITICAL_COUNT=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json)
+          HIGH_COUNT=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json)
+          MODERATE_COUNT=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json)
+
+          echo "📊 Security Audit Results:"
+          echo "  Critical: $CRITICAL_COUNT"
+          echo "  High: $HIGH_COUNT"
+          echo "  Moderate: $MODERATE_COUNT"
+
+          # Fail on critical or high vulnerabilities
+          if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "❌ Found $CRITICAL_COUNT critical and $HIGH_COUNT high severity vulnerabilities"
+            npm audit --audit-level=high
+            exit 1
+          fi
+
+          if [ "$MODERATE_COUNT" -gt 0 ]; then
+            echo "⚠️  Found $MODERATE_COUNT moderate severity vulnerabilities"
+            echo "Consider updating dependencies, but not blocking deployment"
+          fi
+
+          echo "✅ No high or critical vulnerabilities found"
 
       - name: Build application
         run: npm run build
@@ -95,21 +120,29 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Run database migrations
+        run: |
+          echo "🔄 Running database migrations BEFORE deployment..."
+          echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+          echo "✅ Migrations completed successfully"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+
       - name: Deploy to Railway Production
         id: deploy
         run: |
           echo "🚀 Deploying to Railway Production..."
-          npm install -g @railway/cli
 
-          # Capture current deployment ID for potential rollback
-          CURRENT_DEPLOYMENT=$(railway status --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.deployments[0].id' || echo "")
+          # Capture current deployment ID for potential rollback (BEFORE deploying)
+          CURRENT_DEPLOYMENT=$(railway deployments list --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.data[0].id' || echo "")
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
-          echo "📝 Current deployment: $CURRENT_DEPLOYMENT"
+          echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
 
-          # Run migrations on production database
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
-
-          # Deploy the application
+          # Deploy the application (migrations already applied above)
           railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
 
           echo "✅ Deployment initiated"
@@ -117,10 +150,12 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
       - name: Wait for Railway deployment
-        run: |
-          echo "⏳ Waiting for Railway to complete deployment..."
-          sleep 30
-          echo "✅ Ready for health check"
+        run: node scripts/wait-for-deployment.js
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          DEPLOYMENT_POLL_INTERVAL: 5
+          DEPLOYMENT_TIMEOUT: 300
 
       - name: Run health check
         id: health-check
@@ -148,33 +183,26 @@ jobs:
           PREVIOUS_DEPLOYMENT="${{ steps.deploy.outputs.current_deployment_id }}"
 
           if [ -n "$PREVIOUS_DEPLOYMENT" ] && [ "$PREVIOUS_DEPLOYMENT" != "null" ]; then
-            echo "📝 Rolling back to deployment: $PREVIOUS_DEPLOYMENT"
-
-            # Attempt rollback using Railway CLI
-            railway rollback --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} "$PREVIOUS_DEPLOYMENT" || {
-              echo "❌ Automated rollback failed!"
-              echo "🔧 Manual intervention required."
-              echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-              exit 1
-            }
-
-            echo "✅ Rollback completed successfully"
-            echo "⏳ Waiting for rollback to stabilize..."
-            sleep 15
-
-            # Verify rollback health
-            echo "🔍 Verifying rollback health..."
-            node scripts/health-check.js || {
-              echo "⚠️ Rollback health check failed - manual verification required"
-              echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-              exit 1
-            }
-
-            echo "✅ Rollback verified - service is healthy"
+            echo "📝 Previous deployment: $PREVIOUS_DEPLOYMENT"
+            echo ""
+            echo "⚠️  AUTOMATED ROLLBACK NOT AVAILABLE"
+            echo "Railway CLI v3 does not support programmatic rollback to specific deployment IDs."
+            echo ""
+            echo "🔧 MANUAL ROLLBACK REQUIRED:"
+            echo "1. Go to Railway Dashboard: https://railway.app"
+            echo "2. Navigate to your production service"
+            echo "3. Find deployment: $PREVIOUS_DEPLOYMENT"
+            echo "4. Click the three dots (...) and select 'Rollback'"
+            echo "5. Confirm the rollback"
+            echo ""
+            echo "📊 Deployment Health Status:"
+            echo "   - Health Check: ${{ steps.health-check.outcome }}"
+            echo "   - Smoke Tests: ${{ steps.smoke-tests.outcome }}"
+            echo ""
           else
-            echo "⚠️ No previous deployment found - cannot rollback automatically"
+            echo "⚠️ No previous deployment found"
             echo "🔧 Manual intervention required."
-            echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
+            echo "Railway Dashboard: https://railway.app"
           fi
 
           exit 1

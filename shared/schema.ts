@@ -150,20 +150,27 @@ export const invitations = pgTable("invitations", {
 
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  action: text("action").notNull(), // e.g., "site_admin_access", "role_change", "user_create"
-  resourceType: text("resource_type"), // e.g., "organization", "user", "team"
-  resourceId: varchar("resource_id"), // ID of the affected resource
-  details: text("details"), // JSON string with additional context
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  // Foreign key with ON DELETE SET NULL to preserve audit logs when user is deleted
+  // Maintains compliance trail while allowing user cleanup
+  // Note: Nullable by default in Drizzle (no .notNull() call)
+  userId: varchar("user_id", { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  action: varchar("action", { length: 100 }).notNull(), // e.g., "site_admin_access", "role_change", "user_create"
+  resourceType: varchar("resource_type", { length: 50 }), // e.g., "organization", "user", "team"
+  resourceId: varchar("resource_id", { length: 255 }), // ID of the affected resource
+  details: text("details"), // JSON string with additional context (sanitized to prevent log injection)
+  ipAddress: varchar("ip_address", { length: 45 }), // IPv6 max length is 45 characters
+  userAgent: varchar("user_agent", { length: 500 }), // User agents can be long, but limit to prevent abuse
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Index for efficient querying by user and time
   userTimeIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_user_time_idx ON ${table} (${table.userId}, ${table.createdAt} DESC)`,
   // Index for querying by action type
   actionIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON ${table} (${table.action}, ${table.createdAt} DESC)`,
+  // Index for querying by resource type and ID (compliance queries)
+  resourceIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON ${table} (${table.resourceType}, ${table.resourceId}, ${table.createdAt} DESC)`,
+  // Index for time-based queries (data retention policies)
+  createdAtIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON ${table} (${table.createdAt} DESC)`,
 }));
 
 // PostgreSQL session store for connect-pg-simple

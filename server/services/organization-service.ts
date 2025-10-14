@@ -17,21 +17,63 @@ interface UserOrganizationWithOrg extends UserOrganization {
 }
 
 /**
- * Constant-time string comparison to prevent timing attacks
- * Pads strings to equal length before comparison
+ * Constant-time string comparison to prevent timing attacks in organization deletion
+ *
+ * SECURITY TRADEOFFS:
+ * - toLowerCase() and trim() have variable execution time based on input content
+ * - Achieving perfectly constant-time string normalization is extremely difficult
+ * - However, timing attack risk is mitigated by multiple defense layers:
+ *   1. Site admin only access (limited attack surface)
+ *   2. Rate limiting (5 attempts per 15 minutes via composite IP+UserID keys)
+ *   3. Comprehensive audit logging (all attempts recorded with IP/User-Agent)
+ *   4. crypto.timingSafeEqual() on padded strings (constant-time comparison)
+ *
+ * ACCEPTED RISK: The normalization step may leak minimal timing information, but the
+ * combination of access control, rate limiting, and audit logging makes practical
+ * exploitation infeasible. The cost-benefit of attempting perfect constant-time
+ * normalization (which may still have timing variations) is not justified.
+ *
+ * @param a - First string to compare (user-provided organization name)
+ * @param b - Second string to compare (actual organization name)
+ * @returns true if strings match (case-insensitive, trimmed), false otherwise
  */
 function constantTimeCompare(a: string, b: string): boolean {
-  const bufA = Buffer.from(a.trim().toLowerCase());
-  const bufB = Buffer.from(b.trim().toLowerCase());
-  const maxLen = Math.max(bufA.length, bufB.length);
-  const paddedA = Buffer.concat([bufA, Buffer.alloc(maxLen - bufA.length)]);
-  const paddedB = Buffer.concat([bufB, Buffer.alloc(maxLen - bufB.length)]);
+  // Normalize strings (trim whitespace, convert to lowercase)
+  // NOTE: These operations have variable time, but risk is accepted (see JSDoc above)
+  const normalizedA = a.trim().toLowerCase();
+  const normalizedB = b.trim().toLowerCase();
+
+  const maxLen = 255;
+  const paddedA = normalizedA.padEnd(maxLen, '\0');
+  const paddedB = normalizedB.padEnd(maxLen, '\0');
+
+  const bufA = Buffer.from(paddedA);
+  const bufB = Buffer.from(paddedB);
 
   try {
-    return crypto.timingSafeEqual(paddedA, paddedB);
+    return crypto.timingSafeEqual(bufA, bufB);
   } catch {
     return false;
   }
+}
+
+/**
+ * Sanitize user input for audit logs to prevent log injection attacks
+ * Removes control characters, ANSI escape sequences, and limits length
+ */
+function sanitizeForAuditLog(input: string, maxLength = 255): string {
+  return input
+    .trim()
+    // Remove C0 control characters (0x00-0x1F) and delete character (0x7F)
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    // Remove C1 control characters (0x80-0x9F)
+    .replace(/[\x80-\x9F]/g, '')
+    // Remove ANSI escape sequences (e.g., color codes)
+    .replace(/\x1B\[[0-9;]*[A-Za-z]/g, '')
+    // Remove newlines and tabs to prevent log injection (redundant but explicit)
+    .replace(/[\n\r\t]/g, ' ')
+    // Limit length
+    .substring(0, maxLength);
 }
 
 export class OrganizationService extends BaseService {
@@ -115,9 +157,9 @@ export class OrganizationService extends BaseService {
       // This prevents N+1 queries when called multiple times with session data
       const userIsSiteAdmin = cachedIsSiteAdmin ?? await this.isSiteAdmin(userId);
 
-      // Site admins can access all organizations
+      // Site admins can access all organizations (including inactive ones for management)
       if (userIsSiteAdmin) {
-        return await this.storage.getOrganizations();
+        return await this.storage.getOrganizations({ includeInactive: true });
       }
 
       // Regular users get only their assigned organizations
@@ -215,25 +257,10 @@ export class OrganizationService extends BaseService {
         }
       }
 
-      // Prevent removing self if it's the last admin
-      if (userId === requestingUserId && targetUserRole === 'org_admin') {
-        const orgUsers = await this.storage.getOrganizationUsers(organizationId);
-        const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
-        if (adminCount <= 1) {
-          throw new Error("Cannot remove the last organization administrator");
-        }
-      }
-
-      // If trying to delete an org admin, ensure it's not the last one
-      if (targetUserRole === "org_admin") {
-        const orgUsers = await this.storage.getOrganizationUsers(organizationId);
-        const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
-        if (adminCount <= 1) {
-          throw new Error("Cannot remove the last organization administrator");
-        }
-      }
-
-      await this.storage.removeUserFromOrganization(userId, organizationId);
+      // If trying to delete an org admin, use transaction-based removal to prevent race conditions
+      // The storage layer will atomically check admin count and perform deletion
+      const isAdminRemoval = targetUserRole === "org_admin";
+      await this.storage.removeUserFromOrganization(userId, organizationId, isAdminRemoval);
     } catch (error) {
       console.error("OrganizationService.removeUserFromOrganization:", error);
       throw error;
@@ -248,6 +275,8 @@ export class OrganizationService extends BaseService {
     userData: any,
     requestingUserId: string
   ): Promise<User> {
+    const startTime = Date.now();
+
     try {
       // Validate access
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
@@ -273,6 +302,15 @@ export class OrganizationService extends BaseService {
       return user;
     } catch (error) {
       console.error("OrganizationService.addUserToOrganization:", error);
+
+      // Normalize timing to prevent username enumeration via timing analysis
+      // Ensures all error responses take at least 100ms to mitigate timing attacks
+      const elapsed = Date.now() - startTime;
+      const minTime = 100;
+      if (elapsed < minTime) {
+        await new Promise(resolve => setTimeout(resolve, minTime - elapsed));
+      }
+
       throw error;
     }
   }
@@ -358,13 +396,16 @@ export class OrganizationService extends BaseService {
       // Deactivate organization
       await this.storage.deactivateOrganization(organizationId);
 
+      // Sanitize organization name for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+
       // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_deactivated',
         resourceType: 'organization',
         resourceId: organizationId,
-        details: JSON.stringify({ organizationName: org.name }),
+        details: JSON.stringify({ organizationName: sanitizedOrgName }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,
       });
@@ -402,13 +443,16 @@ export class OrganizationService extends BaseService {
       // Reactivate organization
       await this.storage.reactivateOrganization(organizationId);
 
+      // Sanitize organization name for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+
       // Create audit log with request context
       await this.storage.createAuditLog({
         userId: requestingUserId,
         action: 'organization_reactivated',
         resourceType: 'organization',
         resourceId: organizationId,
-        details: JSON.stringify({ organizationName: org.name }),
+        details: JSON.stringify({ organizationName: sanitizedOrgName }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,
       });
@@ -457,8 +501,11 @@ export class OrganizationService extends BaseService {
       // Delete organization (transaction with race condition protection is handled in storage layer)
       await this.storage.deleteOrganization(organizationId);
 
-      // Sanitize confirmation name for audit log (prevent log injection)
-      const sanitizedConfirmation = confirmationName.trim().substring(0, 255);
+      // Sanitize all user inputs and organization data for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+      const sanitizedConfirmation = sanitizeForAuditLog(confirmationName);
+      const sanitizedIpAddress = context.ipAddress ? sanitizeForAuditLog(context.ipAddress, 45) : null;
+      const sanitizedUserAgent = context.userAgent ? sanitizeForAuditLog(context.userAgent, 500) : null;
 
       // Create audit log with request context
       await this.storage.createAuditLog({
@@ -467,12 +514,12 @@ export class OrganizationService extends BaseService {
         resourceType: 'organization',
         resourceId: organizationId,
         details: JSON.stringify({
-          organizationName: org.name,
+          organizationName: sanitizedOrgName,
           confirmationProvided: true,
           confirmationName: sanitizedConfirmation
         }),
-        ipAddress: context.ipAddress || null,
-        userAgent: context.userAgent || null,
+        ipAddress: sanitizedIpAddress,
+        userAgent: sanitizedUserAgent,
       });
     } catch (error) {
       console.error("OrganizationService.deleteOrganization:", error);
@@ -502,6 +549,9 @@ export class OrganizationService extends BaseService {
 
       const counts = await this.storage.getOrganizationDependencyCounts(organizationId);
 
+      // Sanitize all user inputs and organization data for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+
       // Create audit log for security monitoring
       await this.storage.createAuditLog({
         userId: requestingUserId,
@@ -509,8 +559,12 @@ export class OrganizationService extends BaseService {
         resourceType: 'organization',
         resourceId: organizationId,
         details: JSON.stringify({
-          organizationName: org.name,
-          counts
+          organizationName: sanitizedOrgName,
+          counts: {
+            users: Number(counts.users),
+            teams: Number(counts.teams),
+            measurements: Number(counts.measurements)
+          }
         }),
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,

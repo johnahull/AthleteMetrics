@@ -7,15 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, Trash2, Power, PowerOff } from "lucide-react";
+import { Plus, Building2, Trash2, CheckCircle, Ban } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { mutations } from "@/lib/api";
+import { mutations, type ApiError } from "@/lib/api";
 import DeleteOrganizationModal from "@/components/delete-organization-modal";
 
 type Organization = {
@@ -37,6 +39,7 @@ export default function Organizations() {
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
   const [, setLocation] = useLocation();
   const { user, setOrganizationContext } = useAuth();
 
@@ -63,11 +66,11 @@ export default function Organizations() {
       setOrgDialogOpen(false);
       orgForm.reset();
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error creating organization", 
+    onError: (error: ApiError) => {
+      toast({
+        title: "Error creating organization",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -78,6 +81,26 @@ export default function Organizations() {
         ? await mutations.reactivateOrganization(id)
         : await mutations.deactivateOrganization(id);
     },
+    onMutate: async ({ id, isActive }) => {
+      // Cancel any outgoing refetches to avoid overwriting our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["/api/my-organizations"] });
+
+      // Snapshot the previous value
+      const previousOrganizations = queryClient.getQueryData<Organization[]>(["/api/my-organizations"]);
+
+      // Optimistically update to the new value
+      if (previousOrganizations) {
+        queryClient.setQueryData<Organization[]>(
+          ["/api/my-organizations"],
+          previousOrganizations.map(org =>
+            org.id === id ? { ...org, isActive } : org
+          )
+        );
+      }
+
+      // Return a context with the snapshot
+      return { previousOrganizations };
+    },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-organizations"] });
       toast({
@@ -87,7 +110,11 @@ export default function Organizations() {
           : "Users will no longer be able to log into this organization."
       });
     },
-    onError: (error: any) => {
+    onError: (error: ApiError, _, context) => {
+      // Rollback to the previous value on error
+      if (context?.previousOrganizations) {
+        queryClient.setQueryData(["/api/my-organizations"], context.previousOrganizations);
+      }
       toast({
         title: "Error updating organization status",
         description: error.message,
@@ -109,7 +136,7 @@ export default function Organizations() {
         description: "The organization and all related data have been permanently deleted."
       });
     },
-    onError: (error: any) => {
+    onError: (error: ApiError) => {
       toast({
         title: "Error deleting organization",
         description: error.message,
@@ -161,19 +188,28 @@ export default function Organizations() {
   useEffect(() => {
     if (!user?.isSiteAdmin && organizations && organizations.length === 1) {
       const primaryOrg = organizations[0];
-      console.log(`Auto-redirecting user to their primary organization: ${primaryOrg.name}`);
+      // Auto-redirect to primary organization for better UX
       setLocation(`/organizations/${primaryOrg.id}`);
     }
   }, [user, organizations, setLocation]);
 
+  // Filter organizations based on status filter
+  // Explicit boolean checks to avoid undefined/null edge cases
+  const filteredOrganizations = organizations?.filter(org => {
+    if (statusFilter === "active") return org.isActive === true;
+    if (statusFilter === "inactive") return org.isActive === false;
+    return true; // "all"
+  }) || [];
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Organizations</h1>
-          <p className="text-gray-600 mt-1">Manage your organizations and settings</p>
+    <TooltipProvider delayDuration={300}>
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Organizations</h1>
+            <p className="text-gray-600 mt-1">Manage your organizations and settings</p>
+          </div>
         </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Organization Management */}
@@ -184,7 +220,20 @@ export default function Organizations() {
                 <Building2 className="h-5 w-5 text-primary" />
                 <CardTitle>Organizations</CardTitle>
               </div>
-              <Dialog open={orgDialogOpen} onOpenChange={setOrgDialogOpen}>
+              <div className="flex items-center gap-2">
+                {user?.isSiteAdmin && (
+                  <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "active" | "inactive" | "all")}>
+                    <SelectTrigger className="w-[180px]" data-testid="status-filter">
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active Organizations</SelectItem>
+                      <SelectItem value="inactive">Inactive Organizations</SelectItem>
+                      <SelectItem value="all">All Organizations</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <Dialog open={orgDialogOpen} onOpenChange={setOrgDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm" data-testid="create-organization-button">
                     <Plus className="h-4 w-4 mr-2" />
@@ -247,11 +296,12 @@ export default function Organizations() {
                   </Form>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {organizations?.map((org) => (
+              {filteredOrganizations.map((org) => (
                 <div
                   key={org.id}
                   className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
@@ -288,41 +338,64 @@ export default function Organizations() {
                     {user?.isSiteAdmin && (
                       <div className="flex items-center gap-2 ml-4">
                         {/* Deactivate/Activate Button */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateStatusMutation.mutate({
-                            id: org.id,
-                            isActive: org.isActive === false
-                          })}
-                          disabled={updateStatusMutation.isPending}
-                          data-testid={`toggle-status-${org.id}`}
-                        >
-                          {org.isActive === false ? (
-                            <Power className="h-4 w-4" />
-                          ) : (
-                            <PowerOff className="h-4 w-4" />
-                          )}
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateStatusMutation.mutate({
+                                id: org.id,
+                                isActive: org.isActive === false
+                              })}
+                              disabled={updateStatusMutation.isPending}
+                              data-testid={`toggle-status-${org.id}`}
+                              className={org.isActive === false ? "text-red-600 hover:text-red-700 hover:bg-red-50" : "text-green-600 hover:text-green-700 hover:bg-green-50"}
+                            >
+                              {org.isActive === false ? (
+                                <Ban className="h-4 w-4" />
+                              ) : (
+                                <CheckCircle className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              {org.isActive === false
+                                ? "Activate organization (users can log in)"
+                                : "Deactivate organization (users cannot log in)"}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
 
                         {/* Delete Button */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDeleteClick(org)}
-                          data-testid={`delete-org-${org.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteClick(org)}
+                              data-testid={`delete-org-${org.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Permanently delete organization and all data</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                     )}
                   </div>
                 </div>
               ))}
 
-              {!organizations?.length && (
-                <p className="text-gray-500 text-center py-8">No organizations created yet</p>
+              {!filteredOrganizations.length && (
+                <p className="text-gray-500 text-center py-8">
+                  {statusFilter === "active" ? "No active organizations found" :
+                   statusFilter === "inactive" ? "No inactive organizations found" :
+                   "No organizations created yet"}
+                </p>
               )}
             </div>
           </CardContent>
@@ -349,19 +422,20 @@ export default function Organizations() {
         </Card>
       </div>
 
-      {/* Delete Organization Modal */}
-      {orgToDelete && (
-        <DeleteOrganizationModal
-          organization={orgToDelete}
-          isOpen={deleteModalOpen}
-          onClose={() => {
-            setDeleteModalOpen(false);
-            setOrgToDelete(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-          isLoading={deleteOrgMutation.isPending}
-        />
-      )}
-    </div>
+        {/* Delete Organization Modal */}
+        {orgToDelete && (
+          <DeleteOrganizationModal
+            organization={orgToDelete}
+            isOpen={deleteModalOpen}
+            onClose={() => {
+              setDeleteModalOpen(false);
+              setOrgToDelete(null);
+            }}
+            onConfirm={handleDeleteConfirm}
+            isLoading={deleteOrgMutation.isPending}
+          />
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

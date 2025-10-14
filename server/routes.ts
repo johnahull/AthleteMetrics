@@ -269,7 +269,8 @@ export async function initializeDefaultUser() {
     let passwordMatches = false;
     let userCreated = false;
 
-    await db.transaction(async (tx) => {
+    try {
+      await db.transaction(async (tx) => {
       // CRITICAL: Fetch and lock user row inside transaction to prevent TOCTOU
       // This prevents race condition where user data could change between fetch and lock
       // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
@@ -433,6 +434,22 @@ export async function initializeDefaultUser() {
         });
       }
     });
+    } catch (txError: any) {
+      // Handle duplicate username errors from transaction
+      // This can happen when multiple processes/tests try to create the admin user concurrently
+      const errorMessage = txError?.message || String(txError);
+      const isDuplicateUsername = (errorMessage.includes('duplicate key') || errorMessage.includes('duplicate')) &&
+                                   (errorMessage.includes('users_username_unique') || errorMessage.includes('username'));
+
+      if (isDuplicateUsername) {
+        // Admin user already exists (created by concurrent transaction) - this is OK
+        console.log(`Admin user "${adminUser}" already exists (created by concurrent process)`);
+        return; // Exit function successfully - user exists
+      }
+
+      // Re-throw other transaction errors
+      throw txError;
+    }
 
     // Console logging after successful transaction
     if (userCreated) {
@@ -643,7 +660,9 @@ export async function registerRoutes(app: Express) {
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
     ];
 
-    if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
+    // Use exact path matching to prevent path traversal attacks
+    // Do NOT use startsWith() as it allows bypasses like "/login/../protected"
+    if (skipCsrfPaths.includes(req.path) ||
         skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
       return next();
     }

@@ -44,14 +44,16 @@ export default function DeleteOrganizationModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Case-insensitive comparison with trimming
-    if (confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase()) {
+    // Frontend validation for UX (immediate feedback)
+    // Backend performs secure constant-time validation for actual security
+    if (confirmationMatches) {
       onConfirm(confirmationName);
     }
   };
 
   const hasDependencies = dependencies && (dependencies.users > 0 || dependencies.teams > 0 || dependencies.measurements > 0);
-  // Case-insensitive comparison with trimming
+  // Frontend validation: case-insensitive match for UX
+  // Note: Backend uses constant-time comparison for security - this is just for user feedback
   const confirmationMatches = confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase();
 
   return (
@@ -145,11 +147,14 @@ export default function DeleteOrganizationModal({
                   onChange={(e) => setConfirmationName(e.target.value)}
                   placeholder={organization.name}
                   disabled={isLoading}
-                  className={confirmationMatches ? "border-green-500" : ""}
                   data-testid="delete-org-confirmation-input"
+                  className={confirmationName.length > 0 && !confirmationMatches ? 'border-destructive' : ''}
                 />
-                {confirmationName && !confirmationMatches && (
+                {confirmationName.length > 0 && !confirmationMatches && (
                   <p className="text-sm text-destructive">Name does not match</p>
+                )}
+                {confirmationMatches && confirmationName.length > 0 && (
+                  <p className="text-sm text-green-600">✓ Name matches</p>
                 )}
               </div>
             </>

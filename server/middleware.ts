@@ -35,10 +35,18 @@ export const requireAuth = (req: any, res: Response, next: NextFunction) => {
 
 // Site admin only middleware
 export const requireSiteAdmin = async (req: any, res: Response, next: NextFunction) => {
-  const user = req.session.user || { admin: req.session.admin };
+  const user = req.session.user || (req.session.admin ? { admin: true } : null);
+
+  // Check authentication first (return 401 if not authenticated)
+  if (!user) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+
+  // Then check if user is site admin (return 403 if not admin)
   if (!isSiteAdmin(user)) {
     return res.status(403).json({ message: "Site admin access required" });
   }
+
   req.user = user;
   next();
 };
