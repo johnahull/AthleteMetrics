@@ -63,7 +63,7 @@ export default function ImportExport() {
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const { toast } = useToast();
-  const { user, userOrganizations } = useAuth();
+  const { user, userOrganizations, organizationContext } = useAuth();
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
@@ -650,11 +650,23 @@ export default function ImportExport() {
 
   const handleExport = async (exportType: string) => {
     try {
-      const response = await fetch(`/api/export/${exportType}`, {
+      // Get effective organization ID
+      const effectiveOrgId = organizationContext || userOrganizations?.[0]?.organizationId;
+
+      // Build URL with organizationId parameter if available
+      let url = `/api/export/${exportType}`;
+      if (effectiveOrgId) {
+        url += `?organizationId=${encodeURIComponent(effectiveOrgId)}`;
+      }
+
+      const response = await fetch(url, {
         credentials: 'include',
       });
 
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('You do not have permission to export from this organization');
+        }
         throw new Error('Export failed');
       }
 
@@ -668,7 +680,7 @@ export default function ImportExport() {
     } catch (error) {
       toast({
         title: "Export Failed",
-        description: `Failed to export ${exportType} data`,
+        description: error instanceof Error ? error.message : `Failed to export ${exportType} data`,
         variant: "destructive",
       });
     }
