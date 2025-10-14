@@ -44,15 +44,17 @@ export default function DeleteOrganizationModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Always submit - backend performs constant-time validation
-    // This prevents timing attacks via frontend JavaScript execution time
-    onConfirm(confirmationName);
+    // Frontend validation for UX (immediate feedback)
+    // Backend performs secure constant-time validation for actual security
+    if (confirmationMatches) {
+      onConfirm(confirmationName);
+    }
   };
 
   const hasDependencies = dependencies && (dependencies.users > 0 || dependencies.teams > 0 || dependencies.measurements > 0);
-  // Allow submission when user has typed something
-  // Backend performs secure constant-time comparison to prevent timing attacks
-  const confirmationMatches = confirmationName.trim().length > 0;
+  // Frontend validation: case-insensitive match for UX
+  // Note: Backend uses constant-time comparison for security - this is just for user feedback
+  const confirmationMatches = confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -146,9 +148,14 @@ export default function DeleteOrganizationModal({
                   placeholder={organization.name}
                   disabled={isLoading}
                   data-testid="delete-org-confirmation-input"
+                  className={confirmationName.length > 0 && !confirmationMatches ? 'border-destructive' : ''}
                 />
-                {/* Visual feedback removed to prevent timing attacks */}
-                {/* Backend performs secure constant-time validation */}
+                {confirmationName.length > 0 && !confirmationMatches && (
+                  <p className="text-sm text-destructive">Name does not match</p>
+                )}
+                {confirmationMatches && confirmationName.length > 0 && (
+                  <p className="text-sm text-green-600">✓ Name matches</p>
+                )}
               </div>
             </>
           )}

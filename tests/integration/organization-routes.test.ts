@@ -12,7 +12,7 @@ import { app } from '../../server';
 import { db } from '../../server/db';
 import { organizations, users, userOrganizations, teams, userTeams, measurements, auditLogs } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
-import { hashPassword } from '../../server/auth-utils';
+import bcrypt from 'bcrypt';
 
 // Test data
 let testSiteAdmin: any;
@@ -21,7 +21,7 @@ let authCookie: string;
 
 beforeAll(async () => {
   // Create test site admin
-  const hashedPassword = await hashPassword('TestPassword123!');
+  const hashedPassword = await bcrypt.hash('TestPassword123!', 10);
   [testSiteAdmin] = await db.insert(users).values({
     username: 'test-site-admin-org-routes',
     emails: ['test-org-routes@example.com'],
