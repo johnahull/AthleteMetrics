@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { useForm } from "react-hook-form";
@@ -17,12 +16,13 @@ import { Plus, Building2, Trash2, Power, PowerOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { mutations } from "@/lib/api";
+import DeleteOrganizationModal from "@/components/delete-organization-modal";
 
 type Organization = {
   id: string;
   name: string;
   description?: string;
-  isActive?: boolean;
+  isActive: boolean;
   createdAt: string;
 };
 
@@ -35,6 +35,8 @@ export default function Organizations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
   const [, setLocation] = useLocation();
   const { user, setOrganizationContext } = useAuth();
 
@@ -72,7 +74,9 @@ export default function Organizations() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      return await mutations.updateOrganizationStatus(id, isActive);
+      return isActive
+        ? await mutations.reactivateOrganization(id)
+        : await mutations.deactivateOrganization(id);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-organizations"] });
@@ -93,11 +97,13 @@ export default function Organizations() {
   });
 
   const deleteOrgMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return await mutations.deleteOrganization(id);
+    mutationFn: async ({ id, confirmationName }: { id: string; confirmationName: string }) => {
+      return await mutations.deleteOrganization(id, confirmationName);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-organizations"] });
+      setDeleteModalOpen(false);
+      setOrgToDelete(null);
       toast({
         title: "Organization deleted",
         description: "The organization and all related data have been permanently deleted."
@@ -111,6 +117,17 @@ export default function Organizations() {
       });
     },
   });
+
+  const handleDeleteClick = (org: Organization) => {
+    setOrgToDelete(org);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = (confirmationName: string) => {
+    if (orgToDelete) {
+      deleteOrgMutation.mutate({ id: orgToDelete.id, confirmationName });
+    }
+  };
 
   const onCreateOrg = (data: z.infer<typeof organizationSchema>) => {
     createOrgMutation.mutate(data);
@@ -289,45 +306,15 @@ export default function Organizations() {
                         </Button>
 
                         {/* Delete Button */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                              data-testid={`delete-org-${org.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Organization</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to permanently delete <strong>{org.name}</strong>?
-                                <br /><br />
-                                This will also delete:
-                                <ul className="list-disc list-inside mt-2 space-y-1">
-                                  <li>All teams in this organization</li>
-                                  <li>All user-organization relationships</li>
-                                  <li>All pending invitations</li>
-                                </ul>
-                                <br />
-                                <strong>This action cannot be undone.</strong>
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteOrgMutation.mutate(org.id)}
-                                className="bg-red-600 hover:bg-red-700"
-                                data-testid={`confirm-delete-${org.id}`}
-                              >
-                                Delete Organization
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteClick(org)}
+                          data-testid={`delete-org-${org.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -361,6 +348,20 @@ export default function Organizations() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Organization Modal */}
+      {orgToDelete && (
+        <DeleteOrganizationModal
+          organization={orgToDelete}
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setOrgToDelete(null);
+          }}
+          onConfirm={handleDeleteConfirm}
+          isLoading={deleteOrgMutation.isPending}
+        />
+      )}
     </div>
   );
 }

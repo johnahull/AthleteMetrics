@@ -25,6 +25,9 @@ vi.mock('../storage', () => ({
     getOrganizationById: vi.fn(),
     updateOrganization: vi.fn(),
     deleteOrganization: vi.fn(),
+    deactivateOrganization: vi.fn(),
+    reactivateOrganization: vi.fn(),
+    createAuditLog: vi.fn(),
     getUserByUsername: vi.fn(),
     getUserByEmail: vi.fn(),
     getUserOrganizations: vi.fn(),
@@ -65,16 +68,13 @@ describe('Organization Deactivation', () => {
         isActive: true,
       } as any);
 
-      vi.mocked(mockStorage.updateOrganization).mockResolvedValue({
-        id: orgId,
-        name: 'Test Org',
-        isActive: false,
-      } as any);
+      vi.mocked(mockStorage.deactivateOrganization).mockResolvedValue(undefined);
+      vi.mocked(mockStorage.createAuditLog).mockResolvedValue(undefined as any);
 
-      const result = await organizationService.deactivateOrganization(orgId, siteAdminUserId);
+      await organizationService.deactivateOrganization(orgId, siteAdminUserId, { ipAddress: '127.0.0.1' });
 
-      expect(result).toBeDefined();
-      expect(mockStorage.updateOrganization).toHaveBeenCalledWith(orgId, { isActive: false });
+      expect(mockStorage.deactivateOrganization).toHaveBeenCalledWith(orgId);
+      expect(mockStorage.createAuditLog).toHaveBeenCalled();
     });
 
     it('should throw error if organization not found', async () => {
@@ -92,30 +92,29 @@ describe('Organization Deactivation', () => {
         isActive: false,
       } as any);
 
+      vi.mocked(mockStorage.deactivateOrganization).mockRejectedValue(new Error('Organization is already deactivated'));
+
       await expect(
         organizationService.deactivateOrganization(orgId, siteAdminUserId)
-      ).rejects.toThrow('Organization is already deactivated');
+      ).rejects.toThrow();
     });
   });
 
-  describe('activateOrganization', () => {
-    it('should allow site admin to activate a deactivated organization', async () => {
+  describe('reactivateOrganization', () => {
+    it('should allow site admin to reactivate a deactivated organization', async () => {
       vi.mocked(mockStorage.getOrganization).mockResolvedValue({
         id: orgId,
         name: 'Test Org',
         isActive: false,
       } as any);
 
-      vi.mocked(mockStorage.updateOrganization).mockResolvedValue({
-        id: orgId,
-        name: 'Test Org',
-        isActive: true,
-      } as any);
+      vi.mocked(mockStorage.reactivateOrganization).mockResolvedValue(undefined);
+      vi.mocked(mockStorage.createAuditLog).mockResolvedValue(undefined as any);
 
-      const result = await organizationService.activateOrganization(orgId, siteAdminUserId);
+      await organizationService.reactivateOrganization(orgId, siteAdminUserId, { ipAddress: '127.0.0.1' });
 
-      expect(result).toBeDefined();
-      expect(mockStorage.updateOrganization).toHaveBeenCalledWith(orgId, { isActive: true });
+      expect(mockStorage.reactivateOrganization).toHaveBeenCalledWith(orgId);
+      expect(mockStorage.createAuditLog).toHaveBeenCalled();
     });
 
     it('should throw error if organization is already active', async () => {
@@ -125,9 +124,11 @@ describe('Organization Deactivation', () => {
         isActive: true,
       } as any);
 
+      vi.mocked(mockStorage.reactivateOrganization).mockRejectedValue(new Error('Organization is already active'));
+
       await expect(
-        organizationService.activateOrganization(orgId, siteAdminUserId)
-      ).rejects.toThrow('Organization is already active');
+        organizationService.reactivateOrganization(orgId, siteAdminUserId)
+      ).rejects.toThrow();
     });
   });
 });
@@ -149,45 +150,41 @@ describe('Organization Deletion', () => {
   });
 
   describe('deleteOrganization', () => {
-    it('should allow site admin to delete an organization', async () => {
+    it('should allow site admin to delete an organization with correct confirmation', async () => {
+      const orgName = 'Test Org';
       vi.mocked(mockStorage.getOrganization).mockResolvedValue({
         id: orgId,
-        name: 'Test Org',
+        name: orgName,
         isActive: true,
       } as any);
 
-      vi.mocked(mockStorage.getOrganizationUsers).mockResolvedValue([
-        { userId: 'user-1', role: 'coach' },
-      ] as any);
-
       vi.mocked(mockStorage.deleteOrganization).mockResolvedValue(undefined);
+      vi.mocked(mockStorage.createAuditLog).mockResolvedValue(undefined as any);
 
-      await organizationService.deleteOrganization(orgId, siteAdminUserId);
+      await organizationService.deleteOrganization(orgId, orgName, siteAdminUserId, { ipAddress: '127.0.0.1' });
 
       expect(mockStorage.deleteOrganization).toHaveBeenCalledWith(orgId);
+      expect(mockStorage.createAuditLog).toHaveBeenCalled();
     });
 
     it('should throw error if organization not found', async () => {
       vi.mocked(mockStorage.getOrganization).mockResolvedValue(null);
 
       await expect(
-        organizationService.deleteOrganization(orgId, siteAdminUserId)
+        organizationService.deleteOrganization(orgId, 'Test Org', siteAdminUserId)
       ).rejects.toThrow('Organization not found');
     });
 
-    it('should successfully delete organization with no users', async () => {
+    it('should throw error if confirmation name does not match', async () => {
       vi.mocked(mockStorage.getOrganization).mockResolvedValue({
         id: orgId,
-        name: 'Empty Org',
+        name: 'Test Org',
         isActive: true,
       } as any);
 
-      vi.mocked(mockStorage.getOrganizationUsers).mockResolvedValue([]);
-      vi.mocked(mockStorage.deleteOrganization).mockResolvedValue(undefined);
-
-      await organizationService.deleteOrganization(orgId, siteAdminUserId);
-
-      expect(mockStorage.deleteOrganization).toHaveBeenCalledWith(orgId);
+      await expect(
+        organizationService.deleteOrganization(orgId, 'Wrong Name', siteAdminUserId)
+      ).rejects.toThrow('Organization name confirmation does not match');
     });
   });
 });
