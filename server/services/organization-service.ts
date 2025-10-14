@@ -22,17 +22,18 @@ interface UserOrganizationWithOrg extends UserOrganization {
  * Pads strings to prevent length leakage via timing
  */
 function constantTimeCompare(a: string, b: string): boolean {
-  const normalizedA = a.trim().toLowerCase();
-  const normalizedB = b.trim().toLowerCase();
-
-  // Pad to maximum organization name length (255 chars) to prevent length leakage
-  // This ensures timing is consistent regardless of actual string lengths
+  // Pad BEFORE normalization to prevent timing attacks on variable-length strings
+  // toLowerCase() has variable execution time, so we must operate on fixed-length strings
   const maxLen = 255;
-  const paddedA = normalizedA.padEnd(maxLen, '\0');
-  const paddedB = normalizedB.padEnd(maxLen, '\0');
+  const paddedA = a.trim().padEnd(maxLen, '\0');
+  const paddedB = b.trim().padEnd(maxLen, '\0');
 
-  const bufA = Buffer.from(paddedA);
-  const bufB = Buffer.from(paddedB);
+  // Now safe to normalize on fixed-length strings
+  const normalizedA = paddedA.toLowerCase();
+  const normalizedB = paddedB.toLowerCase();
+
+  const bufA = Buffer.from(normalizedA);
+  const bufB = Buffer.from(normalizedB);
 
   try {
     return crypto.timingSafeEqual(bufA, bufB);
@@ -43,14 +44,18 @@ function constantTimeCompare(a: string, b: string): boolean {
 
 /**
  * Sanitize user input for audit logs to prevent log injection attacks
- * Removes control characters and limits length
+ * Removes control characters, ANSI escape sequences, and limits length
  */
 function sanitizeForAuditLog(input: string, maxLength = 255): string {
   return input
     .trim()
-    // Remove control characters (0x00-0x1F) and delete character (0x7F)
+    // Remove C0 control characters (0x00-0x1F) and delete character (0x7F)
     .replace(/[\x00-\x1F\x7F]/g, '')
-    // Remove newlines and tabs to prevent log injection
+    // Remove C1 control characters (0x80-0x9F)
+    .replace(/[\x80-\x9F]/g, '')
+    // Remove ANSI escape sequences (e.g., color codes)
+    .replace(/\x1B\[[0-9;]*[A-Za-z]/g, '')
+    // Remove newlines and tabs to prevent log injection (redundant but explicit)
     .replace(/[\n\r\t]/g, ' ')
     // Limit length
     .substring(0, maxLength);

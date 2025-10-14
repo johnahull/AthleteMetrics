@@ -94,8 +94,7 @@ const orgDeleteLimiter = rateLimit({
   // - For advanced protection, consider: device fingerprinting, behavior analysis, or CAPTCHA
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
-    const ip = req.ip || 'unknown';
-    const normalizedIp = ipKeyGenerator(ip);
+    const normalizedIp = ipKeyGenerator(req);
     return userId ? `${normalizedIp}-${userId}` : normalizedIp;
   },
 });

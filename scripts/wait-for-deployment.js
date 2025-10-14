@@ -110,14 +110,30 @@ async function waitForDeployment() {
   console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
   console.log(`   Timeout: ${TIMEOUT / 1000}s`);
 
+  // Initial delay to allow Railway API to register the new deployment
+  // Without this, we may poll the previous deployment instead of the new one
+  const INITIAL_DELAY = 10000; // 10 seconds
+  console.log(`⏸️  Initial delay: ${INITIAL_DELAY / 1000}s (waiting for Railway to register new deployment)`);
+  await new Promise(resolve => setTimeout(resolve, INITIAL_DELAY));
+
   const startTime = Date.now();
   let lastStatus = null;
   let consecutiveErrors = 0;
+  let trackedDeploymentId = null;
   const MAX_CONSECUTIVE_ERRORS = 5;
 
   while (Date.now() - startTime < TIMEOUT) {
     try {
       const deployment = await getLatestDeploymentStatus();
+
+      // Track the first deployment ID we see to ensure we monitor the correct one
+      if (!trackedDeploymentId) {
+        trackedDeploymentId = deployment.id;
+        console.log(`🎯 Tracking deployment: ${trackedDeploymentId}`);
+      } else if (deployment.id !== trackedDeploymentId) {
+        console.warn(`⚠️  Deployment ID changed! Was ${trackedDeploymentId}, now ${deployment.id}`);
+        console.warn(`   This may indicate we started monitoring the wrong deployment`);
+      }
 
       // Reset consecutive error counter on successful status check
       consecutiveErrors = 0;
