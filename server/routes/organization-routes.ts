@@ -11,6 +11,38 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 const organizationService = new OrganizationService();
 
 /**
+ * Sanitize error messages for production
+ * Prevents leaking sensitive implementation details in error responses
+ */
+function sanitizeError(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  // In production, only return safe error messages to prevent info disclosure
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Allowlist of error messages safe to expose (don't reveal internal paths, SQL, etc.)
+  const safeErrors = [
+    'Unauthorized',
+    'not found',
+    'access denied',
+    'Invalid',
+    'confirmation',
+    'dependencies',
+    'already exists'
+  ];
+
+  if (isProduction) {
+    const isSafeError = safeErrors.some(safe => error.message.includes(safe));
+    return isSafeError ? error.message : fallback;
+  }
+
+  // In development, return full error message for debugging
+  return error.message;
+}
+
+/**
  * Rate limit configuration constants
  * These values balance security with usability for different operations
  */
@@ -87,8 +119,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(organizations);
     } catch (error) {
       console.error("Get organizations error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organizations";
-      res.status(500).json({ message });
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch organizations") });
     }
   });
 
@@ -115,8 +146,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(organization);
     } catch (error) {
       console.error("Get organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organization";
-      res.status(500).json({ message });
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch organization") });
     }
   });
 
@@ -146,8 +176,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.status(201).json(organization);
     } catch (error) {
       console.error("Create organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to create organization";
-      res.status(400).json({ message });
+      res.status(400).json({ message: sanitizeError(error, "Failed to create organization") });
     }
   });
 
@@ -170,7 +199,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(profile);
     } catch (error) {
       console.error("Get organization profile error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organization profile";
+      const message = sanitizeError(error, "Failed to fetch organization profile");
       const statusCode = message.includes("Unauthorized") ? 403 : 500;
       res.status(statusCode).json({ message });
     }
@@ -197,7 +226,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json({ message: "User removed from organization successfully" });
     } catch (error) {
       console.error("Remove user from organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to remove user from organization";
+      const message = sanitizeError(error, "Failed to remove user from organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 500;
       res.status(statusCode).json({ message });
     }
@@ -224,7 +253,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.status(201).json(user);
     } catch (error) {
       console.error("Add user to organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to add user to organization";
+      const message = sanitizeError(error, "Failed to add user to organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 400;
       res.status(statusCode).json({ message });
     }
@@ -315,7 +344,7 @@ export function registerOrganizationRoutes(app: Express) {
       }
     } catch (error) {
       console.error("Update organization status error:", error);
-      const message = error instanceof Error ? error.message : "Failed to update organization status";
+      const message = sanitizeError(error, "Failed to update organization status");
       const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
       res.status(statusCode).json({ message });
     }
@@ -347,7 +376,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json(counts);
     } catch (error) {
       console.error("Get organization dependencies error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch organization dependencies";
+      const message = sanitizeError(error, "Failed to fetch organization dependencies");
       const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
       res.status(statusCode).json({ message });
     }
@@ -388,7 +417,7 @@ export function registerOrganizationRoutes(app: Express) {
       res.json({ message: "Organization deleted successfully" });
     } catch (error) {
       console.error("Delete organization error:", error);
-      const message = error instanceof Error ? error.message : "Failed to delete organization";
+      const message = sanitizeError(error, "Failed to delete organization");
       const statusCode = message.includes("Unauthorized") ? 403
         : message.includes("not found") ? 404
         : message.includes("dependencies") || message.includes("confirmation") ? 400

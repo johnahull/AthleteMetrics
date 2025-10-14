@@ -78,10 +78,12 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
 
       - name: Wait for Railway deployment
-        run: |
-          echo "⏳ Waiting for Railway to complete deployment..."
-          sleep 30
-          echo "✅ Ready for health check"
+        run: node scripts/wait-for-deployment.js
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+          DEPLOYMENT_POLL_INTERVAL: 5
+          DEPLOYMENT_TIMEOUT: 300
 
       - name: Run health check
         run: node scripts/health-check.js

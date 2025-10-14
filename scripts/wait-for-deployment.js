@@ -1,0 +1,151 @@
+#!/usr/bin/env node
+
+/**
+ * Wait for Railway deployment to reach a stable state
+ * Polls deployment status instead of using fixed sleep duration
+ *
+ * Usage: node scripts/wait-for-deployment.js
+ *
+ * Required environment variables:
+ * - RAILWAY_TOKEN: Railway API token
+ * - RAILWAY_SERVICE_ID: Service ID to monitor
+ *
+ * Optional environment variables:
+ * - DEPLOYMENT_POLL_INTERVAL: Seconds between status checks (default: 5)
+ * - DEPLOYMENT_TIMEOUT: Maximum seconds to wait (default: 300)
+ */
+
+import { spawn } from 'child_process';
+
+const POLL_INTERVAL = parseInt(process.env.DEPLOYMENT_POLL_INTERVAL || '5', 10) * 1000;
+const TIMEOUT = parseInt(process.env.DEPLOYMENT_TIMEOUT || '300', 10) * 1000;
+const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID;
+
+if (!RAILWAY_SERVICE_ID) {
+  console.error('❌ RAILWAY_SERVICE_ID environment variable is required');
+  process.exit(1);
+}
+
+if (!process.env.RAILWAY_TOKEN) {
+  console.error('❌ RAILWAY_TOKEN environment variable is required');
+  process.exit(1);
+}
+
+/**
+ * Execute Railway CLI command and parse JSON output
+ */
+async function railwayCommand(args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('railway', args, {
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Railway CLI exited with code ${code}: ${stderr}`));
+      } else {
+        try {
+          resolve(JSON.parse(stdout));
+        } catch (err) {
+          reject(new Error(`Failed to parse Railway CLI output: ${err.message}`));
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Get the latest deployment status
+ */
+async function getLatestDeploymentStatus() {
+  try {
+    const result = await railwayCommand([
+      'deployments',
+      'list',
+      '--service',
+      RAILWAY_SERVICE_ID,
+      '--json'
+    ]);
+
+    if (!result || !result.data || result.data.length === 0) {
+      throw new Error('No deployments found');
+    }
+
+    const latestDeployment = result.data[0];
+    return {
+      id: latestDeployment.id,
+      status: latestDeployment.status,
+      createdAt: latestDeployment.createdAt
+    };
+  } catch (error) {
+    throw new Error(`Failed to get deployment status: ${error.message}`);
+  }
+}
+
+/**
+ * Wait for deployment to reach SUCCESS or FAILED state
+ */
+async function waitForDeployment() {
+  console.log('⏳ Waiting for Railway deployment to complete...');
+  console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
+  console.log(`   Timeout: ${TIMEOUT / 1000}s`);
+
+  const startTime = Date.now();
+  let lastStatus = null;
+
+  while (Date.now() - startTime < TIMEOUT) {
+    try {
+      const deployment = await getLatestDeploymentStatus();
+
+      if (deployment.status !== lastStatus) {
+        console.log(`📊 Deployment ${deployment.id} status: ${deployment.status}`);
+        lastStatus = deployment.status;
+      }
+
+      // Terminal states
+      if (deployment.status === 'SUCCESS') {
+        console.log('✅ Deployment completed successfully');
+        return 0;
+      }
+
+      if (deployment.status === 'FAILED' || deployment.status === 'CRASHED') {
+        console.error(`❌ Deployment ${deployment.status.toLowerCase()}`);
+        return 1;
+      }
+
+      // In-progress states: BUILDING, DEPLOYING, INITIALIZING
+      // Keep polling
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+
+    } catch (error) {
+      console.error(`⚠️  Error checking deployment status: ${error.message}`);
+      console.log(`   Retrying in ${POLL_INTERVAL / 1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+    }
+  }
+
+  // Timeout reached
+  console.error(`❌ Deployment timeout after ${TIMEOUT / 1000}s`);
+  console.error('   Last status:', lastStatus || 'unknown');
+  return 1;
+}
+
+// Run the script
+waitForDeployment()
+  .then(exitCode => process.exit(exitCode))
+  .catch(error => {
+    console.error('❌ Fatal error:', error.message);
+    process.exit(1);
+  });

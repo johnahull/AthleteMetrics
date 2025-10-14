@@ -151,9 +151,9 @@ export const invitations = pgTable("invitations", {
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  // Foreign key with ON DELETE CASCADE to prevent blocking user deletion
-  // Audit logs are preserved when user is deleted to maintain compliance trail
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Foreign key with ON DELETE SET NULL to preserve audit logs when user is deleted
+  // Maintains compliance trail while allowing user cleanup
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
   action: text("action").notNull(), // e.g., "site_admin_access", "role_change", "user_create"
   resourceType: text("resource_type"), // e.g., "organization", "user", "team"
   resourceId: varchar("resource_id"), // ID of the affected resource
