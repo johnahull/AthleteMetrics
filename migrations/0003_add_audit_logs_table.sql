@@ -26,11 +26,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     'user_created', 'user_updated', 'user_deleted', 'user_role_changed',
     'team_created', 'team_updated', 'team_deleted', 'team_archived',
     'measurement_created', 'measurement_updated', 'measurement_deleted',
-    'invitation_created', 'invitation_accepted', 'invitation_revoked', 'invitation_cancelled'
+    'invitation_created', 'invitation_accepted', 'invitation_revoked', 'invitation_cancelled',
+    'zombie_sessions_cleaned', 'zombie_cleanup_failed', 'session_revocation_failed'
   )),
 
   CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
-    'organization', 'user', 'team', 'measurement', 'invitation'
+    'organization', 'user', 'team', 'measurement', 'invitation', 'session'
   )),
 
   -- Prevent abuse: limit details field to 10,000 characters
