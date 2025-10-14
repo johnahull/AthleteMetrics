@@ -46,14 +46,16 @@ function sanitizeError(error: unknown, fallback: string): string {
 /**
  * Rate limit configuration constants
  * These values balance security with usability for different operations
+ * Disabled in test environment to allow integration tests to run without hitting limits
  */
+const isTestEnv = process.env.NODE_ENV === 'test';
 const RATE_LIMITS = {
   /** Conservative: Prevent organization spam while allowing legitimate admin work */
-  ORG_CREATION: 5,
+  ORG_CREATION: isTestEnv ? 1000 : 5,
   /** Moderate: Balance safety with usability for user management */
-  USER_DELETION: 10,
+  USER_DELETION: isTestEnv ? 1000 : 10,
   /** Very conservative: Destructive operation requiring extra caution */
-  ORG_DELETION: 5,
+  ORG_DELETION: isTestEnv ? 1000 : 5,
 } as const;
 
 // Rate limiting for organization creation
