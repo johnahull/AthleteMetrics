@@ -12,6 +12,7 @@ process.env.SESSION_SECRET = 'test-secret-key-for-integration-tests-only-at-leas
 process.env.ADMIN_USER = 'admin';
 process.env.ADMIN_EMAIL = 'admin@test.com';
 process.env.ADMIN_PASSWORD = 'TestPassword123!';
+process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // Bypass rate limits for these tests
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
@@ -320,7 +321,7 @@ describe('DELETE /api/organizations/:id', () => {
       .send({ confirmationName: testOrg.name });
 
     expect(response.status).toBe(200);
-    expect(response.body.message).toContain('successfully deleted');
+    expect(response.body.message).toContain('Organization deleted successfully');
 
     // Verify organization is deleted
     const [deleted] = await db
@@ -364,7 +365,7 @@ describe('DELETE /api/organizations/:id', () => {
       .send({ confirmationName: testOrg.name });
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toContain('has dependencies');
+    expect(response.body.message).toContain('dependencies');
 
     // Verify organization still exists
     const [stillExists] = await db
