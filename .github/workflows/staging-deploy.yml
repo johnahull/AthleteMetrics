@@ -82,10 +82,32 @@ jobs:
         run: |
           echo "🚀 Deploying to Railway Staging..."
 
-          # Deploy the application (migrations already applied above)
-          railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
+          # Deploy with retry logic for transient failures
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
 
-          echo "✅ Deployment initiated, waiting for Railway to complete..."
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
+
+            if railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach; then
+              echo "✅ Deployment initiated successfully"
+              exit 0
+            else
+              EXIT_CODE=$?
+              echo "❌ Deployment attempt $ATTEMPT failed with exit code $EXIT_CODE"
+
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                WAIT_TIME=$((ATTEMPT * 10))
+                echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
+                sleep $WAIT_TIME
+              fi
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ All deployment attempts failed"
+          exit 1
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
