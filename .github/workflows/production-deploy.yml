@@ -120,11 +120,13 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
       - name: Run database migrations
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
           echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
-          npm install -g @railway/cli
           railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
           echo "✅ Migrations completed successfully"
         env:
