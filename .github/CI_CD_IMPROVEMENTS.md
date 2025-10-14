@@ -151,6 +151,91 @@ This document outlines the comprehensive improvements made to the AthleteMetrics
 3. **Less Manual Work:** Automated rollbacks reduce on-call burden
 4. **Better Debugging:** Audit results saved as artifacts
 
+## Migration-Based Deployments
+
+### Overview
+
+Production and staging deployments now use **migration-based schema changes** instead of `drizzle-kit push`:
+
+```bash
+# OLD (bypasses git-tracked migrations):
+railway run npm run db:push  # Generates SQL on-the-fly
+
+# NEW (uses git-tracked migrations):
+railway run npm run db:migrate  # Runs committed migration files
+```
+
+### Why Migration Files?
+
+| Benefit | Description |
+|---------|-------------|
+| **Audit Trail** | Git history shows exactly what SQL ran when |
+| **SQL Review** | Team reviews exact SQL in PRs before production |
+| **Rollback Safety** | Revert schema changes using git revert |
+| **Deployment Confidence** | Test exact SQL in staging before production |
+| **Team Coordination** | Prevents conflicting schema changes |
+
+### Implementation Details
+
+**New Files:**
+- `server/migrate.ts` - Migration runner script
+- `MIGRATIONS.md` - Comprehensive developer guide
+
+**New npm Scripts:**
+```json
+{
+  "db:generate": "drizzle-kit generate",  // Create migration from schema
+  "db:migrate": "tsx server/migrate.ts",  // Apply git-tracked migrations
+  "db:push": "drizzle-kit push"           // Local dev only (kept for speed)
+}
+```
+
+**Workflow Changes:**
+- `production-deploy.yml` - Line 111: Uses `db:migrate`
+- `staging-deploy.yml` - Line 75: Uses `db:migrate`
+- `pr-checks.yml` - Still uses `db:push` for ephemeral test databases
+
+### Developer Workflow
+
+```bash
+# 1. Update schema
+vim shared/schema.ts
+
+# 2. Generate migration file
+npm run db:generate
+
+# 3. Review generated SQL
+cat migrations/000X_*.sql
+
+# 4. Test locally
+npm run db:migrate
+
+# 5. Commit migration with schema
+git add shared/schema.ts migrations/
+git commit -m "feat: add user email field"
+
+# 6. Deploy (migrations run automatically)
+git push origin develop  # Staging
+```
+
+### Safety Features
+
+- **Transaction Safety:** PostgreSQL transactions ensure partial migrations are rolled back
+- **Failure Handling:** Migration failures prevent deployment (code not deployed)
+- **Git Tracking:** All migrations committed to repository
+- **Review Process:** SQL reviewed in PRs before merging
+
+### Migration File Examples
+
+Existing migrations in project:
+```
+migrations/
+├── 0000_secret_blue_marvel.sql           # Initial schema
+├── 0001_add_team_uniqueness_constraint.sql
+├── 0002_add_organization_is_active_index.sql
+└── 0003_add_audit_logs_table.sql
+```
+
 ## Future Enhancements (Not Implemented)
 
 These were identified but deferred to keep the scope manageable:

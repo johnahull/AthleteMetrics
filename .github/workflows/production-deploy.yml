@@ -106,8 +106,9 @@ jobs:
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
           echo "📝 Current deployment: $CURRENT_DEPLOYMENT"
 
-          # Run migrations on production database
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+          # Run migrations on production database (uses migration files from git)
+          echo "🔄 Running database migrations from git-tracked migration files..."
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:migrate
 
           # Deploy the application
           railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
