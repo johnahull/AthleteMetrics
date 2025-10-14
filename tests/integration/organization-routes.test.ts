@@ -58,7 +58,7 @@ beforeAll(async () => {
 
   // Authenticate and get session cookie using the initialized admin user
   const loginResponse = await request(app)
-    .post('/api/login')
+    .post('/api/auth/login')
     .send({
       username: process.env.ADMIN_USER || 'admin',
       password: process.env.ADMIN_PASSWORD || 'TestPassword123!',
@@ -427,7 +427,7 @@ describe('Authorization', () => {
 
     // Authenticate regular user
     const loginResponse = await request(app)
-      .post('/api/login')
+      .post('/api/auth/login')
       .send({
         username: 'test-regular-user-org-routes',
         password: 'TestPassword123!',
