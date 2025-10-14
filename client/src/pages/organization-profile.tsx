@@ -581,7 +581,6 @@ export default function OrganizationProfile() {
       if (!userBelongsToRequestedOrg) {
         // Redirect to user's primary organization
         const primaryOrg = userOrganizations[0];
-        console.log(`Redirecting user from org ${id} to their primary org ${primaryOrg.organizationId}`);
         setLocation(`/organizations/${primaryOrg.organizationId}`);
         return;
       }
@@ -606,44 +605,9 @@ export default function OrganizationProfile() {
     };
   }, [organization?.name]);
 
-  // Debug: Log organization data and compare with sidebar data
-  useEffect(() => {
-    if (organization) {
-      console.log('=== ORGANIZATION DATA COMPARISON ===');
-      console.log('Page title data (from /api/organizations/${id}/profile):', {
-        id: organization.id,
-        name: organization.name,
-        description: organization.description,
-        coaches: organization.coaches?.length ?? 0,
-        athletes: organization.athletes?.length ?? 0
-      });
-
-      if (userOrganizations) {
-        const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
-        if (matchingUserOrg) {
-          console.log('Sidebar data (from /api/auth/me/organizations):', {
-            organizationId: matchingUserOrg.organizationId,
-            name: matchingUserOrg.organization.name,
-            role: matchingUserOrg.role
-          });
-
-          if (matchingUserOrg.organization.name !== organization.name) {
-            console.log('❌ DATA MISMATCH DETECTED:');
-            console.log('  - Profile endpoint says:', organization.name);
-            console.log('  - User orgs endpoint says:', matchingUserOrg.organization.name);
-            console.log('  - This suggests the organization name in the database is actually:', organization.name);
-          } else {
-            console.log('✅ Data is consistent between endpoints');
-          }
-        }
-      }
-    }
-  }, [organization, userOrganizations]);
-
   // Force refresh organization data when component mounts
   useEffect(() => {
     if (id) {
-      console.log('Force refreshing organization data for ID:', id);
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}`] });
       // Also invalidate user organizations to sync sidebar data
@@ -656,7 +620,6 @@ export default function OrganizationProfile() {
     if (organization && userOrganizations && id) {
       const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
       if (matchingUserOrg && matchingUserOrg.organization.name !== organization.name) {
-        console.log('Detected data mismatch, refreshing all organization caches...');
         // Force refresh both endpoints
         queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me/organizations"] });
