@@ -50,6 +50,12 @@ const orgDeleteLimiter = rateLimit({
   legacyHeaders: false,
   // Combine IP and user ID to prevent bypass via IP spoofing
   // Uses ipKeyGenerator for proper IPv6 handling
+  // SECURITY NOTE: This mitigates but does not completely prevent bypass via IP rotation
+  // (e.g., cloud VPN services, mobile networks, proxy rotation). Additional protections:
+  // - Audit logging captures all attempts for forensic analysis
+  // - CSRF protection prevents automated attacks without valid session
+  // - User account-based limiting (userId in key) prevents single-user abuse
+  // - For advanced protection, consider: device fingerprinting, behavior analysis, or CAPTCHA
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
     const ip = req.ip || 'unknown';
@@ -60,8 +66,13 @@ const orgDeleteLimiter = rateLimit({
 
 /**
  * Validate that a string is a valid UUIDv4
+ * Includes length check to prevent ReDoS attacks
  */
 function isValidUUID(id: string): boolean {
+  // Validate length first to prevent ReDoS (UUIDs are always 36 characters)
+  if (!id || id.length !== 36) {
+    return false;
+  }
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return UUID_REGEX.test(id);
 }

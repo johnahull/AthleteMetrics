@@ -18,20 +18,40 @@ interface UserOrganizationWithOrg extends UserOrganization {
 
 /**
  * Constant-time string comparison to prevent timing attacks
- * Pads strings to equal length before comparison
+ * Uses crypto.timingSafeEqual on equal-length buffers
  */
 function constantTimeCompare(a: string, b: string): boolean {
-  const bufA = Buffer.from(a.trim().toLowerCase());
-  const bufB = Buffer.from(b.trim().toLowerCase());
-  const maxLen = Math.max(bufA.length, bufB.length);
-  const paddedA = Buffer.concat([bufA, Buffer.alloc(maxLen - bufA.length)]);
-  const paddedB = Buffer.concat([bufB, Buffer.alloc(maxLen - bufB.length)]);
+  const normalizedA = a.trim().toLowerCase();
+  const normalizedB = b.trim().toLowerCase();
+
+  // Early length check (not timing-sensitive as length is public information)
+  if (normalizedA.length !== normalizedB.length) {
+    return false;
+  }
+
+  const bufA = Buffer.from(normalizedA);
+  const bufB = Buffer.from(normalizedB);
 
   try {
-    return crypto.timingSafeEqual(paddedA, paddedB);
+    return crypto.timingSafeEqual(bufA, bufB);
   } catch {
     return false;
   }
+}
+
+/**
+ * Sanitize user input for audit logs to prevent log injection attacks
+ * Removes control characters and limits length
+ */
+function sanitizeForAuditLog(input: string, maxLength = 255): string {
+  return input
+    .trim()
+    // Remove control characters (0x00-0x1F) and delete character (0x7F)
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    // Remove newlines and tabs to prevent log injection
+    .replace(/[\n\r\t]/g, ' ')
+    // Limit length
+    .substring(0, maxLength);
 }
 
 export class OrganizationService extends BaseService {
@@ -457,8 +477,11 @@ export class OrganizationService extends BaseService {
       // Delete organization (transaction with race condition protection is handled in storage layer)
       await this.storage.deleteOrganization(organizationId);
 
-      // Sanitize confirmation name for audit log (prevent log injection)
-      const sanitizedConfirmation = confirmationName.trim().substring(0, 255);
+      // Sanitize all user inputs and organization data for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+      const sanitizedConfirmation = sanitizeForAuditLog(confirmationName);
+      const sanitizedIpAddress = context.ipAddress ? sanitizeForAuditLog(context.ipAddress, 45) : null;
+      const sanitizedUserAgent = context.userAgent ? sanitizeForAuditLog(context.userAgent, 500) : null;
 
       // Create audit log with request context
       await this.storage.createAuditLog({
@@ -467,12 +490,12 @@ export class OrganizationService extends BaseService {
         resourceType: 'organization',
         resourceId: organizationId,
         details: JSON.stringify({
-          organizationName: org.name,
+          organizationName: sanitizedOrgName,
           confirmationProvided: true,
           confirmationName: sanitizedConfirmation
         }),
-        ipAddress: context.ipAddress || null,
-        userAgent: context.userAgent || null,
+        ipAddress: sanitizedIpAddress,
+        userAgent: sanitizedUserAgent,
       });
     } catch (error) {
       console.error("OrganizationService.deleteOrganization:", error);

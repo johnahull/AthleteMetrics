@@ -643,7 +643,9 @@ export async function registerRoutes(app: Express) {
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
     ];
 
-    if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
+    // Use exact path matching to prevent path traversal attacks
+    // Do NOT use startsWith() as it allows bypasses like "/login/../protected"
+    if (skipCsrfPaths.includes(req.path) ||
         skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
       return next();
     }
