@@ -47,35 +47,29 @@ beforeAll(async () => {
   app.use(express.urlencoded({ extended: false }));
   await registerRoutes(app);
 
-  // Create test site admin
-  const hashedPassword = await bcrypt.hash('TestPassword123!', 10);
-  [testSiteAdmin] = await db.insert(users).values({
-    username: 'test-site-admin-org-routes',
-    emails: ['test-org-routes@example.com'],
-    password: hashedPassword,
-    firstName: 'Test',
-    lastName: 'Admin',
-    fullName: 'Test Admin',
-    isSiteAdmin: true,
-    isActive: true,
-  }).returning();
+  // Admin user is already created by initializeDefaultUser() in registerRoutes()
+  // Get the admin user for reference
+  const adminUser = await db.select().from(users).where(eq(users.username, process.env.ADMIN_USER || 'admin')).limit(1);
+  if (adminUser.length > 0) {
+    testSiteAdmin = adminUser[0];
+  } else {
+    throw new Error('Admin user not found after initialization');
+  }
 
-  // Authenticate and get session cookie
+  // Authenticate and get session cookie using the initialized admin user
   const loginResponse = await request(app)
     .post('/api/login')
     .send({
-      username: 'test-site-admin-org-routes',
-      password: 'TestPassword123!',
+      username: process.env.ADMIN_USER || 'admin',
+      password: process.env.ADMIN_PASSWORD || 'TestPassword123!',
     });
 
   authCookie = loginResponse.headers['set-cookie'][0];
 });
 
 afterAll(async () => {
-  // Cleanup test data
-  if (testSiteAdmin?.id) {
-    await db.delete(users).where(eq(users.id, testSiteAdmin.id));
-  }
+  // Note: Do not delete the admin user created by initializeDefaultUser()
+  // It may be used by other tests
 });
 
 beforeEach(async () => {
