@@ -76,7 +76,7 @@ jobs:
           railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
           echo "✅ Migrations completed successfully"
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy to Railway Staging
         run: |
@@ -87,12 +87,12 @@ jobs:
 
           echo "✅ Deployment initiated, waiting for Railway to complete..."
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Wait for Railway deployment
         run: node scripts/wait-for-deployment.js
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           DEPLOYMENT_POLL_INTERVAL: 5
           DEPLOYMENT_TIMEOUT: 300
