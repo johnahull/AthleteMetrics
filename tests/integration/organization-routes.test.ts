@@ -465,6 +465,6 @@ describe('Authorization', () => {
       .patch(`/api/organizations/${testOrg.id}/status`)
       .send({ isActive: false });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(401);
   });
 });

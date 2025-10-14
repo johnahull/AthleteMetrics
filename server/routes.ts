@@ -286,18 +286,29 @@ export async function initializeDefaultUser() {
         const bcryptImport = await import("bcrypt");
         const hashedPassword = await bcryptImport.default.hash(adminPassword, 14);
 
-        await tx.insert(users).values({
-          username: adminUser,
-          emails: adminEmail ? [adminEmail] : [], // Optional email
-          password: hashedPassword,
-          passwordChangedAt: new Date(),
-          firstName: "Site",
-          lastName: "Administrator",
-          fullName: "Site Administrator",
-          isSiteAdmin: true
-        });
+        try {
+          await tx.insert(users).values({
+            username: adminUser,
+            emails: adminEmail ? [adminEmail] : [], // Optional email
+            password: hashedPassword,
+            passwordChangedAt: new Date(),
+            firstName: "Site",
+            lastName: "Administrator",
+            fullName: "Site Administrator",
+            isSiteAdmin: true
+          });
 
-        userCreated = true;
+          userCreated = true;
+        } catch (insertError: any) {
+          // If duplicate username error, user was created by concurrent transaction - this is OK
+          // This can happen in tests when multiple test files call registerRoutes() concurrently
+          if (insertError?.code === '23505' && insertError?.constraint?.includes('username')) {
+            console.log(`Admin user "${adminUser}" already exists (created by concurrent transaction)`);
+            return; // Exit transaction - user exists
+          }
+          // Re-throw other errors
+          throw insertError;
+        }
         return; // Exit transaction early for new user creation
       }
 
