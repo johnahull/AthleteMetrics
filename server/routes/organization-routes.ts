@@ -30,7 +30,8 @@ function sanitizeError(error: unknown, fallback: string): string {
     'Invalid',
     'confirmation',
     'dependencies',
-    'already exists'
+    'already exists',
+    'already'
   ];
 
   if (isProduction) {
@@ -345,7 +346,10 @@ export function registerOrganizationRoutes(app: Express) {
     } catch (error) {
       console.error("Update organization status error:", error);
       const message = sanitizeError(error, "Failed to update organization status");
-      const statusCode = message.includes("Unauthorized") ? 403 : message.includes("not found") ? 404 : 500;
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
+        : message.includes("already") ? 400
+        : 500;
       res.status(statusCode).json({ message });
     }
   });

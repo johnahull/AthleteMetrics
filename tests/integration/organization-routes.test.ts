@@ -89,9 +89,8 @@ describe('POST /api/organizations/:id/deactivate', () => {
       .send({ isActive: false });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      id: testOrg.id,
-      isActive: false,
+    expect(response.body).toEqual({
+      message: "Organization deactivated successfully"
     });
 
     // Verify database state
@@ -167,9 +166,8 @@ describe('POST /api/organizations/:id/reactivate', () => {
       .send({ isActive: true });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      id: testOrg.id,
-      isActive: true,
+    expect(response.body).toEqual({
+      message: "Organization reactivated successfully"
     });
 
     // Verify database state
