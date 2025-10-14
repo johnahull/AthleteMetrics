@@ -167,8 +167,25 @@ These were identified but deferred to keep the scope manageable:
 ### No Breaking Changes
 All changes are backward compatible. Existing workflows will continue to function.
 
-### New Secrets Required
-None - uses existing Railway secrets.
+### Required GitHub Secrets
+
+The following secrets must be configured in your GitHub repository:
+
+**Railway Deployment:**
+- `RAILWAY_STAGING_TOKEN` - Railway API token for staging environment
+- `RAILWAY_STAGING_SERVICE_ID` - Service ID for staging deployment
+- `RAILWAY_PRODUCTION_TOKEN` - Railway API token for production environment
+- `RAILWAY_PRODUCTION_SERVICE_ID` - Service ID for production deployment
+
+**Health Check URLs:**
+- `STAGING_URL` - Full URL of staging environment (e.g., `https://staging.example.com`)
+- `PRODUCTION_URL` - Full URL of production environment (e.g., `https://example.com`)
+
+To configure these secrets:
+1. Go to your GitHub repository → Settings → Secrets and variables → Actions
+2. Click "New repository secret" for each secret above
+3. Obtain Railway tokens from Railway dashboard → Account Settings → Tokens
+4. Get service IDs from Railway dashboard → Project → Service → Settings
 
 ### Testing the Changes
 

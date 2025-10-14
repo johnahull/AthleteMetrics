@@ -12,7 +12,7 @@ interface ApiResponse<T> {
   error?: string;
 }
 
-interface ApiError extends Error {
+export interface ApiError extends Error {
   status?: number;
   details?: any;
 }

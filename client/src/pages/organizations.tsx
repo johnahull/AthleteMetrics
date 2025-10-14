@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Building2, Trash2, CheckCircle, Ban } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { mutations } from "@/lib/api";
+import { mutations, type ApiError } from "@/lib/api";
 import DeleteOrganizationModal from "@/components/delete-organization-modal";
 
 type Organization = {
@@ -66,11 +66,11 @@ export default function Organizations() {
       setOrgDialogOpen(false);
       orgForm.reset();
     },
-    onError: (error: any) => {
-      toast({ 
-        title: "Error creating organization", 
+    onError: (error: ApiError) => {
+      toast({
+        title: "Error creating organization",
         description: error.message,
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
@@ -110,7 +110,7 @@ export default function Organizations() {
           : "Users will no longer be able to log into this organization."
       });
     },
-    onError: (error: any, _, context) => {
+    onError: (error: ApiError, _, context) => {
       // Rollback to the previous value on error
       if (context?.previousOrganizations) {
         queryClient.setQueryData(["/api/my-organizations"], context.previousOrganizations);
@@ -136,7 +136,7 @@ export default function Organizations() {
         description: "The organization and all related data have been permanently deleted."
       });
     },
-    onError: (error: any) => {
+    onError: (error: ApiError) => {
       toast({
         title: "Error deleting organization",
         description: error.message,

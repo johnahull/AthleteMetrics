@@ -26,6 +26,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: athletemetrics_test
+          POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
