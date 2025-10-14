@@ -6,19 +6,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Badge } from "@/components/ui/badge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2 } from "lucide-react";
+import { Plus, Building2, Trash2, Power, PowerOff } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { mutations } from "@/lib/api";
+import DeleteOrganizationModal from "@/components/delete-organization-modal";
 
 type Organization = {
   id: string;
   name: string;
   description?: string;
+  isActive: boolean;
   createdAt: string;
 };
 
@@ -31,6 +35,8 @@ export default function Organizations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [orgDialogOpen, setOrgDialogOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
   const [, setLocation] = useLocation();
   const { user, setOrganizationContext } = useAuth();
 
@@ -65,6 +71,63 @@ export default function Organizations() {
       });
     },
   });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      return isActive
+        ? await mutations.reactivateOrganization(id)
+        : await mutations.deactivateOrganization(id);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-organizations"] });
+      toast({
+        title: variables.isActive ? "Organization activated" : "Organization deactivated",
+        description: variables.isActive
+          ? "Users can now log into this organization."
+          : "Users will no longer be able to log into this organization."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error updating organization status",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const deleteOrgMutation = useMutation({
+    mutationFn: async ({ id, confirmationName }: { id: string; confirmationName: string }) => {
+      return await mutations.deleteOrganization(id, confirmationName);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-organizations"] });
+      setDeleteModalOpen(false);
+      setOrgToDelete(null);
+      toast({
+        title: "Organization deleted",
+        description: "The organization and all related data have been permanently deleted."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error deleting organization",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const handleDeleteClick = (org: Organization) => {
+    setOrgToDelete(org);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = (confirmationName: string) => {
+    if (orgToDelete) {
+      deleteOrgMutation.mutate({ id: orgToDelete.id, confirmationName });
+    }
+  };
 
   const onCreateOrg = (data: z.infer<typeof organizationSchema>) => {
     createOrgMutation.mutate(data);
@@ -194,22 +257,67 @@ export default function Organizations() {
                   className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors"
                   data-testid={`organization-${org.id}`}
                 >
-                  <h3 
-                    className="font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer" 
-                    data-testid={`organization-link-${org.id}`}
-                    onClick={() => onOrganizationClick(org.id, org.name)}
-                  >
-                    {org.name}
-                  </h3>
-                  {user?.isSiteAdmin && (
-                    <p className="text-xs text-blue-500 mt-1">Click to switch to organization view</p>
-                  )}
-                  {org.description && (
-                    <p className="text-sm text-gray-600 mt-1">{org.description}</p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-2">
-                    Created: {new Date(org.createdAt).toLocaleDateString()}
-                  </p>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3
+                          className="font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                          data-testid={`organization-link-${org.id}`}
+                          onClick={() => onOrganizationClick(org.id, org.name)}
+                        >
+                          {org.name}
+                        </h3>
+                        {org.isActive === false && (
+                          <Badge variant="secondary" className="bg-gray-200 text-gray-700">
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                      {user?.isSiteAdmin && (
+                        <p className="text-xs text-blue-500 mt-1">Click to switch to organization view</p>
+                      )}
+                      {org.description && (
+                        <p className="text-sm text-gray-600 mt-1">{org.description}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-2">
+                        Created: {new Date(org.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    {/* Site Admin Actions */}
+                    {user?.isSiteAdmin && (
+                      <div className="flex items-center gap-2 ml-4">
+                        {/* Deactivate/Activate Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateStatusMutation.mutate({
+                            id: org.id,
+                            isActive: org.isActive === false
+                          })}
+                          disabled={updateStatusMutation.isPending}
+                          data-testid={`toggle-status-${org.id}`}
+                        >
+                          {org.isActive === false ? (
+                            <Power className="h-4 w-4" />
+                          ) : (
+                            <PowerOff className="h-4 w-4" />
+                          )}
+                        </Button>
+
+                        {/* Delete Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteClick(org)}
+                          data-testid={`delete-org-${org.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
 
@@ -240,6 +348,20 @@ export default function Organizations() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Organization Modal */}
+      {orgToDelete && (
+        <DeleteOrganizationModal
+          organization={orgToDelete}
+          isOpen={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setOrgToDelete(null);
+          }}
+          onConfirm={handleDeleteConfirm}
+          isLoading={deleteOrgMutation.isPending}
+        />
+      )}
     </div>
   );
 }
