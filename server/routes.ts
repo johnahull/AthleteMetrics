@@ -302,7 +302,11 @@ export async function initializeDefaultUser() {
         } catch (insertError: any) {
           // If duplicate username error, user was created by concurrent transaction - this is OK
           // This can happen in tests when multiple test files call registerRoutes() concurrently
-          if (insertError?.code === '23505' && insertError?.constraint?.includes('username')) {
+          const errorMessage = insertError?.message || String(insertError);
+          const isDuplicateUsername = errorMessage.includes('duplicate key') &&
+                                       errorMessage.includes('users_username_unique');
+
+          if (isDuplicateUsername) {
             console.log(`Admin user "${adminUser}" already exists (created by concurrent transaction)`);
             return; // Exit transaction - user exists
           }
