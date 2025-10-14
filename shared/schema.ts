@@ -12,11 +12,9 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   location: text("location"),
   isActive: boolean("is_active").default(true).notNull(),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  // Performance index for filtering active organizations
-  isActiveIndex: index("organizations_is_active_idx").on(table.isActive),
-}));
+});
 
 export const teams = pgTable("teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -311,6 +309,18 @@ export const emailVerificationTokensRelations = relations(emailVerificationToken
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
   id: true,
   createdAt: true,
+  isActive: true, // Managed by system
+  deletedAt: true, // Managed by system
+});
+
+// Organization status update schema
+export const updateOrganizationStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
+// Organization deletion validation schema
+export const deleteOrganizationSchema = z.object({
+  confirmationName: z.string().min(1, "Organization name confirmation is required"),
 });
 
 export const insertTeamSchema = createInsertSchema(teams).omit({
@@ -477,6 +487,8 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
+export type UpdateOrganizationStatus = z.infer<typeof updateOrganizationStatusSchema>;
+export type DeleteOrganization = z.infer<typeof deleteOrganizationSchema>;
 
 export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type Team = typeof teams.$inferSelect;

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { EnhancedUser, ImpersonationStatus, UserOrganization } from './types/user';
+import { apiClient } from './api';
 
 interface AuthContextType {
   user: EnhancedUser | null;
@@ -111,43 +112,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const startImpersonation = async (userId: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const response = await fetch(`/api/admin/impersonate/${userId}`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setUser(data.user);
-        setImpersonationStatus(data.impersonationStatus);
-        return { success: true, message: data.message };
-      } else {
-        return { success: false, message: data.message || 'Failed to start impersonation' };
-      }
+      const data = await apiClient.post<{ user: EnhancedUser; impersonationStatus: ImpersonationStatus; message: string }>(`/admin/impersonate/${userId}`, {});
+      setUser(data.user);
+      setImpersonationStatus(data.impersonationStatus);
+      return { success: true, message: data.message };
     } catch (error) {
-      return { success: false, message: 'Network error occurred' };
+      const message = error instanceof Error ? error.message : 'Network error occurred';
+      return { success: false, message };
     }
   };
 
   const stopImpersonation = async (): Promise<{ success: boolean; message?: string }> => {
     try {
-      const response = await fetch('/api/admin/stop-impersonation', {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setUser(data.user);
-        setImpersonationStatus(data.impersonationStatus);
-        return { success: true, message: data.message };
-      } else {
-        return { success: false, message: data.message || 'Failed to stop impersonation' };
-      }
+      const data = await apiClient.post<{ user: EnhancedUser; impersonationStatus: ImpersonationStatus; message: string }>('/admin/stop-impersonation', {});
+      setUser(data.user);
+      setImpersonationStatus(data.impersonationStatus);
+      return { success: true, message: data.message };
     } catch (error) {
-      return { success: false, message: 'Network error occurred' };
+      const message = error instanceof Error ? error.message : 'Network error occurred';
+      return { success: false, message };
     }
   };
 
@@ -191,6 +174,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserOrganizations(null);
       setOrganizationContext(null);
       setImpersonationStatus(null);
+      // Clear CSRF token cache to prevent session desync on re-login
+      apiClient.clearCsrfTokenCache();
       setLocation('/login');
     } catch (error) {
       console.error('Logout failed:', error);
@@ -198,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserOrganizations(null);
       setOrganizationContext(null);
       setImpersonationStatus(null);
+      // Clear CSRF token cache even on error
+      apiClient.clearCsrfTokenCache();
       setLocation('/login');
     }
   };

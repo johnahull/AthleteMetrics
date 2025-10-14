@@ -5,6 +5,7 @@
 import { BaseService } from "./base-service";
 import { insertOrganizationSchema } from "@shared/schema";
 import type { Organization, InsertOrganization, User, UserOrganization } from "@shared/schema";
+import crypto from "crypto";
 
 export interface OrganizationFilters {
   search?: string;
@@ -13,6 +14,24 @@ export interface OrganizationFilters {
 
 interface UserOrganizationWithOrg extends UserOrganization {
   organization: Organization;
+}
+
+/**
+ * Constant-time string comparison to prevent timing attacks
+ * Pads strings to equal length before comparison
+ */
+function constantTimeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a.trim().toLowerCase());
+  const bufB = Buffer.from(b.trim().toLowerCase());
+  const maxLen = Math.max(bufA.length, bufB.length);
+  const paddedA = Buffer.concat([bufA, Buffer.alloc(maxLen - bufA.length)]);
+  const paddedB = Buffer.concat([bufB, Buffer.alloc(maxLen - bufB.length)]);
+
+  try {
+    return crypto.timingSafeEqual(paddedA, paddedB);
+  } catch {
+    return false;
+  }
 }
 
 export class OrganizationService extends BaseService {
@@ -41,6 +60,7 @@ export class OrganizationService extends BaseService {
 
   /**
    * Get all organizations (site admin only)
+   * Includes inactive organizations for site admins to manage deactivation/reactivation
    */
   async getAllOrganizations(requestingUserId: string): Promise<Organization[]> {
     try {
@@ -49,7 +69,8 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Only site administrators can view all organizations");
       }
 
-      return await this.storage.getOrganizations();
+      // Site admins need to see inactive orgs for reactivation functionality
+      return await this.storage.getOrganizations({ includeInactive: true });
     } catch (error) {
       console.error("OrganizationService.getAllOrganizations:", error);
       return [];
@@ -265,36 +286,42 @@ export class OrganizationService extends BaseService {
   ): Promise<Map<string, any>> {
     try {
       const profilesMap = new Map<string, any>();
+      const BATCH_SIZE = 50; // Process 50 organizations at a time to prevent memory issues
 
-      // Fetch all organizations in parallel
-      const orgsPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganization(id))
-      );
+      // Process organizations in batches to prevent memory issues with large numbers
+      for (let i = 0; i < organizationIds.length; i += BATCH_SIZE) {
+        const batch = organizationIds.slice(i, i + BATCH_SIZE);
 
-      // Fetch all users for all organizations in parallel
-      const usersPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganizationUsers(id))
-      );
+        // Fetch all organizations in this batch in parallel
+        const orgsPromise = Promise.all(
+          batch.map(id => this.storage.getOrganization(id))
+        );
 
-      // Fetch all invitations for all organizations in parallel
-      const invitationsPromise = Promise.all(
-        organizationIds.map(id => this.storage.getOrganizationInvitations(id))
-      );
+        // Fetch all users for all organizations in this batch in parallel
+        const usersPromise = Promise.all(
+          batch.map(id => this.storage.getOrganizationUsers(id))
+        );
 
-      const [orgs, usersArrays, invitationsArrays] = await Promise.all([
-        orgsPromise,
-        usersPromise,
-        invitationsPromise
-      ]);
+        // Fetch all invitations for all organizations in this batch in parallel
+        const invitationsPromise = Promise.all(
+          batch.map(id => this.storage.getOrganizationInvitations(id))
+        );
 
-      // Build the profiles map
-      organizationIds.forEach((orgId, index) => {
-        profilesMap.set(orgId, {
-          organization: orgs[index],
-          users: usersArrays[index] || [],
-          invitations: invitationsArrays[index] || []
+        const [orgs, usersArrays, invitationsArrays] = await Promise.all([
+          orgsPromise,
+          usersPromise,
+          invitationsPromise
+        ]);
+
+        // Build the profiles map for this batch
+        batch.forEach((orgId, index) => {
+          profilesMap.set(orgId, {
+            organization: orgs[index],
+            users: usersArrays[index] || [],
+            invitations: invitationsArrays[index] || []
+          });
         });
-      });
+      }
 
       return profilesMap;
     } catch (error) {
@@ -304,32 +331,38 @@ export class OrganizationService extends BaseService {
   }
 
   /**
-   * Deactivate an organization (site admin only)
-   * Prevents users from logging into this organization
+   * Deactivate organization (soft delete - site admin only)
    */
   async deactivateOrganization(
     organizationId: string,
-    requestingUserId: string
-  ): Promise<Organization> {
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
+  ): Promise<void> {
     try {
       // Verify permissions
       if (!(await this.isSiteAdmin(requestingUserId))) {
         throw new Error("Unauthorized: Only site administrators can deactivate organizations");
       }
 
-      // Check if organization exists
-      const organization = await this.storage.getOrganization(organizationId);
-      if (!organization) {
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
         throw new Error("Organization not found");
       }
 
-      // Check if already deactivated
-      if (organization.isActive === false) {
-        throw new Error("Organization is already deactivated");
-      }
+      // Deactivate organization
+      await this.storage.deactivateOrganization(organizationId);
 
-      // Update organization status
-      return await this.storage.updateOrganization(organizationId, { isActive: false });
+      // Create audit log with request context
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_deactivated',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({ organizationName: org.name }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
+      });
     } catch (error) {
       console.error("OrganizationService.deactivateOrganization:", error);
       throw error;
@@ -337,48 +370,53 @@ export class OrganizationService extends BaseService {
   }
 
   /**
-   * Activate a deactivated organization (site admin only)
+   * Reactivate organization (site admin only)
    */
-  async activateOrganization(
+  async reactivateOrganization(
     organizationId: string,
-    requestingUserId: string
-  ): Promise<Organization> {
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
+  ): Promise<void> {
     try {
       // Verify permissions
       if (!(await this.isSiteAdmin(requestingUserId))) {
-        throw new Error("Unauthorized: Only site administrators can activate organizations");
+        throw new Error("Unauthorized: Only site administrators can reactivate organizations");
       }
 
-      // Check if organization exists
-      const organization = await this.storage.getOrganization(organizationId);
-      if (!organization) {
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
         throw new Error("Organization not found");
       }
 
-      // Check if already active
-      if (organization.isActive === true) {
-        throw new Error("Organization is already active");
-      }
+      // Reactivate organization
+      await this.storage.reactivateOrganization(organizationId);
 
-      // Update organization status
-      return await this.storage.updateOrganization(organizationId, { isActive: true });
+      // Create audit log with request context
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_reactivated',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({ organizationName: org.name }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
+      });
     } catch (error) {
-      console.error("OrganizationService.activateOrganization:", error);
+      console.error("OrganizationService.reactivateOrganization:", error);
       throw error;
     }
   }
 
   /**
-   * Delete an organization and all related data (site admin only)
-   * This is a hard delete with cascading to:
-   * - Teams
-   * - User-organization relationships
-   * - Invitations
-   * - Related measurements (via team memberships)
+   * Delete organization permanently (site admin only)
+   * Only allowed if organization has no users, teams, or measurements
    */
   async deleteOrganization(
     organizationId: string,
-    requestingUserId: string
+    confirmationName: string,
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
   ): Promise<void> {
     try {
       // Verify permissions
@@ -386,22 +424,91 @@ export class OrganizationService extends BaseService {
         throw new Error("Unauthorized: Only site administrators can delete organizations");
       }
 
-      // Check if organization exists
-      const organization = await this.storage.getOrganization(organizationId);
-      if (!organization) {
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
         throw new Error("Organization not found");
       }
 
-      // Get organization users for logging/audit purposes
-      const users = await this.storage.getOrganizationUsers(organizationId);
-      console.log(`Deleting organization ${organization.name} (${organizationId}) with ${users.length} users`);
+      // Validate confirmation name type and length to prevent DoS
+      if (!confirmationName || typeof confirmationName !== 'string') {
+        throw new Error("Confirmation name is required");
+      }
 
-      // Delete organization (cascading deletes handled by database FK constraints)
+      if (confirmationName.length > 255) {
+        throw new Error("Confirmation name too long");
+      }
+
+      // Verify confirmation name matches using constant-time comparison to prevent timing attacks
+      if (!constantTimeCompare(confirmationName, org.name)) {
+        throw new Error("Organization name confirmation does not match");
+      }
+
+      // Delete organization (transaction with race condition protection is handled in storage layer)
       await this.storage.deleteOrganization(organizationId);
 
-      console.log(`Successfully deleted organization ${organizationId}`);
+      // Sanitize confirmation name for audit log (prevent log injection)
+      const sanitizedConfirmation = confirmationName.trim().substring(0, 255);
+
+      // Create audit log with request context
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_deleted',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({
+          organizationName: org.name,
+          confirmationProvided: true,
+          confirmationName: sanitizedConfirmation
+        }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
+      });
     } catch (error) {
       console.error("OrganizationService.deleteOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get organization dependency counts (site admin only)
+   */
+  async getOrganizationDependencyCounts(
+    organizationId: string,
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
+  ): Promise<{ users: number; teams: number; measurements: number }> {
+    try {
+      // Verify permissions
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can view dependency counts");
+      }
+
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      const counts = await this.storage.getOrganizationDependencyCounts(organizationId);
+
+      // Create audit log for security monitoring
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_dependencies_viewed',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({
+          organizationName: org.name,
+          counts
+        }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
+      });
+
+      return counts;
+    } catch (error) {
+      console.error("OrganizationService.getOrganizationDependencyCounts:", error);
       throw error;
     }
   }
