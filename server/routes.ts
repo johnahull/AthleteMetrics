@@ -444,17 +444,13 @@ export async function initializeDefaultUser() {
   } catch (error) {
     console.error("Error initializing default user:", error);
 
-    // In test mode, process.exit is mocked to throw an error
-    // We need to catch and rethrow that error for test assertions
-    try {
+    // In test environments, throw the error so tests can assert on it
+    // In production, exit the process to prevent running with broken admin setup
+    if (process.env.NODE_ENV === 'test') {
+      throw error;
+    } else {
       process.exit(1);
-    } catch (exitError) {
-      // If process.exit throws (due to test mock), rethrow it
-      throw exitError;
     }
-
-    // If process.exit didn't throw (production), the process will have exited
-    // This line is unreachable in production
   }
 }
 
