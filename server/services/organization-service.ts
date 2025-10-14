@@ -22,18 +22,18 @@ interface UserOrganizationWithOrg extends UserOrganization {
  * Pads strings to prevent length leakage via timing
  */
 function constantTimeCompare(a: string, b: string): boolean {
-  // Pad BEFORE normalization to prevent timing attacks on variable-length strings
-  // toLowerCase() has variable execution time, so we must operate on fixed-length strings
+  // Normalize FIRST (on variable-length strings), then pad to fixed length
+  // This prevents timing attacks: toLowerCase() on different content has variable time,
+  // but operating on padded, normalized strings of equal length is constant-time
+  const normalizedA = a.trim().toLowerCase();
+  const normalizedB = b.trim().toLowerCase();
+
   const maxLen = 255;
-  const paddedA = a.trim().padEnd(maxLen, '\0');
-  const paddedB = b.trim().padEnd(maxLen, '\0');
+  const paddedA = normalizedA.padEnd(maxLen, '\0');
+  const paddedB = normalizedB.padEnd(maxLen, '\0');
 
-  // Now safe to normalize on fixed-length strings
-  const normalizedA = paddedA.toLowerCase();
-  const normalizedB = paddedB.toLowerCase();
-
-  const bufA = Buffer.from(normalizedA);
-  const bufB = Buffer.from(normalizedB);
+  const bufA = Buffer.from(paddedA);
+  const bufB = Buffer.from(paddedB);
 
   try {
     return crypto.timingSafeEqual(bufA, bufB);
