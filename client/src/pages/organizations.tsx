@@ -188,7 +188,7 @@ export default function Organizations() {
   useEffect(() => {
     if (!user?.isSiteAdmin && organizations && organizations.length === 1) {
       const primaryOrg = organizations[0];
-      console.log(`Auto-redirecting user to their primary organization: ${primaryOrg.name}`);
+      // Auto-redirect to primary organization for better UX
       setLocation(`/organizations/${primaryOrg.id}`);
     }
   }, [user, organizations, setLocation]);

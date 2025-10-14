@@ -56,6 +56,12 @@ async function railwayCommand(args) {
       if (code !== 0) {
         reject(new Error(`Railway CLI exited with code ${code}: ${stderr}`));
       } else {
+        // Check for empty output before parsing
+        if (!stdout || stdout.trim().length === 0) {
+          reject(new Error(`Railway CLI returned empty output. stderr: ${stderr}`));
+          return;
+        }
+
         try {
           resolve(JSON.parse(stdout));
         } catch (err) {
@@ -106,10 +112,15 @@ async function waitForDeployment() {
 
   const startTime = Date.now();
   let lastStatus = null;
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 5;
 
   while (Date.now() - startTime < TIMEOUT) {
     try {
       const deployment = await getLatestDeploymentStatus();
+
+      // Reset consecutive error counter on successful status check
+      consecutiveErrors = 0;
 
       if (deployment.status !== lastStatus) {
         console.log(`📊 Deployment ${deployment.id} status: ${deployment.status}`);
@@ -132,8 +143,16 @@ async function waitForDeployment() {
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
 
     } catch (error) {
+      consecutiveErrors++;
       console.error(`⚠️  Error checking deployment status: ${error.message}`);
-      console.log(`   Retrying in ${POLL_INTERVAL / 1000}s...`);
+
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error(`❌ ${MAX_CONSECUTIVE_ERRORS} consecutive API errors - failing fast`);
+        console.error('   This may indicate Railway CLI authentication or network issues');
+        return 1;
+      }
+
+      console.log(`   Retrying in ${POLL_INTERVAL / 1000}s... (attempt ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
     }
   }
