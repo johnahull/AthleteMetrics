@@ -17,14 +17,29 @@ interface UserOrganizationWithOrg extends UserOrganization {
 }
 
 /**
- * Constant-time string comparison to prevent timing attacks
- * Uses crypto.timingSafeEqual on equal-length buffers
- * Pads strings to prevent length leakage via timing
+ * Constant-time string comparison to prevent timing attacks in organization deletion
+ *
+ * SECURITY TRADEOFFS:
+ * - toLowerCase() and trim() have variable execution time based on input content
+ * - Achieving perfectly constant-time string normalization is extremely difficult
+ * - However, timing attack risk is mitigated by multiple defense layers:
+ *   1. Site admin only access (limited attack surface)
+ *   2. Rate limiting (5 attempts per 15 minutes via composite IP+UserID keys)
+ *   3. Comprehensive audit logging (all attempts recorded with IP/User-Agent)
+ *   4. crypto.timingSafeEqual() on padded strings (constant-time comparison)
+ *
+ * ACCEPTED RISK: The normalization step may leak minimal timing information, but the
+ * combination of access control, rate limiting, and audit logging makes practical
+ * exploitation infeasible. The cost-benefit of attempting perfect constant-time
+ * normalization (which may still have timing variations) is not justified.
+ *
+ * @param a - First string to compare (user-provided organization name)
+ * @param b - Second string to compare (actual organization name)
+ * @returns true if strings match (case-insensitive, trimmed), false otherwise
  */
 function constantTimeCompare(a: string, b: string): boolean {
-  // Normalize FIRST (on variable-length strings), then pad to fixed length
-  // This prevents timing attacks: toLowerCase() on different content has variable time,
-  // but operating on padded, normalized strings of equal length is constant-time
+  // Normalize strings (trim whitespace, convert to lowercase)
+  // NOTE: These operations have variable time, but risk is accepted (see JSDoc above)
   const normalizedA = a.trim().toLowerCase();
   const normalizedB = b.trim().toLowerCase();
 

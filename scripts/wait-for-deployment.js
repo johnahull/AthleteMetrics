@@ -32,6 +32,29 @@ if (!process.env.RAILWAY_TOKEN) {
 }
 
 /**
+ * Verify Railway CLI is installed
+ */
+function checkRailwayCLI() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('railway', ['--version'], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error('Railway CLI not found. Install with: npm install -g @railway/cli'));
+      } else {
+        resolve();
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error('Railway CLI not found. Install with: npm install -g @railway/cli'));
+    });
+  });
+}
+
+/**
  * Execute Railway CLI command and parse JSON output
  */
 async function railwayCommand(args) {
@@ -106,6 +129,11 @@ async function getLatestDeploymentStatus() {
  * Wait for deployment to reach SUCCESS or FAILED state
  */
 async function waitForDeployment() {
+  // Verify Railway CLI is installed before proceeding
+  console.log('🔍 Checking Railway CLI installation...');
+  await checkRailwayCLI();
+  console.log('✅ Railway CLI found');
+
   console.log('⏳ Waiting for Railway deployment to complete...');
   console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
   console.log(`   Timeout: ${TIMEOUT / 1000}s`);
