@@ -69,9 +69,12 @@ jobs:
           MODERATE_COUNT=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json)
           LOW_COUNT=$(jq '.metadata.vulnerabilities.low // 0' audit-results.json)
 
-          echo "critical-count=$CRITICAL_COUNT" >> "$GITHUB_OUTPUT"
-          echo "high-count=$HIGH_COUNT" >> "$GITHUB_OUTPUT"
-          echo "moderate-count=$MODERATE_COUNT" >> "$GITHUB_OUTPUT"
+          # Output results (grouped to avoid SC2129 shellcheck warning)
+          {
+            echo "critical-count=$CRITICAL_COUNT"
+            echo "high-count=$HIGH_COUNT"
+            echo "moderate-count=$MODERATE_COUNT"
+          } >> "$GITHUB_OUTPUT"
 
           echo "📊 Security Audit Results:"
           echo "  Critical: $CRITICAL_COUNT"
