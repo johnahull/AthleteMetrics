@@ -63,6 +63,7 @@ const createLimiter = rateLimit({
   message: { message: "Too many organization creation attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => process.env.BYPASS_GENERAL_RATE_LIMIT === 'true',
 });
 
 // Stricter rate limiting for user deletion operations
@@ -72,6 +73,7 @@ const userDeleteLimiter = rateLimit({
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => process.env.BYPASS_GENERAL_RATE_LIMIT === 'true',
 });
 
 // Rate limiting for organization deletion operations
@@ -81,6 +83,7 @@ const orgDeleteLimiter = rateLimit({
   message: { message: "Too many organization deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => process.env.BYPASS_GENERAL_RATE_LIMIT === 'true',
   // Combine IP and user ID to prevent bypass via IP spoofing
   // Uses ipKeyGenerator for proper IPv6 handling
   // SECURITY NOTE: This mitigates but does not completely prevent bypass via IP rotation
