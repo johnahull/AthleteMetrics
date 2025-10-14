@@ -66,12 +66,21 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Run database migrations
+        run: |
+          echo "🔄 Running database migrations BEFORE deployment..."
+          echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          npm install -g @railway/cli
+          railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
+          echo "✅ Migrations completed successfully"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+
       - name: Deploy to Railway Staging
         run: |
           echo "🚀 Deploying to Railway Staging..."
-          npm install -g @railway/cli
 
-          # Deploy the application first (without migrations)
+          # Deploy the application (migrations already applied above)
           railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
 
           echo "✅ Deployment initiated, waiting for Railway to complete..."
@@ -92,14 +101,6 @@ jobs:
           HEALTH_CHECK_URL: ${{ secrets.STAGING_URL }}
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
-
-      - name: Run database migrations
-        run: |
-          echo "🔄 Running database migrations after successful deployment..."
-          railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
-          echo "✅ Migrations completed"
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
 
       - name: Notify deployment success
         if: success()

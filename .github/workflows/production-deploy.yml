@@ -120,18 +120,27 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
+      - name: Run database migrations
+        run: |
+          echo "🔄 Running database migrations BEFORE deployment..."
+          echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          npm install -g @railway/cli
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+          echo "✅ Migrations completed successfully"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+
       - name: Deploy to Railway Production
         id: deploy
         run: |
           echo "🚀 Deploying to Railway Production..."
-          npm install -g @railway/cli
 
           # Capture current deployment ID for potential rollback (BEFORE deploying)
           CURRENT_DEPLOYMENT=$(railway deployments list --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.data[0].id' || echo "")
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
           echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
 
-          # Deploy the application first (this creates NEW deployment)
+          # Deploy the application (migrations already applied above)
           railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
 
           echo "✅ Deployment initiated"
@@ -154,15 +163,6 @@ jobs:
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
         continue-on-error: true
-
-      - name: Run database migrations
-        if: steps.health-check.outcome == 'success'
-        run: |
-          echo "🔄 Running database migrations after successful health check..."
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
-          echo "✅ Migrations completed"
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
       - name: Run smoke tests
         id: smoke-tests
