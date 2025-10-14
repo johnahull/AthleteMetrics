@@ -269,7 +269,8 @@ export async function initializeDefaultUser() {
     let passwordMatches = false;
     let userCreated = false;
 
-    await db.transaction(async (tx) => {
+    try {
+      await db.transaction(async (tx) => {
       // CRITICAL: Fetch and lock user row inside transaction to prevent TOCTOU
       // This prevents race condition where user data could change between fetch and lock
       // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
@@ -286,39 +287,18 @@ export async function initializeDefaultUser() {
         const bcryptImport = await import("bcrypt");
         const hashedPassword = await bcryptImport.default.hash(adminPassword, 14);
 
-        try {
-          await tx.insert(users).values({
-            username: adminUser,
-            emails: adminEmail ? [adminEmail] : [], // Optional email
-            password: hashedPassword,
-            passwordChangedAt: new Date(),
-            firstName: "Site",
-            lastName: "Administrator",
-            fullName: "Site Administrator",
-            isSiteAdmin: true
-          });
+        await tx.insert(users).values({
+          username: adminUser,
+          emails: adminEmail ? [adminEmail] : [], // Optional email
+          password: hashedPassword,
+          passwordChangedAt: new Date(),
+          firstName: "Site",
+          lastName: "Administrator",
+          fullName: "Site Administrator",
+          isSiteAdmin: true
+        });
 
-          userCreated = true;
-        } catch (insertError: any) {
-          // If duplicate username error, user was created by concurrent transaction - this is OK
-          // This can happen in tests when multiple test files call registerRoutes() concurrently
-          const errorMessage = insertError?.message || String(insertError);
-          const errorName = insertError?.name || insertError?.constructor?.name || '';
-          const isDuplicateUsername = (errorMessage.includes('duplicate key') || errorMessage.includes('duplicate')) &&
-                                       (errorMessage.includes('users_username_unique') || errorMessage.includes('username'));
-
-          // Log for debugging
-          if (process.env.NODE_ENV === 'test') {
-            console.log(`[DEBUG] Insert error caught: name="${errorName}", message="${errorMessage}", isDuplicate=${isDuplicateUsername}`);
-          }
-
-          if (isDuplicateUsername) {
-            console.log(`Admin user "${adminUser}" already exists (created by concurrent transaction)`);
-            return; // Exit transaction - user exists
-          }
-          // Re-throw other errors
-          throw insertError;
-        }
+        userCreated = true;
         return; // Exit transaction early for new user creation
       }
 
@@ -454,6 +434,22 @@ export async function initializeDefaultUser() {
         });
       }
     });
+    } catch (txError: any) {
+      // Handle duplicate username errors from transaction
+      // This can happen when multiple processes/tests try to create the admin user concurrently
+      const errorMessage = txError?.message || String(txError);
+      const isDuplicateUsername = (errorMessage.includes('duplicate key') || errorMessage.includes('duplicate')) &&
+                                   (errorMessage.includes('users_username_unique') || errorMessage.includes('username'));
+
+      if (isDuplicateUsername) {
+        // Admin user already exists (created by concurrent transaction) - this is OK
+        console.log(`Admin user "${adminUser}" already exists (created by concurrent process)`);
+        return; // Exit function successfully - user exists
+      }
+
+      // Re-throw other transaction errors
+      throw txError;
+    }
 
     // Console logging after successful transaction
     if (userCreated) {
