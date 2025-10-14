@@ -92,11 +92,9 @@ describe('Organization Deactivation', () => {
         isActive: false,
       } as any);
 
-      vi.mocked(mockStorage.deactivateOrganization).mockRejectedValue(new Error('Organization is already deactivated'));
-
       await expect(
         organizationService.deactivateOrganization(orgId, siteAdminUserId)
-      ).rejects.toThrow();
+      ).rejects.toThrow('Organization is already deactivated');
     });
   });
 
@@ -124,11 +122,9 @@ describe('Organization Deactivation', () => {
         isActive: true,
       } as any);
 
-      vi.mocked(mockStorage.reactivateOrganization).mockRejectedValue(new Error('Organization is already active'));
-
       await expect(
         organizationService.reactivateOrganization(orgId, siteAdminUserId)
-      ).rejects.toThrow();
+      ).rejects.toThrow('Organization is already active');
     });
   });
 });

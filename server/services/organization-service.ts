@@ -350,6 +350,11 @@ export class OrganizationService extends BaseService {
         throw new Error("Organization not found");
       }
 
+      // Check if already deactivated
+      if (org.isActive === false) {
+        throw new Error("Organization is already deactivated");
+      }
+
       // Deactivate organization
       await this.storage.deactivateOrganization(organizationId);
 
@@ -387,6 +392,11 @@ export class OrganizationService extends BaseService {
       const org = await this.storage.getOrganization(organizationId);
       if (!org) {
         throw new Error("Organization not found");
+      }
+
+      // Check if already active
+      if (org.isActive === true) {
+        throw new Error("Organization is already active");
       }
 
       // Reactivate organization
