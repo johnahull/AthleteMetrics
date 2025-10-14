@@ -115,9 +115,9 @@ export class OrganizationService extends BaseService {
       // This prevents N+1 queries when called multiple times with session data
       const userIsSiteAdmin = cachedIsSiteAdmin ?? await this.isSiteAdmin(userId);
 
-      // Site admins can access all organizations
+      // Site admins can access all organizations (including inactive ones for management)
       if (userIsSiteAdmin) {
-        return await this.storage.getOrganizations();
+        return await this.storage.getOrganizations({ includeInactive: true });
       }
 
       // Regular users get only their assigned organizations
