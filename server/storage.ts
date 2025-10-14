@@ -53,7 +53,7 @@ export interface IStorage {
   // User Management
   addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
   addUserToTeam(userId: string, teamId: string): Promise<UserTeam>;
-  removeUserFromOrganization(userId: string, organizationId: string): Promise<void>;
+  removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin?: boolean): Promise<void>;
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
 
   // Optimized queries
@@ -951,12 +951,43 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async removeUserFromOrganization(userId: string, organizationId: string): Promise<void> {
-    await db.delete(userOrganizations)
-      .where(and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, organizationId)
-      ));
+  async removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin: boolean = false): Promise<void> {
+    if (!validateLastAdmin) {
+      // Simple deletion without admin validation
+      await db.delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return;
+    }
+
+    // Transaction with admin count validation to prevent race conditions (TOCTOU protection)
+    await db.transaction(async (tx: any) => {
+      // 1. Lock organization row to prevent concurrent admin removals
+      await tx.select()
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .for('update');
+
+      // 2. Get current admin count atomically within transaction
+      const orgUsers = await tx.select()
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, organizationId));
+
+      const adminCount = orgUsers.filter((u: any) => u.role === 'org_admin').length;
+
+      if (adminCount <= 1) {
+        throw new Error("Cannot remove the last organization administrator");
+      }
+
+      // 3. Delete user from organization atomically
+      await tx.delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+    });
   }
 
   async updateUserOrganizationRole(userId: string, organizationId: string, role: string): Promise<void> {

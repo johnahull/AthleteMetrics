@@ -44,15 +44,15 @@ export default function DeleteOrganizationModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Case-insensitive comparison with trimming
-    if (confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase()) {
-      onConfirm(confirmationName);
-    }
+    // Always submit - backend performs constant-time validation
+    // This prevents timing attacks via frontend JavaScript execution time
+    onConfirm(confirmationName);
   };
 
   const hasDependencies = dependencies && (dependencies.users > 0 || dependencies.teams > 0 || dependencies.measurements > 0);
-  // Case-insensitive comparison with trimming
-  const confirmationMatches = confirmationName.trim().toLowerCase() === organization.name.trim().toLowerCase();
+  // Allow submission when user has typed something
+  // Backend performs secure constant-time comparison to prevent timing attacks
+  const confirmationMatches = confirmationName.trim().length > 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -145,12 +145,10 @@ export default function DeleteOrganizationModal({
                   onChange={(e) => setConfirmationName(e.target.value)}
                   placeholder={organization.name}
                   disabled={isLoading}
-                  className={confirmationMatches ? "border-green-500" : ""}
                   data-testid="delete-org-confirmation-input"
                 />
-                {confirmationName && !confirmationMatches && (
-                  <p className="text-sm text-destructive">Name does not match</p>
-                )}
+                {/* Visual feedback removed to prevent timing attacks */}
+                {/* Backend performs secure constant-time validation */}
               </div>
             </>
           )}

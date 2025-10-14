@@ -237,25 +237,10 @@ export class OrganizationService extends BaseService {
         }
       }
 
-      // Prevent removing self if it's the last admin
-      if (userId === requestingUserId && targetUserRole === 'org_admin') {
-        const orgUsers = await this.storage.getOrganizationUsers(organizationId);
-        const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
-        if (adminCount <= 1) {
-          throw new Error("Cannot remove the last organization administrator");
-        }
-      }
-
-      // If trying to delete an org admin, ensure it's not the last one
-      if (targetUserRole === "org_admin") {
-        const orgUsers = await this.storage.getOrganizationUsers(organizationId);
-        const adminCount = orgUsers.filter(u => u.role === 'org_admin').length;
-        if (adminCount <= 1) {
-          throw new Error("Cannot remove the last organization administrator");
-        }
-      }
-
-      await this.storage.removeUserFromOrganization(userId, organizationId);
+      // If trying to delete an org admin, use transaction-based removal to prevent race conditions
+      // The storage layer will atomically check admin count and perform deletion
+      const isAdminRemoval = targetUserRole === "org_admin";
+      await this.storage.removeUserFromOrganization(userId, organizationId, isAdminRemoval);
     } catch (error) {
       console.error("OrganizationService.removeUserFromOrganization:", error);
       throw error;
@@ -270,6 +255,8 @@ export class OrganizationService extends BaseService {
     userData: any,
     requestingUserId: string
   ): Promise<User> {
+    const startTime = Date.now();
+
     try {
       // Validate access
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
@@ -295,6 +282,15 @@ export class OrganizationService extends BaseService {
       return user;
     } catch (error) {
       console.error("OrganizationService.addUserToOrganization:", error);
+
+      // Normalize timing to prevent username enumeration via timing analysis
+      // Ensures all error responses take at least 100ms to mitigate timing attacks
+      const elapsed = Date.now() - startTime;
+      const minTime = 100;
+      if (elapsed < minTime) {
+        await new Promise(resolve => setTimeout(resolve, minTime - elapsed));
+      }
+
       throw error;
     }
   }

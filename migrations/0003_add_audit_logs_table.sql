@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     'user_created', 'user_updated', 'user_deleted', 'user_role_changed',
     'team_created', 'team_updated', 'team_deleted', 'team_archived',
     'measurement_created', 'measurement_updated', 'measurement_deleted',
-    'invitation_created', 'invitation_accepted', 'invitation_revoked'
+    'invitation_created', 'invitation_accepted', 'invitation_revoked', 'invitation_cancelled'
   )),
 
   CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (

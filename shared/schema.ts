@@ -167,6 +167,10 @@ export const auditLogs = pgTable("audit_logs", {
   userTimeIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_user_time_idx ON ${table} (${table.userId}, ${table.createdAt} DESC)`,
   // Index for querying by action type
   actionIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON ${table} (${table.action}, ${table.createdAt} DESC)`,
+  // Index for querying by resource type and ID (compliance queries)
+  resourceIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON ${table} (${table.resourceType}, ${table.resourceId}, ${table.createdAt} DESC)`,
+  // Index for time-based queries (data retention policies)
+  createdAtIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON ${table} (${table.createdAt} DESC)`,
 }));
 
 // PostgreSQL session store for connect-pg-simple
