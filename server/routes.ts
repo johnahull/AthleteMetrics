@@ -21,6 +21,7 @@ import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireTeamAccess, requireAthleteAccess, errorHandler } from "./middleware";
 import { validateAnalyticsRequest } from "./validation/analytics-validation";
 import { METRIC_CONFIG } from "@shared/analytics-types";
+import { AuthSecurity } from "./auth/security";
 import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
@@ -212,73 +213,248 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 // Old requireSiteAdmin removed - now using middleware version
 
 // Initialize default site admin user
-async function initializeDefaultUser() {
+export async function initializeDefaultUser() {
+  // Environment validation is outside try-catch to allow process.exit errors to propagate in tests
+  const adminUser = process.env.ADMIN_USER;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminEmail = process.env.ADMIN_EMAIL; // Optional: email address for admin
+
+  // Require admin credentials to be set in environment variables
+  if (!adminUser || !adminPassword) {
+    console.error("SECURITY: ADMIN_USER and ADMIN_PASSWORD environment variables must be set");
+    process.exit(1);
+  }
+
+  // Validate username
+  if (adminUser.length < 3) {
+    console.error("SECURITY: ADMIN_USER must be at least 3 characters long");
+    process.exit(1);
+  }
+
+  // Validate password strength and complexity
+  if (adminPassword.length < 12) {
+    console.error("SECURITY: ADMIN_PASSWORD must be at least 12 characters long");
+    process.exit(1);
+  }
+
+  // Validate password complexity (same requirements as user passwords)
+  const { PASSWORD_REGEX } = await import("@shared/password-requirements");
+  if (!PASSWORD_REGEX.lowercase.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one lowercase letter");
+    process.exit(1);
+  }
+  if (!PASSWORD_REGEX.uppercase.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one uppercase letter");
+    process.exit(1);
+  }
+  if (!PASSWORD_REGEX.number.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one number");
+    process.exit(1);
+  }
+  if (!PASSWORD_REGEX.specialChar.test(adminPassword)) {
+    console.error("SECURITY: ADMIN_PASSWORD must contain at least one special character");
+    process.exit(1);
+  }
+
   try {
-    const adminUser = process.env.ADMIN_USER;
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    const adminEmail = process.env.ADMIN_EMAIL; // Optional: email address for admin
+    // Combine updates into single atomic operation to prevent race conditions
+    // Always enter transaction to perform secure user lookup with row lock
+    const { db } = await import("./db");
+    const { eq } = await import("drizzle-orm");
+    const { users } = await import("@shared/schema");
 
-    // Require admin credentials to be set in environment variables
-    if (!adminUser || !adminPassword) {
-      console.error("SECURITY: ADMIN_USER and ADMIN_PASSWORD environment variables must be set");
-      process.exit(1);
-    }
+    // Use database transaction for atomicity
+    // This eliminates TOCTOU vulnerability by fetching and locking user in single atomic operation
+    let revokedCount = 0;
+    let passwordMatches = false;
+    let userCreated = false;
 
-    // Validate username
-    if (adminUser.length < 3) {
-      console.error("SECURITY: ADMIN_USER must be at least 3 characters long");
-      process.exit(1);
-    }
+    await db.transaction(async (tx) => {
+      // CRITICAL: Fetch and lock user row inside transaction to prevent TOCTOU
+      // This prevents race condition where user data could change between fetch and lock
+      // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
+      const existingUsers = await tx.select()
+        .from(users)
+        .where(eq(users.username, adminUser))
+        .for('update'); // SELECT ... FOR UPDATE (row-level lock)
 
-    // Validate password strength
-    if (adminPassword.length < 12) {
-      console.error("SECURITY: ADMIN_PASSWORD must be at least 12 characters long");
-      process.exit(1);
-    }
+      if (existingUsers.length === 0) {
+        // User doesn't exist - create new admin user
+        // Note: Site admins have role=site_admin and isSiteAdmin=true
+        // role is for organization-level permissions (athlete, coach, org_admin, site_admin)
+        // while isSiteAdmin grants platform-wide access independent of organizations
+        const bcryptImport = await import("bcrypt");
+        const hashedPassword = await bcryptImport.default.hash(adminPassword, 14);
 
-    // Check if admin user already exists by username
-    const existingUser = await storage.getUserByUsername(adminUser);
+        await tx.insert(users).values({
+          username: adminUser,
+          emails: adminEmail ? [adminEmail] : [], // Optional email
+          password: hashedPassword,
+          passwordChangedAt: new Date(),
+          firstName: "Site",
+          lastName: "Administrator",
+          fullName: "Site Administrator",
+          isSiteAdmin: true
+        });
 
-    if (!existingUser) {
-      // Note: Site admins don't have a role field - they are identified by isSiteAdmin flag
-      // This is intentional: role is for organization-level permissions (athlete, coach, org_admin)
-      // while isSiteAdmin grants platform-wide access independent of organizations
-      await storage.createUser({
-        username: adminUser,
-        emails: adminEmail ? [adminEmail] : [], // Optional email
-        password: adminPassword,
-        firstName: "Site",
-        lastName: "Administrator",
-        role: "site_admin",
-        isSiteAdmin: true
-      });
-      console.log(`Site administrator account created successfully: ${adminUser}`);
-    } else {
+        userCreated = true;
+        return; // Exit transaction early for new user creation
+      }
+
       // User exists - check if password needs to be synced with environment variable
-      const passwordMatches = await bcrypt.compare(adminPassword, existingUser.password);
+      const lockedUser = existingUsers[0];
+
+      // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
+      // This prevents TOCTOU vulnerability where password could change between fetch and use
+      // Using lockedUser.password ensures we compare against current value
+      passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
+
+      // Check privilege restoration AFTER password comparison to use fresh transaction context
+      const needsPrivilegeRestore = lockedUser.isSiteAdmin !== true;
+
+      const updateData: any = {};
 
       if (!passwordMatches) {
         // Password in environment has changed - update the database
-        // Note: updateUser will hash the password automatically
-        await storage.updateUser(existingUser.id, {
-          password: adminPassword
-        });
-        console.log(`Site administrator password synced with environment variable: ${adminUser}`);
-      } else {
-        console.log(`Site administrator account already exists: ${adminUser}`);
+        // Note: Must hash manually in transaction (can't use storage.updateUser)
+        // Use 14 rounds per OWASP recommendation for high-value admin accounts
+        // (Higher than standard 12 rounds due to elevated privilege level)
+        const bcryptImport = await import("bcrypt");
+        updateData.password = await bcryptImport.default.hash(adminPassword, 14);
+        updateData.passwordChangedAt = new Date();
+
+        // CRITICAL: Revoke all sessions when password changes
+        // This ensures all active sessions are invalidated and users must re-authenticate
+        // with the new password for security
+        // Pass tx to ensure session deletion is part of the same transaction
+        revokedCount = await AuthSecurity.revokeAllSessions(lockedUser.id, { throwOnError: true, tx });
       }
 
-      // Ensure isSiteAdmin flag is set (in case it was changed)
-      if (existingUser.isSiteAdmin !== true) {
-        await storage.updateUser(existingUser.id, {
-          isSiteAdmin: true
-        });
-        console.log(`Site administrator privileges restored: ${adminUser}`);
+      if (needsPrivilegeRestore) {
+        // SECURITY: Auto-restore isSiteAdmin flag only if explicitly enabled
+        // This prevents automatic privilege escalation after security team demotes admin
+        // DEFAULT: false (requires explicit opt-in for security)
+        const allowPrivilegeRestore = process.env.ALLOW_ADMIN_PRIVILEGE_RESTORE === 'true';
+
+        if (allowPrivilegeRestore) {
+          // Ensure isSiteAdmin flag is set (in case it was changed)
+          updateData.isSiteAdmin = true;
+          console.warn('SECURITY WARNING: Auto-restoring site admin privileges. Set ALLOW_ADMIN_PRIVILEGE_RESTORE=false to disable.');
+        } else {
+          console.error('SECURITY ALERT: Site admin privileges were revoked but auto-restore is disabled. Manual intervention required.');
+          console.error('To restore privileges, set ALLOW_ADMIN_PRIVILEGE_RESTORE=true and restart the server.');
+
+          // CRITICAL: Audit log for blocked privilege restoration attempt
+          // This creates a security audit trail when automatic privilege escalation is prevented
+          const { auditLogs } = await import("@shared/schema");
+          const SYSTEM_IP = '127.0.0.1';
+          await tx.insert(auditLogs).values({
+            userId: lockedUser.id,
+            action: 'privilege_restoration_blocked',
+            resourceType: 'user',
+            resourceId: lockedUser.id,
+            details: JSON.stringify({
+              username: adminUser,
+              currentState: 'isSiteAdmin=false',
+              attemptedAction: 'auto_restore_privileges',
+              blockReason: 'ALLOW_ADMIN_PRIVILEGE_RESTORE=false',
+              securityNote: 'Manual intervention required',
+              timestamp: new Date().toISOString()
+            }),
+            ipAddress: SYSTEM_IP,
+            userAgent: 'System',
+          });
+        }
       }
+
+      // Single atomic update within transaction to prevent race conditions
+      if (Object.keys(updateData).length > 0) {
+        await tx.update(users)
+          .set(updateData)
+          .where(eq(users.id, lockedUser.id));
+      }
+
+      // Create audit logs INSIDE transaction for atomicity
+      // Use consistent IP address for all server-initiated actions
+      const SYSTEM_IP = '127.0.0.1';
+      const { auditLogs } = await import("@shared/schema");
+
+      if (!passwordMatches) {
+        // Audit log for password sync
+        await tx.insert(auditLogs).values({
+          userId: lockedUser.id,
+          action: 'admin_password_synced',
+          resourceType: 'user',
+          resourceId: lockedUser.id,
+          details: JSON.stringify({
+            username: adminUser,
+            syncReason: 'environment_variable_mismatch',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: SYSTEM_IP, // Server-initiated
+          userAgent: 'System',
+        });
+
+        // Audit log for session revocation with count
+        await tx.insert(auditLogs).values({
+          userId: lockedUser.id,
+          action: 'sessions_revoked',
+          resourceType: 'user',
+          resourceId: lockedUser.id,
+          details: JSON.stringify({
+            reason: 'password_sync',
+            revokedCount: revokedCount,
+            securityContext: 'password_change',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: SYSTEM_IP,
+          userAgent: 'System',
+        });
+      }
+
+      // Only create privilege_restored audit log if privileges were actually restored
+      // (not if restoration was blocked by ALLOW_ADMIN_PRIVILEGE_RESTORE=false)
+      if (needsPrivilegeRestore && updateData.isSiteAdmin === true) {
+        // Audit log for privilege restoration
+        await tx.insert(auditLogs).values({
+          userId: lockedUser.id,
+          action: 'privilege_restored',
+          resourceType: 'user',
+          resourceId: lockedUser.id,
+          details: JSON.stringify({
+            username: adminUser,
+            previousState: 'isSiteAdmin=false',
+            newState: 'isSiteAdmin=true',
+            restorationReason: 'startup_verification',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: SYSTEM_IP,
+          userAgent: 'System',
+        });
+      }
+    });
+
+    // Console logging after successful transaction
+    if (userCreated) {
+      console.log(`Site administrator account created successfully: ${adminUser}`);
+    } else if (!passwordMatches) {
+      console.log(`Site administrator password synced with environment variable: ${adminUser}`);
+      console.log(`Revoked ${revokedCount} active session(s) for security`);
     }
   } catch (error) {
     console.error("Error initializing default user:", error);
-    process.exit(1);
+
+    // In test mode, process.exit is mocked to throw an error
+    // We need to catch and rethrow that error for test assertions
+    try {
+      process.exit(1);
+    } catch (exitError) {
+      // If process.exit throws (due to test mock), rethrow it
+      throw exitError;
+    }
+
+    // If process.exit didn't throw (production), the process will have exited
+    // This line is unreachable in production
   }
 }
 
@@ -340,7 +516,9 @@ export async function registerRoutes(app: Express) {
     }
   };
 
-  // Use Redis store if available, otherwise fall back to memory store
+  // Try Redis first (if available), then PostgreSQL, then fall back to memory store
+  let sessionStoreConfigured = false;
+
   if (redisClient) {
     try {
       // @ts-expect-error - connect-redis is an optional dependency that may not be installed
@@ -353,19 +531,75 @@ export async function registerRoutes(app: Express) {
           ttl: 24 * 60 * 60 // 24 hours in seconds
         });
         console.log('Using Redis session store');
-      } else {
-        console.warn('connect-redis module not available');
-        console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
+        sessionStoreConfigured = true;
       }
     } catch (error: any) {
       console.warn('Failed to create Redis store:', error?.message || error);
+    }
+  }
+
+  // If Redis is not available, use PostgreSQL session store
+  if (!sessionStoreConfigured) {
+    try {
+      const connectPgSimple = await import("connect-pg-simple");
+      const PgStore = connectPgSimple.default(session);
+      const { sessionPool } = await import("./db");
+
+      sessionConfig.store = new PgStore({
+        pool: sessionPool, // Use pg.Pool (required for connect-pg-simple compatibility)
+        tableName: 'session',
+        createTableIfMissing: process.env.NODE_ENV !== 'production', // Only auto-create in development
+        pruneSessionInterval: 60 * 15, // Prune expired sessions every 15 minutes
+        errorLog: (error: any) => {
+          console.error('CRITICAL: Session store error:', error);
+          if (error.message?.includes('does not exist') && process.env.NODE_ENV === 'production') {
+            console.error('Run database migration to create session table');
+            process.exit(1); // Fail startup if table missing in production
+          }
+        }
+      });
+      console.log('Using PostgreSQL session store');
+      sessionStoreConfigured = true;
+    } catch (error: any) {
+      console.warn('Failed to create PostgreSQL store:', error?.message || error);
       console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
     }
-  } else {
-    console.warn('WARNING: Using in-memory session store. Sessions will be lost on server restart!');
   }
 
   app.use(session(sessionConfig));
+
+  // CRITICAL: Sync req.session.user.id to database userId column for session revocation
+  // connect-pg-simple does NOT automatically sync custom columns - we must do this manually
+  // This middleware ensures that when password changes trigger revokeAllUserSessions(),
+  // the query on the userId column actually finds sessions to delete
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
+    // Only sync if user is authenticated and session exists
+    if (req.session && (req.session as any).user?.id) {
+      const sessionUserId = (req.session as any).user.id;
+
+      // Check if we need to update the database userId column
+      // Only update if the session has a user but the database column is not yet set
+      if (sessionUserId && req.sessionID) {
+        try {
+          const { pgClient } = await import("./db");
+
+          // Update the userId column in the database to match req.session.user.id
+          // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
+          // Note: postgres-js uses SQL template strings, not .query() method
+          await pgClient`
+            UPDATE session
+            SET user_id = ${sessionUserId}
+            WHERE sid = ${req.sessionID}
+            AND user_id IS NULL
+          `;
+        } catch (error) {
+          // Log error but don't block the request - session is still valid
+          console.error('Failed to sync session userId:', error);
+        }
+      }
+    }
+    next();
+  });
 
   // Register new refactored routes - AFTER session middleware
   registerAllRoutes(app);
@@ -636,7 +870,7 @@ export async function registerRoutes(app: Express) {
   };
 
   // Initialize default user
-  initializeDefaultUser();
+  await initializeDefaultUser();
 
   // ⚠️ LEGACY ROUTES - These have been refactored to new service layer
   // Authentication routes are now handled by ./routes/auth-routes.ts
@@ -5131,8 +5365,36 @@ export async function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Get all athletes with comprehensive data
-      const athletes = await storage.getAthletes();
+      // Extract organizationId query parameter
+      const { organizationId: requestedOrgId } = req.query;
+
+      // Determine effective organization ID based on user permissions
+      let effectiveOrganizationId: string | undefined;
+
+      if (currentUser.isSiteAdmin) {
+        // Site admins can export from all organizations or a specific one
+        effectiveOrganizationId = requestedOrgId as string | undefined;
+      } else {
+        // Non-site-admin users can only export from their organization(s)
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+
+        if (requestedOrgId) {
+          // Validate user has access to requested organization
+          const hasAccess = userOrgs.some(uo => uo.organizationId === requestedOrgId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "You do not have access to export athletes from this organization"
+            });
+          }
+          effectiveOrganizationId = requestedOrgId as string;
+        } else {
+          // Use user's first organization as default
+          effectiveOrganizationId = userOrgs[0]?.organizationId;
+        }
+      }
+
+      // Get athletes filtered by organization
+      const athletes = await storage.getAthletes({ organizationId: effectiveOrganizationId });
 
       // Transform to CSV format with all database fields
       const csvHeaders = [
@@ -5199,6 +5461,31 @@ export async function registerRoutes(app: Express) {
       // Extract query parameters for filtering
       const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
 
+      // Determine effective organization ID based on user permissions
+      let effectiveOrganizationId: string | undefined;
+
+      if (currentUser.isSiteAdmin) {
+        // Site admins can export from all organizations or a specific one
+        effectiveOrganizationId = organizationId as string | undefined;
+      } else {
+        // Non-site-admin users can only export from their organization(s)
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+
+        if (organizationId) {
+          // Validate user has access to requested organization
+          const hasAccess = userOrgs.some(uo => uo.organizationId === organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "You do not have access to export measurements from this organization"
+            });
+          }
+          effectiveOrganizationId = organizationId as string;
+        } else {
+          // Use user's first organization as default
+          effectiveOrganizationId = userOrgs[0]?.organizationId;
+        }
+      }
+
       const filters: MeasurementFilters = {
         playerId: playerId as string,
         teamIds: teamIds ? (teamIds as string).split(',') : undefined,
@@ -5212,7 +5499,7 @@ export async function registerRoutes(app: Express) {
         search: search as string,
         sport: sport as string,
         gender: gender as string,
-        organizationId: organizationId as string,
+        organizationId: effectiveOrganizationId,
         includeUnverified: true
       };
 

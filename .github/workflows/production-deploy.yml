@@ -37,6 +37,19 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
 
+      - name: Setup test database schema
+        run: npm run db:push
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+      - name: Run session table migration for tests
+        run: |
+          echo "Running session table migration on test database..."
+          psql "$DATABASE_URL" -f scripts/migrate-session-table.sql
+          echo "✅ Session table migration completed"
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
       - name: Run integration tests
         run: npm run test:integration
         env:
@@ -104,28 +117,22 @@ jobs:
         run: node scripts/backup-database.js
         env:
           USE_RAILWAY_BACKUPS: true
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
       - name: Run database migrations
         run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
-      - name: Get current deployment ID (for rollback)
-        id: current-deploy
+      - name: Run session table migration (idempotent)
         run: |
-          SERVICE_ID="${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-          if [ -z "$SERVICE_ID" ]; then
-            echo "Error: RAILWAY_PRODUCTION_SERVICE_ID is not set"
-            exit 1
-          fi
-          DEPLOY_ID=$(railway status --service "$SERVICE_ID" --json | jq -r '.deployment.id')
-          echo "deployment_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "Running session table migration..."
+          psql "$PRODUCTION_DATABASE_URL" -f scripts/migrate-session-table.sql
+          echo "✅ Session table migration completed"
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        continue-on-error: true
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_PUBLIC_DATABASE_URL }}
 
       - name: Deploy to Railway Production
         id: deploy
@@ -135,11 +142,13 @@ jobs:
             echo "Error: RAILWAY_PRODUCTION_SERVICE_ID is not set"
             exit 1
           fi
-          railway up --service "$SERVICE_ID"
-          NEW_DEPLOY_ID=$(railway status --service "$SERVICE_ID" --json | jq -r '.deployment.id')
-          echo "new_deployment_id=$NEW_DEPLOY_ID" >> "$GITHUB_OUTPUT"
+          echo "🚀 Deploying to Railway Production..."
+          # Use --detach to actually deploy (CI mode only builds without deploying)
+          # Specify environment to ensure correct service targeting
+          railway up --service "$SERVICE_ID" --environment production --detach
+          echo "✅ Railway deployment initiated successfully"
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
       - name: Wait for deployment
         run: sleep 45
@@ -161,20 +170,13 @@ jobs:
           BASE_URL: ${{ secrets.PRODUCTION_URL }}
         continue-on-error: true
 
-      - name: Rollback on failure
+      - name: Alert on failure
         if: steps.health-check.outcome == 'failure' || steps.smoke-tests.outcome == 'failure'
         run: |
-          echo "⚠️ Health check or smoke tests failed! Rolling back..."
-          if [ -n "${{ steps.current-deploy.outputs.deployment_id }}" ]; then
-            echo "Rolling back to deployment: ${{ steps.current-deploy.outputs.deployment_id }}"
-            railway rollback ${{ steps.current-deploy.outputs.deployment_id }} --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
-            echo "✅ Rollback completed"
-          else
-            echo "❌ No previous deployment ID found. Manual rollback required."
-          fi
+          echo "⚠️ Health check or smoke tests failed!"
+          echo "❌ Manual intervention required. Please check Railway dashboard and rollback if needed."
+          echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
           exit 1
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Notify deployment success
         if: success()
@@ -182,7 +184,6 @@ jobs:
           echo "🚀 Production deployment successful!"
           echo "Release: ${{ github.event.release.tag_name }}"
           echo "URL: ${{ secrets.PRODUCTION_URL }}"
-          echo "Deployment ID: ${{ steps.deploy.outputs.new_deployment_id }}"
           echo "Deployment completed at: $(date)"
 
       - name: Notify deployment failure
@@ -191,9 +192,6 @@ jobs:
           echo "❌ Production deployment failed!"
           echo "Release: ${{ github.event.release.tag_name }}"
           echo "Check the logs above for details."
-          if [ -n "${{ steps.current-deploy.outputs.deployment_id }}" ]; then
-            echo "Attempted rollback to: ${{ steps.current-deploy.outputs.deployment_id }}"
-          fi
           exit 1
 
       - name: Post deployment comment
@@ -203,20 +201,18 @@ jobs:
           script: |
             const status = '${{ job.status }}';
             const release = context.payload.release;
-            const deploymentId = '${{ steps.deploy.outputs.new_deployment_id }}';
             const healthCheck = '${{ steps.health-check.outcome }}';
             const smokeTests = '${{ steps.smoke-tests.outcome }}';
 
             let body = `## 🚀 Production Deployment ${status === 'success' ? '✅' : '❌'}\n\n`;
             body += `**Release:** ${release.tag_name}\n`;
             body += `**URL:** ${{ secrets.PRODUCTION_URL }}\n`;
-            body += `**Deployment ID:** ${deploymentId}\n`;
             body += `**Health Check:** ${healthCheck === 'success' ? '✅' : '❌'}\n`;
             body += `**Smoke Tests:** ${smokeTests === 'success' ? '✅' : '❌'}\n`;
             body += `**Status:** ${status}\n`;
 
             if (status !== 'success') {
-              body += `\n⚠️ Deployment failed and rollback was attempted.`;
+              body += `\n⚠️ Deployment failed. Check Railway dashboard for manual rollback if needed.`;
             }
 
             github.rest.repos.createCommitComment({
