@@ -40,13 +40,13 @@ const DANGEROUS_PATTERNS = [
     severity: 'ERROR'
   },
   {
-    pattern: /DELETE\s+FROM\s+[\w.]+\s*(?:;|$|--)/im,
-    message: 'Contains DELETE without WHERE clause - could delete all data',
+    pattern: /DELETE\s+FROM\s+[\w.]+(?!\s+(WHERE|USING|RETURNING))\s*(?:;|$)/is,
+    message: 'Contains DELETE without WHERE/USING clause - could delete all data',
     severity: 'ERROR'
   },
   {
-    pattern: /UPDATE\s+[\w.]+\s+SET\s+(?:(?!WHERE).)*?(?:;|$)/is,
-    message: 'Contains UPDATE without WHERE clause - will update all rows',
+    pattern: /UPDATE\s+[\w.]+\s+SET\s+(?:(?!WHERE|FROM).)*?(?:;|$)/is,
+    message: 'Contains UPDATE without WHERE/FROM clause - will update all rows',
     severity: 'ERROR'
   },
   {
@@ -80,7 +80,7 @@ const DANGEROUS_PATTERNS = [
     severity: 'WARNING'
   },
   {
-    pattern: /CREATE\s+INDEX(?!\s+CONCURRENTLY)/i,
+    pattern: /CREATE\s+(UNIQUE\s+)?INDEX(?!\s+CONCURRENTLY)/i,
     message: 'Contains CREATE INDEX without CONCURRENTLY - blocks writes during creation',
     severity: 'WARNING'
   },
@@ -138,6 +138,21 @@ const DANGEROUS_PATTERNS = [
     pattern: /REVOKE/i,
     message: 'Revoking permissions may break application database access',
     severity: 'WARNING'
+  },
+  {
+    pattern: /DROP\s+FUNCTION/i,
+    message: 'Contains DROP FUNCTION - may break application code that calls this function',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /DROP\s+TRIGGER/i,
+    message: 'Contains DROP TRIGGER - may disable critical business logic or audit trails',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /ALTER\s+TABLE\s+[\w.]+\s+RENAME\s+TO/i,
+    message: 'Contains ALTER TABLE RENAME - CRITICAL: will break all queries referencing old table name',
+    severity: 'ERROR'
   }
 ];
 
@@ -184,12 +199,13 @@ function validateMigrationFile(filePath) {
     // THEN: Strip SQL comments and string literals, then check again
     // This catches dangerous SQL that appears in executable code
     // CRITICAL: Must handle PostgreSQL dollar-quoted strings to prevent hiding dangerous SQL
+    // Use backreference (\1) to match opening and closing tags
     // Order matters: Remove dollar-quotes first (including nested), then string literals, then comments
     const cleanedContent = content
-      .replace(/\$[a-zA-Z0-9_]*\$[\s\S]*?\$[a-zA-Z0-9_]*\$/g, '')  // Remove dollar-quoted strings
-      .replace(/'(?:''|[^'])*'/g, '')                              // Remove single-quoted strings
-      .replace(/--[^\n]*/g, '')                                    // Remove line comments
-      .replace(/\/\*[\s\S]*?\*\//g, '');                          // Remove block comments
+      .replace(/\$([a-zA-Z0-9_]*)\$[\s\S]*?\$\1\$/g, '')  // Remove dollar-quoted strings (backreference matches same tag)
+      .replace(/'(?:''|[^'])*'/g, '')                     // Remove single-quoted strings
+      .replace(/--[^\n]*/g, '')                           // Remove line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '');                 // Remove block comments
 
     for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
       if (pattern.test(cleanedContent)) {

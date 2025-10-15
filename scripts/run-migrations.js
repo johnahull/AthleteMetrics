@@ -38,7 +38,7 @@ async function emergencyCleanup(signal) {
       console.error('   Lock will auto-release on connection close');
     }
   }
-  process.exit(128 + (signal === 'SIGTERM' ? 15 : 9));
+  process.exit(128 + (signal === 'SIGTERM' ? 15 : 2));
 }
 
 // Install signal handlers BEFORE any async operations
@@ -83,8 +83,9 @@ async function acquireMigrationLock(client) {
     ['advisory', LOCK_CLASS_ID, LOCK_OBJ_ID]
   );
 
-  if (verification[0]?.lock_count !== '1') {
-    throw new Error('Lock acquisition verification failed - race condition detected');
+  const lockCount = parseInt(verification[0]?.lock_count) || 0;
+  if (lockCount !== 1) {
+    throw new Error(`Lock acquisition verification failed - expected 1 lock, found ${lockCount}`);
   }
 
   console.log('✅ Migration lock acquired and verified');

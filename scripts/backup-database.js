@@ -44,6 +44,12 @@ async function createBackup() {
   }
 
   try {
+    // Validate Service ID format first (Railway uses UUIDs)
+    // This prevents command injection attacks
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(RAILWAY_SERVICE_ID)) {
+      throw new Error('Invalid RAILWAY_SERVICE_ID format - expected UUID');
+    }
+
     // Get current timestamp for backup naming
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupName = `pre-deploy-backup-${timestamp}`;
@@ -92,10 +98,14 @@ async function createBackup() {
       throw new Error('Backup file is empty');
     }
 
-    // Verify reasonable file size (should be > 512 bytes for any valid database)
-    // Lower threshold accounts for minimal schemas (just structure, no data)
-    if (stats.size < 512) {
-      throw new Error('Backup file suspiciously small (< 512 bytes) - likely incomplete');
+    // Verify reasonable file size (should be > 5KB for AthleteMetrics schema)
+    // Even empty schema with 8+ tables should be at least 5KB
+    const MIN_BACKUP_SIZE = 5 * 1024; // 5KB
+    if (stats.size < MIN_BACKUP_SIZE) {
+      throw new Error(
+        `Backup file suspiciously small (${stats.size} bytes < ${MIN_BACKUP_SIZE} bytes minimum). ` +
+        'Expected at least 5KB for schema structure. Backup may be incomplete.'
+      );
     }
 
     // Verify backup file integrity using async streaming I/O
@@ -160,17 +170,24 @@ async function createBackup() {
     const maxAge = BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
     let deletedCount = 0;
-    files.forEach(file => {
-      const filePath = path.join(backupDir, file);
-      const fileStats = fs.statSync(filePath);
-      const age = now - fileStats.mtimeMs;
+    files
+      .filter(f => f.endsWith('.sql'))
+      .forEach(file => {
+        const filePath = path.join(backupDir, file);
+        const checksumPath = `${filePath}.sha256`;
+        const fileStats = fs.statSync(filePath);
+        const age = now - fileStats.mtimeMs;
 
-      if (age > maxAge && file.endsWith('.sql')) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-        console.log(`  Deleted: ${file}`);
-      }
-    });
+        if (age > maxAge) {
+          // Delete both .sql and .sha256 files together to prevent orphans
+          fs.unlinkSync(filePath);
+          if (fs.existsSync(checksumPath)) {
+            fs.unlinkSync(checksumPath);
+          }
+          deletedCount++;
+          console.log(`  Deleted: ${file}`);
+        }
+      });
 
     if (deletedCount === 0) {
       console.log('  No old backups to delete');
