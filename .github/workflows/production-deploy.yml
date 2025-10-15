@@ -130,6 +130,9 @@ jobs:
           echo "✅ Migration validation passed"
 
       - name: Run database migrations
+        timeout-minutes: 10
+        continue-on-error: true
+        id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
           echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
@@ -137,6 +140,20 @@ jobs:
           echo "✅ Migrations completed successfully"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+
+      - name: Handle migration failure
+        if: steps.migrate.outcome == 'failure'
+        run: |
+          echo "❌ Migration failed!"
+          echo ""
+          echo "🔄 Attempting to restore from backup..."
+          echo "⚠️  Manual intervention required:"
+          echo "1. Check Railway logs for migration errors"
+          echo "2. Restore database from backup if needed"
+          echo "3. Review migration files for issues"
+          echo ""
+          echo "See docs/database-migration-rollback.md for detailed procedures"
+          exit 1
 
       - name: Deploy to Railway Production
         id: deploy
