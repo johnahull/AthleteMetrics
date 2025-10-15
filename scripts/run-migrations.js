@@ -146,9 +146,9 @@ async function runMigrations() {
     const lockTimeout = process.env.NODE_ENV === 'production' ? '5min' : '1min';
     const stmtTimeout = process.env.NODE_ENV === 'production' ? '3min' : '30s';
 
-    // FIX: Use parameterized queries to prevent SQL injection
-    await migrationClient.unsafe('SET lock_timeout = $1', [lockTimeout]);
-    await migrationClient.unsafe('SET statement_timeout = $1', [stmtTimeout]);
+    // SET commands don't support parameterized values, but these values are safe (hardcoded strings)
+    await migrationClient.unsafe(`SET lock_timeout = '${lockTimeout}'`);
+    await migrationClient.unsafe(`SET statement_timeout = '${stmtTimeout}'`);
     console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: ${stmtTimeout})`);
 
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
