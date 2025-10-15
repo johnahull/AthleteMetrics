@@ -69,11 +69,6 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Verify Railway authentication
-        run: railway whoami || (echo "❌ Authentication failed" && exit 1)
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
       - name: Backup staging database
         run: node scripts/backup-database.js
         env:
