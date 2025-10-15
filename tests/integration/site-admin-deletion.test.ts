@@ -862,3 +862,213 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(dash40!.value).toBe('4.5');
   });
 });
+
+describe('User Soft Delete (Level 2 Immutability)', () => {
+  let testOrg: Organization;
+  let testTeam: Team;
+  let athlete: User;
+  let coach: User;
+
+  beforeEach(async () => {
+    // Create test organization
+    const [org] = await db.insert(organizations).values({
+      name: 'Test Org for Soft Delete'
+    }).returning();
+    testOrg = org;
+
+    // Create test team
+    const [team] = await db.insert(teams).values({
+      name: 'Test Team for Soft Delete',
+      organizationId: testOrg.id,
+      level: 'HS'
+    }).returning();
+    testTeam = team;
+
+    // Create athlete
+    const [athleteUser] = await db.insert(users).values({
+      username: `athlete-soft-delete-${Date.now()}`,
+      emails: ['athlete-soft@test.com'],
+      password: 'password123',
+      firstName: 'Test',
+      lastName: 'Athlete',
+      fullName: 'Test Athlete'
+    }).returning();
+    athlete = athleteUser;
+
+    // Create coach
+    const [coachUser] = await db.insert(users).values({
+      username: `coach-soft-delete-${Date.now()}`,
+      emails: ['coach-soft@test.com'],
+      password: 'password123',
+      firstName: 'Test',
+      lastName: 'Coach',
+      fullName: 'Test Coach'
+    }).returning();
+    coach = coachUser;
+
+    // Link users to org and team
+    await db.insert(userOrganizations).values([
+      { userId: athlete.id, organizationId: testOrg.id, role: 'athlete' },
+      { userId: coach.id, organizationId: testOrg.id, role: 'coach' }
+    ]);
+
+    await db.insert(userTeams).values([
+      { userId: athlete.id, teamId: testTeam.id },
+      { userId: coach.id, teamId: testTeam.id }
+    ]);
+  });
+
+  afterEach(async () => {
+    // Cleanup
+    await db.delete(measurements).where(sql`1=1`);
+    await db.delete(userTeams).where(sql`1=1`);
+    await db.delete(userOrganizations).where(sql`1=1`);
+    await db.delete(sessions).where(sql`1=1`);
+    await db.delete(users).where(sql`1=1`);
+    await db.delete(teams).where(sql`1=1`);
+    await db.delete(organizations).where(sql`1=1`);
+  });
+
+  it('should soft delete user by setting deletedAt timestamp', async () => {
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // User should still exist in database but with deletedAt set
+    const [deletedUser] = await db.select().from(users).where(eq(users.id, athlete.id));
+    expect(deletedUser).toBeDefined();
+    expect(deletedUser.deletedAt).toBeInstanceOf(Date);
+    expect(deletedUser.isActive).toBe(false);
+  });
+
+  it('should preserve all related data when soft deleting', async () => {
+    // Create measurement
+    await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'VERTICAL_JUMP',
+      value: '30',
+      units: 'in',
+      age: 16,
+      date: '2024-01-01',
+      submittedBy: coach.id
+    });
+
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // Verify ALL relationships preserved
+    const userOrgs = await db.select().from(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
+    expect(userOrgs).toHaveLength(1);
+
+    const userTeamsData = await db.select().from(userTeams).where(eq(userTeams.userId, athlete.id));
+    expect(userTeamsData).toHaveLength(1);
+
+    const measurementsData = await db.select().from(measurements).where(sql`${measurements.userId} = ${athlete.id}`);
+    expect(measurementsData).toHaveLength(1);
+  });
+
+  it('should exclude soft-deleted users from getUser()', async () => {
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // getUser should return undefined for soft-deleted user
+    const user = await storage.getUser(athlete.id);
+    expect(user).toBeUndefined();
+  });
+
+  it('should exclude soft-deleted users from getUsers()', async () => {
+    // Get users before deletion
+    const usersBefore = await storage.getUsers();
+    const countBefore = usersBefore.length;
+
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // getUsers should not include soft-deleted user
+    const usersAfter = await storage.getUsers();
+    expect(usersAfter).toHaveLength(countBefore - 1);
+    expect(usersAfter.find(u => u.id === athlete.id)).toBeUndefined();
+  });
+
+  it('should exclude soft-deleted users from authentication', async () => {
+    // Verify authentication works before deletion
+    const authBefore = await storage.authenticateUser(athlete.username, 'password123');
+    expect(authBefore).toBeTruthy();
+
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // Authentication should fail for soft-deleted user
+    const authAfter = await storage.authenticateUser(athlete.username, 'password123');
+    expect(authAfter).toBeNull();
+  });
+
+  it('should exclude soft-deleted users from getUserByUsername()', async () => {
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // getUserByUsername should return undefined for soft-deleted user
+    const user = await storage.getUserByUsername(athlete.username);
+    expect(user).toBeUndefined();
+  });
+
+  it('should exclude soft-deleted users from getUserByEmail()', async () => {
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // getUserByEmail should return undefined for soft-deleted user
+    const user = await storage.getUserByEmail('athlete-soft@test.com');
+    expect(user).toBeUndefined();
+  });
+
+  it('should revoke sessions when soft deleting user', async () => {
+    // Import sessions dynamically
+    const { sessions } = await import('../../shared/schema');
+
+    // Create session for athlete
+    await db.insert(sessions).values({
+      id: 'test-session-id',
+      userId: athlete.id,
+      expiresAt: new Date(Date.now() + 86400000) // 24 hours
+    });
+
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // Session should be deleted
+    const sessionsData = await db.select().from(sessions).where(eq(sessions.userId, athlete.id));
+    expect(sessionsData).toHaveLength(0);
+  });
+
+  it('should maintain full measurement context with soft-deleted users', async () => {
+    // Create measurement with coach as submitter
+    const [measurement] = await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'VERTICAL_JUMP',
+      value: '30',
+      units: 'in',
+      age: 16,
+      date: '2024-01-01',
+      submittedBy: coach.id,
+      verifiedBy: coach.id,
+      isVerified: true
+    }).returning();
+
+    // Delete coach (soft delete)
+    await storage.deleteUser(coach.id);
+
+    // Measurement still exists with original submittedBy/verifiedBy
+    const [preservedMeasurement] = await db.select().from(measurements)
+      .where(eq(measurements.id, measurement.id));
+
+    expect(preservedMeasurement.submittedBy).toBe(coach.id);
+    expect(preservedMeasurement.verifiedBy).toBe(coach.id);
+
+    // Can still get coach data from database (soft deleted)
+    const [softDeletedCoach] = await db.select().from(users).where(eq(users.id, coach.id));
+    expect(softDeletedCoach).toBeDefined();
+    expect(softDeletedCoach.fullName).toBe('Test Coach'); // Full context preserved!
+    expect(softDeletedCoach.deletedAt).toBeInstanceOf(Date);
+  });
+});

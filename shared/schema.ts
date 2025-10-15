@@ -66,6 +66,7 @@ export const users = pgTable("users", {
   // System fields
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  deletedAt: timestamp("deleted_at"), // Soft delete - user marked as deleted but data preserved
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
