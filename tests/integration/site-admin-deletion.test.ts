@@ -1,5 +1,5 @@
-// Set DATABASE_URL before any imports that use it
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://username:password@localhost:5432/athlete_performance';
+// DATABASE_URL must be set in environment - no fallback for security
+// This prevents accidentally running tests against wrong database
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { db } from '../../server/db';
@@ -459,6 +459,54 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(measurementsAfter).toHaveLength(0);
   });
 
+  it('should delete site admin organization memberships', async () => {
+    // Organization membership already created in beforeEach
+
+    // Verify organization membership exists before deletion
+    const orgsBefore = await db.select()
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, siteAdmin.id));
+    expect(orgsBefore).toHaveLength(1);
+    expect(orgsBefore[0].organizationId).toBe(testOrg.id);
+
+    // Delete site admin
+    await storage.deleteUser(siteAdmin.id);
+
+    // Verify admin is deleted
+    const deletedAdmin = await storage.getUser(siteAdmin.id);
+    expect(deletedAdmin).toBeUndefined();
+
+    // Verify organization memberships are deleted
+    const orgsAfter = await db.select()
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, siteAdmin.id));
+    expect(orgsAfter).toHaveLength(0);
+  });
+
+  it('should delete site admin team memberships', async () => {
+    // Team membership already created in beforeEach
+
+    // Verify team membership exists before deletion
+    const teamsBefore = await db.select()
+      .from(userTeams)
+      .where(eq(userTeams.userId, siteAdmin.id));
+    expect(teamsBefore).toHaveLength(1);
+    expect(teamsBefore[0].teamId).toBe(testTeam.id);
+
+    // Delete site admin
+    await storage.deleteUser(siteAdmin.id);
+
+    // Verify admin is deleted
+    const deletedAdmin = await storage.getUser(siteAdmin.id);
+    expect(deletedAdmin).toBeUndefined();
+
+    // Verify team memberships are deleted
+    const teamsAfter = await db.select()
+      .from(userTeams)
+      .where(eq(userTeams.userId, siteAdmin.id));
+    expect(teamsAfter).toHaveLength(0);
+  });
+
   it('should handle site admin deletion with all foreign key relationships in one operation', async () => {
     // Create comprehensive test data with all foreign key relationships
 
@@ -605,9 +653,16 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const tokensAfter = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.userId, siteAdmin.id));
     expect(tokensAfter).toHaveLength(0);
 
-    // Check audit logs deleted
+    // Check audit logs are PRESERVED with nullified userId (compliance requirement)
     const logsAfter = await db.select().from(auditLogs).where(eq(auditLogs.userId, siteAdmin.id));
-    expect(logsAfter).toHaveLength(0);
+    expect(logsAfter).toHaveLength(0); // No logs with this userId anymore
+
+    // Verify audit logs still exist in database but with NULL userId
+    const allLogs = await db.select().from(auditLogs);
+    const preservedLogs = allLogs.filter(log =>
+      log.action === 'user.login' && log.userId === null
+    );
+    expect(preservedLogs.length).toBeGreaterThan(0); // Audit trail preserved for compliance
 
     // Check measurements where admin was subject are deleted
     const measurementsSubjectAfter = await db.select().from(measurements).where(eq(measurements.userId, siteAdmin.id));
