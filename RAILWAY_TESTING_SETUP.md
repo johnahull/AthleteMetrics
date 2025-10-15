@@ -9,26 +9,61 @@ This guide will help you complete the setup of your Railway testing environment 
 ✅ `railway.json` configured with testing environment
 ✅ Convenience scripts added to `package.json`
 
-## Setup Steps
+## Understanding Railway's Structure
 
-### 1. Link to Railway Project (if not already linked)
+Railway organizes resources in a hierarchy:
 
-```bash
-railway link
-# Select your AthleteMetrics project when prompted
+```
+Workspace (e.g., "AthleteMetrics Team")
+  └── Project (e.g., "AthleteMetrics")
+      └── Environment (e.g., "testing", "staging", "production")
+          └── Service (e.g., "athletemetrics-web", "postgres")
 ```
 
-### 2. Switch to Testing Environment
+**Important:** You must link to a specific **Service** within an **Environment** before you can deploy or manage variables.
+
+## Setup Steps
+
+### 1. Link to Railway Service
+
+Railway requires you to link your local directory to a specific service in your testing environment.
+
+**Option A: Interactive Linking (Recommended)**
+```bash
+railway link
+# You'll be prompted to select:
+# 1. Workspace → Select your workspace (e.g., "AthleteMetrics Team")
+# 2. Project → Select "AthleteMetrics"
+# 3. Environment → Select "testing"
+# 4. Service → Select your web application service (e.g., "athletemetrics")
+```
+
+**Option B: Direct Linking (if you know the names)**
+```bash
+railway link --workspace "YourWorkspace" --project "AthleteMetrics" --environment testing --service "your-service-name"
+```
+
+**How to find your service name:**
+- Go to [railway.app](https://railway.app)
+- Navigate to your AthleteMetrics project
+- Switch to "testing" environment
+- Your service names are listed (typically "athletemetrics" or similar for the web app)
+
+### 2. Verify the Link
 
 ```bash
-railway environment testing
+railway status
+# Should show:
+# - Environment: testing
+# - Service: [your-service-name]
+# - Project: AthleteMetrics
 ```
 
 ### 3. Add a PostgreSQL Database to Testing Environment
 
 **Option A: Create New Database (Recommended)**
 ```bash
-# While in testing environment
+# While linked to testing environment service
 railway add
 # Select "PostgreSQL" from the list
 # Railway will automatically set DATABASE_URL variable
@@ -37,7 +72,7 @@ railway add
 **Option B: Use Existing Database with Different Schema**
 ```bash
 # Manually set DATABASE_URL to use a different database name
-railway variables set DATABASE_URL="postgresql://user:pass@host:port/athletemetrics_testing"
+railway variables --set DATABASE_URL="postgresql://user:pass@host:port/athletemetrics_testing"
 ```
 
 ### 4. Set Required Environment Variables
@@ -87,10 +122,11 @@ Required variables you should see:
 # Deploy using the convenience script
 npm run deploy:testing
 
-# Or manually
-railway environment testing
+# Or manually (if already linked to testing service)
 railway up
 ```
+
+**Note:** The convenience scripts automatically switch to the testing environment before deploying.
 
 ### 7. Monitor Deployment
 
@@ -180,10 +216,25 @@ railway login
 # Follow browser authentication flow
 ```
 
+### "Need to link a service" Error
+This means you haven't completed the full linking process. You need to link to a specific service within your environment:
+
+```bash
+railway link
+# Follow the prompts to select:
+# Workspace → Project → Environment (testing) → Service (your web app)
+```
+
+Verify the link worked:
+```bash
+railway status
+# Should show environment: testing, service: [your-service-name]
+```
+
 ### "No linked project" Error
 ```bash
 railway link
-# Select AthleteMetrics project
+# Complete the full linking process including service selection
 ```
 
 ### Database Connection Errors
@@ -216,6 +267,28 @@ After successful setup, you can:
 
 ## Quick Reference
 
+### Initial Setup
+```bash
+# 1. Link to your service in testing environment
+railway link  # Select: Workspace → Project → testing → your-service
+
+# 2. Verify link
+railway status
+
+# 3. Add database (if needed)
+railway add  # Select PostgreSQL
+
+# 4. Set environment variables
+railway variables --set SESSION_SECRET="$(openssl rand -hex 32)"
+railway variables --set ADMIN_USER="admin"
+railway variables --set ADMIN_PASSWORD="YourPassword123!"
+railway variables --set ADMIN_EMAIL="testing@example.com"
+
+# 5. Deploy
+npm run deploy:testing
+```
+
+### Daily Usage
 ```bash
 # Deploy to testing
 npm run deploy:testing
@@ -228,9 +301,24 @@ npm run vars:testing
 
 # Access database shell
 npm run shell:testing
+```
 
-# Switch environments
-railway environment production
-railway environment staging
-railway environment testing
+### Switching Between Environments
+**Important:** When you run `railway link`, you're linking to ONE service in ONE environment. To work with different environments, you need to either:
+
+**Option A: Relink for each environment**
+```bash
+# Link to testing
+railway link  # Select testing environment + service
+
+# Link to staging
+railway link  # Select staging environment + service
+```
+
+**Option B: Use the convenience scripts (recommended)**
+The npm scripts automatically handle environment switching:
+```bash
+npm run deploy:testing  # Deploys to testing
+npm run logs:testing    # Views testing logs
+npm run vars:testing    # Views testing variables
 ```
