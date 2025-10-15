@@ -123,10 +123,19 @@ jobs:
       - name: Backup production database
         run: node scripts/backup-database.js
         env:
-          USE_RAILWAY_BACKUPS: true
+          USE_RAILWAY_BACKUPS: false
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
+
+      - name: Upload backup artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Validate database migrations
         run: |
@@ -135,7 +144,7 @@ jobs:
           echo "✅ Migration validation passed"
 
       - name: Run database migrations
-        timeout-minutes: 10
+        timeout-minutes: 6
         id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."

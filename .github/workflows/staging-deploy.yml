@@ -82,6 +82,15 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 7
 
+      - name: Upload backup artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Validate database migrations
         run: |
           echo "🔍 Validating migrations for safety..."
@@ -89,7 +98,7 @@ jobs:
           echo "✅ Migration validation passed"
 
       - name: Run database migrations
-        timeout-minutes: 10
+        timeout-minutes: 6
         id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
