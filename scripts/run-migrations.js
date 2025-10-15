@@ -88,6 +88,7 @@ async function runMigrations() {
     // Release lock before exiting
     if (lockId !== null) {
       await releaseMigrationLock(migrationClient, lockId);
+      lockId = null; // Prevent double-release in finally block
     }
 
     process.exit(0);
@@ -124,6 +125,7 @@ async function runMigrations() {
     // Release lock on error
     if (lockId !== null) {
       await releaseMigrationLock(migrationClient, lockId);
+      lockId = null; // Prevent double-release in finally block
     }
 
     process.exit(1);

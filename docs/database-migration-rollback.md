@@ -41,6 +41,12 @@ graph TD
 - **Format**: `pre-deploy-backup-YYYY-MM-DDTHH-MM-SS.sql`
 - **Retention**: Configured via `BACKUP_RETENTION_DAYS` environment variable
 
+### GitHub Actions Artifacts
+- **Location**: GitHub Actions run artifacts
+- **Retention**: 30 days (production), 7 days (staging)
+- **Access**: Via GitHub Actions workflow run page
+- **⚠️ Security Notice**: See Security Considerations section below
+
 ## Rollback Scenarios
 
 ### Scenario 1: Migration Fails During Application
@@ -251,6 +257,59 @@ git push origin develop
 # 3. Apply reverse migration
 # 4. Deploy code
 ```
+
+---
+
+## Security Considerations
+
+### Backup Artifact Security
+
+**⚠️ IMPORTANT: Database backups contain sensitive production data**
+
+Backup files uploaded to GitHub Actions artifacts may contain:
+- User personal information (names, emails, phone numbers)
+- Athlete performance measurements
+- Team and organization data
+- Any other data stored in the database
+
+**Access Control:**
+- GitHub Actions artifacts are accessible to users with **repository read access**
+- Production backups (30-day retention) have extended exposure window
+- Staging backups (7-day retention) have shorter exposure window
+
+**Recommended Practices:**
+
+1. **Delete Artifacts After Use**
+   - Navigate to the GitHub Actions run
+   - Delete backup artifacts once restoration is confirmed
+   - Don't keep artifacts longer than necessary
+
+2. **Repository Access Management**
+   - Limit repository access to authorized team members
+   - Review repository collaborators regularly
+   - Use branch protection rules
+
+3. **Backup Encryption (Future Enhancement)**
+   For high-security environments, consider encrypting backups before upload:
+   ```bash
+   # Encrypt backup before upload
+   gpg --symmetric --cipher-algo AES256 \
+     --passphrase "$BACKUP_ENCRYPTION_KEY" backup.sql
+
+   # Decrypt for restoration
+   gpg --decrypt --passphrase "$BACKUP_ENCRYPTION_KEY" \
+     backup.sql.gpg > backup.sql
+   ```
+
+4. **Compliance Requirements**
+   - If handling regulated data (HIPAA, GDPR, etc.), ensure backup storage complies
+   - Consider using encrypted Railway backups instead of GitHub artifacts
+   - Document backup handling in privacy policy
+
+**Current Implementation:**
+- Backups are stored **unencrypted** in GitHub Actions artifacts
+- Access is controlled by GitHub repository permissions
+- Automatic cleanup after retention period expires
 
 ---
 

@@ -82,10 +82,17 @@ function createBackup() {
     // Write output to backup file
     fs.writeFileSync(backupFile, dumpOutput);
 
-    // Check if backup was created and has content
+    // Validate file size first (before opening file descriptor)
+    // This ensures we only open the file descriptor when necessary
     const stats = fs.statSync(backupFile);
     if (stats.size === 0) {
       throw new Error('Backup file is empty');
+    }
+
+    // Verify reasonable file size (should be > 512 bytes for any valid database)
+    // Lower threshold accounts for minimal schemas (just structure, no data)
+    if (stats.size < 512) {
+      throw new Error('Backup file suspiciously small (< 512 bytes) - likely incomplete');
     }
 
     // Verify backup file integrity by checking PostgreSQL dump headers
@@ -115,12 +122,6 @@ function createBackup() {
     } finally {
       // Always close file descriptor, even if validation fails
       fs.closeSync(fd);
-    }
-
-    // Verify reasonable file size (should be > 512 bytes for any valid database)
-    // Lower threshold accounts for minimal schemas (just structure, no data)
-    if (stats.size < 512) {
-      throw new Error('Backup file suspiciously small (< 512 bytes) - likely incomplete');
     }
 
     console.log(`\n✅ Backup created successfully`);
