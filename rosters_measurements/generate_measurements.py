@@ -4,21 +4,95 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ---- Config: metric specs ----
-# Center/SD are for adult male baseline; min/max expanded to accommodate all ages/genders
+# Center/SD are for college-aged male baseline; min/max expanded to accommodate all ages/genders
 METRICS = {
-    "FLY10_TIME": {"units": "s",  "better": "lower", "center": 1.22, "sd": 0.06, "drift_per_day": -0.0006, "min": 1.00, "max": 1.70, "flyInDistance": 20},
-    "VERTICAL_JUMP": {"units": "in", "better": "higher", "center": 23.5, "sd": 2.0, "drift_per_day": +0.008, "min": 12.0, "max": 32.0, "flyInDistance": ""},
-    "AGILITY_505": {"units": "s",  "better": "lower", "center": 2.55, "sd": 0.07, "drift_per_day": -0.0007, "min": 2.1, "max": 3.5, "flyInDistance": ""},
-    "RSI": {"units": "",           "better": "higher", "center": 2.4,  "sd": 0.25, "drift_per_day": +0.0009, "min": 1.0, "max": 4.5, "flyInDistance": ""},
-    "T_TEST": {"units": "s",       "better": "lower", "center": 9.8,  "sd": 0.4,  "drift_per_day": -0.0010, "min": 7.5, "max": 13.5, "flyInDistance": ""},
+    "FLY10_TIME": {
+        "units": "s",
+        "better": "lower",
+        "center": 1.22,
+        "sd": 0.06,
+        "drift_per_day": -0.0004,
+        "progress_per_day": -0.0012,
+        "min": 1.00,
+        "max": 1.70,
+        "flyInDistance": 20,
+    },
+    "VERTICAL_JUMP": {
+        "units": "in",
+        "better": "higher",
+        "center": 23.5,
+        "sd": 2.0,
+        "drift_per_day": 0.006,
+        "progress_per_day": 0.12,
+        "min": 12.0,
+        "max": 32.0,
+        "flyInDistance": "",
+    },
+    "AGILITY_505": {
+        "units": "s",
+        "better": "lower",
+        "center": 2.55,
+        "sd": 0.07,
+        "drift_per_day": -0.0005,
+        "progress_per_day": -0.0016,
+        "min": 2.1,
+        "max": 3.5,
+        "flyInDistance": "",
+    },
+    "RSI": {
+        "units": "",
+        "better": "higher",
+        "center": 2.4,
+        "sd": 0.25,
+        "drift_per_day": 0.001,
+        "progress_per_day": 0.02,
+        "min": 1.0,
+        "max": 4.5,
+        "flyInDistance": "",
+    },
+    "T_TEST": {
+        "units": "s",
+        "better": "lower",
+        "center": 9.8,
+        "sd": 0.4,
+        "drift_per_day": -0.0008,
+        "progress_per_day": -0.0025,
+        "min": 7.5,
+        "max": 13.5,
+        "flyInDistance": "",
+    },
 }
 
-# Age bracket multipliers (baseline = college_plus at 1.00)
+# Age bracket multipliers per metric (baseline = college_plus at 1.00) tuned using normative ranges.
 AGE_BRACKETS = {
-    "middle_school": 0.80,  # ages <14
-    "young_hs": 0.88,       # ages 14-15
-    "older_hs": 0.95,       # ages 16-17
-    "college_plus": 1.00,   # ages 18+
+    "middle_school": {
+        "FLY10_TIME": 1.15,
+        "VERTICAL_JUMP": 0.65,
+        "AGILITY_505": 1.12,
+        "RSI": 0.60,
+        "T_TEST": 1.14,
+    },
+    "young_hs": {
+        "FLY10_TIME": 1.10,
+        "VERTICAL_JUMP": 0.75,
+        "AGILITY_505": 1.07,
+        "RSI": 0.72,
+        "T_TEST": 1.08,
+    },
+    "older_hs": {
+        "FLY10_TIME": 1.06,
+        "VERTICAL_JUMP": 0.85,
+        "AGILITY_505": 1.04,
+        "RSI": 0.82,
+        "T_TEST": 1.05,
+    },
+    "college_plus": {
+        "FLY10_TIME": 1.00,
+        "VERTICAL_JUMP": 1.00,
+        "AGILITY_505": 1.00,
+        "RSI": 1.00,
+        "T_TEST": 1.00,
+    },
 }
 
 # Age boundary constants for bracket determination
@@ -103,32 +177,28 @@ def get_age_bracket(age):
     else:
         return "college_plus"
 
-def get_adjustment_factor(age, gender, metric, metric_spec):
-    """Calculate combined age + gender adjustment factor for a metric."""
-    # Get age bracket multiplier
+def get_adjusted_center(metric, metric_spec, age, gender):
+    """Calculate the expected center value for a metric after age/gender adjustments."""
+    base_center = metric_spec["center"]
+
     bracket = get_age_bracket(age)
-    age_mult = AGE_BRACKETS[bracket]
+    age_adjustments = AGE_BRACKETS.get(bracket, {})
+    age_mult = age_adjustments.get(metric, 1.0)
 
-    # Get gender multiplier - explicit fallback to Male baseline
-    # Use .get() to prevent KeyError if metric is added without gender adjustments
     metric_adjustments = GENDER_ADJUSTMENTS.get(metric, {"Male": 1.00, "Female": 1.00})
-    if gender not in ["Male", "Female"]:
-        gender_mult = 1.00  # Default to Male baseline for unexpected/missing values
-    else:
-        gender_mult = metric_adjustments.get(gender, 1.00)
+    gender_mult = metric_adjustments.get(gender, 1.00)
+    if gender not in metric_adjustments:
+        gender_mult = 1.00
 
-    # For "better is lower" metrics (times), adjustments work differently
-    # Lower performance = higher times, so we multiply by the inverse relationship
-    if metric_spec["better"] == "lower":
-        # Age: younger athletes are slower (higher times), so inverse age_mult
-        # Gender: if female mult > 1.0 (slower), apply directly
-        # Safeguard against division by zero (though current constants are all > 0)
-        combined = (1.0 / age_mult if age_mult != 0 else 1.0) * gender_mult
-    else:
-        # For "better is higher" metrics (jumps, RSI), multiply directly
-        combined = age_mult * gender_mult
+    return base_center * age_mult * gender_mult
 
-    return combined
+def get_adjustment_factor(age, gender, metric, metric_spec):
+    """Return the multiplier applied to the baseline center for a metric."""
+    base_center = metric_spec.get("center", 1.0) or 1.0
+    adjusted_center = get_adjusted_center(metric, metric_spec, age, gender)
+    factor = adjusted_center / base_center if base_center else 1.0
+    return factor if factor > 0 else 1.0
+
 
 def athlete_baseline_offsets(roster_rows):
     """Give each athlete a stable baseline offset per metric so their data is consistent across dates."""
@@ -143,17 +213,59 @@ def athlete_baseline_offsets(roster_rows):
     return offsets
 
 def gen_value(spec, base_offset, day_index, jitter_sd, age=None, gender=None, metric=None):
-    # Apply age and gender adjustments to center baseline
-    center = spec["center"]
-    # Explicitly check for None and empty string to handle all edge cases
-    if age is not None and age != "" and gender and metric:
-        adjustment = get_adjustment_factor(age, gender, metric, spec)
-        center = center * adjustment
+    """Generate a single measurement value using baseline adjustments."""
+    center = spec.get("center", 0)
+    if metric:
+        factor = get_adjustment_factor(age, gender, metric, spec)
+        center *= factor
 
-    # Trend over time: drift_per_day * day_index, plus trial noise
-    trend = spec["drift_per_day"] * day_index
-    v = random.gauss(center + base_offset + trend, jitter_sd)
-    return clamp(v, spec["min"], spec["max"])
+    trend = spec.get("drift_per_day", 0) * day_index
+    value = random.gauss(center + base_offset + trend, jitter_sd)
+    return clamp(value, spec["min"], spec["max"])
+
+
+def compute_progressive_anchor(
+    spec,
+    base_offset,
+    adjusted_center,
+    days_since_start,
+    previous_anchor,
+    days_since_prev,
+):
+    """Generate a per-date anchor value that trends and guarantees progressive improvement."""
+    trend = spec["drift_per_day"] * days_since_start
+    target = adjusted_center + base_offset + trend
+    anchor = random.gauss(target, spec["sd"] * 0.2)
+
+    if previous_anchor is not None:
+        required_delta = spec["progress_per_day"] * max(1, days_since_prev)
+        if spec["better"] == "lower":
+            min_allowed = previous_anchor + required_delta
+            if anchor > min_allowed:
+                anchor = min_allowed - abs(required_delta) * 0.3
+        else:
+            min_allowed = previous_anchor + required_delta
+            if anchor < min_allowed:
+                anchor = min_allowed + abs(required_delta) * 0.3
+
+    return clamp(anchor, spec["min"], spec["max"])
+
+
+def enforce_progress_for_trial(spec, trial_value, previous_anchor, required_delta):
+    """Ensure individual trials respect progressive improvement expectations."""
+    if previous_anchor is None:
+        return clamp(trial_value, spec["min"], spec["max"])
+
+    if spec["better"] == "lower":
+        worst_allowed = previous_anchor + required_delta * 0.5
+        if trial_value > worst_allowed:
+            trial_value = worst_allowed
+    else:
+        worst_allowed = previous_anchor + required_delta * 0.5
+        if trial_value < worst_allowed:
+            trial_value = worst_allowed
+
+    return clamp(trial_value, spec["min"], spec["max"])
 
 def main():
     args = parse_args()
@@ -169,6 +281,7 @@ def main():
         dates = [datetime.strptime(d, "%Y-%m-%d").date() for d in args.dates]
     else:
         dates = rand_dates(args.num_random_dates, args.random_date_start, args.random_date_end)
+    dates_sorted = sorted(dates)
 
     # Stable athlete-specific baselines
     base = athlete_baseline_offsets(roster)
@@ -186,14 +299,35 @@ def main():
             team = a.get("teamName","")
             birthDate = a.get("birthDate","")
 
-            for di, d in enumerate(sorted(dates)):
+            metric_progress_state = {m: {"anchor": None, "date": None} for m in METRICS.keys()}
+
+            for d in dates_sorted:
                 age = age_on(birthDate, d)
+                days_since_start = (d - dates_sorted[0]).days
 
                 for metric, spec in METRICS.items():
+                    progress_info = metric_progress_state[metric]
+                    previous_anchor = progress_info["anchor"]
+                    previous_date = progress_info["date"]
+                    days_since_prev = (d - previous_date).days if previous_date else days_since_start
+
+                    adjusted_center = get_adjusted_center(metric, spec, age, gender)
+                    anchor_value = compute_progressive_anchor(
+                        spec,
+                        per_metric_offset[metric],
+                        adjusted_center,
+                        days_since_start,
+                        previous_anchor,
+                        days_since_prev,
+                    )
+                    required_delta = spec["progress_per_day"] * max(1, days_since_prev if days_since_prev else 1)
+
+                    metric_progress_state[metric] = {"anchor": anchor_value, "date": d}
+
                     for trial in range(args.trials):
-                        # Slightly higher within-session jitter than between-date drift
-                        jitter_sd = spec["sd"] * 0.5
-                        val = gen_value(spec, per_metric_offset[metric], di, jitter_sd, age, gender, metric)
+                        jitter_sd = spec["sd"] * 0.4
+                        trial_val = random.gauss(anchor_value, jitter_sd)
+                        val = enforce_progress_for_trial(spec, trial_val, previous_anchor, required_delta)
 
                         row = {
                             "firstName": key[0],
@@ -211,7 +345,7 @@ def main():
                         w.writerow(row)
 
     print(f"Wrote measurements: {args.out}")
-    print(f"Dates used: {', '.join([d.isoformat() for d in dates])}")
+    print(f"Dates used: {', '.join([d.isoformat() for d in dates_sorted])}")
 
 if __name__ == "__main__":
     main()

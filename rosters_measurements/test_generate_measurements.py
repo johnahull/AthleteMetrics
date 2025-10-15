@@ -200,7 +200,9 @@ class TestAdjustmentFactor(unittest.TestCase):
         expected_brackets = ["middle_school", "young_hs", "older_hs", "college_plus"]
         for bracket in expected_brackets:
             self.assertIn(bracket, AGE_BRACKETS)
-            self.assertGreater(AGE_BRACKETS[bracket], 0)
+            for metric_name in METRICS.keys():
+                self.assertIn(metric_name, AGE_BRACKETS[bracket])
+                self.assertGreater(AGE_BRACKETS[bracket][metric_name], 0)
 
 
 class TestGenValue(unittest.TestCase):
@@ -284,7 +286,7 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_all_metrics_have_required_fields(self):
         """Verify all metrics have required fields"""
-        required_fields = ["units", "better", "center", "sd", "drift_per_day", "min", "max"]
+        required_fields = ["units", "better", "center", "sd", "drift_per_day", "progress_per_day", "min", "max"]
         for metric_name, spec in METRICS.items():
             for field in required_fields:
                 self.assertIn(field, spec,
@@ -313,9 +315,10 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_age_bracket_multipliers_positive(self):
         """Verify all age bracket multipliers are positive"""
-        for bracket, multiplier in AGE_BRACKETS.items():
-            self.assertGreater(multiplier, 0,
-                              f"Age bracket {bracket} has non-positive multiplier")
+        for bracket, metric_multipliers in AGE_BRACKETS.items():
+            for metric_name, multiplier in metric_multipliers.items():
+                self.assertGreater(multiplier, 0,
+                                  f"Age bracket {bracket} metric {metric_name} has non-positive multiplier")
 
 
 class TestDataRealism(unittest.TestCase):
