@@ -53,9 +53,15 @@ export function registerAthleteRoutes(app: Express) {
     try {
       // Parse and validate query parameters with proper typing
       const filters: Parameters<typeof storage.getAthletes>[0] = {};
-      
+
       if (req.query.teamId) filters.teamId = req.query.teamId as string;
-      if (req.query.organizationId) filters.organizationId = req.query.organizationId as string;
+
+      // For org admins, automatically filter by their organization unless they're a site admin
+      if (req.query.organizationId) {
+        filters.organizationId = req.query.organizationId as string;
+      } else if (!isSiteAdmin(req.user) && req.user?.organizationId) {
+        filters.organizationId = req.user.organizationId;
+      }
       if (req.query.birthYearFrom) {
         const year = parseInt(req.query.birthYearFrom as string);
         if (!isNaN(year)) filters.birthYearFrom = year;
