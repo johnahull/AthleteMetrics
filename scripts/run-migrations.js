@@ -25,6 +25,11 @@ async function runMigrations() {
   const db = drizzle(migrationClient);
 
   try {
+    // Set PostgreSQL safety timeouts
+    await migrationClient.unsafe('SET lock_timeout = \'30s\'');
+    await migrationClient.unsafe('SET statement_timeout = \'5min\'');
+    console.log('🔒 PostgreSQL safety timeouts configured');
+
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
