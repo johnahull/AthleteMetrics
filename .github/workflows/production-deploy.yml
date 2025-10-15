@@ -123,11 +123,17 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Validate database migrations
+        run: |
+          echo "🔍 Validating migrations for safety..."
+          npm run db:validate
+          echo "✅ Migration validation passed"
+
       - name: Run database migrations
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
           echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
-          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
+          railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:migrate
           echo "✅ Migrations completed successfully"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
