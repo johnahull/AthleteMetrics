@@ -121,6 +121,11 @@ jobs:
           wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
+          # Update alternatives to use PostgreSQL 17 by default
+          sudo update-alternatives --install /usr/bin/pg_dump pg_dump /usr/lib/postgresql/17/bin/pg_dump 100
+          sudo update-alternatives --install /usr/bin/pg_restore pg_restore /usr/lib/postgresql/17/bin/pg_restore 100
+          # Verify version
+          pg_dump --version
 
       - name: Backup production database
         run: node scripts/backup-database.js
