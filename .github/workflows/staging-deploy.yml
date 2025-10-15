@@ -69,11 +69,19 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      # NOTE: Database backups cannot be created from GitHub Actions because Railway's
-      # internal database hostnames (*.railway.internal) are not accessible from outside
-      # Railway's private network. Use Railway's automatic backups or manual backups via
-      # Railway CLI from within the Railway environment.
-      # See docs/database-migration-rollback.md for backup procedures.
+      - name: Backup staging database
+        run: node scripts/backup-database.js
+        env:
+          USE_RAILWAY_BACKUPS: false
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+          PUBLIC_DATABASE_URL: ${{ secrets.RAILWAY_STAGING_PUBLIC_DATABASE_URL }}
+          BACKUP_RETENTION_DAYS: 7
+
+      # NOTE: Backup artifacts are NOT uploaded to GitHub Actions for security reasons.
+      # Staging backups may contain production-like data and should not be stored in GitHub.
+      # Access backups via Railway CLI: railway run --service <SERVICE_ID> ls backups/
+      # See docs/database-migration-rollback.md for backup access procedures
 
       - name: Validate database migrations
         run: |

@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename);
 
 const RAILWAY_TOKEN = process.env.RAILWAY_TOKEN;
 const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID;
+const PUBLIC_DATABASE_URL = process.env.PUBLIC_DATABASE_URL; // For GitHub Actions (external network)
 
 // SECURITY: Validate backup retention days to prevent integer overflow/underflow
 // Negative values would delete ALL backups, zero would delete current backup
@@ -108,18 +109,26 @@ async function createBackup() {
 
     console.log(`Creating backup: ${backupName}`);
 
-    // Get database URL from Railway
-    console.log('Fetching database connection details...');
-    const varsOutput = runCommand(
-      `railway variables --service ${RAILWAY_SERVICE_ID} --json`,
-      { silent: true }
-    );
+    // Get database URL - use PUBLIC_DATABASE_URL if set (for GitHub Actions),
+    // otherwise fetch from Railway variables (for Railway environment)
+    let databaseUrl;
 
-    const vars = JSON.parse(varsOutput);
-    const databaseUrl = vars.DATABASE_URL;
+    if (PUBLIC_DATABASE_URL) {
+      console.log('Using PUBLIC_DATABASE_URL (external network)...');
+      databaseUrl = PUBLIC_DATABASE_URL;
+    } else {
+      console.log('Fetching database connection details from Railway...');
+      const varsOutput = runCommand(
+        `railway variables --service ${RAILWAY_SERVICE_ID} --json`,
+        { silent: true }
+      );
 
-    if (!databaseUrl) {
-      throw new Error('DATABASE_URL not found in Railway variables');
+      const vars = JSON.parse(varsOutput);
+      databaseUrl = vars.DATABASE_URL;
+
+      if (!databaseUrl) {
+        throw new Error('DATABASE_URL not found in Railway variables');
+      }
     }
 
     // Create local backup directory if it doesn't exist
@@ -132,13 +141,23 @@ async function createBackup() {
 
     console.log('Dumping database...');
 
-    // Use pg_dump through Railway CLI
-    // Railway CLI handles authentication automatically
-    // Capture output directly to avoid shell redirection issues
-    const dumpOutput = runCommand(
-      `railway run --service ${RAILWAY_SERVICE_ID} sh -c 'pg_dump "$DATABASE_URL"'`,
-      { silent: true }
-    );
+    // Use pg_dump - either through Railway CLI (internal) or directly (public URL)
+    let dumpOutput;
+
+    if (PUBLIC_DATABASE_URL) {
+      // Direct pg_dump with public URL (for GitHub Actions)
+      dumpOutput = runCommand(
+        `pg_dump "${databaseUrl}"`,
+        { silent: true }
+      );
+    } else {
+      // Use Railway CLI (for Railway environment with internal hostnames)
+      // Railway CLI handles authentication automatically
+      dumpOutput = runCommand(
+        `railway run --service ${RAILWAY_SERVICE_ID} sh -c 'pg_dump "$DATABASE_URL"'`,
+        { silent: true }
+      );
+    }
 
     // Write output to backup file with restricted permissions (owner-only)
     // SECURITY: Mode 0o600 = rw------- (owner read/write, no group/other access)
