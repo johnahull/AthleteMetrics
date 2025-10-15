@@ -47,22 +47,22 @@ railway variables set DATABASE_URL="postgresql://user:pass@host:port/athletemetr
 SESSION_SECRET=$(openssl rand -hex 32)
 
 # Set all required variables
-railway variables set SESSION_SECRET="$SESSION_SECRET"
-railway variables set ADMIN_USER="admin"
-railway variables set ADMIN_PASSWORD="TestingPass123!"
-railway variables set ADMIN_EMAIL="testing@example.com"
+railway variables --set SESSION_SECRET="$SESSION_SECRET"
+railway variables --set ADMIN_USER="admin"
+railway variables --set ADMIN_PASSWORD="TestingPass123!"
+railway variables --set ADMIN_EMAIL="testing@example.com"
 
 # Optional: Set Neon tier (if using Neon PostgreSQL)
-railway variables set NEON_TIER="free"
+railway variables --set NEON_TIER="free"
 
 # Optional: Email configuration (can skip for testing)
-railway variables set SENDGRID_API_KEY="your-key-here"
-railway variables set SENDGRID_FROM_EMAIL="noreply@testing.com"
-railway variables set SENDGRID_FROM_NAME="AthleteMetrics Testing"
+railway variables --set SENDGRID_API_KEY="your-key-here"
+railway variables --set SENDGRID_FROM_EMAIL="noreply@testing.com"
+railway variables --set SENDGRID_FROM_NAME="AthleteMetrics Testing"
 
 # Optional: Set application URL (Railway will auto-generate if not set)
-railway variables set APP_URL="https://your-testing-url.up.railway.app"
-railway variables set INVITATION_EXPIRY_DAYS="7"
+railway variables --set APP_URL="https://your-testing-url.up.railway.app"
+railway variables --set INVITATION_EXPIRY_DAYS="7"
 ```
 
 ### 5. Verify Environment Variables
