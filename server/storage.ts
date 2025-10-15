@@ -357,8 +357,10 @@ export class DatabaseStorage implements IStorage {
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
-      // Delete all user-organization relationships
-      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+      // ✅ KEEP user-organization relationships to preserve measurement organization context
+      // This allows measurements to still be filtered by organization even after user deletion
+      // Without this, measurements would become orphaned and unable to be queried by org
+      // Note: userOrganizations records for deleted users are harmless and preserve data integrity
 
       // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
       // userId, submittedBy, and verifiedBy remain as historical references
@@ -1792,7 +1794,7 @@ export class DatabaseStorage implements IStorage {
       verifierInfo: sql<any>`verifier_info.first_name || ' ' || verifier_info.last_name`
     })
     .from(measurements)
-    .innerJoin(users, eq(measurements.userId, users.id))
+    .leftJoin(users, eq(measurements.userId, users.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 

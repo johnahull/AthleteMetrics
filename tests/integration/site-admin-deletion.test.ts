@@ -758,4 +758,107 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const tokens = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.userId, siteAdmin.id));
     expect(tokens).toHaveLength(0);
   });
+
+  it('should preserve measurements in analytics queries after user deletion', async () => {
+    // Add users to organization for analytics
+    await db.insert(userOrganizations).values({
+      userId: athlete.id,
+      organizationId: testOrg.id,
+      role: 'athlete'
+    });
+
+    await db.insert(userOrganizations).values({
+      userId: coach.id,
+      organizationId: testOrg.id,
+      role: 'coach'
+    });
+
+    // Create verified measurements for athlete
+    await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'VERTICAL_JUMP',
+      value: '30',
+      units: 'in',
+      age: 25,
+      date: '2024-01-01',
+      submittedBy: coach.id,
+      isVerified: true
+    });
+
+    await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'DASH_40YD',
+      value: '4.5',
+      units: 's',
+      age: 25,
+      date: '2024-01-02',
+      submittedBy: coach.id,
+      isVerified: true
+    });
+
+    // Query measurements using analytics-style query (leftJoin users)
+    const measurementsBeforeDeletion = await db
+      .select({
+        userId: measurements.userId,
+        metric: measurements.metric,
+        value: measurements.value,
+        athleteName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, '[Deleted User]')`,
+      })
+      .from(measurements)
+      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(
+        sql`${measurements.isVerified} = true
+            AND ${userOrganizations.organizationId} = ${testOrg.id}`
+      );
+
+    expect(measurementsBeforeDeletion).toHaveLength(2);
+    expect(measurementsBeforeDeletion[0].athleteName).toBe('Test Athlete');
+
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
+
+    // Verify athlete is deleted
+    const deletedAthlete = await storage.getUser(athlete.id);
+    expect(deletedAthlete).toBeUndefined();
+
+    // Query measurements again using analytics-style query
+    // This should STILL return measurements because:
+    // 1. We use leftJoin for users (not innerJoin)
+    // 2. We keep userOrganizations records (not deleted with user)
+    const measurementsAfterDeletion = await db
+      .select({
+        userId: measurements.userId,
+        metric: measurements.metric,
+        value: measurements.value,
+        athleteName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, '[Deleted User]')`,
+      })
+      .from(measurements)
+      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(
+        sql`${measurements.isVerified} = true
+            AND ${userOrganizations.organizationId} = ${testOrg.id}`
+      );
+
+    // ✅ CRITICAL: Measurements should still appear in analytics
+    expect(measurementsAfterDeletion).toHaveLength(2);
+
+    // ✅ Athlete name should show "[Deleted User]" via COALESCE
+    expect(measurementsAfterDeletion[0].athleteName).toBe('[Deleted User]');
+
+    // ✅ Original userId should be preserved
+    expect(measurementsAfterDeletion[0].userId).toBe(athlete.id);
+
+    // ✅ Values should be unchanged
+    const verticalJump = measurementsAfterDeletion.find(m => m.metric === 'VERTICAL_JUMP');
+    expect(verticalJump).toBeDefined();
+    expect(verticalJump!.value).toBe('30');
+
+    const dash40 = measurementsAfterDeletion.find(m => m.metric === 'DASH_40YD');
+    expect(dash40).toBeDefined();
+    expect(dash40!.value).toBe('4.5');
+  });
 });

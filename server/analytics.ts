@@ -176,14 +176,14 @@ export class AnalyticsService {
         date: measurements.date,
         teamId: measurements.teamId,
         season: measurements.season,
-        athleteName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+        athleteName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, '[Deleted User]')`,
         teamName: teams.name,
         birthDate: users.birthDate,
         gender: users.gender,
         school: users.school
       })
       .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(users, eq(measurements.userId, users.id))
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .leftJoin(teams, eq(measurements.teamId, teams.id))
       .where(and(...allConditions));
@@ -655,7 +655,7 @@ export class AnalyticsService {
         count: sql<number>`count(*)::int`
       })
       .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(users, eq(measurements.userId, users.id))
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);
