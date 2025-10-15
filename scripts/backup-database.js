@@ -21,7 +21,18 @@ const __dirname = path.dirname(__filename);
 
 const RAILWAY_TOKEN = process.env.RAILWAY_TOKEN;
 const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID;
-const BACKUP_RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS) || 30;
+
+// SECURITY: Validate backup retention days to prevent integer overflow/underflow
+// Negative values would delete ALL backups, zero would delete current backup
+function validateBackupRetentionDays(days) {
+  const parsed = parseInt(days);
+  if (isNaN(parsed) || parsed < 1 || parsed > 365) {
+    throw new Error(`Invalid BACKUP_RETENTION_DAYS: must be between 1 and 365 (got: ${days})`);
+  }
+  return parsed;
+}
+
+const BACKUP_RETENTION_DAYS = validateBackupRetentionDays(process.env.BACKUP_RETENTION_DAYS || '30');
 
 function runCommand(command, options = {}) {
   try {
@@ -31,8 +42,49 @@ function runCommand(command, options = {}) {
       ...options
     });
   } catch (error) {
-    throw new Error(`Command failed: ${command}\n${error.message}`);
+    // SECURITY FIX: Include original error context for better debugging
+    // This helps identify whether it's a Railway CLI issue, network problem, or pg_dump failure
+    throw new Error(`Command failed: ${command}\nOriginal error: ${error.message}\nExit code: ${error.status || 'N/A'}`);
   }
+}
+
+/**
+ * Verify backup checksum (for restore validation)
+ * @param {string} backupFile - Path to backup .sql file
+ * @returns {Promise<boolean>} - True if checksum matches
+ */
+async function verifyBackupChecksum(backupFile) {
+  const checksumFile = `${backupFile}.sha256`;
+
+  if (!fs.existsSync(checksumFile)) {
+    console.warn(`⚠️  Checksum file not found: ${checksumFile}`);
+    return false;
+  }
+
+  // Read stored checksum
+  const storedChecksum = fs.readFileSync(checksumFile, 'utf-8').split(' ')[0];
+
+  // Calculate actual checksum using streaming
+  const hash = createHash('sha256');
+  const fileStream = createReadStream(backupFile);
+
+  await new Promise((resolve, reject) => {
+    fileStream.on('data', (chunk) => hash.update(chunk));
+    fileStream.on('end', resolve);
+    fileStream.on('error', reject);
+  });
+
+  const actualChecksum = hash.digest('hex');
+
+  if (storedChecksum !== actualChecksum) {
+    console.error(`❌ Checksum mismatch!`);
+    console.error(`   Expected: ${storedChecksum}`);
+    console.error(`   Actual:   ${actualChecksum}`);
+    return false;
+  }
+
+  console.log('✅ Backup checksum verified');
+  return true;
 }
 
 async function createBackup() {
@@ -88,8 +140,9 @@ async function createBackup() {
       { silent: true }
     );
 
-    // Write output to backup file
-    fs.writeFileSync(backupFile, dumpOutput);
+    // Write output to backup file with restricted permissions (owner-only)
+    // SECURITY: Mode 0o600 = rw------- (owner read/write, no group/other access)
+    fs.writeFileSync(backupFile, dumpOutput, { mode: 0o600 });
 
     // Validate file size first (before opening file descriptor)
     // This ensures we only open the file descriptor when necessary
@@ -98,14 +151,24 @@ async function createBackup() {
       throw new Error('Backup file is empty');
     }
 
-    // Verify reasonable file size (should be > 5KB for AthleteMetrics schema)
-    // Even empty schema with 8+ tables should be at least 5KB
+    // SECURITY FIX: Environment-aware backup size validation
+    // Staging: Warn if < 5KB (may be fresh database)
+    // Production: Error if < 5KB (should always have data)
     const MIN_BACKUP_SIZE = 5 * 1024; // 5KB
+    const isProduction = process.env.NODE_ENV === 'production';
+
     if (stats.size < MIN_BACKUP_SIZE) {
-      throw new Error(
-        `Backup file suspiciously small (${stats.size} bytes < ${MIN_BACKUP_SIZE} bytes minimum). ` +
-        'Expected at least 5KB for schema structure. Backup may be incomplete.'
-      );
+      const message = `Backup file suspiciously small (${stats.size} bytes < ${MIN_BACKUP_SIZE} bytes minimum). Expected at least 5KB for schema structure.`;
+
+      if (isProduction) {
+        // Production: Fail - should never have empty database
+        throw new Error(`${message} Backup may be incomplete or corrupted.`);
+      } else {
+        // Staging: Warn but allow - might be fresh setup
+        console.warn(`⚠️  ${message}`);
+        console.warn('   This may be normal for fresh/empty staging databases.');
+        console.warn('   Production backups will require minimum size.');
+      }
     }
 
     // Verify backup file integrity using async streaming I/O
@@ -176,7 +239,9 @@ async function createBackup() {
         const filePath = path.join(backupDir, file);
         const checksumPath = `${filePath}.sha256`;
         const fileStats = fs.statSync(filePath);
-        const age = now - fileStats.mtimeMs;
+        // SECURITY FIX: Use birthtimeMs (creation time) not mtimeMs (modification time)
+        // mtime can be changed, but birthtime is the actual file creation timestamp
+        const age = now - fileStats.birthtimeMs;
 
         if (age > maxAge) {
           // Delete both .sql and .sha256 files together to prevent orphans

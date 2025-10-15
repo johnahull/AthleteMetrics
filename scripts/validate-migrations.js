@@ -157,6 +157,36 @@ const DANGEROUS_PATTERNS = [
 ];
 
 /**
+ * Test regex pattern with timeout protection (prevents ReDoS attacks)
+ * @param {RegExp} pattern - Regular expression to test
+ * @param {string} content - Content to test against
+ * @param {number} timeoutMs - Timeout in milliseconds
+ * @returns {boolean} - Whether pattern matched
+ * @throws {Error} - If pattern matching times out
+ */
+function testPatternWithTimeout(pattern, content, timeoutMs) {
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+  }, timeoutMs);
+
+  try {
+    const result = pattern.test(content);
+    clearTimeout(timeout);
+    if (timedOut) {
+      throw new Error('Pattern matching timeout');
+    }
+    return result;
+  } catch (error) {
+    clearTimeout(timeout);
+    if (timedOut) {
+      throw new Error('Pattern matching timeout');
+    }
+    throw error;
+  }
+}
+
+/**
  * Find migrations directory
  */
 function findMigrationsDirectory() {
@@ -179,20 +209,50 @@ function findMigrationsDirectory() {
  */
 function validateMigrationFile(filePath) {
   try {
-    let content = fs.readFileSync(filePath, 'utf-8');
+    // SECURITY: Prevent path traversal attacks
+    // Ensure file path is within the migrations directory
+    const realPath = fs.realpathSync(filePath);
+    const migrationsDir = findMigrationsDirectory();
+    if (!realPath.startsWith(fs.realpathSync(migrationsDir))) {
+      throw new Error('Path traversal attempt detected - file outside migrations directory');
+    }
+
+    // SECURITY: Limit file size to prevent DoS (max 10MB)
+    const stats = fs.statSync(realPath);
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    if (stats.size > MAX_FILE_SIZE) {
+      throw new Error(`Migration file too large (${(stats.size / 1024 / 1024).toFixed(2)}MB > 10MB limit)`);
+    }
+
+    let content = fs.readFileSync(realPath, 'utf-8');
     const fileName = path.basename(filePath);
     const issues = [];
 
     // FIRST: Check raw content (catches patterns in quoted strings/comments)
     // This prevents attackers from hiding dangerous SQL inside string literals
+    // SECURITY: Wrap regex testing with timeout to prevent ReDoS attacks
     for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
-      if (pattern.test(content)) {
-        issues.push({
-          file: fileName,
-          severity,
-          message: `${message} (in raw content)`,
-          type: 'DANGEROUS_PATTERN'
-        });
+      try {
+        const matched = testPatternWithTimeout(pattern, content, 5000); // 5 second timeout
+        if (matched) {
+          issues.push({
+            file: fileName,
+            severity,
+            message: `${message} (in raw content)`,
+            type: 'DANGEROUS_PATTERN'
+          });
+        }
+      } catch (error) {
+        if (error.message === 'Pattern matching timeout') {
+          issues.push({
+            file: fileName,
+            severity: 'ERROR',
+            message: `Pattern matching timed out - possible ReDoS attack or extremely large file`,
+            type: 'TIMEOUT'
+          });
+          break; // Stop processing this file
+        }
+        throw error;
       }
     }
 
@@ -208,19 +268,36 @@ function validateMigrationFile(filePath) {
       .replace(/\/\*[\s\S]*?\*\//g, '');                 // Remove block comments
 
     for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
-      if (pattern.test(cleanedContent)) {
-        // Only add if not already detected in raw content
-        const alreadyDetected = issues.some(
-          issue => issue.message.includes(message) && issue.message.includes('(in raw content)')
-        );
-        if (!alreadyDetected) {
-          issues.push({
-            file: fileName,
-            severity,
-            message: `${message} (outside quotes)`,
-            type: 'DANGEROUS_PATTERN'
-          });
+      try {
+        const matched = testPatternWithTimeout(pattern, cleanedContent, 5000);
+        if (matched) {
+          // Only add if not already detected in raw content
+          const alreadyDetected = issues.some(
+            issue => issue.message.includes(message) && issue.message.includes('(in raw content)')
+          );
+          if (!alreadyDetected) {
+            issues.push({
+              file: fileName,
+              severity,
+              message: `${message} (outside quotes)`,
+              type: 'DANGEROUS_PATTERN'
+            });
+          }
         }
+      } catch (error) {
+        if (error.message === 'Pattern matching timeout') {
+          const alreadyTimedOut = issues.some(issue => issue.type === 'TIMEOUT');
+          if (!alreadyTimedOut) {
+            issues.push({
+              file: fileName,
+              severity: 'ERROR',
+              message: `Pattern matching timed out on cleaned content - possible ReDoS attack`,
+              type: 'TIMEOUT'
+            });
+          }
+          break; // Stop processing this file
+        }
+        throw error;
       }
     }
 

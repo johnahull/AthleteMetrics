@@ -27,10 +27,11 @@ async function emergencyCleanup(signal) {
   console.error(`\n⚠️  Received ${signal} - emergency cleanup...`);
   if (globalLockId && globalClient) {
     try {
-      // Race against 1-second timeout for cleanup
+      // SECURITY FIX: Increase timeout from 1s to 5s for cloud database latency
+      // Railway/Neon databases may need more time for lock release under load
       await Promise.race([
         releaseMigrationLock(globalClient, globalLockId),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
       ]);
       console.error('✅ Emergency lock release successful');
     } catch (error) {
@@ -57,20 +58,28 @@ async function acquireMigrationLock(client) {
   // Use consistent application identifier
   const LOCK_CLASS_ID = 2024;
 
-  // Generate unique lock ID based on database name (prevents cross-environment conflicts)
-  const dbHash = createHash('sha256').update(dbName).digest('hex');
+  // SECURITY FIX: Include NODE_ENV in lock ID hash to prevent collision
+  // Even if staging/production share a database server, they'll have different locks
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const lockSeed = `${dbName}-${nodeEnv}`;
+
+  // Generate unique lock ID based on database name + environment (prevents cross-environment conflicts)
+  const dbHash = createHash('sha256').update(lockSeed).digest('hex');
   const LOCK_OBJ_ID = parseInt(dbHash.substring(0, 8), 16) % 2147483647;
 
   console.log('🔒 Acquiring migration lock...');
   console.log(`   Database: ${dbName}`);
   console.log(`   Lock ID: ${LOCK_CLASS_ID}.${LOCK_OBJ_ID}`);
 
-  const result = await client.unsafe(
-    'SELECT pg_try_advisory_lock($1, $2) as locked',
-    [LOCK_CLASS_ID, LOCK_OBJ_ID]
-  );
+  // SECURITY: Wrap lock acquisition and verification in a transaction to prevent TOCTOU race condition
+  // This ensures atomicity - either we get the lock AND verify it, or we fail
+  const result = await client.unsafe(`
+    BEGIN;
+    SELECT pg_try_advisory_lock($1, $2) as locked;
+  `, [LOCK_CLASS_ID, LOCK_OBJ_ID]);
 
   if (!result[0]?.locked) {
+    await client.unsafe('ROLLBACK');
     throw new Error(
       'Another migration is in progress. Cannot run concurrent migrations. ' +
       'Wait for the other migration to complete and try again.'
@@ -78,6 +87,7 @@ async function acquireMigrationLock(client) {
   }
 
   // VERIFY: Double-check we actually hold the lock (prevents race condition)
+  // This happens within the same transaction, ensuring atomicity
   const verification = await client.unsafe(
     'SELECT count(*) as lock_count FROM pg_locks WHERE locktype = $1 AND classid = $2 AND objid = $3 AND pid = pg_backend_pid()',
     ['advisory', LOCK_CLASS_ID, LOCK_OBJ_ID]
@@ -85,8 +95,12 @@ async function acquireMigrationLock(client) {
 
   const lockCount = parseInt(verification[0]?.lock_count) || 0;
   if (lockCount !== 1) {
+    await client.unsafe('ROLLBACK');
     throw new Error(`Lock acquisition verification failed - expected 1 lock, found ${lockCount}`);
   }
+
+  // Commit the transaction - lock is now held outside transaction scope
+  await client.unsafe('COMMIT');
 
   console.log('✅ Migration lock acquired and verified');
   return { classId: LOCK_CLASS_ID, objId: LOCK_OBJ_ID };
@@ -142,6 +156,23 @@ async function runMigrations() {
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
+    // VALIDATION: Check migrations folder exists before attempting migration
+    // This prevents confusing errors if folder is missing
+    const fs = await import('fs');
+    if (!fs.existsSync(migrationsFolder)) {
+      console.warn('⚠️  Migrations folder does not exist - no migrations to apply');
+      console.log('   This is normal for fresh setups');
+      console.log('   Generate migrations with: npm run db:generate');
+      // Don't throw error - this is valid for fresh setups
+      // Just release lock and exit successfully
+      if (lockId !== null) {
+        await releaseMigrationLock(migrationClient, lockId);
+        lockId = null;
+        globalLockId = null;
+      }
+      process.exit(0);
+    }
+
     await migrate(db, { migrationsFolder });
 
     console.log('\n✅ Migrations completed successfully');
@@ -163,6 +194,14 @@ async function runMigrations() {
     // Log PostgreSQL-specific error details if available
     if (error.code) {
       console.error(`  PostgreSQL Error Code: ${error.code}`);
+
+      // SECURITY FIX: Catch statement timeout (error code 57014) and release lock
+      // Without this, lock would remain held until connection closes
+      if (error.code === '57014') {
+        console.error('⚠️  Statement timeout exceeded - this is a safety mechanism');
+        console.error('   The migration operation took too long and was canceled');
+        console.error('   Consider breaking the migration into smaller steps or increasing timeout');
+      }
     }
     if (error.detail) {
       console.error(`  Detail: ${error.detail}`);
@@ -184,11 +223,17 @@ async function runMigrations() {
     console.error('  3. Check if schema changes conflict with existing data');
     console.error('  4. Review docs/database-migration-rollback.md for recovery procedures');
 
-    // Release lock on error
+    // CRITICAL: Release lock on error (including statement timeout)
+    // This ensures the lock doesn't remain held, blocking future migrations
     if (lockId !== null) {
-      await releaseMigrationLock(migrationClient, lockId);
-      lockId = null; // Prevent double-release in finally block
-      globalLockId = null; // Clear global
+      try {
+        await releaseMigrationLock(migrationClient, lockId);
+        lockId = null; // Prevent double-release in finally block
+        globalLockId = null; // Clear global
+      } catch (lockError) {
+        console.error('⚠️  Failed to release lock after error:', lockError.message);
+        console.error('   Lock will auto-release when connection closes');
+      }
     }
 
     process.exit(1);
