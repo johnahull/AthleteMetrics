@@ -340,23 +340,79 @@ export class DatabaseStorage implements IStorage {
     return updatedUser;
   }
 
+  /**
+   * Deletes a user and all associated data in an atomic transaction.
+   *
+   * IMPORTANT DATA LOSS CONSIDERATIONS:
+   * - Measurements where user is the subject (userId) are DELETED
+   * - Measurements submitted by user (submittedBy) are DELETED, including measurements for other athletes
+   *   This is required because submittedBy is NOT NULL in the schema
+   * - If preserving measurement data is critical, consider reassigning to a system user instead of deleting
+   *
+   * PRESERVED DATA (set to NULL):
+   * - Audit logs (compliance requirement - immutable audit trail)
+   * - Measurements verified by user (verifiedBy is nullable)
+   * - Invitations accepted/cancelled by user (preserve invitation history)
+   */
   async deleteUser(id: string): Promise<void> {
-    // Delete related records first
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
-    await db.delete(userTeams).where(eq(userTeams.userId, id));
+    // Use a transaction to ensure all deletions happen atomically
+    await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
 
-    // Delete invitations sent by this user
-    await db.delete(invitations).where(eq(invitations.invitedBy, id));
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
-    // Update measurements to remove references to this user
-    await db.update(measurements)
-      .set({
-        submittedBy: sql`NULL`,
-        verifiedBy: sql`NULL`
-      })
-      .where(sql`${measurements.submittedBy} = ${id} OR ${measurements.verifiedBy} = ${id}`);
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
-    await db.delete(users).where(eq(users.id, id));
+      // Delete all user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
+
+      // Delete all user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete measurements where user is subject OR submitter
+      // Note: submittedBy is NOT NULL, so we must delete rather than set to null
+      // This covers both self-submitted measurements and measurements submitted by this user for others
+      await tx.delete(measurements).where(
+        or(
+          eq(measurements.userId, id),
+          eq(measurements.submittedBy, id)
+        )
+      );
+
+      // Update measurements verified by this user (verifiedBy is nullable)
+      await tx.update(measurements)
+        .set({ verifiedBy: null as any })
+        .where(eq(measurements.verifiedBy, id));
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: null as any })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: null as any })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Delete invitations created BY this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+
+      // Delete invitations FOR this user (as athlete/playerId)
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
+
+      // Finally, delete the user record
+      await tx.delete(users).where(eq(users.id, id));
+    });
   }
 
   async getUserOrganizations(userId: string): Promise<any[]> {
@@ -1603,6 +1659,11 @@ export class DatabaseStorage implements IStorage {
   async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
       // Delete email verification tokens
       await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
@@ -1615,16 +1676,17 @@ export class DatabaseStorage implements IStorage {
       // Delete all user-organization relationships
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
-      // Delete all measurements for this user (as subject)
-      await tx.delete(measurements).where(eq(measurements.userId, id));
+      // Delete measurements where user is subject OR submitter
+      // Note: submittedBy is NOT NULL, so we must delete rather than set to null
+      // This covers both self-submitted measurements and measurements submitted by this user for others
+      await tx.delete(measurements).where(
+        or(
+          eq(measurements.userId, id),
+          eq(measurements.submittedBy, id)
+        )
+      );
 
-      // Update measurements submitted by this user (set submittedBy to null or keep as-is)
-      // Don't delete them as they belong to other athletes
-      await tx.update(measurements)
-        .set({ submittedBy: null as any })
-        .where(eq(measurements.submittedBy, id));
-
-      // Update measurements verified by this user
+      // Update measurements verified by this user (verifiedBy is nullable)
       await tx.update(measurements)
         .set({ verifiedBy: null as any })
         .where(eq(measurements.verifiedBy, id));
@@ -1644,8 +1706,11 @@ export class DatabaseStorage implements IStorage {
       // Delete invitations FOR this user (as athlete/playerId)
       await tx.delete(invitations).where(eq(invitations.playerId, id));
 
-      // Delete audit logs for this user
-      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
 
       // Finally, delete the user record
       await tx.delete(users).where(eq(users.id, id));

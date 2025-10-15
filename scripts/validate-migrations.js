@@ -319,11 +319,22 @@ function validateMigrationFile(filePath) {
 function validateMigrations() {
   console.log('🔍 Validating database migrations...\n');
 
+  // SECURITY: Set overall script timeout (60 seconds) to prevent DoS
+  // Individual pattern timeouts are 5s, but multiple patterns could accumulate
+  const SCRIPT_TIMEOUT_MS = 60000;
+  const scriptTimeout = setTimeout(() => {
+    console.error('\n❌ Migration validation TIMEOUT');
+    console.error('⚠️  Script execution exceeded 60 second limit');
+    console.error('🛑 This may indicate a ReDoS attack or excessively large migration files');
+    process.exit(1);
+  }, SCRIPT_TIMEOUT_MS);
+
   const migrationsDir = findMigrationsDirectory();
 
   if (!migrationsDir) {
     console.log('ℹ️  No migrations directory found - this is normal for fresh setup');
     console.log('📝 Migrations will be created when you run: npm run db:generate\n');
+    clearTimeout(scriptTimeout);
     return 0;
   }
 
@@ -334,6 +345,7 @@ function validateMigrations() {
     files = fs.readdirSync(migrationsDir);
   } catch (error) {
     console.error(`❌ Error reading migrations directory: ${error.message}`);
+    clearTimeout(scriptTimeout);
     return 1;
   }
 
@@ -342,6 +354,7 @@ function validateMigrations() {
   if (sqlFiles.length === 0) {
     console.log('ℹ️  No migration files found - this is normal for fresh setup');
     console.log('📝 Generate migrations with: npm run db:generate\n');
+    clearTimeout(scriptTimeout);
     return 0;
   }
 
@@ -378,6 +391,7 @@ function validateMigrations() {
     console.error('🛑 DO NOT apply these migrations to production/staging databases');
     console.error('📝 Review the migration files and fix the issues before proceeding');
     console.error('');
+    clearTimeout(scriptTimeout);
     return 1;
   }
 
@@ -387,11 +401,13 @@ function validateMigrations() {
     console.warn('📝 Review the warnings above and ensure they are intentional');
     console.warn('💾 Make sure you have a database backup before applying migrations');
     console.warn('');
+    clearTimeout(scriptTimeout);
     return 0; // Warnings don't block deployment
   }
 
   console.log('✅ All migrations are SAFE');
   console.log('');
+  clearTimeout(scriptTimeout);
   return 0;
 }
 
