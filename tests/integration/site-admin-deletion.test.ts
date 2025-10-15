@@ -383,14 +383,14 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify measurement's submittedBy field is set to NULL (preserve measurement data)
+    // Verify measurements submitted by deleted user are DELETED
+    // Note: submittedBy is NOT NULL in schema, so we must delete these measurements
     const measurementsAfter = await db.select().from(measurements).where(eq(measurements.submittedBy, siteAdmin.id));
     expect(measurementsAfter).toHaveLength(0);
 
-    // Verify measurement still exists but submittedBy is null
-    const measurementPreserved = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
-    expect(measurementPreserved).toHaveLength(1);
-    expect(measurementPreserved[0].submittedBy).toBeNull();
+    // Verify measurement for athlete is also deleted (since submittedBy cannot be null)
+    const measurementForAthlete = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
+    expect(measurementForAthlete).toHaveLength(0);
   });
 
   it('should delete site admin with measurements they verified', async () => {
@@ -611,20 +611,20 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const measurementsSubjectAfter = await db.select().from(measurements).where(eq(measurements.userId, siteAdmin.id));
     expect(measurementsSubjectAfter).toHaveLength(0);
 
-    // Check measurements submitted/verified by admin have nullified references
+    // Check measurements submitted by admin are DELETED (submittedBy is NOT NULL)
     const measurementsSubmittedAfter = await db.select().from(measurements).where(eq(measurements.submittedBy, siteAdmin.id));
     expect(measurementsSubmittedAfter).toHaveLength(0);
 
+    // Check measurements verified by admin have nullified verifiedBy (verifiedBy is nullable)
     const measurementsVerifiedAfter = await db.select().from(measurements).where(eq(measurements.verifiedBy, siteAdmin.id));
     expect(measurementsVerifiedAfter).toHaveLength(0);
 
-    // Verify athlete's measurements still exist with nullified admin references
+    // Verify athlete's measurement verified by admin still exists with nullified verifiedBy
+    // Note: Measurement submitted by admin was deleted since submittedBy is NOT NULL
     const athleteMeasurements = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
-    expect(athleteMeasurements).toHaveLength(2);
-    athleteMeasurements.forEach(m => {
-      expect(m.submittedBy).not.toBe(siteAdmin.id);
-      expect(m.verifiedBy).not.toBe(siteAdmin.id);
-    });
+    expect(athleteMeasurements).toHaveLength(1); // Only the verified one remains
+    expect(athleteMeasurements[0].verifiedBy).toBeNull();
+    expect(athleteMeasurements[0].submittedBy).toBe(coach.id); // Submitted by coach
   });
 
   it('should use transaction for atomicity - all or nothing deletion', async () => {

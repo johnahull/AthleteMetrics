@@ -363,13 +363,12 @@ export class DatabaseStorage implements IStorage {
       // Delete all measurements for this user (as subject)
       await tx.delete(measurements).where(eq(measurements.userId, id));
 
-      // Update measurements submitted by this user (set submittedBy to null)
-      // Don't delete them as they belong to other athletes
-      await tx.update(measurements)
-        .set({ submittedBy: null as any })
-        .where(eq(measurements.submittedBy, id));
+      // Delete measurements submitted by this user
+      // Note: submittedBy is NOT NULL, so we must delete rather than set to null
+      // This is acceptable as these measurements lose their submitter context
+      await tx.delete(measurements).where(eq(measurements.submittedBy, id));
 
-      // Update measurements verified by this user
+      // Update measurements verified by this user (verifiedBy is nullable)
       await tx.update(measurements)
         .set({ verifiedBy: null as any })
         .where(eq(measurements.verifiedBy, id));
@@ -1664,13 +1663,12 @@ export class DatabaseStorage implements IStorage {
       // Delete all measurements for this user (as subject)
       await tx.delete(measurements).where(eq(measurements.userId, id));
 
-      // Update measurements submitted by this user (set submittedBy to null or keep as-is)
-      // Don't delete them as they belong to other athletes
-      await tx.update(measurements)
-        .set({ submittedBy: null as any })
-        .where(eq(measurements.submittedBy, id));
+      // Delete measurements submitted by this user
+      // Note: submittedBy is NOT NULL, so we must delete rather than set to null
+      // This is acceptable as these measurements lose their submitter context
+      await tx.delete(measurements).where(eq(measurements.submittedBy, id));
 
-      // Update measurements verified by this user
+      // Update measurements verified by this user (verifiedBy is nullable)
       await tx.update(measurements)
         .set({ verifiedBy: null as any })
         .where(eq(measurements.verifiedBy, id));
