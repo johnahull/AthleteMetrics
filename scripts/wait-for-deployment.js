@@ -103,7 +103,7 @@ async function railwayCommand(args) {
 async function getLatestDeploymentStatus() {
   try {
     const result = await railwayCommand([
-      'deployments',
+      'deployment',
       'list',
       '--service',
       RAILWAY_SERVICE_ID,
