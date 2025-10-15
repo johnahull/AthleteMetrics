@@ -89,7 +89,7 @@ jobs:
           echo "✅ Migration validation passed"
 
       - name: Run database migrations
-        timeout-minutes: 5
+        timeout-minutes: 10
         id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
@@ -100,7 +100,7 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Handle migration failure
-        if: failure()
+        if: failure() && steps.migrate.outcome == 'failure'
         run: |
           echo "❌ Migration failed - deployment BLOCKED"
           echo ""
@@ -113,6 +113,7 @@ jobs:
           exit 1
 
       - name: Deploy to Railway Staging
+        if: steps.migrate.outcome == 'success'
         run: |
           echo "🚀 Deploying to Railway Staging..."
 
