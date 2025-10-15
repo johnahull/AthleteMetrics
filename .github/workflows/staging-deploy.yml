@@ -69,16 +69,56 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Verify Railway authentication
+        run: railway whoami || (echo "❌ Authentication failed" && exit 1)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Backup staging database
+        run: node scripts/backup-database.js
+        env:
+          USE_RAILWAY_BACKUPS: false
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+          BACKUP_RETENTION_DAYS: 7
+
+      # NOTE: Backup artifacts are NOT uploaded to GitHub Actions for security reasons.
+      # Staging backups may contain production-like data and should not be stored in GitHub.
+      # Access backups via Railway CLI: railway run --service <SERVICE_ID> ls backups/
+      # See docs/database-migration-rollback.md for backup access procedures
+
+      - name: Validate database migrations
+        run: |
+          echo "🔍 Validating migrations for safety..."
+          npm run db:validate
+          echo "✅ Migration validation passed"
+
       - name: Run database migrations
+        timeout-minutes: 30
+        id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
           echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
-          railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
+          railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:migrate
           echo "✅ Migrations completed successfully"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
+      - name: Handle migration failure
+        if: failure() && steps.migrate.outcome == 'failure'
+        run: |
+          echo "❌ Migration failed - deployment BLOCKED"
+          echo ""
+          echo "⚠️  Manual intervention required:"
+          echo "1. Check Railway logs for migration errors"
+          echo "2. Restore database from backup if needed"
+          echo "3. Review migration files for issues"
+          echo ""
+          echo "See docs/database-migration-rollback.md for detailed procedures"
+          exit 1
+
       - name: Deploy to Railway Staging
+        if: steps.migrate.outcome == 'success'
         run: |
           echo "🚀 Deploying to Railway Staging..."
 

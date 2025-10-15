@@ -5,7 +5,7 @@ import { defineConfig } from "drizzle-kit";
 const databaseUrl = process.env.DATABASE_URL || "postgresql://placeholder";
 
 export default defineConfig({
-  out: "./migrations",
+  out: "./drizzle/migrations",
   schema: "./shared/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
