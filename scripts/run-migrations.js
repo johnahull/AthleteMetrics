@@ -73,10 +73,8 @@ async function acquireMigrationLock(client) {
 
   // SECURITY: Wrap lock acquisition and verification in a transaction to prevent TOCTOU race condition
   // This ensures atomicity - either we get the lock AND verify it, or we fail
-  const result = await client.unsafe(`
-    BEGIN;
-    SELECT pg_try_advisory_lock($1, $2) as locked;
-  `, [LOCK_CLASS_ID, LOCK_OBJ_ID]);
+  await client.unsafe('BEGIN');
+  const result = await client.unsafe('SELECT pg_try_advisory_lock($1, $2) as locked', [LOCK_CLASS_ID, LOCK_OBJ_ID]);
 
   if (!result[0]?.locked) {
     await client.unsafe('ROLLBACK');
