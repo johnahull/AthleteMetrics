@@ -89,31 +89,38 @@ function createBackup() {
     }
 
     // Verify backup file integrity by checking PostgreSQL dump headers
-    // Use streaming to avoid reading large files into memory
+    // Note: Using synchronous I/O here is intentional - this is a deployment script
+    // that performs a single task (backup validation) and doesn't need async I/O.
+    // The file reads are small (1KB header/footer) and won't block other operations.
     const headerBuffer = Buffer.alloc(1024);
     const fd = fs.openSync(backupFile, 'r');
-    fs.readSync(fd, headerBuffer, 0, 1024, 0);
-    const headerContent = headerBuffer.toString('utf-8');
 
-    if (!headerContent.includes('PostgreSQL database dump')) {
+    try {
+      fs.readSync(fd, headerBuffer, 0, 1024, 0);
+      const headerContent = headerBuffer.toString('utf-8');
+
+      if (!headerContent.includes('PostgreSQL database dump')) {
+        throw new Error('Backup file does not appear to be a valid PostgreSQL dump');
+      }
+
+      // Check for completion marker at end of file
+      const footerBuffer = Buffer.alloc(1024);
+      const footerPos = Math.max(0, stats.size - 1024);
+      fs.readSync(fd, footerBuffer, 0, 1024, footerPos);
+
+      const footerContent = footerBuffer.toString('utf-8');
+      if (!footerContent.includes('PostgreSQL database dump complete')) {
+        console.warn('⚠️  Warning: Backup may be incomplete (missing completion marker)');
+      }
+    } finally {
+      // Always close file descriptor, even if validation fails
       fs.closeSync(fd);
-      throw new Error('Backup file does not appear to be a valid PostgreSQL dump');
     }
 
-    // Check for completion marker at end of file
-    const footerBuffer = Buffer.alloc(1024);
-    const footerPos = Math.max(0, stats.size - 1024);
-    fs.readSync(fd, footerBuffer, 0, 1024, footerPos);
-    fs.closeSync(fd);
-
-    const footerContent = footerBuffer.toString('utf-8');
-    if (!footerContent.includes('PostgreSQL database dump complete')) {
-      console.warn('⚠️  Warning: Backup may be incomplete (missing completion marker)');
-    }
-
-    // Verify reasonable file size (should be > 1KB for any real database)
-    if (stats.size < 1024) {
-      throw new Error('Backup file suspiciously small (< 1KB) - likely incomplete');
+    // Verify reasonable file size (should be > 512 bytes for any valid database)
+    // Lower threshold accounts for minimal schemas (just structure, no data)
+    if (stats.size < 512) {
+      throw new Error('Backup file suspiciously small (< 512 bytes) - likely incomplete');
     }
 
     console.log(`\n✅ Backup created successfully`);

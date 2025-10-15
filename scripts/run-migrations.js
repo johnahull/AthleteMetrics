@@ -70,10 +70,13 @@ async function runMigrations() {
     lockId = await acquireMigrationLock(migrationClient);
 
     // Set PostgreSQL safety timeouts (environment-aware)
+    // Statement timeout should be proportional to lock timeout to prevent
+    // long-running statements from holding locks and blocking other operations
     const lockTimeout = process.env.NODE_ENV === 'production' ? '2min' : '30s';
+    const stmtTimeout = process.env.NODE_ENV === 'production' ? '4min' : '2min';
     await migrationClient.unsafe(`SET lock_timeout = '${lockTimeout}'`);
-    await migrationClient.unsafe('SET statement_timeout = \'5min\'');
-    console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: 5min)`);
+    await migrationClient.unsafe(`SET statement_timeout = '${stmtTimeout}'`);
+    console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: ${stmtTimeout})`);
 
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
@@ -125,6 +128,16 @@ async function runMigrations() {
 
     process.exit(1);
   } finally {
+    // Defensive lock release - PostgreSQL advisory locks are session-based and
+    // auto-release on disconnect, but explicitly release for cleanliness
+    if (lockId !== null) {
+      try {
+        await releaseMigrationLock(migrationClient, lockId);
+      } catch (lockError) {
+        console.warn('⚠️  Lock release failed (will auto-release on disconnect):', lockError.message);
+      }
+    }
+
     try {
       await migrationClient.end();
     } catch (endError) {
