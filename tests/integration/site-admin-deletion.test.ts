@@ -155,7 +155,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
   it('should delete site admin with invitations they accepted', async () => {
     // Create invitation accepted by site admin
     await db.insert(invitations).values({
-      email: siteAdmin.email!,
+      email: siteAdmin.emails[0],
       firstName: siteAdmin.firstName,
       lastName: siteAdmin.lastName,
       organizationId: testOrg.id,
@@ -227,7 +227,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
   it('should delete site admin with invitations FOR them (as playerId)', async () => {
     // Create invitation FOR site admin (as athlete/playerId)
     await db.insert(invitations).values({
-      email: siteAdmin.email!,
+      email: siteAdmin.emails[0],
       firstName: siteAdmin.firstName,
       lastName: siteAdmin.lastName,
       organizationId: testOrg.id,
@@ -285,6 +285,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // Create email verification token for site admin
     await db.insert(emailVerificationTokens).values({
       userId: siteAdmin.id,
+      email: siteAdmin.emails[0],
       token: 'test_verification_token',
       expiresAt: new Date(Date.now() + 86400000)
     });
@@ -473,7 +474,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     // 2. Invitation accepted BY admin
     await db.insert(invitations).values({
-      email: siteAdmin.email!,
+      email: siteAdmin.emails[0],
       organizationId: testOrg.id,
       role: 'org_admin',
       invitedBy: coach.id,
@@ -497,7 +498,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     // 4. Invitation FOR admin (playerId)
     await db.insert(invitations).values({
-      email: siteAdmin.email!,
+      email: siteAdmin.emails[0],
       organizationId: testOrg.id,
       playerId: siteAdmin.id,
       role: 'athlete',
@@ -516,6 +517,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // 6. Email verification token
     await db.insert(emailVerificationTokens).values({
       userId: siteAdmin.id,
+      email: siteAdmin.emails[0],
       token: 'verification_token',
       expiresAt: new Date(Date.now() + 86400000)
     });
@@ -637,6 +639,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     await db.insert(emailVerificationTokens).values({
       userId: siteAdmin.id,
+      email: siteAdmin.emails[0],
       token: 'test_token',
       expiresAt: new Date(Date.now() + 86400000)
     });
