@@ -135,7 +135,8 @@ describe('Migration Safety Tests', () => {
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
 
       expect(packageJson.scripts['db:migrate']).toBeDefined();
-      expect(packageJson.scripts['db:migrate']).toContain('drizzle-kit migrate');
+      // Updated to use custom migration runner instead of drizzle-kit migrate (which doesn't exist)
+      expect(packageJson.scripts['db:migrate']).toContain('node scripts/run-migrations.js');
     });
 
     it('should have db:push script (for development only)', () => {
