@@ -140,7 +140,7 @@ jobs:
           echo "✅ Migration validation passed"
 
       - name: Run database migrations
-        timeout-minutes: 10
+        timeout-minutes: 30
         id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
