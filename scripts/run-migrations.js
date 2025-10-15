@@ -14,6 +14,43 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
+/**
+ * Acquire advisory lock to prevent concurrent migrations
+ * Returns lock ID if successful, throws error if lock cannot be acquired
+ */
+async function acquireMigrationLock(client) {
+  const MIGRATION_LOCK_ID = 123456789; // Unique ID for migration lock
+
+  console.log('🔒 Acquiring migration lock...');
+
+  const result = await client.unsafe(
+    'SELECT pg_try_advisory_lock($1) as locked',
+    [MIGRATION_LOCK_ID]
+  );
+
+  if (!result[0]?.locked) {
+    throw new Error(
+      'Another migration is in progress. Cannot run concurrent migrations. ' +
+      'Wait for the other migration to complete and try again.'
+    );
+  }
+
+  console.log('✅ Migration lock acquired');
+  return MIGRATION_LOCK_ID;
+}
+
+/**
+ * Release advisory lock after migration completes
+ */
+async function releaseMigrationLock(client, lockId) {
+  try {
+    await client.unsafe('SELECT pg_advisory_unlock($1)', [lockId]);
+    console.log('🔓 Migration lock released');
+  } catch (error) {
+    console.warn('⚠️  Warning: Failed to release migration lock:', error.message);
+  }
+}
+
 async function runMigrations() {
   console.log('🔄 Running database migrations...\n');
 
@@ -26,12 +63,17 @@ async function runMigrations() {
   });
 
   const db = drizzle(migrationClient);
+  let lockId = null;
 
   try {
-    // Set PostgreSQL safety timeouts
-    await migrationClient.unsafe('SET lock_timeout = \'30s\'');
+    // Acquire migration lock to prevent concurrent migrations
+    lockId = await acquireMigrationLock(migrationClient);
+
+    // Set PostgreSQL safety timeouts (environment-aware)
+    const lockTimeout = process.env.NODE_ENV === 'production' ? '2min' : '30s';
+    await migrationClient.unsafe(`SET lock_timeout = '${lockTimeout}'`);
     await migrationClient.unsafe('SET statement_timeout = \'5min\'');
-    console.log('🔒 PostgreSQL safety timeouts configured');
+    console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: 5min)`);
 
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
@@ -39,6 +81,12 @@ async function runMigrations() {
     await migrate(db, { migrationsFolder });
 
     console.log('\n✅ Migrations completed successfully');
+
+    // Release lock before exiting
+    if (lockId !== null) {
+      await releaseMigrationLock(migrationClient, lockId);
+    }
+
     process.exit(0);
   } catch (error) {
     console.error('\n❌ Migration failed\n');
@@ -70,9 +118,19 @@ async function runMigrations() {
     console.error('  3. Check if schema changes conflict with existing data');
     console.error('  4. Review docs/database-migration-rollback.md for recovery procedures');
 
+    // Release lock on error
+    if (lockId !== null) {
+      await releaseMigrationLock(migrationClient, lockId);
+    }
+
     process.exit(1);
   } finally {
-    await migrationClient.end();
+    try {
+      await migrationClient.end();
+    } catch (endError) {
+      console.error('Warning: Error closing migration connection:', endError.message);
+      // Don't fail if connection closing fails - migration already succeeded/failed
+    }
   }
 }
 

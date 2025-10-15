@@ -40,12 +40,12 @@ const DANGEROUS_PATTERNS = [
     severity: 'ERROR'
   },
   {
-    pattern: /DELETE\s+FROM\s+[\w.]+(?!\s+WHERE)/i,
+    pattern: /DELETE\s+FROM\s+[\w.]+\s*(?:;|$|--)/im,
     message: 'Contains DELETE without WHERE clause - could delete all data',
     severity: 'ERROR'
   },
   {
-    pattern: /UPDATE\s+[\w.]+\s+SET(?!.*WHERE)/is,
+    pattern: /UPDATE\s+[\w.]+\s+SET\s+(?:(?!WHERE).)*?(?:;|$)/is,
     message: 'Contains UPDATE without WHERE clause - will update all rows',
     severity: 'ERROR'
   },
@@ -97,6 +97,21 @@ const DANGEROUS_PATTERNS = [
   {
     pattern: /ON\s+DELETE\s+CASCADE/i,
     message: 'Contains ON DELETE CASCADE - ensure cascading deletes are intentional',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /REINDEX(?!\s+.*CONCURRENTLY)/i,
+    message: 'REINDEX without CONCURRENTLY blocks all operations',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /LOCK\s+TABLE/i,
+    message: 'Explicit table locks can block application queries',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /ALTER\s+(?:TABLE|COLUMN).*USING/i,
+    message: 'ALTER COLUMN USING rewrites entire table - check table size first',
     severity: 'WARNING'
   }
 ];

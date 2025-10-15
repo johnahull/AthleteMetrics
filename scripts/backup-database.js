@@ -73,9 +73,14 @@ function createBackup() {
 
     // Use pg_dump through Railway CLI
     // Railway CLI handles authentication automatically
-    runCommand(
-      `railway run --service ${RAILWAY_SERVICE_ID} pg_dump $DATABASE_URL > ${backupFile}`
+    // Capture output directly to avoid shell redirection issues
+    const dumpOutput = runCommand(
+      `railway run --service ${RAILWAY_SERVICE_ID} sh -c 'pg_dump "$DATABASE_URL"'`,
+      { silent: true }
     );
+
+    // Write output to backup file
+    fs.writeFileSync(backupFile, dumpOutput);
 
     // Check if backup was created and has content
     const stats = fs.statSync(backupFile);
@@ -84,11 +89,31 @@ function createBackup() {
     }
 
     // Verify backup file integrity by checking PostgreSQL dump headers
-    const backupContent = fs.readFileSync(backupFile, 'utf-8');
-    const firstLines = backupContent.split('\n').slice(0, 10).join('\n');
+    // Use streaming to avoid reading large files into memory
+    const headerBuffer = Buffer.alloc(1024);
+    const fd = fs.openSync(backupFile, 'r');
+    fs.readSync(fd, headerBuffer, 0, 1024, 0);
+    const headerContent = headerBuffer.toString('utf-8');
 
-    if (!firstLines.includes('PostgreSQL database dump')) {
+    if (!headerContent.includes('PostgreSQL database dump')) {
+      fs.closeSync(fd);
       throw new Error('Backup file does not appear to be a valid PostgreSQL dump');
+    }
+
+    // Check for completion marker at end of file
+    const footerBuffer = Buffer.alloc(1024);
+    const footerPos = Math.max(0, stats.size - 1024);
+    fs.readSync(fd, footerBuffer, 0, 1024, footerPos);
+    fs.closeSync(fd);
+
+    const footerContent = footerBuffer.toString('utf-8');
+    if (!footerContent.includes('PostgreSQL database dump complete')) {
+      console.warn('⚠️  Warning: Backup may be incomplete (missing completion marker)');
+    }
+
+    // Verify reasonable file size (should be > 1KB for any real database)
+    if (stats.size < 1024) {
+      throw new Error('Backup file suspiciously small (< 1KB) - likely incomplete');
     }
 
     console.log(`\n✅ Backup created successfully`);
