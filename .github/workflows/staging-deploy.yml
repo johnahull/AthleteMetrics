@@ -66,6 +66,14 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Verify Railway authentication
+        run: railway whoami || (echo "❌ Authentication failed" && exit 1)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
       - name: Backup staging database
         run: node scripts/backup-database.js
         env:
@@ -74,9 +82,6 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 7
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
       - name: Validate database migrations
         run: |
           echo "🔍 Validating migrations for safety..."
@@ -84,8 +89,7 @@ jobs:
           echo "✅ Migration validation passed"
 
       - name: Run database migrations
-        timeout-minutes: 10
-        continue-on-error: true
+        timeout-minutes: 5
         id: migrate
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
@@ -96,11 +100,10 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Handle migration failure
-        if: steps.migrate.outcome == 'failure'
+        if: failure()
         run: |
-          echo "❌ Migration failed!"
+          echo "❌ Migration failed - deployment BLOCKED"
           echo ""
-          echo "🔄 Attempting to restore from backup..."
           echo "⚠️  Manual intervention required:"
           echo "1. Check Railway logs for migration errors"
           echo "2. Restore database from backup if needed"

@@ -40,9 +40,24 @@ const DANGEROUS_PATTERNS = [
     severity: 'ERROR'
   },
   {
-    pattern: /DELETE\s+FROM.*(?!WHERE)/i,
+    pattern: /DELETE\s+FROM\s+\w+\s*;/i,
     message: 'Contains DELETE without WHERE clause - could delete all data',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /UPDATE\s+\w+\s+SET.*(?!WHERE)/i,
+    message: 'Contains UPDATE without WHERE clause - will update all rows',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /ALTER\s+TABLE.*ALTER\s+COLUMN.*TYPE/i,
+    message: 'Column type change may cause data loss or conversion errors',
     severity: 'WARNING'
+  },
+  {
+    pattern: /ALTER\s+TABLE.*ADD\s+COLUMN.*NOT\s+NULL(?!.*DEFAULT)/i,
+    message: 'Adding NOT NULL column without DEFAULT will fail on existing data',
+    severity: 'ERROR'
   },
   {
     pattern: /DROP\s+COLUMN/i,
@@ -73,8 +88,14 @@ function findMigrationsDirectory() {
  * Validate a single migration file
  */
 function validateMigrationFile(filePath) {
-  const content = fs.readFileSync(filePath, 'utf-8');
+  let content = fs.readFileSync(filePath, 'utf-8');
   const fileName = path.basename(filePath);
+
+  // Strip SQL comments to prevent pattern bypass
+  content = content
+    .replace(/--[^\n]*/g, '')           // Remove line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '');  // Remove block comments
+
   const issues = [];
 
   for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
@@ -107,7 +128,14 @@ function validateMigrations() {
 
   console.log(`📁 Migrations directory: ${migrationsDir}\n`);
 
-  const files = fs.readdirSync(migrationsDir);
+  let files;
+  try {
+    files = fs.readdirSync(migrationsDir);
+  } catch (error) {
+    console.error(`❌ Error reading migrations directory: ${error.message}`);
+    return 1;
+  }
+
   const sqlFiles = files.filter(f => f.endsWith('.sql'));
 
   if (sqlFiles.length === 0) {
