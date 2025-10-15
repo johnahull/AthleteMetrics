@@ -24,6 +24,15 @@
         "NODE_OPTIONS": "--max-old-space-size=4096",
         "ENABLE_DEBUG_LOGGING": "true"
       }
+    },
+    "testing": {
+      "variables": {
+        "NODE_ENV": "testing",
+        "NODE_OPTIONS": "--max-old-space-size=2048",
+        "ENABLE_DEBUG_LOGGING": "true",
+        "BYPASS_ANALYTICS_RATE_LIMIT": "true",
+        "BYPASS_GENERAL_RATE_LIMIT": "true"
+      }
     }
   }
 }
