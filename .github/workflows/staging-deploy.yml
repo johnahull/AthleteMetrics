@@ -69,18 +69,21 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Link Railway project
+        run: railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+
       - name: Verify Railway authentication
         run: railway whoami || (echo "❌ Authentication failed" && exit 1)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
 
       - name: Backup staging database
         run: node scripts/backup-database.js
         env:
           USE_RAILWAY_BACKUPS: false
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 7
 
@@ -105,7 +108,6 @@ jobs:
           echo "✅ Migrations completed successfully"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
 
       - name: Handle migration failure
         if: failure() && steps.migrate.outcome == 'failure'
@@ -153,7 +155,6 @@ jobs:
           exit 1
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
 
       - name: Run health check
         run: node scripts/health-check.js
