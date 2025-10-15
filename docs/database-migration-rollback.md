@@ -150,11 +150,14 @@ graph TD
 
 #### 1. Download Latest Backup
 ```bash
-# List available backups in Railway
-railway backups list --service <SERVICE_ID>
+# Access backups stored on Railway during CI/CD
+railway run --service <SERVICE_ID> ls backups/
 
-# Or use local backup from CI artifacts (if available)
-# Check GitHub Actions artifacts for backup files
+# Download specific backup file
+railway run --service <SERVICE_ID> cat backups/pre-deploy-backup-YYYY-MM-DDTHH-MM-SS.sql > backup.sql
+
+# NOTE: Backups are NOT stored in GitHub Actions artifacts for security reasons
+# Database backups contain sensitive data and should not be stored in GitHub
 ```
 
 #### 2. Stop Application Traffic (Optional but Recommended)

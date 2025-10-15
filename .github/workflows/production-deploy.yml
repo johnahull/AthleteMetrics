@@ -128,14 +128,10 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           BACKUP_RETENTION_DAYS: 30
 
-      - name: Upload backup artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-backup-${{ github.run_id }}
-          path: backups/
-          retention-days: 30
-          if-no-files-found: warn
+      # NOTE: Backup artifacts are NOT uploaded to GitHub Actions for security reasons.
+      # Production backups contain sensitive data and should not be stored in GitHub.
+      # Access backups via Railway CLI: railway run --service <SERVICE_ID> ls backups/
+      # See docs/database-migration-rollback.md for backup access procedures
 
       - name: Validate database migrations
         run: |
