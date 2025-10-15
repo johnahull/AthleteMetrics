@@ -72,7 +72,7 @@ railway add
 **Option B: Use Existing Database with Different Schema**
 ```bash
 # Manually set DATABASE_URL to use a different database name
-railway variables --set DATABASE_URL="postgresql://user:pass@host:port/athletemetrics_testing"
+railway variables --set "DATABASE_URL=postgresql://user:pass@host:port/athletemetrics_testing"
 ```
 
 ### 4. Set Required Environment Variables
@@ -81,23 +81,23 @@ railway variables --set DATABASE_URL="postgresql://user:pass@host:port/athleteme
 # Generate a secure session secret
 SESSION_SECRET=$(openssl rand -hex 32)
 
-# Set all required variables
-railway variables --set SESSION_SECRET="$SESSION_SECRET"
-railway variables --set ADMIN_USER="admin"
-railway variables --set ADMIN_PASSWORD="TestingPass123!"
-railway variables --set ADMIN_EMAIL="testing@example.com"
+# Set all required variables (using --environment flag since you're linked to testing)
+railway variables --set "SESSION_SECRET=$SESSION_SECRET"
+railway variables --set "ADMIN_USER=admin"
+railway variables --set "ADMIN_PASSWORD=TestingPass123!"
+railway variables --set "ADMIN_EMAIL=testing@example.com"
 
 # Optional: Set Neon tier (if using Neon PostgreSQL)
-railway variables --set NEON_TIER="free"
+railway variables --set "NEON_TIER=free"
 
 # Optional: Email configuration (can skip for testing)
-railway variables --set SENDGRID_API_KEY="your-key-here"
-railway variables --set SENDGRID_FROM_EMAIL="noreply@testing.com"
-railway variables --set SENDGRID_FROM_NAME="AthleteMetrics Testing"
+railway variables --set "SENDGRID_API_KEY=your-key-here"
+railway variables --set "SENDGRID_FROM_EMAIL=noreply@testing.com"
+railway variables --set "SENDGRID_FROM_NAME=AthleteMetrics Testing"
 
 # Optional: Set application URL (Railway will auto-generate if not set)
-railway variables --set APP_URL="https://your-testing-url.up.railway.app"
-railway variables --set INVITATION_EXPIRY_DAYS="7"
+railway variables --set "APP_URL=https://your-testing-url.up.railway.app"
+railway variables --set "INVITATION_EXPIRY_DAYS=7"
 ```
 
 ### 5. Verify Environment Variables
@@ -279,10 +279,10 @@ railway status
 railway add  # Select PostgreSQL
 
 # 4. Set environment variables
-railway variables --set SESSION_SECRET="$(openssl rand -hex 32)"
-railway variables --set ADMIN_USER="admin"
-railway variables --set ADMIN_PASSWORD="YourPassword123!"
-railway variables --set ADMIN_EMAIL="testing@example.com"
+railway variables --set "SESSION_SECRET=$(openssl rand -hex 32)"
+railway variables --set "ADMIN_USER=admin"
+railway variables --set "ADMIN_PASSWORD=YourPassword123!"
+railway variables --set "ADMIN_EMAIL=testing@example.com"
 
 # 5. Deploy
 npm run deploy:testing

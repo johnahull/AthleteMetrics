@@ -17,10 +17,10 @@
     "test:run": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run",
     "test:unit": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.unit.config.ts",
     "test:integration": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts",
-    "deploy:testing": "railway environment use testing && railway up",
-    "logs:testing": "railway environment use testing && railway logs",
-    "shell:testing": "railway environment use testing && railway run bash",
-    "vars:testing": "railway environment use testing && railway variables"
+    "deploy:testing": "railway up --environment testing",
+    "logs:testing": "railway logs --environment testing",
+    "shell:testing": "railway run --environment testing bash",
+    "vars:testing": "railway variables --environment testing"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
