@@ -111,15 +111,6 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-      - name: Wait for Railway deployment
-        run: node scripts/wait-for-deployment.js
-        env:
-          CI: true
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
-          DEPLOYMENT_POLL_INTERVAL: 5
-          DEPLOYMENT_TIMEOUT: 300
-
       - name: Run health check
         run: node scripts/health-check.js
         env:
