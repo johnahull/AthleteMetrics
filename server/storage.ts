@@ -340,100 +340,9 @@ export class DatabaseStorage implements IStorage {
     return updatedUser;
   }
 
-  /**
-   * Get or create organization-specific system users for reassigning orphaned data
-   * Creates one system user per organization to maintain organizational isolation
-   * Falls back to global system user if no organizations provided
-   *
-   * @param tx - Database transaction
-   * @param organizationIds - Array of organization IDs the deleted user belonged to
-   * @returns Map of organizationId -> systemUserId
-   */
-  private async getOrCreateSystemUsers(tx: any, organizationIds: string[]): Promise<Map<string, string>> {
-    const systemUserMap = new Map<string, string>();
-
-    // Handle edge case: user with no organizations
-    if (organizationIds.length === 0) {
-      const globalSystemUsername = 'system-deleted-user-global';
-
-      // Check if global system user exists
-      const [existingGlobalUser] = await tx.select({ id: users.id })
-        .from(users)
-        .where(eq(users.username, globalSystemUsername));
-
-      if (existingGlobalUser) {
-        return new Map([['global', existingGlobalUser.id]]);
-      }
-
-      // Create global system user
-      const hashedPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-      const [globalSystemUser] = await tx.insert(users).values({
-        username: globalSystemUsername,
-        emails: ['system-global@internal.local'],
-        password: hashedPassword,
-        firstName: 'System',
-        lastName: 'User (Global)',
-        fullName: 'System User (Global)',
-        isSiteAdmin: false,
-        isActive: false,
-      }).returning({ id: users.id });
-
-      return new Map([['global', globalSystemUser.id]]);
-    }
-
-    // Create organization-specific system users
-    for (const orgId of organizationIds) {
-      const systemUsername = `system-deleted-user-${orgId}`;
-
-      // Check if org-specific system user exists
-      const [existingUser] = await tx.select({ id: users.id })
-        .from(users)
-        .where(eq(users.username, systemUsername));
-
-      if (existingUser) {
-        systemUserMap.set(orgId, existingUser.id);
-        continue;
-      }
-
-      // Create org-specific system user
-      const hashedPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-      const [systemUser] = await tx.insert(users).values({
-        username: systemUsername,
-        emails: [`system-${orgId}@internal.local`],
-        password: hashedPassword,
-        firstName: 'System',
-        lastName: 'User',
-        fullName: 'System User',
-        isSiteAdmin: false,
-        isActive: false,
-      }).returning({ id: users.id });
-
-      // Create userOrganizations entry to link system user to organization
-      await tx.insert(userOrganizations).values({
-        userId: systemUser.id,
-        organizationId: orgId,
-        role: 'coach'
-      });
-
-      systemUserMap.set(orgId, systemUser.id);
-    }
-
-    return systemUserMap;
-  }
-
   async deleteUser(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
-      // Query user's organizations BEFORE deleting userOrganizations entries
-      const userOrgs = await tx.select({ organizationId: userOrganizations.organizationId })
-        .from(userOrganizations)
-        .where(eq(userOrganizations.userId, id));
-
-      const orgIds = userOrgs.map((org: any) => org.organizationId);
-
-      // Get or create organization-specific system users
-      const systemUserMap = await this.getOrCreateSystemUsers(tx, orgIds);
-
       // Revoke all active sessions for security (explicit revocation)
       // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
       const { sessions } = await import('@shared/schema');
@@ -451,56 +360,9 @@ export class DatabaseStorage implements IStorage {
       // Delete all user-organization relationships
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
-      // Delete all measurements for this user (as subject)
-      await tx.delete(measurements).where(eq(measurements.userId, id));
-
-      // Reassign measurements submitted by this user to appropriate org-specific system users
-      // This preserves athlete measurement data while maintaining organizational isolation
-      if (systemUserMap.size > 0) {
-        // Get all measurements submitted by the deleted user
-        const submittedMeasurements = await tx.select()
-          .from(measurements)
-          .where(eq(measurements.submittedBy, id));
-
-        // Reassign each measurement to the appropriate org-specific system user
-        for (const measurement of submittedMeasurements) {
-          // Determine which org this measurement belongs to via the athlete's team
-          let targetSystemUserId: string;
-
-          if (measurement.teamId) {
-            // Get team's organization
-            const [team] = await tx.select({ organizationId: teams.organizationId })
-              .from(teams)
-              .where(eq(teams.id, measurement.teamId));
-
-            if (team && systemUserMap.has(team.organizationId)) {
-              targetSystemUserId = systemUserMap.get(team.organizationId)!;
-            } else if (systemUserMap.has('global')) {
-              // Fallback to global system user
-              targetSystemUserId = systemUserMap.get('global')!;
-            } else {
-              // Use first available system user if no match found
-              targetSystemUserId = Array.from(systemUserMap.values())[0];
-            }
-          } else if (systemUserMap.has('global')) {
-            // No team context, use global system user
-            targetSystemUserId = systemUserMap.get('global')!;
-          } else {
-            // Use first available system user
-            targetSystemUserId = Array.from(systemUserMap.values())[0];
-          }
-
-          // Update the measurement
-          await tx.update(measurements)
-            .set({ submittedBy: targetSystemUserId })
-            .where(eq(measurements.id, measurement.id));
-        }
-      }
-
-      // Update measurements verified by this user (verifiedBy is nullable)
-      await tx.update(measurements)
-        .set({ verifiedBy: null as any })
-        .where(eq(measurements.verifiedBy, id));
+      // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
+      // userId, submittedBy, and verifiedBy remain as historical references
+      // even though the user no longer exists
 
       // Update invitations where this user accepted/cancelled them (keep invitation history)
       await tx.update(invitations)

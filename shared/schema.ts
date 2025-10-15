@@ -93,9 +93,11 @@ export const userTeams = pgTable("user_teams", {
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id), // Changed from playerId to userId
-  submittedBy: varchar("submitted_by").notNull().references(() => users.id),
-  verifiedBy: varchar("verified_by").references(() => users.id),
+  // Historical reference fields - NO foreign key constraints
+  // These are immutable snapshots in time that may reference deleted users
+  userId: varchar("user_id").notNull(), // Athlete - historical reference (no FK)
+  submittedBy: varchar("submitted_by").notNull(), // Who recorded it - historical reference (no FK)
+  verifiedBy: varchar("verified_by"), // Who verified it - historical reference (no FK)
   isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement

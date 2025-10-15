@@ -360,9 +360,9 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(sessionsAfter).toHaveLength(0);
   });
 
-  it('should reassign measurements submitted by deleted user to organization-specific system user', async () => {
-    // Create measurement submitted by site admin (for athlete)
-    await db.insert(measurements).values({
+  it('should preserve measurements completely unchanged when athlete is deleted', async () => {
+    // Create measurements for athlete
+    const [measurement1] = await db.insert(measurements).values({
       userId: athlete.id,
       teamId: testTeam.id,
       metric: 'VERTICAL_JUMP',
@@ -370,45 +370,107 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       units: 'in',
       age: 25,
       date: '2024-01-01',
+      submittedBy: coach.id
+    }).returning();
+
+    const [measurement2] = await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'DASH_40YD',
+      value: '4.5',
+      units: 's',
+      age: 25,
+      date: '2024-01-02',
       submittedBy: siteAdmin.id
-    });
+    }).returning();
 
-    // Verify measurement exists before deletion
-    const measurementsBefore = await db.select().from(measurements).where(eq(measurements.submittedBy, siteAdmin.id));
-    expect(measurementsBefore).toHaveLength(1);
+    // Verify measurements exist before deletion
+    const measurementsBefore = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
+    expect(measurementsBefore).toHaveLength(2);
 
-    // Delete site admin
-    await storage.deleteUser(siteAdmin.id);
+    // Delete athlete
+    await storage.deleteUser(athlete.id);
 
-    // Verify admin is deleted
-    const deletedAdmin = await storage.getUser(siteAdmin.id);
-    expect(deletedAdmin).toBeUndefined();
+    // Verify athlete is deleted
+    const deletedAthlete = await storage.getUser(athlete.id);
+    expect(deletedAthlete).toBeUndefined();
 
-    // Verify measurements are no longer assigned to deleted user
-    const measurementsAfter = await db.select().from(measurements).where(eq(measurements.submittedBy, siteAdmin.id));
-    expect(measurementsAfter).toHaveLength(0);
+    // Verify measurements are PRESERVED with ORIGINAL userId
+    const measurementsAfter = await db.select().from(measurements)
+      .where(sql`${measurements.userId} = ${athlete.id}`);
+    expect(measurementsAfter).toHaveLength(2);
 
-    // Verify measurement for athlete is PRESERVED (reassigned to system user)
-    const measurementForAthlete = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
-    expect(measurementForAthlete).toHaveLength(1);
+    // Verify measurement data is completely unchanged
+    const m1After = measurementsAfter.find(m => m.metric === 'VERTICAL_JUMP');
+    expect(m1After).toBeDefined();
+    expect(m1After!.userId).toBe(athlete.id); // Original userId preserved
+    expect(m1After!.submittedBy).toBe(coach.id); // Original submittedBy preserved
+    expect(m1After!.value).toBe(measurement1.value);
+    expect(m1After!.id).toBe(measurement1.id);
 
-    // Verify measurement was reassigned to organization-specific system user
-    const systemUsername = `system-deleted-user-${testOrg.id}`;
-    const systemUser = await db.select().from(users).where(eq(users.username, systemUsername));
-    expect(systemUser).toHaveLength(1);
-    expect(measurementForAthlete[0].submittedBy).toBe(systemUser[0].id);
-
-    // Verify system user belongs to the organization
-    const systemUserOrgs = await db.select().from(userOrganizations)
-      .where(eq(userOrganizations.userId, systemUser[0].id));
-    expect(systemUserOrgs).toHaveLength(1);
-    expect(systemUserOrgs[0].organizationId).toBe(testOrg.id);
-    expect(systemUserOrgs[0].role).toBe('coach');
+    const m2After = measurementsAfter.find(m => m.metric === 'DASH_40YD');
+    expect(m2After).toBeDefined();
+    expect(m2After!.userId).toBe(athlete.id); // Original userId preserved
+    expect(m2After!.submittedBy).toBe(siteAdmin.id); // Original submittedBy preserved
   });
 
-  it('should delete site admin with measurements they verified', async () => {
+  it('should preserve measurements completely unchanged when coach is deleted', async () => {
+    // Create measurements submitted by coach
+    const [measurement1] = await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'VERTICAL_JUMP',
+      value: '30',
+      units: 'in',
+      age: 25,
+      date: '2024-01-01',
+      submittedBy: coach.id
+    }).returning();
+
+    const [measurement2] = await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'T_TEST',
+      value: '9.5',
+      units: 's',
+      age: 25,
+      date: '2024-01-02',
+      submittedBy: coach.id
+    }).returning();
+
+    // Verify measurements exist before deletion
+    const measurementsBefore = await db.select().from(measurements)
+      .where(sql`${measurements.submittedBy} = ${coach.id}`);
+    expect(measurementsBefore).toHaveLength(2);
+
+    // Delete coach
+    await storage.deleteUser(coach.id);
+
+    // Verify coach is deleted
+    const deletedCoach = await storage.getUser(coach.id);
+    expect(deletedCoach).toBeUndefined();
+
+    // Verify measurements are PRESERVED with ORIGINAL submittedBy
+    const measurementsAfter = await db.select().from(measurements)
+      .where(sql`${measurements.submittedBy} = ${coach.id}`);
+    expect(measurementsAfter).toHaveLength(2);
+
+    // Verify measurement data is completely unchanged
+    const m1After = measurementsAfter.find(m => m.metric === 'VERTICAL_JUMP');
+    expect(m1After).toBeDefined();
+    expect(m1After!.submittedBy).toBe(coach.id); // Original submittedBy preserved
+    expect(m1After!.userId).toBe(athlete.id); // Original userId preserved
+    expect(m1After!.value).toBe(measurement1.value);
+    expect(m1After!.id).toBe(measurement1.id);
+
+    const m2After = measurementsAfter.find(m => m.metric === 'T_TEST');
+    expect(m2After).toBeDefined();
+    expect(m2After!.submittedBy).toBe(coach.id); // Original submittedBy preserved
+  });
+
+  it('should preserve measurements completely unchanged when verifier is deleted', async () => {
     // Create measurement verified by site admin
-    await db.insert(measurements).values({
+    const [measurement] = await db.insert(measurements).values({
       userId: athlete.id,
       teamId: testTeam.id,
       metric: 'VERTICAL_JUMP',
@@ -419,32 +481,37 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       submittedBy: coach.id,
       verifiedBy: siteAdmin.id,
       isVerified: true
-    });
+    }).returning();
 
     // Verify measurement exists before deletion
-    const measurementsBefore = await db.select().from(measurements).where(eq(measurements.verifiedBy, siteAdmin.id));
+    const measurementsBefore = await db.select().from(measurements)
+      .where(sql`${measurements.verifiedBy} = ${siteAdmin.id}`);
     expect(measurementsBefore).toHaveLength(1);
 
-    // Delete site admin
+    // Delete site admin (verifier)
     await storage.deleteUser(siteAdmin.id);
 
     // Verify admin is deleted
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify measurement's verifiedBy field is set to NULL (preserve measurement data)
-    const measurementsAfter = await db.select().from(measurements).where(eq(measurements.verifiedBy, siteAdmin.id));
-    expect(measurementsAfter).toHaveLength(0);
+    // Verify measurement is PRESERVED with ORIGINAL verifiedBy
+    const measurementsAfter = await db.select().from(measurements)
+      .where(sql`${measurements.verifiedBy} = ${siteAdmin.id}`);
+    expect(measurementsAfter).toHaveLength(1);
 
-    // Verify measurement still exists but verifiedBy is null
-    const measurementPreserved = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
-    expect(measurementPreserved).toHaveLength(1);
-    expect(measurementPreserved[0].verifiedBy).toBeNull();
+    // Verify measurement data is completely unchanged
+    expect(measurementsAfter[0].verifiedBy).toBe(siteAdmin.id); // Original verifiedBy preserved
+    expect(measurementsAfter[0].submittedBy).toBe(coach.id); // Original submittedBy preserved
+    expect(measurementsAfter[0].userId).toBe(athlete.id); // Original userId preserved
+    expect(measurementsAfter[0].isVerified).toBe(true); // Still verified
+    expect(measurementsAfter[0].value).toBe(measurement.value);
+    expect(measurementsAfter[0].id).toBe(measurement.id);
   });
 
-  it('should delete site admin with measurements where they are the subject (userId)', async () => {
-    // Create measurement where site admin is the subject
-    await db.insert(measurements).values({
+  it('should preserve measurements when user is deleted (even if they are the subject)', async () => {
+    // Create measurement where site admin is the subject (athlete)
+    const [measurement] = await db.insert(measurements).values({
       userId: siteAdmin.id,
       teamId: testTeam.id,
       metric: 'VERTICAL_JUMP',
@@ -453,10 +520,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       age: 34,
       date: '2024-01-01',
       submittedBy: coach.id
-    });
+    }).returning();
 
     // Verify measurement exists before deletion
-    const measurementsBefore = await db.select().from(measurements).where(eq(measurements.userId, siteAdmin.id));
+    const measurementsBefore = await db.select().from(measurements)
+      .where(sql`${measurements.userId} = ${siteAdmin.id}`);
     expect(measurementsBefore).toHaveLength(1);
 
     // Delete site admin
@@ -466,9 +534,13 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify measurements where admin was the subject are deleted
-    const measurementsAfter = await db.select().from(measurements).where(eq(measurements.userId, siteAdmin.id));
-    expect(measurementsAfter).toHaveLength(0);
+    // Verify measurement is PRESERVED with original userId
+    const measurementsAfter = await db.select().from(measurements)
+      .where(sql`${measurements.userId} = ${siteAdmin.id}`);
+    expect(measurementsAfter).toHaveLength(1);
+    expect(measurementsAfter[0].userId).toBe(siteAdmin.id); // Original userId preserved
+    expect(measurementsAfter[0].submittedBy).toBe(coach.id); // Original submittedBy preserved
+    expect(measurementsAfter[0].id).toBe(measurement.id);
   });
 
   it('should handle site admin deletion with all foreign key relationships in one operation', async () => {
@@ -621,187 +693,39 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const logsAfter = await db.select().from(auditLogs).where(eq(auditLogs.userId, siteAdmin.id));
     expect(logsAfter).toHaveLength(0);
 
-    // Check measurements where admin was subject are deleted
-    const measurementsSubjectAfter = await db.select().from(measurements).where(eq(measurements.userId, siteAdmin.id));
-    expect(measurementsSubjectAfter).toHaveLength(0);
+    // Check measurements where admin was subject are PRESERVED with original userId
+    const measurementsSubjectAfter = await db.select().from(measurements)
+      .where(sql`${measurements.userId} = ${siteAdmin.id}`);
+    expect(measurementsSubjectAfter).toHaveLength(1);
+    expect(measurementsSubjectAfter[0].userId).toBe(siteAdmin.id); // Original userId preserved
 
-    // Check measurements submitted by admin are reassigned to system user
-    const measurementsSubmittedAfter = await db.select().from(measurements).where(eq(measurements.submittedBy, siteAdmin.id));
-    expect(measurementsSubmittedAfter).toHaveLength(0);
+    // Check measurements submitted by admin are PRESERVED with original submittedBy
+    const measurementsSubmittedAfter = await db.select().from(measurements)
+      .where(sql`${measurements.submittedBy} = ${siteAdmin.id}`);
+    expect(measurementsSubmittedAfter).toHaveLength(1);
+    expect(measurementsSubmittedAfter[0].submittedBy).toBe(siteAdmin.id); // Original submittedBy preserved
 
-    // Check measurements verified by admin have nullified verifiedBy (verifiedBy is nullable)
-    const measurementsVerifiedAfter = await db.select().from(measurements).where(eq(measurements.verifiedBy, siteAdmin.id));
-    expect(measurementsVerifiedAfter).toHaveLength(0);
+    // Check measurements verified by admin are PRESERVED with original verifiedBy
+    const measurementsVerifiedAfter = await db.select().from(measurements)
+      .where(sql`${measurements.verifiedBy} = ${siteAdmin.id}`);
+    expect(measurementsVerifiedAfter).toHaveLength(1);
+    expect(measurementsVerifiedAfter[0].verifiedBy).toBe(siteAdmin.id); // Original verifiedBy preserved
 
-    // Verify athlete's measurements are PRESERVED
-    // Measurement submitted by admin was reassigned to system user
-    // Measurement verified by admin has verifiedBy set to null
+    // Verify athlete's measurements are also preserved
     const athleteMeasurements = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
     expect(athleteMeasurements).toHaveLength(2); // Both measurements preserved
 
-    // Get organization-specific system user
-    const systemUser = await db.select().from(users).where(eq(users.username, `system-deleted-user-${testOrg.id}`));
-    expect(systemUser).toHaveLength(1);
-
-    // Find each measurement
+    // Find each measurement - both should have original references
     const submittedMeasurement = athleteMeasurements.find(m => m.metric === 'VERTICAL_JUMP');
     const verifiedMeasurement = athleteMeasurements.find(m => m.metric === 'DASH_40YD');
 
     expect(submittedMeasurement).toBeDefined();
-    expect(submittedMeasurement!.submittedBy).toBe(systemUser[0].id); // Reassigned to org-specific system user
+    expect(submittedMeasurement!.submittedBy).toBe(siteAdmin.id); // Original submittedBy preserved
+    expect(submittedMeasurement!.userId).toBe(athlete.id);
 
     expect(verifiedMeasurement).toBeDefined();
-    expect(verifiedMeasurement!.verifiedBy).toBeNull(); // Nullified
-    expect(verifiedMeasurement!.submittedBy).toBe(coach.id); // Submitted by coach
-  });
-
-  it('should handle user deletion across multiple organizations', async () => {
-    // Create second organization
-    const [org2] = await db.insert(organizations).values({
-      name: 'Second Org for Multi-Org Test'
-    }).returning();
-
-    // Create second team
-    const [team2] = await db.insert(teams).values({
-      name: 'Second Team',
-      level: 'HS',
-      organizationId: org2.id
-    }).returning();
-
-    // Add siteAdmin to second organization
-    await db.insert(userOrganizations).values({
-      userId: siteAdmin.id,
-      organizationId: org2.id,
-      role: 'coach'
-    });
-
-    // Create athlete in second org
-    const [athlete2] = await db.insert(users).values({
-      username: 'athlete_org2',
-      firstName: 'Athlete',
-      lastName: 'Two',
-      fullName: 'Athlete Two',
-      emails: ['athlete2@test.com'],
-      password: 'hashed_password',
-      birthDate: '2001-01-01'
-    }).returning();
-
-    await db.insert(userOrganizations).values({
-      userId: athlete2.id,
-      organizationId: org2.id,
-      role: 'athlete'
-    });
-
-    // Create measurements in BOTH organizations
-    await db.insert(measurements).values([
-      {
-        userId: athlete.id,
-        teamId: testTeam.id,
-        metric: 'VERTICAL_JUMP',
-        value: '30',
-        units: 'in',
-        age: 25,
-        date: '2024-01-01',
-        submittedBy: siteAdmin.id
-      },
-      {
-        userId: athlete2.id,
-        teamId: team2.id,
-        metric: 'DASH_40YD',
-        value: '4.5',
-        units: 's',
-        age: 24,
-        date: '2024-01-01',
-        submittedBy: siteAdmin.id
-      }
-    ]);
-
-    // Delete site admin (who is in BOTH organizations)
-    await storage.deleteUser(siteAdmin.id);
-
-    // Verify both measurements are preserved
-    const org1Measurements = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
-    expect(org1Measurements).toHaveLength(1);
-
-    const org2Measurements = await db.select().from(measurements).where(eq(measurements.userId, athlete2.id));
-    expect(org2Measurements).toHaveLength(1);
-
-    // Verify org1 measurement reassigned to org1-specific system user
-    const systemUser1 = await db.select().from(users).where(eq(users.username, `system-deleted-user-${testOrg.id}`));
-    expect(systemUser1).toHaveLength(1);
-    expect(org1Measurements[0].submittedBy).toBe(systemUser1[0].id);
-
-    // Verify org1 system user belongs to org1
-    const systemUser1Orgs = await db.select().from(userOrganizations)
-      .where(eq(userOrganizations.userId, systemUser1[0].id));
-    expect(systemUser1Orgs).toHaveLength(1);
-    expect(systemUser1Orgs[0].organizationId).toBe(testOrg.id);
-
-    // Verify org2 measurement reassigned to org2-specific system user
-    const systemUser2 = await db.select().from(users).where(eq(users.username, `system-deleted-user-${org2.id}`));
-    expect(systemUser2).toHaveLength(1);
-    expect(org2Measurements[0].submittedBy).toBe(systemUser2[0].id);
-
-    // Verify org2 system user belongs to org2
-    const systemUser2Orgs = await db.select().from(userOrganizations)
-      .where(eq(userOrganizations.userId, systemUser2[0].id));
-    expect(systemUser2Orgs).toHaveLength(1);
-    expect(systemUser2Orgs[0].organizationId).toBe(org2.id);
-
-    // Cleanup
-    await db.delete(measurements).where(eq(measurements.userId, athlete2.id));
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete2.id));
-    await db.delete(users).where(eq(users.id, athlete2.id));
-    await db.delete(userTeams).where(eq(userTeams.teamId, team2.id));
-    await db.delete(teams).where(eq(teams.id, team2.id));
-    await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, org2.id));
-    await db.delete(organizations).where(eq(organizations.id, org2.id));
-  });
-
-  it('should handle user with no organizations using fallback system user', async () => {
-    // Create a user with no organization memberships
-    const [orphanUser] = await db.insert(users).values({
-      username: 'orphan_user',
-      firstName: 'Orphan',
-      lastName: 'User',
-      fullName: 'Orphan User',
-      emails: ['orphan@test.com'],
-      password: 'hashed_password',
-      birthDate: '1990-01-01'
-    }).returning();
-
-    // Create measurement submitted by orphan user (for athlete who IS in org)
-    await db.insert(measurements).values({
-      userId: athlete.id,
-      teamId: testTeam.id,
-      metric: 'T_TEST',
-      value: '9.5',
-      units: 's',
-      age: 25,
-      date: '2024-01-01',
-      submittedBy: orphanUser.id
-    });
-
-    // Delete orphan user
-    await storage.deleteUser(orphanUser.id);
-
-    // Verify measurement is preserved with fallback system user
-    const athleteMeasurements = await db.select().from(measurements)
-      .where(eq(measurements.userId, athlete.id));
-
-    const orphanMeasurement = athleteMeasurements.find(m => m.metric === 'T_TEST');
-    expect(orphanMeasurement).toBeDefined();
-
-    // Should use global fallback system user
-    const fallbackSystemUser = await db.select().from(users)
-      .where(eq(users.username, 'system-deleted-user-global'));
-    expect(fallbackSystemUser).toHaveLength(1);
-    expect(orphanMeasurement!.submittedBy).toBe(fallbackSystemUser[0].id);
-
-    // Fallback system user should have no organization memberships
-    const fallbackOrgs = await db.select().from(userOrganizations)
-      .where(eq(userOrganizations.userId, fallbackSystemUser[0].id));
-    expect(fallbackOrgs).toHaveLength(0);
+    expect(verifiedMeasurement!.verifiedBy).toBe(siteAdmin.id); // Original verifiedBy preserved
+    expect(verifiedMeasurement!.submittedBy).toBe(coach.id); // Original submittedBy preserved
   });
 
   it('should use transaction for atomicity - all or nothing deletion', async () => {
