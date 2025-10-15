@@ -343,6 +343,11 @@ export class DatabaseStorage implements IStorage {
   async deleteUser(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
       // Delete email verification tokens
       await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
@@ -384,8 +389,11 @@ export class DatabaseStorage implements IStorage {
       // Delete invitations FOR this user (as athlete/playerId)
       await tx.delete(invitations).where(eq(invitations.playerId, id));
 
-      // Delete audit logs for this user
-      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
 
       // Finally, delete the user record
       await tx.delete(users).where(eq(users.id, id));
@@ -1636,6 +1644,11 @@ export class DatabaseStorage implements IStorage {
   async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
       // Delete email verification tokens
       await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
@@ -1677,8 +1690,11 @@ export class DatabaseStorage implements IStorage {
       // Delete invitations FOR this user (as athlete/playerId)
       await tx.delete(invitations).where(eq(invitations.playerId, id));
 
-      // Delete audit logs for this user
-      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
 
       // Finally, delete the user record
       await tx.delete(users).where(eq(users.id, id));

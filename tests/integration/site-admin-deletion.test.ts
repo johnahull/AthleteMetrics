@@ -15,6 +15,7 @@ import {
   emailVerificationTokens,
   auditLogs,
   measurements,
+  sessions,
   type User,
   type Organization,
   type Team,
@@ -303,18 +304,19 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(tokensAfter).toHaveLength(0);
   });
 
-  it('should delete site admin with audit logs', async () => {
+  it('should preserve audit logs with null userId when deleting site admin', async () => {
     // Create audit log for site admin
-    await db.insert(auditLogs).values({
+    const [auditLog] = await db.insert(auditLogs).values({
       userId: siteAdmin.id,
       action: 'user.login',
-      timestamp: new Date(),
-      organizationId: testOrg.id
-    });
+      resourceType: 'user',
+      resourceId: siteAdmin.id
+    }).returning();
 
     // Verify audit log exists before deletion
-    const logsBefore = await db.select().from(auditLogs).where(eq(auditLogs.userId, siteAdmin.id));
+    const logsBefore = await db.select().from(auditLogs).where(eq(auditLogs.id, auditLog.id));
     expect(logsBefore).toHaveLength(1);
+    expect(logsBefore[0].userId).toBe(siteAdmin.id);
 
     // Delete site admin
     await storage.deleteUser(siteAdmin.id);
@@ -323,9 +325,37 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify audit logs are deleted
-    const logsAfter = await db.select().from(auditLogs).where(eq(auditLogs.userId, siteAdmin.id));
-    expect(logsAfter).toHaveLength(0);
+    // Verify audit logs are PRESERVED but userId is set to NULL (compliance requirement)
+    const logsAfter = await db.select().from(auditLogs).where(eq(auditLogs.id, auditLog.id));
+    expect(logsAfter).toHaveLength(1);
+    expect(logsAfter[0].userId).toBeNull();
+    expect(logsAfter[0].action).toBe('user.login');
+  });
+
+  it('should revoke all active sessions when deleting site admin', async () => {
+    // Create active session for site admin
+    const [session] = await db.insert(sessions).values({
+      sid: `session-${siteAdmin.id}-test`,
+      sess: { cookie: {}, userId: siteAdmin.id },
+      expire: new Date(Date.now() + 86400000), // 24 hours from now
+      userId: siteAdmin.id
+    }).returning();
+
+    // Verify session exists before deletion
+    const sessionsBefore = await db.select().from(sessions).where(eq(sessions.sid, session.sid));
+    expect(sessionsBefore).toHaveLength(1);
+    expect(sessionsBefore[0].userId).toBe(siteAdmin.id);
+
+    // Delete site admin
+    await storage.deleteUser(siteAdmin.id);
+
+    // Verify admin is deleted
+    const deletedAdmin = await storage.getUser(siteAdmin.id);
+    expect(deletedAdmin).toBeUndefined();
+
+    // Verify sessions are DELETED for security (no zombie sessions)
+    const sessionsAfter = await db.select().from(sessions).where(eq(sessions.sid, session.sid));
+    expect(sessionsAfter).toHaveLength(0);
   });
 
   it('should delete site admin with measurements they submitted', async () => {
