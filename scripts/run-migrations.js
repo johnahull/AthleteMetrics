@@ -16,16 +16,21 @@ if (!DATABASE_URL) {
 
 /**
  * Acquire advisory lock to prevent concurrent migrations
- * Returns lock ID if successful, throws error if lock cannot be acquired
+ * Returns lock IDs if successful, throws error if lock cannot be acquired
+ * Uses environment-specific lock IDs to prevent cross-environment conflicts
  */
 async function acquireMigrationLock(client) {
-  const MIGRATION_LOCK_ID = 123456789; // Unique ID for migration lock
+  // Use environment-specific lock IDs to prevent staging/production conflicts
+  const LOCK_CLASS_ID = 2024; // Application identifier
+  const LOCK_OBJ_ID = process.env.NODE_ENV === 'production' ? 789456 : 789457; // Environment-specific
 
   console.log('🔒 Acquiring migration lock...');
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Lock ID: ${LOCK_CLASS_ID}.${LOCK_OBJ_ID}`);
 
   const result = await client.unsafe(
-    'SELECT pg_try_advisory_lock($1) as locked',
-    [MIGRATION_LOCK_ID]
+    'SELECT pg_try_advisory_lock($1, $2) as locked',
+    [LOCK_CLASS_ID, LOCK_OBJ_ID]
   );
 
   if (!result[0]?.locked) {
@@ -36,15 +41,15 @@ async function acquireMigrationLock(client) {
   }
 
   console.log('✅ Migration lock acquired');
-  return MIGRATION_LOCK_ID;
+  return { classId: LOCK_CLASS_ID, objId: LOCK_OBJ_ID };
 }
 
 /**
  * Release advisory lock after migration completes
  */
-async function releaseMigrationLock(client, lockId) {
+async function releaseMigrationLock(client, lockIds) {
   try {
-    await client.unsafe('SELECT pg_advisory_unlock($1)', [lockId]);
+    await client.unsafe('SELECT pg_advisory_unlock($1, $2)', [lockIds.classId, lockIds.objId]);
     console.log('🔓 Migration lock released');
   } catch (error) {
     console.warn('⚠️  Warning: Failed to release migration lock:', error.message);
@@ -70,10 +75,12 @@ async function runMigrations() {
     lockId = await acquireMigrationLock(migrationClient);
 
     // Set PostgreSQL safety timeouts (environment-aware)
-    // Statement timeout should be proportional to lock timeout to prevent
-    // long-running statements from holding locks and blocking other operations
-    const lockTimeout = process.env.NODE_ENV === 'production' ? '2min' : '30s';
-    const stmtTimeout = process.env.NODE_ENV === 'production' ? '4min' : '2min';
+    // CRITICAL: statement_timeout MUST be less than lock_timeout to prevent
+    // long-running statements from holding locks and blocking other operations.
+    // Production: Longer lock timeout (5min) for deploy contention, shorter statement (3min) to limit lock hold time
+    // Development: Shorter lock timeout (1min) for faster feedback, very short statement (30s) for quick iterations
+    const lockTimeout = process.env.NODE_ENV === 'production' ? '5min' : '1min';
+    const stmtTimeout = process.env.NODE_ENV === 'production' ? '3min' : '30s';
     await migrationClient.unsafe(`SET lock_timeout = '${lockTimeout}'`);
     await migrationClient.unsafe(`SET statement_timeout = '${stmtTimeout}'`);
     console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: ${stmtTimeout})`);

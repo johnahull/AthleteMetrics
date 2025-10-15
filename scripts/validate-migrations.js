@@ -113,6 +113,31 @@ const DANGEROUS_PATTERNS = [
     pattern: /ALTER\s+(?:TABLE|COLUMN).*USING/i,
     message: 'ALTER COLUMN USING rewrites entire table - check table size first',
     severity: 'WARNING'
+  },
+  {
+    pattern: /CLUSTER\s+/i,
+    message: 'CLUSTER rewrites entire table with exclusive lock - blocks all access during operation',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /VALIDATE\s+CONSTRAINT/i,
+    message: 'VALIDATE CONSTRAINT performs full table scan with exclusive lock - can block operations for extended periods',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /ALTER\s+TABLE.*DISABLE\s+TRIGGER/i,
+    message: 'Disabling triggers bypasses data integrity constraints - extremely dangerous',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /GRANT\s+.*\s+TO\s+PUBLIC/i,
+    message: 'Granting permissions to PUBLIC creates security vulnerability - anyone can access',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /REVOKE/i,
+    message: 'Revoking permissions may break application database access',
+    severity: 'WARNING'
   }
 ];
 
@@ -141,10 +166,14 @@ function validateMigrationFile(filePath) {
   let content = fs.readFileSync(filePath, 'utf-8');
   const fileName = path.basename(filePath);
 
-  // Strip SQL comments to prevent pattern bypass
+  // Strip SQL comments and string literals to prevent pattern bypass
+  // CRITICAL: Must handle PostgreSQL dollar-quoted strings to prevent hiding dangerous SQL
+  // Order matters: Remove dollar-quotes first, then string literals, then comments
   content = content
-    .replace(/--[^\n]*/g, '')           // Remove line comments
-    .replace(/\/\*[\s\S]*?\*\//g, '');  // Remove block comments
+    .replace(/\$[a-zA-Z0-9_]*\$[\s\S]*?\$[a-zA-Z0-9_]*\$/g, '')  // Remove dollar-quoted strings
+    .replace(/'(?:''|[^'])*'/g, '')                              // Remove single-quoted strings
+    .replace(/--[^\n]*/g, '')                                    // Remove line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '');                          // Remove block comments
 
   const issues = [];
 

@@ -110,19 +110,35 @@ function createBackup() {
         throw new Error('Backup file does not appear to be a valid PostgreSQL dump');
       }
 
-      // Check for completion marker at end of file
+      // Check for completion marker at end of file - MUST be present for valid backup
       const footerBuffer = Buffer.alloc(1024);
       const footerPos = Math.max(0, stats.size - 1024);
       fs.readSync(fd, footerBuffer, 0, 1024, footerPos);
 
       const footerContent = footerBuffer.toString('utf-8');
       if (!footerContent.includes('PostgreSQL database dump complete')) {
-        console.warn('⚠️  Warning: Backup may be incomplete (missing completion marker)');
+        throw new Error('Backup incomplete - missing completion marker. Dump may have been interrupted.');
+      }
+
+      // Verify backup contains essential SQL structures
+      // Check for COPY blocks (data) - at least table definitions should be present
+      if (!headerContent.includes('CREATE TABLE') && !footerContent.includes('CREATE TABLE')) {
+        console.warn('⚠️  Warning: No CREATE TABLE statements found - backup may only contain data');
       }
     } finally {
       // Always close file descriptor, even if validation fails
       fs.closeSync(fd);
     }
+
+    // Generate SHA-256 checksum for backup integrity verification
+    const crypto = await import('crypto');
+    const hash = crypto.createHash('sha256');
+    const fileBuffer = fs.readFileSync(backupFile);
+    const checksum = hash.update(fileBuffer).digest('hex');
+
+    // Save checksum alongside backup
+    fs.writeFileSync(`${backupFile}.sha256`, `${checksum}  ${path.basename(backupFile)}\n`);
+    console.log(`\n🔐 Backup checksum (SHA-256): ${checksum.substring(0, 16)}...`);
 
     console.log(`\n✅ Backup created successfully`);
     console.log(`File: ${backupFile}`);
