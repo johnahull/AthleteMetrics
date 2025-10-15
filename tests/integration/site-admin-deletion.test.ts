@@ -44,16 +44,13 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     // Create test organization
     const [org] = await db.insert(organizations).values({
-      name: 'Test Org for Admin Deletion',
-      sport: 'Track & Field',
-      level: 'College'
+      name: 'Test Org for Admin Deletion'
     }).returning();
     testOrg = org;
 
     // Create test team
     const [team] = await db.insert(teams).values({
       name: 'Test Team for Admin Deletion',
-      sport: 'Track & Field',
       level: 'College',
       organizationId: testOrg.id
     }).returning();
@@ -64,10 +61,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       username: 'site_admin_to_delete',
       firstName: 'Admin',
       lastName: 'ToDelete',
-      email: 'admin@test.com',
+      fullName: 'Admin ToDelete',
+      emails: ['admin@test.com'],
       password: 'hashed_password',
       isSiteAdmin: true,
-      birthDate: new Date('1990-01-01')
+      birthDate: '1990-01-01'
     }).returning();
     siteAdmin = admin;
 
@@ -76,10 +74,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       username: 'test_athlete',
       firstName: 'Test',
       lastName: 'Athlete',
-      email: 'athlete@test.com',
+      fullName: 'Test Athlete',
+      emails: ['athlete@test.com'],
       password: 'hashed_password',
       isSiteAdmin: false,
-      birthDate: new Date('2000-01-01')
+      birthDate: '2000-01-01'
     }).returning();
     athlete = ath;
 
@@ -88,10 +87,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       username: 'test_coach',
       firstName: 'Test',
       lastName: 'Coach',
-      email: 'coach@test.com',
+      fullName: 'Test Coach',
+      emails: ['coach@test.com'],
       password: 'hashed_password',
       isSiteAdmin: false,
-      birthDate: new Date('1985-01-01')
+      birthDate: '1985-01-01'
     }).returning();
     coach = coachUser;
 
@@ -110,6 +110,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
   afterEach(async () => {
     // Clean up in reverse order of dependencies
+    await db.delete(sessions).where(sql`true`);
     await db.delete(measurements).where(sql`true`);
     await db.delete(auditLogs).where(sql`true`);
     await db.delete(invitations).where(sql`true`);
@@ -363,9 +364,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     await db.insert(measurements).values({
       userId: athlete.id,
       teamId: testTeam.id,
-      metricType: 'VERTICAL_JUMP',
+      metric: 'VERTICAL_JUMP',
       value: '30',
-      date: new Date(),
+      units: 'in',
+      age: 25,
+      date: '2024-01-01',
       submittedBy: siteAdmin.id
     });
 
@@ -395,12 +398,14 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     await db.insert(measurements).values({
       userId: athlete.id,
       teamId: testTeam.id,
-      metricType: 'VERTICAL_JUMP',
+      metric: 'VERTICAL_JUMP',
       value: '30',
-      date: new Date(),
+      units: 'in',
+      age: 25,
+      date: '2024-01-01',
       submittedBy: coach.id,
       verifiedBy: siteAdmin.id,
-      verifiedAt: new Date()
+      isVerified: true
     });
 
     // Verify measurement exists before deletion
@@ -429,9 +434,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     await db.insert(measurements).values({
       userId: siteAdmin.id,
       teamId: testTeam.id,
-      metricType: 'VERTICAL_JUMP',
+      metric: 'VERTICAL_JUMP',
       value: '35',
-      date: new Date(),
+      units: 'in',
+      age: 34,
+      date: '2024-01-01',
       submittedBy: coach.id
     });
 
@@ -517,17 +524,19 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     await db.insert(auditLogs).values({
       userId: siteAdmin.id,
       action: 'user.login',
-      timestamp: new Date(),
-      organizationId: testOrg.id
+      resourceType: 'user',
+      resourceId: siteAdmin.id
     });
 
     // 8. Measurement submitted by admin
     await db.insert(measurements).values({
       userId: athlete.id,
       teamId: testTeam.id,
-      metricType: 'VERTICAL_JUMP',
+      metric: 'VERTICAL_JUMP',
       value: '30',
-      date: new Date(),
+      units: 'in',
+      age: 25,
+      date: '2024-01-01',
       submittedBy: siteAdmin.id
     });
 
@@ -535,21 +544,25 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     await db.insert(measurements).values({
       userId: athlete.id,
       teamId: testTeam.id,
-      metricType: 'DASH_40YD',
+      metric: 'DASH_40YD',
       value: '4.5',
-      date: new Date(),
+      units: 's',
+      age: 25,
+      date: '2024-01-01',
       submittedBy: coach.id,
       verifiedBy: siteAdmin.id,
-      verifiedAt: new Date()
+      isVerified: true
     });
 
     // 10. Measurement where admin is subject
     await db.insert(measurements).values({
       userId: siteAdmin.id,
       teamId: testTeam.id,
-      metricType: 'VERTICAL_JUMP',
+      metric: 'VERTICAL_JUMP',
       value: '35',
-      date: new Date(),
+      units: 'in',
+      age: 34,
+      date: '2024-01-01',
       submittedBy: coach.id
     });
 
