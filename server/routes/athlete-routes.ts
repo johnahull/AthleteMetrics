@@ -57,10 +57,11 @@ export function registerAthleteRoutes(app: Express) {
       if (req.query.teamId) filters.teamId = req.query.teamId as string;
 
       // For org admins and coaches, automatically filter by their organization unless they're a site admin
+      const user = req.session.user;
       if (req.query.organizationId) {
         filters.organizationId = req.query.organizationId as string;
-      } else if (!isSiteAdmin(req.user) && req.user?.primaryOrganizationId) {
-        filters.organizationId = req.user.primaryOrganizationId;
+      } else if (user && !isSiteAdmin(user) && user.primaryOrganizationId) {
+        filters.organizationId = user.primaryOrganizationId;
       }
       if (req.query.birthYearFrom) {
         const year = parseInt(req.query.birthYearFrom as string);
