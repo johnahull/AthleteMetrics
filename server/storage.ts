@@ -341,22 +341,55 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    // Delete related records first
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
-    await db.delete(userTeams).where(eq(userTeams.userId, id));
+    // Use a transaction to ensure all deletions happen atomically
+    await db.transaction(async (tx: any) => {
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
-    // Delete invitations sent by this user
-    await db.delete(invitations).where(eq(invitations.invitedBy, id));
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
-    // Update measurements to remove references to this user
-    await db.update(measurements)
-      .set({
-        submittedBy: sql`NULL`,
-        verifiedBy: sql`NULL`
-      })
-      .where(sql`${measurements.submittedBy} = ${id} OR ${measurements.verifiedBy} = ${id}`);
+      // Delete all user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
-    await db.delete(users).where(eq(users.id, id));
+      // Delete all user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete all measurements for this user (as subject)
+      await tx.delete(measurements).where(eq(measurements.userId, id));
+
+      // Update measurements submitted by this user (set submittedBy to null)
+      // Don't delete them as they belong to other athletes
+      await tx.update(measurements)
+        .set({ submittedBy: null as any })
+        .where(eq(measurements.submittedBy, id));
+
+      // Update measurements verified by this user
+      await tx.update(measurements)
+        .set({ verifiedBy: null as any })
+        .where(eq(measurements.verifiedBy, id));
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: null as any })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: null as any })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Delete invitations created BY this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+
+      // Delete invitations FOR this user (as athlete/playerId)
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+
+      // Delete audit logs for this user
+      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
+
+      // Finally, delete the user record
+      await tx.delete(users).where(eq(users.id, id));
+    });
   }
 
   async getUserOrganizations(userId: string): Promise<any[]> {
