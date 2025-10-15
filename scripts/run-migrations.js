@@ -154,14 +154,33 @@ async function runMigrations() {
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
-    // VALIDATION: Check migrations folder exists before attempting migration
-    // This prevents confusing errors if folder is missing
+    // VALIDATION: Check migrations folder exists and has migrations before attempting migration
+    // This prevents confusing errors if folder is missing or empty
     const fs = await import('fs');
     if (!fs.existsSync(migrationsFolder)) {
       console.warn('⚠️  Migrations folder does not exist - no migrations to apply');
       console.log('   This is normal for fresh setups');
       console.log('   Generate migrations with: npm run db:generate');
       // Don't throw error - this is valid for fresh setups
+      // Just release lock and exit successfully
+      if (lockId !== null) {
+        await releaseMigrationLock(migrationClient, lockId);
+        lockId = null;
+        globalLockId = null;
+      }
+      process.exit(0);
+    }
+
+    // Check if migrations folder has any migration files
+    const metaFolder = `${migrationsFolder}/meta`;
+    const journalFile = `${metaFolder}/_journal.json`;
+
+    if (!fs.existsSync(journalFile)) {
+      console.warn('⚠️  No migrations found - migrations folder is empty');
+      console.log('   This is normal if schema has not changed');
+      console.log('   Generate migrations with: npm run db:generate');
+      console.log('✅ No migrations to apply - database is up to date');
+      // Don't throw error - empty migrations folder is valid
       // Just release lock and exit successfully
       if (lockId !== null) {
         await releaseMigrationLock(migrationClient, lockId);
