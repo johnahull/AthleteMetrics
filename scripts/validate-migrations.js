@@ -163,32 +163,61 @@ function findMigrationsDirectory() {
  * Validate a single migration file
  */
 function validateMigrationFile(filePath) {
-  let content = fs.readFileSync(filePath, 'utf-8');
-  const fileName = path.basename(filePath);
+  try {
+    let content = fs.readFileSync(filePath, 'utf-8');
+    const fileName = path.basename(filePath);
+    const issues = [];
 
-  // Strip SQL comments and string literals to prevent pattern bypass
-  // CRITICAL: Must handle PostgreSQL dollar-quoted strings to prevent hiding dangerous SQL
-  // Order matters: Remove dollar-quotes first, then string literals, then comments
-  content = content
-    .replace(/\$[a-zA-Z0-9_]*\$[\s\S]*?\$[a-zA-Z0-9_]*\$/g, '')  // Remove dollar-quoted strings
-    .replace(/'(?:''|[^'])*'/g, '')                              // Remove single-quoted strings
-    .replace(/--[^\n]*/g, '')                                    // Remove line comments
-    .replace(/\/\*[\s\S]*?\*\//g, '');                          // Remove block comments
-
-  const issues = [];
-
-  for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
-    if (pattern.test(content)) {
-      issues.push({
-        file: fileName,
-        severity,
-        message,
-        type: 'DANGEROUS_PATTERN'
-      });
+    // FIRST: Check raw content (catches patterns in quoted strings/comments)
+    // This prevents attackers from hiding dangerous SQL inside string literals
+    for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
+      if (pattern.test(content)) {
+        issues.push({
+          file: fileName,
+          severity,
+          message: `${message} (in raw content)`,
+          type: 'DANGEROUS_PATTERN'
+        });
+      }
     }
-  }
 
-  return issues;
+    // THEN: Strip SQL comments and string literals, then check again
+    // This catches dangerous SQL that appears in executable code
+    // CRITICAL: Must handle PostgreSQL dollar-quoted strings to prevent hiding dangerous SQL
+    // Order matters: Remove dollar-quotes first (including nested), then string literals, then comments
+    const cleanedContent = content
+      .replace(/\$[a-zA-Z0-9_]*\$[\s\S]*?\$[a-zA-Z0-9_]*\$/g, '')  // Remove dollar-quoted strings
+      .replace(/'(?:''|[^'])*'/g, '')                              // Remove single-quoted strings
+      .replace(/--[^\n]*/g, '')                                    // Remove line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '');                          // Remove block comments
+
+    for (const { pattern, message, severity } of DANGEROUS_PATTERNS) {
+      if (pattern.test(cleanedContent)) {
+        // Only add if not already detected in raw content
+        const alreadyDetected = issues.some(
+          issue => issue.message.includes(message) && issue.message.includes('(in raw content)')
+        );
+        if (!alreadyDetected) {
+          issues.push({
+            file: fileName,
+            severity,
+            message: `${message} (outside quotes)`,
+            type: 'DANGEROUS_PATTERN'
+          });
+        }
+      }
+    }
+
+    return issues;
+  } catch (error) {
+    console.error(`❌ Error reading migration file ${filePath}: ${error.message}`);
+    return [{
+      file: path.basename(filePath),
+      severity: 'ERROR',
+      message: `Failed to read file: ${error.message}`,
+      type: 'FILE_ERROR'
+    }];
+  }
 }
 
 /**

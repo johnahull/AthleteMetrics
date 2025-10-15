@@ -4,6 +4,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createHash } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,18 +15,54 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
+// Global state for emergency cleanup
+let globalLockId = null;
+let globalClient = null;
+
+/**
+ * Emergency cleanup handler for SIGTERM/SIGINT
+ * Releases advisory lock before process termination
+ */
+async function emergencyCleanup(signal) {
+  console.error(`\n⚠️  Received ${signal} - emergency cleanup...`);
+  if (globalLockId && globalClient) {
+    try {
+      // Race against 1-second timeout for cleanup
+      await Promise.race([
+        releaseMigrationLock(globalClient, globalLockId),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
+      ]);
+      console.error('✅ Emergency lock release successful');
+    } catch (error) {
+      console.error('⚠️  Emergency lock release failed:', error.message);
+      console.error('   Lock will auto-release on connection close');
+    }
+  }
+  process.exit(128 + (signal === 'SIGTERM' ? 15 : 9));
+}
+
+// Install signal handlers BEFORE any async operations
+process.on('SIGTERM', () => emergencyCleanup('SIGTERM'));
+process.on('SIGINT', () => emergencyCleanup('SIGINT'));
+
 /**
  * Acquire advisory lock to prevent concurrent migrations
  * Returns lock IDs if successful, throws error if lock cannot be acquired
- * Uses environment-specific lock IDs to prevent cross-environment conflicts
+ * Uses database-specific lock IDs to prevent cross-environment conflicts
  */
 async function acquireMigrationLock(client) {
-  // Use environment-specific lock IDs to prevent staging/production conflicts
-  const LOCK_CLASS_ID = 2024; // Application identifier
-  const LOCK_OBJ_ID = process.env.NODE_ENV === 'production' ? 789456 : 789457; // Environment-specific
+  // Extract database name from DATABASE_URL for unique lock ID
+  const dbName = DATABASE_URL.match(/\/([^/?]+)(\?|$)/)?.[1] || 'unknown';
+
+  // Use consistent application identifier
+  const LOCK_CLASS_ID = 2024;
+
+  // Generate unique lock ID based on database name (prevents cross-environment conflicts)
+  const dbHash = createHash('sha256').update(dbName).digest('hex');
+  const LOCK_OBJ_ID = parseInt(dbHash.substring(0, 8), 16) % 2147483647;
 
   console.log('🔒 Acquiring migration lock...');
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Database: ${dbName}`);
   console.log(`   Lock ID: ${LOCK_CLASS_ID}.${LOCK_OBJ_ID}`);
 
   const result = await client.unsafe(
@@ -40,7 +77,17 @@ async function acquireMigrationLock(client) {
     );
   }
 
-  console.log('✅ Migration lock acquired');
+  // VERIFY: Double-check we actually hold the lock (prevents race condition)
+  const verification = await client.unsafe(
+    'SELECT count(*) as lock_count FROM pg_locks WHERE locktype = $1 AND classid = $2 AND objid = $3 AND pid = pg_backend_pid()',
+    ['advisory', LOCK_CLASS_ID, LOCK_OBJ_ID]
+  );
+
+  if (verification[0]?.lock_count !== '1') {
+    throw new Error('Lock acquisition verification failed - race condition detected');
+  }
+
+  console.log('✅ Migration lock acquired and verified');
   return { classId: LOCK_CLASS_ID, objId: LOCK_OBJ_ID };
 }
 
@@ -70,9 +117,13 @@ async function runMigrations() {
   const db = drizzle(migrationClient);
   let lockId = null;
 
+  // Store globals for emergency cleanup
+  globalClient = migrationClient;
+
   try {
     // Acquire migration lock to prevent concurrent migrations
     lockId = await acquireMigrationLock(migrationClient);
+    globalLockId = lockId; // Store for emergency cleanup
 
     // Set PostgreSQL safety timeouts (environment-aware)
     // CRITICAL: statement_timeout MUST be less than lock_timeout to prevent
@@ -81,8 +132,10 @@ async function runMigrations() {
     // Development: Shorter lock timeout (1min) for faster feedback, very short statement (30s) for quick iterations
     const lockTimeout = process.env.NODE_ENV === 'production' ? '5min' : '1min';
     const stmtTimeout = process.env.NODE_ENV === 'production' ? '3min' : '30s';
-    await migrationClient.unsafe(`SET lock_timeout = '${lockTimeout}'`);
-    await migrationClient.unsafe(`SET statement_timeout = '${stmtTimeout}'`);
+
+    // FIX: Use parameterized queries to prevent SQL injection
+    await migrationClient.unsafe('SET lock_timeout = $1', [lockTimeout]);
+    await migrationClient.unsafe('SET statement_timeout = $1', [stmtTimeout]);
     console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: ${stmtTimeout})`);
 
     const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
@@ -96,6 +149,7 @@ async function runMigrations() {
     if (lockId !== null) {
       await releaseMigrationLock(migrationClient, lockId);
       lockId = null; // Prevent double-release in finally block
+      globalLockId = null; // Clear global
     }
 
     process.exit(0);
@@ -133,6 +187,7 @@ async function runMigrations() {
     if (lockId !== null) {
       await releaseMigrationLock(migrationClient, lockId);
       lockId = null; // Prevent double-release in finally block
+      globalLockId = null; // Clear global
     }
 
     process.exit(1);
@@ -142,6 +197,7 @@ async function runMigrations() {
     if (lockId !== null) {
       try {
         await releaseMigrationLock(migrationClient, lockId);
+        globalLockId = null; // Clear global after release
       } catch (lockError) {
         console.warn('⚠️  Lock release failed (will auto-release on disconnect):', lockError.message);
       }
@@ -149,6 +205,7 @@ async function runMigrations() {
 
     try {
       await migrationClient.end();
+      globalClient = null; // Clear global after connection closed
     } catch (endError) {
       console.error('Warning: Error closing migration connection:', endError.message);
       // Don't fail if connection closing fails - migration already succeeded/failed

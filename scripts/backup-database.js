@@ -9,8 +9,11 @@
 
 import { execSync } from 'child_process';
 import fs from 'fs';
+import { createReadStream } from 'fs';
+import { open } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createHash } from 'crypto';
 
 // Get current directory in ES module context
 const __filename = fileURLToPath(import.meta.url);
@@ -32,7 +35,7 @@ function runCommand(command, options = {}) {
   }
 }
 
-function createBackup() {
+async function createBackup() {
   console.log('\n💾 Creating database backup...\n');
 
   if (!RAILWAY_TOKEN || !RAILWAY_SERVICE_ID) {
@@ -95,25 +98,24 @@ function createBackup() {
       throw new Error('Backup file suspiciously small (< 512 bytes) - likely incomplete');
     }
 
-    // Verify backup file integrity by checking PostgreSQL dump headers
-    // Note: Using synchronous I/O here is intentional - this is a deployment script
-    // that performs a single task (backup validation) and doesn't need async I/O.
-    // The file reads are small (1KB header/footer) and won't block other operations.
-    const headerBuffer = Buffer.alloc(1024);
-    const fd = fs.openSync(backupFile, 'r');
+    // Verify backup file integrity using async streaming I/O
+    // This prevents blocking the event loop and handles large files efficiently
+    const fileHandle = await open(backupFile, 'r');
 
     try {
-      fs.readSync(fd, headerBuffer, 0, 1024, 0);
+      // Read header (first 1KB)
+      const headerBuffer = Buffer.alloc(1024);
+      await fileHandle.read(headerBuffer, 0, 1024, 0);
       const headerContent = headerBuffer.toString('utf-8');
 
       if (!headerContent.includes('PostgreSQL database dump')) {
         throw new Error('Backup file does not appear to be a valid PostgreSQL dump');
       }
 
-      // Check for completion marker at end of file - MUST be present for valid backup
+      // Read footer (last 1KB) - check for completion marker
       const footerBuffer = Buffer.alloc(1024);
       const footerPos = Math.max(0, stats.size - 1024);
-      fs.readSync(fd, footerBuffer, 0, 1024, footerPos);
+      await fileHandle.read(footerBuffer, 0, 1024, footerPos);
 
       const footerContent = footerBuffer.toString('utf-8');
       if (!footerContent.includes('PostgreSQL database dump complete')) {
@@ -126,19 +128,26 @@ function createBackup() {
         console.warn('⚠️  Warning: No CREATE TABLE statements found - backup may only contain data');
       }
     } finally {
-      // Always close file descriptor, even if validation fails
-      fs.closeSync(fd);
+      // Always close file handle, even if validation fails
+      await fileHandle.close();
     }
 
-    // Generate SHA-256 checksum for backup integrity verification
-    const crypto = await import('crypto');
-    const hash = crypto.createHash('sha256');
-    const fileBuffer = fs.readFileSync(backupFile);
-    const checksum = hash.update(fileBuffer).digest('hex');
+    // Generate SHA-256 checksum using streaming (prevents OOM on large files)
+    console.log('🔐 Generating backup checksum...');
+    const hash = createHash('sha256');
+    const fileStream = createReadStream(backupFile);
+
+    await new Promise((resolve, reject) => {
+      fileStream.on('data', (chunk) => hash.update(chunk));
+      fileStream.on('end', resolve);
+      fileStream.on('error', reject);
+    });
+
+    const checksum = hash.digest('hex');
 
     // Save checksum alongside backup
     fs.writeFileSync(`${backupFile}.sha256`, `${checksum}  ${path.basename(backupFile)}\n`);
-    console.log(`\n🔐 Backup checksum (SHA-256): ${checksum.substring(0, 16)}...`);
+    console.log(`   SHA-256: ${checksum.substring(0, 16)}...`);
 
     console.log(`\n✅ Backup created successfully`);
     console.log(`File: ${backupFile}`);
@@ -235,8 +244,11 @@ process.on('SIGTERM', () => {
 // Determine which backup method to use
 const useRailwayBackups = process.env.USE_RAILWAY_BACKUPS === 'true';
 
-if (useRailwayBackups) {
-  triggerRailwayBackup();
-} else {
-  createBackup();
-}
+// Execute appropriate backup method
+(async () => {
+  if (useRailwayBackups) {
+    triggerRailwayBackup();
+  } else {
+    await createBackup();
+  }
+})();
