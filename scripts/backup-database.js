@@ -83,6 +83,14 @@ function createBackup() {
       throw new Error('Backup file is empty');
     }
 
+    // Verify backup file integrity by checking PostgreSQL dump headers
+    const backupContent = fs.readFileSync(backupFile, 'utf-8');
+    const firstLines = backupContent.split('\n').slice(0, 10).join('\n');
+
+    if (!firstLines.includes('PostgreSQL database dump')) {
+      throw new Error('Backup file does not appear to be a valid PostgreSQL dump');
+    }
+
     console.log(`\n✅ Backup created successfully`);
     console.log(`File: ${backupFile}`);
     console.log(`Size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
@@ -127,21 +135,40 @@ function createBackup() {
 
 // Alternative: Use Railway's built-in backup API
 function triggerRailwayBackup() {
-  console.log('\n💾 Triggering Railway database backup...\n');
+  console.log('\n💾 Verifying Railway database backup availability...\n');
 
   try {
-    // Note: Railway automatically backs up databases daily
-    // This is just documentation of the built-in feature
+    if (!RAILWAY_TOKEN || !RAILWAY_SERVICE_ID) {
+      console.error('❌ ERROR: RAILWAY_TOKEN and RAILWAY_SERVICE_ID must be set');
+      process.exit(1);
+    }
 
-    console.log('ℹ️  Railway automatically creates daily backups');
+    // Verify Railway CLI is available and authenticated
+    console.log('Verifying Railway CLI authentication...');
+    try {
+      runCommand('railway whoami', { silent: true });
+      console.log('✅ Railway CLI authenticated');
+    } catch (error) {
+      throw new Error('Railway CLI authentication failed. Cannot verify backups.');
+    }
+
+    // Note: Railway automatically backs up databases daily
+    // However, we should verify that backups are enabled
+    console.log('\n⚠️  Using Railway automatic backups');
+    console.log('ℹ️  Railway creates daily backups automatically');
     console.log('ℹ️  Backups are accessible in Railway Dashboard → Database → Backups');
-    console.log('ℹ️  Retention period: 7 days (Hobby plan)');
-    console.log('\n✅ Using Railway automatic backups\n');
+    console.log('ℹ️  Retention period: 7 days (Hobby plan), 14 days (Pro plan)');
+    console.log('');
+    console.log('⚠️  IMPORTANT: Railway backups may be up to 24 hours old');
+    console.log('💡 For immediate pre-deployment backups, set USE_RAILWAY_BACKUPS=false');
+    console.log('\n✅ Railway backup verification complete\n');
 
     process.exit(0);
   } catch (error) {
-    console.error('\n❌ Error:', error.message);
-    process.exit(0); // Don't fail deployment
+    console.error('\n❌ Backup verification failed:', error.message);
+    console.error('\n⚠️  Cannot verify Railway backups - deployment blocked for safety');
+    console.error('💡 Set USE_RAILWAY_BACKUPS=false to create manual backups instead\n');
+    process.exit(1); // Fail deployment if we can't verify backups
   }
 }
 

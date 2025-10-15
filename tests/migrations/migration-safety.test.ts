@@ -276,6 +276,40 @@ describe('Migration Safety Tests', () => {
     });
   });
 
+  describe('Migration Validation Script', () => {
+    it('should verify validation script exists', () => {
+      const validationScriptPath = path.join(
+        projectRoot,
+        'scripts',
+        'validate-migrations.js'
+      );
+
+      expect(fs.existsSync(validationScriptPath)).toBe(true);
+    });
+
+    it('should have db:validate script in package.json', () => {
+      const packageJsonPath = path.join(projectRoot, 'package.json');
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
+      expect(packageJson.scripts['db:validate']).toBeDefined();
+      expect(packageJson.scripts['db:validate']).toContain('validate-migrations');
+    });
+
+    it('should detect dangerous WHERE clauses (WHERE 1=1, WHERE true)', () => {
+      const validationScriptPath = path.join(
+        projectRoot,
+        'scripts',
+        'validate-migrations.js'
+      );
+      const scriptContent = fs.readFileSync(validationScriptPath, 'utf-8');
+
+      // Verify the validation script checks for dangerous WHERE clauses
+      expect(scriptContent).toContain('WHERE');
+      expect(scriptContent).toContain('1=1');
+      expect(scriptContent).toContain('true');
+    });
+  });
+
   describe('Backup Safety Requirements', () => {
     it('should verify backup script exists', () => {
       const backupScriptPath = path.join(

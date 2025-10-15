@@ -40,12 +40,12 @@ const DANGEROUS_PATTERNS = [
     severity: 'ERROR'
   },
   {
-    pattern: /DELETE\s+FROM\s+\w+\s*;/i,
+    pattern: /DELETE\s+FROM\s+[\w.]+(?!\s+WHERE)/i,
     message: 'Contains DELETE without WHERE clause - could delete all data',
     severity: 'ERROR'
   },
   {
-    pattern: /UPDATE\s+\w+\s+SET.*(?!WHERE)/i,
+    pattern: /UPDATE\s+[\w.]+\s+SET(?!.*WHERE)/is,
     message: 'Contains UPDATE without WHERE clause - will update all rows',
     severity: 'ERROR'
   },
@@ -62,6 +62,41 @@ const DANGEROUS_PATTERNS = [
   {
     pattern: /DROP\s+COLUMN/i,
     message: 'Contains DROP COLUMN - potential data loss',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /DELETE\s+FROM\s+[\w.]+\s+WHERE\s+(1\s*=\s*1|true)/i,
+    message: 'Contains DELETE with WHERE 1=1 or WHERE true - functionally deletes all data',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /UPDATE\s+[\w.]+\s+SET.*WHERE\s+(1\s*=\s*1|true)/is,
+    message: 'Contains UPDATE with WHERE 1=1 or WHERE true - functionally updates all rows',
+    severity: 'ERROR'
+  },
+  {
+    pattern: /RENAME\s+(TABLE|COLUMN)/i,
+    message: 'Contains RENAME operation - can break application if not coordinated with code changes',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /CREATE\s+INDEX(?!\s+CONCURRENTLY)/i,
+    message: 'Contains CREATE INDEX without CONCURRENTLY - blocks writes during creation',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /DROP\s+INDEX(?!\s+CONCURRENTLY)/i,
+    message: 'Contains DROP INDEX without CONCURRENTLY - blocks writes during drop',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /DROP\s+CONSTRAINT/i,
+    message: 'Contains DROP CONSTRAINT - may allow invalid data if not carefully planned',
+    severity: 'WARNING'
+  },
+  {
+    pattern: /ON\s+DELETE\s+CASCADE/i,
+    message: 'Contains ON DELETE CASCADE - ensure cascading deletes are intentional',
     severity: 'WARNING'
   }
 ];
