@@ -154,9 +154,84 @@ async function runMigrations() {
     const migrationsFolder = path.join(process.cwd(), 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
+    // Import fs for file operations
+    const fs = await import('fs');
+
+    // Check if schema already exists (database was created via drizzle-kit push)
+    // If tables exist but __drizzle_migrations tracking table is empty/missing,
+    // we need to initialize the tracking table without re-running migrations
+    console.log('🔍 Checking if database schema already exists...');
+    const schemaCheck = await migrationClient.unsafe(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = 'users'
+      ) as schema_exists
+    `);
+
+    const schemaExists = schemaCheck[0]?.schema_exists;
+    console.log(`   Schema exists: ${schemaExists ? 'YES' : 'NO'}`);
+
+    // Check if migration tracking table exists
+    const trackingCheck = await migrationClient.unsafe(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'drizzle'
+        AND table_name = '__drizzle_migrations'
+      ) as tracking_exists
+    `);
+
+    const trackingExists = trackingCheck[0]?.tracking_exists;
+    console.log(`   Migration tracking exists: ${trackingExists ? 'YES' : 'NO'}`);
+
+    // If schema exists but tracking doesn't, initialize tracking table
+    // This handles databases created via drizzle-kit push
+    if (schemaExists && !trackingExists) {
+      console.log('⚠️  Database schema exists but migration tracking is missing');
+      console.log('   This indicates the database was created via drizzle-kit push');
+      console.log('   Initializing migration tracking table...');
+
+      // Create drizzle schema and tracking table
+      await migrationClient.unsafe(`CREATE SCHEMA IF NOT EXISTS drizzle`);
+      await migrationClient.unsafe(`
+        CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+          id SERIAL PRIMARY KEY,
+          hash text NOT NULL,
+          created_at bigint
+        )
+      `);
+
+      // Read migration journal to get all migration hashes
+      const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
+      const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
+
+      // Mark all migrations as applied
+      console.log(`   Marking ${journal.entries.length} migrations as applied...`);
+      for (const entry of journal.entries) {
+        // Use tag as hash (Drizzle uses migration file name as identifier)
+        await migrationClient.unsafe(`
+          INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+          VALUES ($1, $2)
+          ON CONFLICT DO NOTHING
+        `, [entry.tag, entry.when]);
+        console.log(`     ✓ ${entry.tag}`);
+      }
+
+      console.log('✅ Migration tracking initialized - all existing migrations marked as applied');
+      console.log('✅ No migrations to apply - database is up to date');
+
+      // Release lock before exiting
+      if (lockId !== null) {
+        await releaseMigrationLock(migrationClient, lockId);
+        lockId = null;
+        globalLockId = null;
+      }
+
+      process.exit(0);
+    }
+
     // VALIDATION: Check migrations folder exists and has migrations before attempting migration
     // This prevents confusing errors if folder is missing or empty
-    const fs = await import('fs');
     if (!fs.existsSync(migrationsFolder)) {
       console.warn('⚠️  Migrations folder does not exist - no migrations to apply');
       console.log('   This is normal for fresh setups');
