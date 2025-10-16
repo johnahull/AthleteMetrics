@@ -9,20 +9,22 @@
 -- 3. Migration caused unexpected issues (report as bug)
 
 -- Remove composite index
-DROP INDEX IF EXISTS idx_measurements_user_date;
+-- Using CONCURRENTLY to avoid table locks
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_user_date;
 
 -- Remove team analytics index
-DROP INDEX IF EXISTS idx_measurements_team_id;
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_team_id;
 
 -- Remove analytics date/metric index
-DROP INDEX IF EXISTS idx_measurements_date_metric;
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_date_metric;
 
 -- Remove verified_by index
-DROP INDEX IF EXISTS idx_measurements_verified_by;
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_verified_by;
 
 -- Remove submitted_by index
-DROP INDEX IF EXISTS idx_measurements_submitted_by;
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_submitted_by;
 
 -- Restore the basic user_id index that was removed in the forward migration
 -- This index was created in migration 0006
-CREATE INDEX IF NOT EXISTS idx_measurements_user_id ON measurements(user_id);
+-- Using CONCURRENTLY to avoid table locks
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_user_id ON measurements(user_id);

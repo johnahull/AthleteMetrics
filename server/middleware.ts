@@ -24,11 +24,22 @@ const canAccessOrganization = async (user: any, organizationId: string): Promise
 };
 
 // Base authentication middleware
-export const requireAuth = (req: any, res: Response, next: NextFunction) => {
+export const requireAuth = async (req: any, res: Response, next: NextFunction) => {
   const user = req.session.user || (req.session.admin ? { admin: true } : null);
   if (!user) {
     return res.status(401).json({ message: "Not authenticated" });
   }
+
+  // Defense-in-depth: Verify user hasn't been soft-deleted or deactivated
+  // Sessions are revoked during user deletion, but this adds extra protection
+  if (user.id && !user.admin) {
+    const dbUser = await storage.getUser(user.id);
+    if (!dbUser || !dbUser.isActive) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "Account no longer active" });
+    }
+  }
+
   req.user = user;
   next();
 };

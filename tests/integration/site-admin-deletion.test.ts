@@ -543,7 +543,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(measurementsAfter[0].id).toBe(measurement.id);
   });
 
-  it('should preserve site admin organization memberships (soft delete)', async () => {
+  it('should delete site admin organization memberships', async () => {
     // Organization membership already created in beforeEach
 
     // Verify organization membership exists before deletion
@@ -560,11 +560,13 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify organization memberships are PRESERVED (for measurement context)
+    // Verify organization memberships are DELETED
+    // Rationale: Measurements remain queryable via measurements → teamId → teams.organizationId
+    // so userOrganizations can be cleaned up during user deletion
     const orgsAfter = await db.select()
       .from(userOrganizations)
       .where(eq(userOrganizations.userId, siteAdmin.id));
-    expect(orgsAfter).toHaveLength(1);
+    expect(orgsAfter).toHaveLength(0);
   });
 
   it('should delete site admin team memberships', async () => {
