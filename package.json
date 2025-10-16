@@ -17,7 +17,7 @@
     "test:run": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run",
     "test:unit": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.unit.config.ts",
     "test:integration": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts",
-    "deploy:testing": "railway up --environment testing",
+    "deploy:testing": "node scripts/validate-testing-env.js && railway up --environment testing",
     "logs:testing": "railway logs --environment testing",
     "shell:testing": "railway run --environment testing bash",
     "vars:testing": "railway variables --environment testing"

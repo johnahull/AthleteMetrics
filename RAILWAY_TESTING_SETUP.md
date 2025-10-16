@@ -111,7 +111,7 @@ Required variables you should see:
 - ✅ `DATABASE_URL`
 - ✅ `SESSION_SECRET`
 - ✅ `ADMIN_USER`
-- ✅ `ADMIN_PASSWORD`
+- ✅ `ADMIN_PASS`
 - ✅ `ADMIN_EMAIL`
 - ✅ `NODE_ENV` (auto-set to "testing" from railway.json)
 - ✅ `NODE_OPTIONS` (auto-set from railway.json)
@@ -208,6 +208,107 @@ The testing environment uses reduced resources:
 
 Estimated cost: ~$5-15/month
 
+## Security Considerations
+
+### Database Isolation
+
+**⚠️ CRITICAL: Always use a separate database for testing**
+
+The testing environment MUST use a completely isolated database to prevent:
+- Accidental data corruption in production/staging
+- Data loss from experimental features
+- Security vulnerabilities affecting real user data
+
+**Validation:** The deployment script automatically validates database isolation before every deploy:
+```bash
+npm run deploy:testing
+# Runs validation first, then deploys only if safe
+```
+
+The validation script checks for:
+- ✅ Production database patterns (blocks deployment)
+- ⚠️ Staging database patterns (shows warning)
+- ✅ Testing-specific database names (allows deployment)
+
+**To set up proper isolation:**
+```bash
+# Option 1: Create dedicated Railway PostgreSQL database
+railway add --environment testing  # Select PostgreSQL
+
+# Option 2: Use existing database with testing-specific name
+railway variables --set "DATABASE_URL=postgresql://...athletemetrics_testing"
+```
+
+### Rate Limiting Bypass
+
+The testing environment has rate limiting **disabled** for convenience:
+```json
+{
+  "BYPASS_ANALYTICS_RATE_LIMIT": "true",
+  "BYPASS_GENERAL_RATE_LIMIT": "true"
+}
+```
+
+**Production Safeguards:**
+- ✅ Rate limiting bypass is **hardcoded to be disabled** in production environments
+- ✅ Server code checks `NODE_ENV === 'production'` and **always enforces** rate limits
+- ✅ Environment variables **cannot override** production rate limiting
+
+**Code Reference:** `server/routes.ts:2795-2804`
+```typescript
+// Production safeguard: Never bypass rate limiting in production environment
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction) {
+  return false; // Always enforce rate limiting in production
+}
+```
+
+**Why this is safe:**
+- Testing environment uses `NODE_ENV=testing` (set automatically by `railway.json`)
+- Production environment uses `NODE_ENV=production`
+- Even if someone accidentally copies these variables to production, the code will ignore them
+
+### Access Control
+
+**Testing environment credentials should be:**
+- ✅ Different from production/staging credentials
+- ✅ Documented in your team's password manager
+- ✅ Rotated regularly (at least quarterly)
+- ✅ Limited to development team members
+
+**Example secure setup:**
+```bash
+# Generate strong credentials
+TESTING_ADMIN_PASS=$(openssl rand -base64 32)
+
+# Set secure credentials
+railway variables --set "ADMIN_USER=admin"
+railway variables --set "ADMIN_PASS=$TESTING_ADMIN_PASS"
+railway variables --set "ADMIN_EMAIL=testing@yourcompany.com"
+```
+
+### Data Privacy
+
+**⚠️ Do not use real user data in testing environment**
+
+Best practices:
+- Use synthetic/anonymized data for testing
+- Regularly reset testing database to remove accumulated test data
+- Never import production database dumps without anonymization
+
+**To reset testing database:**
+```bash
+# Connect to testing database
+npm run shell:testing
+
+# Inside the shell, drop and recreate database (example)
+dropdb athletemetrics_testing
+createdb athletemetrics_testing
+
+# Re-run migrations
+railway run --environment testing npm run db:push
+```
+
 ## Troubleshooting
 
 ### "Unauthorized" Error
@@ -281,7 +382,7 @@ railway add  # Select PostgreSQL
 # 4. Set environment variables
 railway variables --set "SESSION_SECRET=$(openssl rand -hex 32)"
 railway variables --set "ADMIN_USER=admin"
-railway variables --set "ADMIN_PASSWORD=YourPassword123!"
+railway variables --set "ADMIN_PASS=YourPassword123!"
 railway variables --set "ADMIN_EMAIL=testing@example.com"
 
 # 5. Deploy
