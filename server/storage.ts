@@ -430,11 +430,13 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(userTeams.userId, id));
 
-      // Delete user-organization relationships
-      // Note: Measurements can still be queried by organization via:
-      //   measurements → teamId → teams.organizationId
-      // This path remains intact even after user deletion since measurements are immutable
-      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+      // PRESERVE user-organization relationships (for measurement context)
+      // This enables analytics queries to filter measurements by organization
+      // even after user deletion:
+      //   measurements → userId → userOrganizations → organizationId
+      // Alternative path also works: measurements → teamId → teams.organizationId
+      // We keep userOrganizations to support both query patterns
+      // Note: userOrganizations are NOT deleted
 
       // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
       // userId, submittedBy, and verifiedBy remain as historical references

@@ -543,7 +543,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(measurementsAfter[0].id).toBe(measurement.id);
   });
 
-  it('should delete site admin organization memberships', async () => {
+  it('should preserve site admin organization memberships for measurement context', async () => {
     // Organization membership already created in beforeEach
 
     // Verify organization membership exists before deletion
@@ -560,13 +560,13 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify organization memberships are DELETED
-    // Rationale: Measurements remain queryable via measurements → teamId → teams.organizationId
-    // so userOrganizations can be cleaned up during user deletion
+    // Verify organization memberships are PRESERVED
+    // Rationale: Enables analytics queries to filter measurements by organization
+    // even after user deletion (measurements → userId → userOrganizations → organizationId)
     const orgsAfter = await db.select()
       .from(userOrganizations)
       .where(eq(userOrganizations.userId, siteAdmin.id));
-    expect(orgsAfter).toHaveLength(0);
+    expect(orgsAfter).toHaveLength(1);
   });
 
   it('should delete site admin team memberships', async () => {
@@ -912,14 +912,14 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // ✅ Original userId should be preserved
     expect(measurementsAfterDeletion[0].userId).toBe(athlete.id);
 
-    // ✅ Values should be unchanged
+    // ✅ Values should be unchanged (decimal with 3 decimal places from schema)
     const verticalJump = measurementsAfterDeletion.find(m => m.metric === 'VERTICAL_JUMP');
     expect(verticalJump).toBeDefined();
-    expect(verticalJump!.value).toBe('30');
+    expect(verticalJump!.value).toBe('30.000');
 
     const dash40 = measurementsAfterDeletion.find(m => m.metric === 'DASH_40YD');
     expect(dash40).toBeDefined();
-    expect(dash40!.value).toBe('4.5');
+    expect(dash40!.value).toBe('4.500');
   });
 });
 
