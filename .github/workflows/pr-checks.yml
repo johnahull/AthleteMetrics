@@ -6,6 +6,11 @@ on:
       - main
       - develop
 
+# Explicit permissions following principle of least privilege
+permissions:
+  contents: read        # Read repository contents
+  pull-requests: read   # Read PR metadata
+
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -123,9 +128,17 @@ jobs:
 
   security-audit:
     name: Security Audit
-    uses: ./.github/workflows/security-audit.yml
-    with:
-      fail-on-severity: high
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup project
+        uses: ./.github/actions/setup
+
+      - name: Run security audit
+        run: ./scripts/security-audit.sh
 
   workflow-lint:
     name: Workflow Linting

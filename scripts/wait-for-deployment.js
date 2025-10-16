@@ -20,6 +20,43 @@ import { spawn } from 'child_process';
 const POLL_INTERVAL = parseInt(process.env.DEPLOYMENT_POLL_INTERVAL || '5', 10) * 1000;
 const TIMEOUT = parseInt(process.env.DEPLOYMENT_TIMEOUT || '300', 10) * 1000;
 const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID;
+const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
+
+/**
+ * Sanitize output to prevent command injection via control characters
+ * Removes ANSI escape sequences, OSC sequences, control characters, and normalizes Unicode
+ *
+ * Security considerations:
+ * - ANSI CSI sequences: \x1B[ followed by parameters and command letter
+ * - ANSI OSC sequences: \x1B] followed by params and \x07 or \x1B\\ terminator
+ * - Control chars: 0x00-0x1F (except \n, \t), 0x7F-0x9F
+ * - Carriage returns: Can be used to overwrite terminal output
+ * - Unicode normalization: Prevent homoglyph attacks
+ */
+function sanitizeOutput(str) {
+  if (!str) return '';
+
+  // Remove ANSI CSI escape sequences (color codes, cursor control, etc.)
+  // Pattern: ESC [ <parameters> <command letter>
+  str = str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+
+  // Remove ANSI OSC (Operating System Command) sequences
+  // Pattern: ESC ] <params> (terminated by BEL \x07 or ESC \)
+  str = str.replace(/\x1B\].*?(?:\x07|\x1B\\)/g, '');
+
+  // Remove other ANSI sequences: ESC followed by any character
+  str = str.replace(/\x1B./g, '');
+
+  // Remove carriage returns (can overwrite previous output)
+  str = str.replace(/\r/g, '');
+
+  // Remove control characters (0x00-0x1F, 0x7F-0x9F) except newlines and tabs
+  str = str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+
+  // Unicode normalization to NFC (Canonical Composition)
+  // Prevents homoglyph attacks and ensures consistent representation
+  return str.normalize('NFC');
+}
 
 if (!RAILWAY_SERVICE_ID) {
   console.error('❌ RAILWAY_SERVICE_ID environment variable is required');
@@ -55,6 +92,54 @@ function checkRailwayCLI() {
 }
 
 /**
+ * Verify Railway CLI authentication
+ */
+async function checkRailwayAuth() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('railway', ['whoami'], {
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
+
+    proc.stdout.on('data', (data) => {
+      if (stdout.length < MAX_BUFFER_SIZE) {
+        stdout += data.toString();
+      } else if (!stdoutTruncated) {
+        stdoutTruncated = true;
+        console.warn('⚠️  stdout buffer limit reached, output truncated');
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      if (stderr.length < MAX_BUFFER_SIZE) {
+        stderr += data.toString();
+      } else if (!stderrTruncated) {
+        stderrTruncated = true;
+        console.warn('⚠️  stderr buffer limit reached, output truncated');
+      }
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Railway CLI authentication failed. Please check RAILWAY_TOKEN environment variable. Error: ${sanitizeOutput(stderr)}`));
+      } else {
+        // Don't return Railway username to prevent potential info disclosure
+        resolve();
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to verify Railway authentication: ${sanitizeOutput(err.message)}`));
+    });
+  });
+}
+
+/**
  * Execute Railway CLI command and parse JSON output
  */
 async function railwayCommand(args) {
@@ -66,31 +151,49 @@ async function railwayCommand(args) {
 
     let stdout = '';
     let stderr = '';
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
 
     proc.stdout.on('data', (data) => {
-      stdout += data.toString();
+      if (stdout.length < MAX_BUFFER_SIZE) {
+        stdout += data.toString();
+      } else if (!stdoutTruncated) {
+        stdoutTruncated = true;
+        console.warn('⚠️  stdout buffer limit reached, output truncated');
+      }
     });
 
     proc.stderr.on('data', (data) => {
-      stderr += data.toString();
+      if (stderr.length < MAX_BUFFER_SIZE) {
+        stderr += data.toString();
+      } else if (!stderrTruncated) {
+        stderrTruncated = true;
+        console.warn('⚠️  stderr buffer limit reached, output truncated');
+      }
     });
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`Railway CLI exited with code ${code}: ${stderr}`));
+        reject(new Error(`Railway CLI exited with code ${code}: ${sanitizeOutput(stderr)}`));
       } else {
+        // Fail fast if buffer was truncated - JSON may be corrupt
+        if (stdoutTruncated || stderrTruncated) {
+          reject(new Error('Railway CLI output exceeded buffer limit (1MB). This may indicate an issue with the Railway CLI or deployment. Cannot safely parse potentially corrupt JSON.'));
+          return;
+        }
+
         // Check for empty output before parsing
         if (!stdout || stdout.trim().length === 0) {
-          reject(new Error(`Railway CLI returned empty output. stderr: ${stderr}`));
+          reject(new Error(`Railway CLI returned empty output. stderr: ${sanitizeOutput(stderr)}`));
           return;
         }
 
         try {
           resolve(JSON.parse(stdout));
         } catch (err) {
-          // Include partial stdout for debugging
+          // Include partial stdout for debugging (sanitized)
           const preview = stdout.length > 200 ? stdout.substring(0, 200) + '...' : stdout;
-          reject(new Error(`Failed to parse Railway CLI output: ${err.message}\nOutput preview: ${preview}`));
+          reject(new Error(`Failed to parse Railway CLI output: ${sanitizeOutput(err.message)}\nOutput preview: ${sanitizeOutput(preview)}`));
         }
       }
     });
@@ -134,15 +237,21 @@ async function waitForDeployment() {
   await checkRailwayCLI();
   console.log('✅ Railway CLI found');
 
-  console.log('⏳ Waiting for Railway deployment to complete...');
-  console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
-  console.log(`   Timeout: ${TIMEOUT / 1000}s`);
+  // Verify Railway CLI authentication before waiting
+  // This provides faster feedback if auth is misconfigured
+  console.log('🔐 Verifying Railway authentication...');
+  await checkRailwayAuth();
+  console.log('✅ Authenticated successfully');
 
   // Initial delay to allow Railway API to register the new deployment
   // Without this, we may poll the previous deployment instead of the new one
   const INITIAL_DELAY = 10000; // 10 seconds
   console.log(`⏸️  Initial delay: ${INITIAL_DELAY / 1000}s (waiting for Railway to register new deployment)`);
   await new Promise(resolve => setTimeout(resolve, INITIAL_DELAY));
+
+  console.log('⏳ Waiting for Railway deployment to complete...');
+  console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
+  console.log(`   Timeout: ${TIMEOUT / 1000}s`);
 
   const startTime = Date.now();
   let lastStatus = null;

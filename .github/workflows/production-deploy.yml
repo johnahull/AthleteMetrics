@@ -67,33 +67,20 @@ jobs:
           ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
 
       - name: Run security audit
+        id: security-audit
+        run: ./scripts/security-audit.sh
+
+      - name: Handle security audit failure
+        if: failure() && steps.security-audit.outcome == 'failure'
         run: |
-          # Run audit and capture output
-          npm audit --audit-level=moderate --json > audit-results.json || true
-
-          # Check for vulnerabilities
-          CRITICAL_COUNT=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json)
-          HIGH_COUNT=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json)
-          MODERATE_COUNT=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json)
-
-          echo "📊 Security Audit Results:"
-          echo "  Critical: $CRITICAL_COUNT"
-          echo "  High: $HIGH_COUNT"
-          echo "  Moderate: $MODERATE_COUNT"
-
-          # Fail on critical or high vulnerabilities
-          if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
-            echo "❌ Found $CRITICAL_COUNT critical and $HIGH_COUNT high severity vulnerabilities"
-            npm audit --audit-level=high
-            exit 1
-          fi
-
-          if [ "$MODERATE_COUNT" -gt 0 ]; then
-            echo "⚠️  Found $MODERATE_COUNT moderate severity vulnerabilities"
-            echo "Consider updating dependencies, but not blocking deployment"
-          fi
-
-          echo "✅ No high or critical vulnerabilities found"
+          echo "❌ Security audit failed - deployment BLOCKED"
+          echo ""
+          echo "🔧 To resolve:"
+          echo "1. Review audit results above"
+          echo "2. Update vulnerable dependencies: npm audit fix"
+          echo "3. For vulnerabilities without fixes, review alternatives"
+          echo "4. Re-run workflow after fixes are committed"
+          exit 1
 
       - name: Build application
         run: npm run build
@@ -113,12 +100,28 @@ jobs:
           echo "✅ Build verification successful"
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: npm install -g @railway/cli@3.17.7
 
       - name: Install PostgreSQL 17 client tools
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+
+          # Verify GPG key fingerprint with exact matching to prevent partial match attacks
+          FINGERPRINT=$(sudo gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/postgresql.gpg --fingerprint ACCC4CF8 2>/dev/null | grep -A1 "pub" | tail -n1 | tr -d ' ')
+          EXPECTED="B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+          if [ "$FINGERPRINT" != "$EXPECTED" ]; then
+            echo "❌ PostgreSQL GPG key fingerprint verification failed"
+            echo "Expected: $EXPECTED"
+            echo "Got: $FINGERPRINT"
+            exit 1
+          fi
+          echo "✅ PostgreSQL GPG key fingerprint verified"
+
+          # Make keyring immutable to prevent TOCTOU race condition
+          # This prevents modification between verification and usage
+          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
+
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           # Update alternatives to use PostgreSQL 17 by default
@@ -178,12 +181,12 @@ jobs:
           echo "🚀 Deploying to Railway Production..."
 
           # Capture current deployment ID for potential rollback (BEFORE deploying)
-          CURRENT_DEPLOYMENT=$(railway deployments list --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.data[0].id' || echo "")
+          CURRENT_DEPLOYMENT=$(railway deployments list --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --json | jq -r '.data[0].id' || echo "")
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
           echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
 
           # Deploy the application (migrations already applied above)
-          railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
+          railway up --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --environment production --detach
 
           echo "✅ Deployment initiated"
         env:

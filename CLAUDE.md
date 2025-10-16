@@ -297,3 +297,12 @@ The application runs as a **single-process Node.js server** without clustering:
 - `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)
 
 **Security Note**: Rate limiting bypasses are disabled by default and automatically disabled in production environments (NODE_ENV=production) regardless of environment variable settings. This provides an additional safeguard against accidental security vulnerabilities in production deployments.
+
+### Railway Configuration
+
+#### Deployment Configuration (`railway.json`)
+- **Healthcheck Timeout**: 90 seconds (reduced from 300s)
+  - **Rationale**: Express server typically starts in 5-15s, Neon WebSocket connection takes 2-5s
+  - **Safety Margin**: 90s provides 6x safety margin for cold starts
+  - **Platform Alignment**: Railway's default timeout is 100s, so 90s aligns with platform limits
+  - **Documentation**: See `railway.json` for current configuration

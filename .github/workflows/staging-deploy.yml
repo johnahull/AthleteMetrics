@@ -67,12 +67,28 @@ jobs:
           NODE_ENV: production
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: npm install -g @railway/cli@3.17.7
 
       - name: Install PostgreSQL 17 client tools
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+
+          # Verify GPG key fingerprint with exact matching to prevent partial match attacks
+          FINGERPRINT=$(sudo gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/postgresql.gpg --fingerprint ACCC4CF8 2>/dev/null | grep -A1 "pub" | tail -n1 | tr -d ' ')
+          EXPECTED="B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+          if [ "$FINGERPRINT" != "$EXPECTED" ]; then
+            echo "❌ PostgreSQL GPG key fingerprint verification failed"
+            echo "Expected: $EXPECTED"
+            echo "Got: $FINGERPRINT"
+            exit 1
+          fi
+          echo "✅ PostgreSQL GPG key fingerprint verified"
+
+          # Make keyring immutable to prevent TOCTOU race condition
+          # This prevents modification between verification and usage
+          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
+
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
           # Update alternatives to use PostgreSQL 17 by default
@@ -137,7 +153,7 @@ jobs:
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
             echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-            if railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach; then
+            if railway up --service "${{ secrets.RAILWAY_STAGING_SERVICE_ID }}" --detach; then
               echo "✅ Deployment initiated successfully"
               exit 0
             else
