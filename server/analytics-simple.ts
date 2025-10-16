@@ -394,7 +394,7 @@ export class AnalyticsService {
       })
       .from(measurements)
       .leftJoin(users, eq(measurements.userId, users.id))
-      .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+      .leftJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);
 
@@ -499,7 +499,7 @@ export class AnalyticsService {
         })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
-        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+        .leftJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
         .limit(10000); // Increased limit with proper safeguards

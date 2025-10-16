@@ -184,7 +184,7 @@ export class AnalyticsService {
       })
       .from(measurements)
       .leftJoin(users, eq(measurements.userId, users.id))
-      .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+      .leftJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
       .leftJoin(teams, eq(measurements.teamId, teams.id))
       .where(and(...allConditions));
   }
@@ -656,7 +656,7 @@ export class AnalyticsService {
       })
       .from(measurements)
       .leftJoin(users, eq(measurements.userId, users.id))
-      .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+      .leftJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);
 

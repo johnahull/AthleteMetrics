@@ -1126,4 +1126,58 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
     expect(softDeletedCoach.fullName).toBe('Test Coach'); // Full context preserved!
     expect(softDeletedCoach.deletedAt).toBeInstanceOf(Date);
   });
+
+  it('should include measurements from soft-deleted users in analytics queries', async () => {
+    // Import AnalyticsService
+    const { AnalyticsService } = await import('../../server/analytics-simple');
+    const analyticsService = new AnalyticsService();
+
+    // Create measurement for athlete
+    const [measurement] = await db.insert(measurements).values({
+      userId: athlete.id,
+      teamId: testTeam.id,
+      metric: 'VERTICAL_JUMP',
+      value: '30',
+      units: 'in',
+      age: 16,
+      date: '2024-01-01',
+      submittedBy: coach.id,
+      verifiedBy: coach.id,
+      isVerified: true
+    }).returning();
+
+    // Soft delete the athlete
+    await storage.deleteUser(athlete.id);
+
+    // Query analytics for the organization
+    const analyticsRequest = {
+      analysisType: 'intra_group' as const,
+      filters: {
+        organizationId: testOrg.id,
+        teams: [testTeam.id]
+      },
+      metrics: {
+        primary: 'VERTICAL_JUMP',
+        additional: []
+      },
+      timeframe: {
+        type: 'best' as const,
+        period: 'all_time' as const
+      }
+    };
+
+    const result = await analyticsService.getAnalyticsData(analyticsRequest);
+
+    // Verify measurement appears in analytics despite user being deleted
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].athleteId).toBe(athlete.id);
+    expect(result.data[0].athleteName).toBe('[Deleted User]'); // Name shows as deleted
+    expect(result.data[0].value).toBe(30);
+    expect(result.data[0].metric).toBe('VERTICAL_JUMP');
+
+    // Verify statistics are calculated correctly
+    expect(result.statistics['VERTICAL_JUMP']).toBeDefined();
+    expect(result.statistics['VERTICAL_JUMP'].count).toBe(1);
+    expect(result.statistics['VERTICAL_JUMP'].mean).toBe(30);
+  });
 });

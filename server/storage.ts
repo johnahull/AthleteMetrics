@@ -446,9 +446,12 @@ export class DatabaseStorage implements IStorage {
         .set({ userId: null as any })
         .where(eq(auditLogs.userId, id));
 
-      // SOFT DELETE: Mark user as deleted instead of removing the record
+      // SOFT DELETE: Mark user as deleted and inactive instead of removing the record
       await tx.update(users)
-        .set({ deletedAt: new Date() })
+        .set({
+          deletedAt: new Date(),
+          isActive: false
+        })
         .where(eq(users.id, id));
     });
   }
