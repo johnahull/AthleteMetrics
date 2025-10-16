@@ -100,7 +100,7 @@ describe('Organization Deletion Rate Limiting', () => {
     return agent;
   }
 
-  describe('Organization Deletion Rate Limiting', () => {
+  describe.skip('Organization Deletion Rate Limiting', () => {
     // NOTE: Rate limiting enforcement tests have been removed due to rate limiter state isolation issues.
     // See rate-limiting-security.test.ts for production safeguard tests that verify rate limits
     // cannot be bypassed in production environments.
@@ -109,7 +109,7 @@ describe('Organization Deletion Rate Limiting', () => {
     // to be refactored to use a factory pattern. See file header for more details.
   });
 
-  describe('Organization Status Update Rate Limiting', () => {
+  describe.skip('Organization Status Update Rate Limiting', () => {
     // NOTE: Rate limiting enforcement tests have been removed due to rate limiter state isolation issues.
     // See rate-limiting-security.test.ts for production safeguard tests.
   });
@@ -144,12 +144,12 @@ describe('Organization Deletion Rate Limiting', () => {
     }, 30000); // 30 second timeout
   });
 
-  describe('Composite Key Rate Limiting (IP + User ID)', () => {
+  describe.skip('Composite Key Rate Limiting (IP + User ID)', () => {
     // NOTE: Composite key tests have been removed due to rate limiter state isolation issues.
     // The keyGenerator function implementation can be reviewed in organization-routes.ts.
   });
 
-  describe('Rate Limit Bypasses (Development Mode)', () => {
+  describe.skip('Rate Limit Bypasses (Development Mode)', () => {
     // NOTE: Production safeguard tests have been moved to rate-limiting-security.test.ts
     // which verifies that rate limits cannot be bypassed in production environments.
   });
@@ -174,7 +174,7 @@ describe('Organization Deletion Rate Limiting', () => {
     });
   });
 
-  describe('Rate Limit Error Messages', () => {
+  describe.skip('Rate Limit Error Messages', () => {
     // NOTE: Error message tests have been removed due to rate limiter state isolation issues.
     // Rate limit error messages can be verified in rate-limiting-security.test.ts.
   });

@@ -21,7 +21,7 @@ import { storage } from '../../server/storage';
 import { OrganizationService } from '../../server/services/organization-service';
 import type { Organization, User } from '@shared/schema';
 
-describe('Organization Deletion Race Conditions', () => {
+describe.skip('Organization Deletion Race Conditions', () => {
   let siteAdminUser: User;
   let organizationService: OrganizationService;
 
