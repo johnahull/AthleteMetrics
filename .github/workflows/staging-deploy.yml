@@ -67,7 +67,7 @@ jobs:
           NODE_ENV: production
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli@3.17.7
+        run: npm install -g @railway/cli
 
       - name: Install PostgreSQL 17 client tools
         run: |
