@@ -197,7 +197,12 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // Authentication & Users
   async authenticateUser(username: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username),
+        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+      )
+    );
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -205,7 +210,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
+    const [user] = await db.select().from(users).where(
+      and(
+        arrayContains(users.emails, [email]),
+        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+      )
+    );
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -215,13 +225,21 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     // Use PostgreSQL array search with ANY operator
     const [user] = await db.select().from(users).where(
-      sql`${email} = ANY(${users.emails})`
+      and(
+        sql`${email} = ANY(${users.emails})`,
+        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+      )
     );
     return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username),
+        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+      )
+    );
     return user || undefined;
   }
 
@@ -277,12 +295,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(asc(users.lastName), asc(users.firstName));
+    return await db.select().from(users)
+      .where(sql`${users.deletedAt} IS NULL`) // Exclude soft-deleted users
+      .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
   async getSiteAdminUsers(): Promise<User[]> {
     return await db.select().from(users)
-      .where(eq(users.isSiteAdmin, true))
+      .where(and(
+        eq(users.isSiteAdmin, true),
+        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+      ))
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
@@ -291,7 +314,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, id),
+        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+      )
+    );
     return user || undefined;
   }
 
@@ -341,18 +369,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Deletes a user and all associated data in an atomic transaction.
+   * Soft deletes a user and handles associated data in an atomic transaction.
    *
-   * IMPORTANT DATA LOSS CONSIDERATIONS:
-   * - Measurements where user is the subject (userId) are DELETED
-   * - Measurements submitted by user (submittedBy) are DELETED, including measurements for other athletes
-   *   This is required because submittedBy is NOT NULL in the schema
-   * - If preserving measurement data is critical, consider reassigning to a system user instead of deleting
+   * SOFT DELETE: User record is marked as deleted but preserved
+   * - Sets deletedAt timestamp on user record
+   * - User account becomes inaccessible but data integrity is maintained
+   * - User can be queried with isNull(deletedAt) filter to exclude soft-deleted users
    *
-   * PRESERVED DATA (set to NULL):
-   * - Audit logs (compliance requirement - immutable audit trail)
-   * - Measurements verified by user (verifiedBy is nullable)
-   * - Invitations accepted/cancelled by user (preserve invitation history)
+   * HARD DELETIONS (fully removed):
+   * - Sessions (security requirement - explicit revocation)
+   * - Email verification tokens (no longer needed)
+   * - Athlete profiles (personal metadata)
+   * - User-team relationships (membership history not critical)
+   * - Invitations created BY user (invitation management)
+   * - Invitations FOR user (as athlete/playerId)
+   *
+   * PRESERVED DATA:
+   * - User record (soft deleted with deletedAt timestamp)
+   * - User-organization relationships (kept to preserve measurement organization context)
+   * - Measurements (NEVER TOUCHED - immutable snapshots in time)
+   *   - userId, submittedBy, verifiedBy remain as historical references
+   * - Audit logs (compliance requirement - immutable audit trail, userId set to NULL)
+   * - Invitations accepted/cancelled by user (preserve invitation history, set to NULL)
    */
   async deleteUser(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
@@ -401,8 +439,10 @@ export class DatabaseStorage implements IStorage {
         .set({ userId: null as any })
         .where(eq(auditLogs.userId, id));
 
-      // Finally, delete the user record
-      await tx.delete(users).where(eq(users.id, id));
+      // SOFT DELETE: Mark user as deleted instead of removing the record
+      await tx.update(users)
+        .set({ deletedAt: new Date() })
+        .where(eq(users.id, id));
     });
   }
 

@@ -3,7 +3,7 @@
  * Handles complex data aggregation and statistical analysis for charts
  */
 
-import { eq, sql, and, gte, lte, inArray, desc, asc, exists } from "drizzle-orm";
+import { eq, sql, and, gte, lte, inArray, desc, asc, exists, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, teams, userTeams, userOrganizations } from "@shared/schema";
 import type {
@@ -183,7 +183,10 @@ export class AnalyticsService {
         school: users.school
       })
       .from(measurements)
-      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(users, and(
+        eq(measurements.userId, users.id),
+        isNull(users.deletedAt) // Exclude soft-deleted users
+      ))
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .leftJoin(teams, eq(measurements.teamId, teams.id))
       .where(and(...allConditions));
@@ -655,7 +658,10 @@ export class AnalyticsService {
         count: sql<number>`count(*)::int`
       })
       .from(measurements)
-      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(users, and(
+        eq(measurements.userId, users.id),
+        isNull(users.deletedAt) // Exclude soft-deleted users
+      ))
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);

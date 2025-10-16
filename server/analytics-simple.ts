@@ -2,7 +2,7 @@
  * Simplified Analytics Service for initial testing
  */
 
-import { eq, and, inArray, gte, lte, sql, exists } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, sql, exists, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, userOrganizations, teams, userTeams } from "@shared/schema";
 import type {
@@ -393,7 +393,10 @@ export class AnalyticsService {
         count: sql<number>`count(*)::int`
       })
       .from(measurements)
-      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(users, and(
+        eq(measurements.userId, users.id),
+        isNull(users.deletedAt) // Exclude soft-deleted users
+      ))
       .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);
@@ -498,7 +501,10 @@ export class AnalyticsService {
           birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
         })
         .from(measurements)
-        .leftJoin(users, eq(measurements.userId, users.id))
+        .leftJoin(users, and(
+          eq(measurements.userId, users.id),
+          isNull(users.deletedAt) // Exclude soft-deleted users
+        ))
         .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))

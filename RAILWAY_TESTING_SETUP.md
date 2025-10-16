@@ -84,7 +84,7 @@ SESSION_SECRET=$(openssl rand -hex 32)
 # Set all required variables (using --environment flag since you're linked to testing)
 railway variables --set "SESSION_SECRET=$SESSION_SECRET"
 railway variables --set "ADMIN_USER=admin"
-railway variables --set "ADMIN_PASSWORD=TestingPass123!"
+railway variables --set "ADMIN_PASS=TestingPass123!"
 railway variables --set "ADMIN_EMAIL=testing@example.com"
 
 # Optional: Set Neon tier (if using Neon PostgreSQL)
