@@ -1052,7 +1052,7 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
   it('should exclude soft-deleted users from authentication', async () => {
     // Hash the password for authentication test
-    const bcrypt = await import('bcryptjs');
+    const bcrypt = await import('bcrypt');
     const hashedPassword = await bcrypt.hash('password123', 10);
 
     // Update athlete with hashed password

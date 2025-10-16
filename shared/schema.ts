@@ -132,9 +132,9 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
-  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility)
+  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility). NULL if user was deleted (preserves invitation history)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
-  invitedBy: varchar("invited_by").notNull().references(() => users.id),
+  invitedBy: varchar("invited_by").references(() => users.id), // User who sent invitation. NULL if user was deleted (preserves invitation history)
   token: text("token").notNull().unique(),
   // Enhanced tracking fields
   status: text("status").default("pending"), // "pending", "accepted", "expired", "cancelled" - made nullable for backward compatibility
