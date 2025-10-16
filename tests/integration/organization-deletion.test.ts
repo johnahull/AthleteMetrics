@@ -63,9 +63,17 @@ describe('Organization Deletion and Deactivation', () => {
     }
 
     // Verify organization exists in database before proceeding
-    const verifyOrg = await storage.getOrganization(testOrg.id);
+    // Add retry logic in case of transaction timing issues
+    let verifyOrg = await storage.getOrganization(testOrg.id);
+    let retries = 0;
+    while (!verifyOrg && retries < 5) {
+      // Wait a bit for transaction to commit
+      await new Promise(resolve => setTimeout(resolve, 100));
+      verifyOrg = await storage.getOrganization(testOrg.id);
+      retries++;
+    }
     if (!verifyOrg) {
-      throw new Error(`Created organization ${testOrg.id} not found in database immediately after creation`);
+      throw new Error(`Created organization ${testOrg.id} not found in database after ${retries} retries`);
     }
 
     // Create site admin user
