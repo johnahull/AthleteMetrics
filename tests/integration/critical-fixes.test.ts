@@ -90,20 +90,38 @@ describe('Critical Fix 2: User-Team Soft Delete', () => {
   });
 
   afterEach(async () => {
-    // Clean up in reverse order of dependencies
-    // Foreign key relationships require: child tables before parent tables
-    await db.delete(sessions).where(sql`true`);
-    await db.delete(measurements).where(sql`true`);
-    await db.delete(auditLogs).where(sql`true`);
-    await db.delete(invitations).where(sql`true`);
-    await db.delete(emailVerificationTokens).where(sql`true`);
-    await db.delete(athleteProfiles).where(sql`true`);
-    await db.delete(userTeams).where(sql`true`);
-    await db.delete(userOrganizations).where(sql`true`);
-    await db.delete(users).where(sql`true`);
-    await db.delete(teams).where(sql`true`);
-    // Organizations must be deleted LAST (after userOrganizations and teams)
-    await db.delete(organizations).where(sql`true`);
+    // Clean up only data from THIS test to avoid interfering with parallel tests
+    // Delete in reverse order of dependencies: child tables before parent tables
+
+    // Delete child records for this test's users
+    if (athlete?.id) {
+      await db.delete(sessions).where(eq(sessions.userId, athlete.id));
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, athlete.id));
+      await db.delete(athleteProfiles).where(eq(athleteProfiles.userId, athlete.id));
+      await db.delete(userTeams).where(eq(userTeams.userId, athlete.id));
+      // storage.deleteUser() preserves userOrganizations, so we must delete them manually
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
+      await db.delete(users).where(eq(users.id, athlete.id));
+    }
+
+    if (coach?.id) {
+      await db.delete(sessions).where(eq(sessions.userId, coach.id));
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, coach.id));
+      await db.delete(users).where(eq(users.id, coach.id));
+    }
+
+    // Delete team and organization
+    if (testTeam?.id) {
+      await db.delete(teams).where(eq(teams.id, testTeam.id));
+    }
+
+    if (testOrg?.id) {
+      // Clean up any remaining audit logs or invitations for this org
+      await db.delete(auditLogs).where(eq(auditLogs.resourceId, testOrg.id));
+      await db.delete(invitations).where(eq(invitations.organizationId, testOrg.id));
+      await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+    }
   });
 
   it('should soft delete user-team relationships instead of hard delete', async () => {
@@ -192,17 +210,27 @@ describe('Critical Fix 3: Invitation History Preservation', () => {
   });
 
   afterEach(async () => {
-    await db.delete(sessions).where(sql`true`);
-    await db.delete(measurements).where(sql`true`);
-    await db.delete(auditLogs).where(sql`true`);
-    await db.delete(invitations).where(sql`true`);
-    await db.delete(emailVerificationTokens).where(sql`true`);
-    await db.delete(athleteProfiles).where(sql`true`);
-    await db.delete(userTeams).where(sql`true`);
-    await db.delete(userOrganizations).where(sql`true`);
-    await db.delete(users).where(sql`true`);
-    await db.delete(teams).where(sql`true`);
-    await db.delete(organizations).where(sql`true`);
+    // Clean up only data from THIS test to avoid interfering with parallel tests
+    if (admin?.id) {
+      await db.delete(sessions).where(eq(sessions.userId, admin.id));
+      await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, admin.id));
+      await db.delete(athleteProfiles).where(eq(athleteProfiles.userId, admin.id));
+      // storage.deleteUser() preserves userOrganizations
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, admin.id));
+      await db.delete(users).where(eq(users.id, admin.id));
+    }
+
+    if (coach?.id) {
+      await db.delete(sessions).where(eq(sessions.userId, coach.id));
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, coach.id));
+      await db.delete(users).where(eq(users.id, coach.id));
+    }
+
+    if (testOrg?.id) {
+      await db.delete(auditLogs).where(eq(auditLogs.resourceId, testOrg.id));
+      await db.delete(invitations).where(eq(invitations.organizationId, testOrg.id));
+      await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+    }
   });
 
   it('should preserve invitation history instead of deleting invitations sent BY user', async () => {
@@ -287,17 +315,23 @@ describe('Critical Fix 4: Soft Delete Test Coverage', () => {
   });
 
   afterEach(async () => {
-    await db.delete(sessions).where(sql`true`);
-    await db.delete(measurements).where(sql`true`);
-    await db.delete(auditLogs).where(sql`true`);
-    await db.delete(invitations).where(sql`true`);
-    await db.delete(emailVerificationTokens).where(sql`true`);
-    await db.delete(athleteProfiles).where(sql`true`);
-    await db.delete(userTeams).where(sql`true`);
-    await db.delete(userOrganizations).where(sql`true`);
-    await db.delete(users).where(sql`true`);
-    await db.delete(teams).where(sql`true`);
-    await db.delete(organizations).where(sql`true`);
+    // Clean up only data from THIS test to avoid interfering with parallel tests
+    if (athlete?.id) {
+      await db.delete(sessions).where(eq(sessions.userId, athlete.id));
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, athlete.id));
+      await db.delete(athleteProfiles).where(eq(athleteProfiles.userId, athlete.id));
+      await db.delete(userTeams).where(eq(userTeams.userId, athlete.id));
+      // storage.deleteUser() preserves userOrganizations
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
+      await db.delete(users).where(eq(users.id, athlete.id));
+    }
+
+    if (testOrg?.id) {
+      await db.delete(auditLogs).where(eq(auditLogs.resourceId, testOrg.id));
+      await db.delete(invitations).where(eq(invitations.organizationId, testOrg.id));
+      await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+    }
   });
 
   it('should verify user record exists in DB with deletedAt timestamp', async () => {
@@ -401,17 +435,23 @@ describe('Critical Fix 7: GDPR Hard Delete', () => {
   });
 
   afterEach(async () => {
-    await db.delete(sessions).where(sql`true`);
-    await db.delete(measurements).where(sql`true`);
-    await db.delete(auditLogs).where(sql`true`);
-    await db.delete(invitations).where(sql`true`);
-    await db.delete(emailVerificationTokens).where(sql`true`);
-    await db.delete(athleteProfiles).where(sql`true`);
-    await db.delete(userTeams).where(sql`true`);
-    await db.delete(userOrganizations).where(sql`true`);
-    await db.delete(users).where(sql`true`);
-    await db.delete(teams).where(sql`true`);
-    await db.delete(organizations).where(sql`true`);
+    // Clean up only data from THIS test to avoid interfering with parallel tests
+    // Note: hardDeleteUser() removes all data, but we still need to clean up if test fails before calling it
+    if (athlete?.id) {
+      await db.delete(sessions).where(eq(sessions.userId, athlete.id));
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, athlete.id));
+      await db.delete(athleteProfiles).where(eq(athleteProfiles.userId, athlete.id));
+      await db.delete(userTeams).where(eq(userTeams.userId, athlete.id));
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
+      await db.delete(users).where(eq(users.id, athlete.id));
+    }
+
+    if (testOrg?.id) {
+      await db.delete(auditLogs).where(eq(auditLogs.resourceId, testOrg.id));
+      await db.delete(invitations).where(eq(invitations.organizationId, testOrg.id));
+      await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+    }
   });
 
   it('should permanently delete all user data for GDPR compliance', async () => {
