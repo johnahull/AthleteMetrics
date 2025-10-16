@@ -40,6 +40,12 @@ if (isProduction) {
 // This prevents connection exhaustion and optimizes costs
 const NEON_TIER = (process.env.NEON_TIER || 'pro').toLowerCase();
 
+// Validate NEON_TIER is a valid tier
+const VALID_TIERS = ['free', 'pro', 'scale'] as const;
+if (!VALID_TIERS.includes(NEON_TIER as any)) {
+  console.warn(`⚠️ Invalid NEON_TIER "${NEON_TIER}", defaulting to "pro". Valid values: ${VALID_TIERS.join(', ')}`);
+}
+
 // Connection pool configurations per Neon tier
 // See: https://neon.tech/docs/connect/connection-pooling
 interface PoolConfig {
