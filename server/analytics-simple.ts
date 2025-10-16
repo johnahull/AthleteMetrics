@@ -357,12 +357,16 @@ export class AnalyticsService {
    * Used to show data availability in metric selector
    */
   async getMetricsAvailability(filters: AnalyticsFilters): Promise<Record<string, number>> {
+    // Use teams.organizationId OR userOrganizations.organizationId to support soft-deleted users
+    // Soft-deleted users maintain measurements through team → organization path
     const conditions = [
       eq(measurements.isVerified, true),
-      eq(userOrganizations.organizationId, filters.organizationId)
+      sql`(${teams.organizationId} = ${filters.organizationId} OR ${userOrganizations.organizationId} = ${filters.organizationId})`
     ];
 
     // Apply team filter - filter by athlete team membership
+    // Note: Don't filter by userTeams.isActive to include measurements from soft-deleted users
+    // (Level 2 Immutability - measurements preserved even after user deletion)
     if (filters.teams && filters.teams.length > 0) {
       conditions.push(
         exists(
@@ -370,8 +374,7 @@ export class AnalyticsService {
             .where(
               and(
                 eq(userTeams.userId, users.id),
-                inArray(userTeams.teamId, filters.teams),
-                eq(userTeams.isActive, true)
+                inArray(userTeams.teamId, filters.teams)
               )
             )
         )
@@ -387,14 +390,16 @@ export class AnalyticsService {
     // Date filtering is handled by timeframe configuration in the query layer
 
     // Query measurement counts per metric
+    // Use LEFT JOIN to include measurements from soft-deleted users (preserves historical data)
     const results = await db
       .select({
         metric: measurements.metric,
         count: sql<number>`count(*)::int`
       })
       .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id))
-      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(teams, eq(measurements.teamId, teams.id))
       .where(and(...conditions))
       .groupBy(measurements.metric);
 
@@ -440,9 +445,11 @@ export class AnalyticsService {
       }
 
       // Build where conditions
+      // Use teams.organizationId OR userOrganizations.organizationId to support soft-deleted users
+      // Soft-deleted users maintain measurements through team → organization path
       const whereConditions = [
         eq(measurements.isVerified, true),
-        eq(userOrganizations.organizationId, request.filters.organizationId),
+        sql`(${teams.organizationId} = ${request.filters.organizationId} OR ${userOrganizations.organizationId} = ${request.filters.organizationId})`,
         inArray(measurements.metric, allMetrics),
       ];
 
@@ -450,14 +457,15 @@ export class AnalyticsService {
       if (request.filters.teams && request.filters.teams.length > 0) {
         // Filter to only include measurements from athletes who belong to the selected teams
         // This narrows down the comparison group, regardless of individual athlete being analyzed
+        // Note: Don't filter by userTeams.isActive to include measurements from soft-deleted users
+        // (Level 2 Immutability - measurements preserved even after user deletion)
         whereConditions.push(
           exists(
             db.select().from(userTeams)
               .where(
                 and(
                   eq(userTeams.userId, users.id),
-                  inArray(userTeams.teamId, request.filters.teams),
-                  eq(userTeams.isActive, true)
+                  inArray(userTeams.teamId, request.filters.teams)
                 )
               )
           )
@@ -484,6 +492,7 @@ export class AnalyticsService {
       whereConditions.push(lte(measurements.date, formatDateForDatabase(endDate)));
 
       // Query to get basic data
+      // Use LEFT JOIN to include measurements from soft-deleted users (Level 2 Immutability)
       const data: QueryResult[] = await db
         .select({
           measurementId: measurements.id,
@@ -492,14 +501,20 @@ export class AnalyticsService {
           value: measurements.value,
           date: measurements.date,
           teamId: measurements.teamId,
-          athleteName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+          // Show "[Deleted User]" for soft-deleted users, preserving privacy while maintaining analytics
+          athleteName: sql<string>`
+            CASE
+              WHEN ${users.deletedAt} IS NOT NULL THEN '[Deleted User]'
+              ELSE ${users.firstName} || ' ' || ${users.lastName}
+            END
+          `,
           teamName: teams.name,
           gender: users.gender,
           birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
         })
         .from(measurements)
-        .innerJoin(users, eq(measurements.userId, users.id))
-        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
         .limit(10000); // Increased limit with proper safeguards

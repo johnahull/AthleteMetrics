@@ -66,6 +66,7 @@ export const users = pgTable("users", {
   // System fields
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  deletedAt: timestamp("deleted_at"), // Soft delete - user marked as deleted but data preserved
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -93,9 +94,11 @@ export const userTeams = pgTable("user_teams", {
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id), // Changed from playerId to userId
-  submittedBy: varchar("submitted_by").notNull().references(() => users.id),
-  verifiedBy: varchar("verified_by").references(() => users.id),
+  // Historical reference fields - NO foreign key constraints
+  // These are immutable snapshots in time that may reference deleted users
+  userId: varchar("user_id").notNull(), // Athlete - historical reference (no FK)
+  submittedBy: varchar("submitted_by").notNull(), // Who recorded it - historical reference (no FK)
+  verifiedBy: varchar("verified_by"), // Who verified it - historical reference (no FK)
   isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement
@@ -129,9 +132,9 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
-  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility)
+  playerId: varchar("player_id").references(() => users.id, { onDelete: 'set null' }), // Reference to existing athlete (kept as playerId for DB compatibility). NULL if user was deleted (preserves invitation history)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
-  invitedBy: varchar("invited_by").notNull().references(() => users.id),
+  invitedBy: varchar("invited_by").references(() => users.id, { onDelete: 'set null' }), // User who sent invitation. NULL if user was deleted (preserves invitation history)
   token: text("token").notNull().unique(),
   // Enhanced tracking fields
   status: text("status").default("pending"), // "pending", "accepted", "expired", "cancelled" - made nullable for backward compatibility
@@ -139,9 +142,9 @@ export const invitations = pgTable("invitations", {
   emailSent: boolean("email_sent").default(false).notNull(),
   emailSentAt: timestamp("email_sent_at"),
   acceptedAt: timestamp("accepted_at"),
-  acceptedBy: varchar("accepted_by").references(() => users.id), // User ID created from invitation
+  acceptedBy: varchar("accepted_by").references(() => users.id, { onDelete: 'set null' }), // User ID created from invitation
   cancelledAt: timestamp("cancelled_at"),
-  cancelledBy: varchar("cancelled_by").references(() => users.id),
+  cancelledBy: varchar("cancelled_by").references(() => users.id, { onDelete: 'set null' }),
   lastAttemptAt: timestamp("last_attempt_at"), // Track failed acceptance attempts
   attemptCount: integer("attempt_count").default(0).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
