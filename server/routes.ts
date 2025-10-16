@@ -3511,7 +3511,7 @@ export async function registerRoutes(app: Express) {
       // Enrich with additional data
       const enrichedInvitations = await Promise.all(
         filteredInvitations.map(async (invitation) => {
-          const inviter = await storage.getUser(invitation.invitedBy);
+          const inviter = invitation.invitedBy ? await storage.getUser(invitation.invitedBy) : null;
           const organization = await storage.getOrganization(invitation.organizationId);
 
           return {
