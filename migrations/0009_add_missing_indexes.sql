@@ -12,22 +12,23 @@
 
 -- Composite index on user_organizations for team roster queries
 -- Query pattern: SELECT * FROM user_organizations WHERE user_id = ? AND organization_id = ?
-CREATE INDEX IF NOT EXISTS idx_user_organizations_user_org
+-- Using CONCURRENTLY to avoid table locks during production deployment
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_organizations_user_org
 ON user_organizations(user_id, organization_id);
 
 -- Composite index on user_organizations for org user lookups
 -- Query pattern: SELECT * FROM user_organizations WHERE organization_id = ? AND user_id = ?
-CREATE INDEX IF NOT EXISTS idx_user_organizations_org_user
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_organizations_org_user
 ON user_organizations(organization_id, user_id);
 
 -- Composite index on user_teams for athlete team queries
 -- Query pattern: SELECT * FROM user_teams WHERE user_id = ? AND team_id = ?
-CREATE INDEX IF NOT EXISTS idx_user_teams_user_team
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_teams_user_team
 ON user_teams(user_id, team_id);
 
 -- Composite index on user_teams for team roster queries
 -- Query pattern: SELECT * FROM user_teams WHERE team_id = ? AND user_id = ?
-CREATE INDEX IF NOT EXISTS idx_user_teams_team_user
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_teams_team_user
 ON user_teams(team_id, user_id);
 
 -- Add comments for documentation
