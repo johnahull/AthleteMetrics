@@ -357,9 +357,11 @@ export class AnalyticsService {
    * Used to show data availability in metric selector
    */
   async getMetricsAvailability(filters: AnalyticsFilters): Promise<Record<string, number>> {
+    // Use teams.organizationId OR userOrganizations.organizationId to support soft-deleted users
+    // Soft-deleted users maintain measurements through team → organization path
     const conditions = [
       eq(measurements.isVerified, true),
-      eq(userOrganizations.organizationId, filters.organizationId)
+      sql`(${teams.organizationId} = ${filters.organizationId} OR ${userOrganizations.organizationId} = ${filters.organizationId})`
     ];
 
     // Apply team filter - filter by athlete team membership
@@ -396,6 +398,7 @@ export class AnalyticsService {
       .from(measurements)
       .leftJoin(users, eq(measurements.userId, users.id))
       .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(teams, eq(measurements.teamId, teams.id))
       .where(and(...conditions))
       .groupBy(measurements.metric);
 
@@ -441,9 +444,11 @@ export class AnalyticsService {
       }
 
       // Build where conditions
+      // Use teams.organizationId OR userOrganizations.organizationId to support soft-deleted users
+      // Soft-deleted users maintain measurements through team → organization path
       const whereConditions = [
         eq(measurements.isVerified, true),
-        eq(userOrganizations.organizationId, request.filters.organizationId),
+        sql`(${teams.organizationId} = ${request.filters.organizationId} OR ${userOrganizations.organizationId} = ${request.filters.organizationId})`,
         inArray(measurements.metric, allMetrics),
       ];
 
