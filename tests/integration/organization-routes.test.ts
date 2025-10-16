@@ -65,6 +65,13 @@ beforeAll(async () => {
       password: process.env.ADMIN_PASSWORD || 'TestPassword123!',
     });
 
+  if (loginResponse.status !== 200 || !loginResponse.headers['set-cookie']) {
+    throw new Error(
+      `Login failed (status: ${loginResponse.status}). ` +
+      `Ensure ADMIN_PASSWORD environment variable matches the initialized admin user password.`
+    );
+  }
+
   authCookie = loginResponse.headers['set-cookie'][0];
 });
 
