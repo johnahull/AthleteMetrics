@@ -91,6 +91,7 @@ describe('Critical Fix 2: User-Team Soft Delete', () => {
 
   afterEach(async () => {
     // Clean up in reverse order of dependencies
+    // Foreign key relationships require: child tables before parent tables
     await db.delete(sessions).where(sql`true`);
     await db.delete(measurements).where(sql`true`);
     await db.delete(auditLogs).where(sql`true`);
@@ -101,6 +102,7 @@ describe('Critical Fix 2: User-Team Soft Delete', () => {
     await db.delete(userOrganizations).where(sql`true`);
     await db.delete(users).where(sql`true`);
     await db.delete(teams).where(sql`true`);
+    // Organizations must be deleted LAST (after userOrganizations and teams)
     await db.delete(organizations).where(sql`true`);
   });
 
