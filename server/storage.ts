@@ -409,17 +409,11 @@ export class DatabaseStorage implements IStorage {
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
-      // ✅ KEEP user-organization relationships to preserve measurement organization context
-      // This allows measurements to still be filtered by organization even after user deletion
-      // Without this, measurements would become orphaned and unable to be queried by org
-      // Note: userOrganizations records for deleted users are harmless and preserve data integrity
-      //
-      // CLEANUP STRATEGY: These orphaned relationships can be cleaned up periodically with:
-      //   DELETE FROM user_organizations WHERE user_id IN (
-      //     SELECT id FROM users WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '1 year'
-      //   );
-      // This should only be done after confirming all measurements from that user are no longer
-      // needed for analytics/reporting. Consider archiving measurements first if needed.
+      // Delete user-organization relationships
+      // Note: Measurements can still be queried by organization via:
+      //   measurements → teamId → teams.organizationId
+      // This path remains intact even after user deletion since measurements are immutable
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
       // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
       // userId, submittedBy, and verifiedBy remain as historical references
@@ -1527,7 +1521,12 @@ export class DatabaseStorage implements IStorage {
   // Legacy methods for backward compatibility - delegate to athlete methods
 
   async getAthlete(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      )
+    );
     if (!user) return undefined;
 
     const userTeams = await this.getUserTeams(user.id);
@@ -1763,7 +1762,8 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(users.firstName, firstName),
         eq(users.lastName, lastName),
-        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`
+        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`,
+        isNull(users.deletedAt)
       ));
 
     if (!user) return undefined;
@@ -2145,7 +2145,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get submitter info to determine if auto-verify
-    const [submitter] = await db.select().from(users).where(eq(users.id, submittedBy));
+    const [submitter] = await db.select().from(users).where(
+      and(
+        eq(users.id, submittedBy),
+        isNull(users.deletedAt)
+      )
+    );
 
     // Check if submitter is site admin or has coach/org_admin role in any organization
     let isCoach = submitter?.isSiteAdmin === true;
@@ -2356,7 +2361,12 @@ export class DatabaseStorage implements IStorage {
 
   // Enhanced Authentication Methods Implementation
   async findUserById(userId: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, userId),
+        isNull(users.deletedAt)
+      )
+    );
     return user || null;
   }
 
