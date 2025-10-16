@@ -1167,9 +1167,13 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           label: (context) => {
             const rawData = context.raw as any;
             // Get metric from rawData first, fallback to statistics keys
-            const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
+            const parsedX = context.parsed.x;
+            const parsedY = context.parsed.y;
+            if (parsedX === null || parsedY === null) return '';
+
+            const metric = rawData?.metric || Object.keys(statistics || {})[parsedX];
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-            const value = context.parsed.y;
+            const value = parsedY;
 
             // Format value with dual display for FLY10_TIME
             const formattedValue = isFly10Metric(metric)
@@ -1187,7 +1191,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           afterLabel: (context) => {
             const rawData = context.raw as any;
             // Get metric from rawData first, fallback to statistics keys
-            const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
+            const parsedX = context.parsed.x;
+            const parsedY = context.parsed.y;
+            if (parsedX === null || parsedY === null) return [];
+
+            const metric = rawData?.metric || Object.keys(statistics || {})[parsedX];
             const stats = statistics?.[metric];
             const result = [];
 
@@ -1206,7 +1214,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   .filter(d => d.metric === metric)
                   .map(d => d.value)
                   .sort((a, b) => a - b);
-                const rank = allValues.filter(v => v < context.parsed.y).length;
+                const rank = allValues.filter(v => v < parsedY).length;
 
                 // For "lower is better" metrics, invert percentile so high percentile = better performance
                 const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];

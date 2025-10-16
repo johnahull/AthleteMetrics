@@ -153,6 +153,7 @@ export function BarChart({
           },
           label: (context) => {
             const value = context.parsed.x;
+            if (value === null) return '';
 
             // Format value with dual display for FLY10_TIME
             const formattedValue = barData?.primaryMetric && isFly10Metric(barData.primaryMetric)
