@@ -20,6 +20,17 @@ import { spawn } from 'child_process';
 const POLL_INTERVAL = parseInt(process.env.DEPLOYMENT_POLL_INTERVAL || '5', 10) * 1000;
 const TIMEOUT = parseInt(process.env.DEPLOYMENT_TIMEOUT || '300', 10) * 1000;
 const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID;
+const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
+
+/**
+ * Sanitize output to prevent command injection via control characters
+ * Removes control characters and ANSI escape sequences
+ */
+function sanitizeOutput(str) {
+  if (!str) return '';
+  // Remove control characters (0x00-0x1F, 0x7F-0x9F) except newlines and tabs
+  return str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+}
 
 if (!RAILWAY_SERVICE_ID) {
   console.error('❌ RAILWAY_SERVICE_ID environment variable is required');
@@ -66,25 +77,37 @@ async function checkRailwayAuth() {
 
     let stdout = '';
     let stderr = '';
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
 
     proc.stdout.on('data', (data) => {
-      stdout += data.toString();
+      if (stdout.length < MAX_BUFFER_SIZE) {
+        stdout += data.toString();
+      } else if (!stdoutTruncated) {
+        stdoutTruncated = true;
+        console.warn('⚠️  stdout buffer limit reached, output truncated');
+      }
     });
 
     proc.stderr.on('data', (data) => {
-      stderr += data.toString();
+      if (stderr.length < MAX_BUFFER_SIZE) {
+        stderr += data.toString();
+      } else if (!stderrTruncated) {
+        stderrTruncated = true;
+        console.warn('⚠️  stderr buffer limit reached, output truncated');
+      }
     });
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`Railway CLI authentication failed. Please check RAILWAY_TOKEN environment variable. Error: ${stderr}`));
+        reject(new Error(`Railway CLI authentication failed. Please check RAILWAY_TOKEN environment variable. Error: ${sanitizeOutput(stderr)}`));
       } else {
         resolve(stdout.trim());
       }
     });
 
     proc.on('error', (err) => {
-      reject(new Error(`Failed to verify Railway authentication: ${err.message}`));
+      reject(new Error(`Failed to verify Railway authentication: ${sanitizeOutput(err.message)}`));
     });
   });
 }
@@ -101,31 +124,43 @@ async function railwayCommand(args) {
 
     let stdout = '';
     let stderr = '';
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
 
     proc.stdout.on('data', (data) => {
-      stdout += data.toString();
+      if (stdout.length < MAX_BUFFER_SIZE) {
+        stdout += data.toString();
+      } else if (!stdoutTruncated) {
+        stdoutTruncated = true;
+        console.warn('⚠️  stdout buffer limit reached, output truncated');
+      }
     });
 
     proc.stderr.on('data', (data) => {
-      stderr += data.toString();
+      if (stderr.length < MAX_BUFFER_SIZE) {
+        stderr += data.toString();
+      } else if (!stderrTruncated) {
+        stderrTruncated = true;
+        console.warn('⚠️  stderr buffer limit reached, output truncated');
+      }
     });
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(`Railway CLI exited with code ${code}: ${stderr}`));
+        reject(new Error(`Railway CLI exited with code ${code}: ${sanitizeOutput(stderr)}`));
       } else {
         // Check for empty output before parsing
         if (!stdout || stdout.trim().length === 0) {
-          reject(new Error(`Railway CLI returned empty output. stderr: ${stderr}`));
+          reject(new Error(`Railway CLI returned empty output. stderr: ${sanitizeOutput(stderr)}`));
           return;
         }
 
         try {
           resolve(JSON.parse(stdout));
         } catch (err) {
-          // Include partial stdout for debugging
+          // Include partial stdout for debugging (sanitized)
           const preview = stdout.length > 200 ? stdout.substring(0, 200) + '...' : stdout;
-          reject(new Error(`Failed to parse Railway CLI output: ${err.message}\nOutput preview: ${preview}`));
+          reject(new Error(`Failed to parse Railway CLI output: ${sanitizeOutput(err.message)}\nOutput preview: ${sanitizeOutput(preview)}`));
         }
       }
     });
@@ -172,8 +207,8 @@ async function waitForDeployment() {
   // Verify Railway CLI authentication before waiting
   // This provides faster feedback if auth is misconfigured
   console.log('🔐 Verifying Railway authentication...');
-  const user = await checkRailwayAuth();
-  console.log(`✅ Authenticated as: ${user}`);
+  await checkRailwayAuth();
+  console.log('✅ Authenticated successfully');
 
   // Initial delay to allow Railway API to register the new deployment
   // Without this, we may poll the previous deployment instead of the new one
