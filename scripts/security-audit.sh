@@ -38,6 +38,10 @@ if command -v jq &> /dev/null; then
   echo "✅ No high or critical vulnerabilities found"
 else
   # Fallback if jq is not available
+  # Note: Uses --audit-level=high (not moderate) because we cannot parse JSON
+  # to differentiate between blocking (critical/high) and non-blocking (moderate)
+  # This is intentionally stricter than the main path to ensure security
   echo "⚠️  jq not found, falling back to npm audit without JSON parsing"
+  echo "⚠️  Using --audit-level=high (stricter than main path due to no JSON parsing)"
   npm audit --audit-level=high
 fi

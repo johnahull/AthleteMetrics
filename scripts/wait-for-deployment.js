@@ -110,7 +110,8 @@ async function checkRailwayAuth() {
       if (code !== 0) {
         reject(new Error(`Railway CLI authentication failed. Please check RAILWAY_TOKEN environment variable. Error: ${sanitizeOutput(stderr)}`));
       } else {
-        resolve(stdout.trim());
+        // Don't return Railway username to prevent potential info disclosure
+        resolve();
       }
     });
 
