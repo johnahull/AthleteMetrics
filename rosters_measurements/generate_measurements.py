@@ -38,6 +38,16 @@ GENDER_ADJUSTMENTS = {
     "T_TEST": {"Male": 1.00, "Female": 1.08},          # Females ~8% slower
 }
 
+# Competitive level adjustments (multiplier applied to performance)
+# Level 1 = Elite (best performance), Level 5 = Beginner (lowest performance)
+COMPETITIVE_LEVEL_ADJUSTMENTS = {
+    1: 1.15,   # Elite: +15% better performance
+    2: 1.08,   # Advanced: +8% better
+    3: 1.00,   # Intermediate: baseline
+    4: 0.92,   # Recreational: -8% worse
+    5: 0.85,   # Beginner: -15% worse
+}
+
 def parse_args():
     p = argparse.ArgumentParser(description="Generate soccer testing measurements from a roster.")
     p.add_argument("--roster", required=True, help="Path to roster CSV")
@@ -103,8 +113,8 @@ def get_age_bracket(age):
     else:
         return "college_plus"
 
-def get_adjustment_factor(age, gender, metric, metric_spec):
-    """Calculate combined age + gender adjustment factor for a metric."""
+def get_adjustment_factor(age, gender, metric, metric_spec, competitive_level=None):
+    """Calculate combined age + gender + competitive level adjustment factor for a metric."""
     # Get age bracket multiplier
     bracket = get_age_bracket(age)
     age_mult = AGE_BRACKETS[bracket]
@@ -117,16 +127,23 @@ def get_adjustment_factor(age, gender, metric, metric_spec):
     else:
         gender_mult = metric_adjustments.get(gender, 1.00)
 
+    # Get competitive level multiplier (defaults to intermediate if missing)
+    if competitive_level is not None and competitive_level in COMPETITIVE_LEVEL_ADJUSTMENTS:
+        comp_level_mult = COMPETITIVE_LEVEL_ADJUSTMENTS[competitive_level]
+    else:
+        comp_level_mult = 1.00  # Default to intermediate baseline
+
     # For "better is lower" metrics (times), adjustments work differently
     # Lower performance = higher times, so we multiply by the inverse relationship
     if metric_spec["better"] == "lower":
         # Age: younger athletes are slower (higher times), so inverse age_mult
         # Gender: if female mult > 1.0 (slower), apply directly
+        # Competitive level: higher level = faster (lower times), so inverse comp_level_mult
         # Safeguard against division by zero (though current constants are all > 0)
-        combined = (1.0 / age_mult if age_mult != 0 else 1.0) * gender_mult
+        combined = (1.0 / age_mult if age_mult != 0 else 1.0) * gender_mult * (1.0 / comp_level_mult if comp_level_mult != 0 else 1.0)
     else:
         # For "better is higher" metrics (jumps, RSI), multiply directly
-        combined = age_mult * gender_mult
+        combined = age_mult * gender_mult * comp_level_mult
 
     return combined
 
@@ -142,12 +159,12 @@ def athlete_baseline_offsets(roster_rows):
         offsets[key] = per_metric
     return offsets
 
-def gen_value(spec, base_offset, day_index, jitter_sd, age=None, gender=None, metric=None):
-    # Apply age and gender adjustments to center baseline
+def gen_value(spec, base_offset, day_index, jitter_sd, age=None, gender=None, metric=None, competitive_level=None):
+    # Apply age, gender, and competitive level adjustments to center baseline
     center = spec["center"]
     # Explicitly check for None and empty string to handle all edge cases
     if age is not None and age != "" and gender and metric:
-        adjustment = get_adjustment_factor(age, gender, metric, spec)
+        adjustment = get_adjustment_factor(age, gender, metric, spec, competitive_level)
         center = center * adjustment
 
     # Trend over time: drift_per_day * day_index, plus trial noise
@@ -185,6 +202,11 @@ def main():
             gender = a.get("gender","")
             team = a.get("teamName","")
             birthDate = a.get("birthDate","")
+            # Read competitive level from roster (with fallback to intermediate)
+            try:
+                competitive_level = int(a.get("competitiveLevel", 3))
+            except (ValueError, TypeError):
+                competitive_level = 3  # Default to intermediate if invalid/missing
 
             for di, d in enumerate(sorted(dates)):
                 age = age_on(birthDate, d)
@@ -193,7 +215,7 @@ def main():
                     for trial in range(args.trials):
                         # Slightly higher within-session jitter than between-date drift
                         jitter_sd = spec["sd"] * 0.5
-                        val = gen_value(spec, per_metric_offset[metric], di, jitter_sd, age, gender, metric)
+                        val = gen_value(spec, per_metric_offset[metric], di, jitter_sd, age, gender, metric, competitive_level)
 
                         row = {
                             "firstName": key[0],
