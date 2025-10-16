@@ -393,11 +393,8 @@ export class AnalyticsService {
         count: sql<number>`count(*)::int`
       })
       .from(measurements)
-      .leftJoin(users, and(
-        eq(measurements.userId, users.id),
-        isNull(users.deletedAt) // Exclude soft-deleted users
-      ))
-      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(users, eq(measurements.userId, users.id))
+      .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);
 
@@ -501,11 +498,8 @@ export class AnalyticsService {
           birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
         })
         .from(measurements)
-        .leftJoin(users, and(
-          eq(measurements.userId, users.id),
-          isNull(users.deletedAt) // Exclude soft-deleted users
-        ))
-        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
         .limit(10000); // Increased limit with proper safeguards

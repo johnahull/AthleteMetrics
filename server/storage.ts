@@ -413,6 +413,13 @@ export class DatabaseStorage implements IStorage {
       // This allows measurements to still be filtered by organization even after user deletion
       // Without this, measurements would become orphaned and unable to be queried by org
       // Note: userOrganizations records for deleted users are harmless and preserve data integrity
+      //
+      // CLEANUP STRATEGY: These orphaned relationships can be cleaned up periodically with:
+      //   DELETE FROM user_organizations WHERE user_id IN (
+      //     SELECT id FROM users WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '1 year'
+      //   );
+      // This should only be done after confirming all measurements from that user are no longer
+      // needed for analytics/reporting. Consider archiving measurements first if needed.
 
       // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
       // userId, submittedBy, and verifiedBy remain as historical references
