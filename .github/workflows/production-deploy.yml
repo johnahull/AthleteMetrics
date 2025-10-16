@@ -100,7 +100,7 @@ jobs:
           echo "✅ Build verification successful"
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli
+        run: npm install -g @railway/cli@3.17.7
 
       - name: Install PostgreSQL 17 client tools
         run: |
@@ -117,6 +117,10 @@ jobs:
             exit 1
           fi
           echo "✅ PostgreSQL GPG key fingerprint verified"
+
+          # Make keyring immutable to prevent TOCTOU race condition
+          # This prevents modification between verification and usage
+          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
 
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
@@ -177,12 +181,12 @@ jobs:
           echo "🚀 Deploying to Railway Production..."
 
           # Capture current deployment ID for potential rollback (BEFORE deploying)
-          CURRENT_DEPLOYMENT=$(railway deployments list --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.data[0].id' || echo "")
+          CURRENT_DEPLOYMENT=$(railway deployments list --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --json | jq -r '.data[0].id' || echo "")
           echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
           echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
 
           # Deploy the application (migrations already applied above)
-          railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
+          railway up --service "${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}" --environment production --detach
 
           echo "✅ Deployment initiated"
         env:

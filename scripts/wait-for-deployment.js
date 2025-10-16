@@ -24,20 +24,38 @@ const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
 
 /**
  * Sanitize output to prevent command injection via control characters
- * Removes ANSI escape sequences and control characters
+ * Removes ANSI escape sequences, OSC sequences, control characters, and normalizes Unicode
  *
- * ANSI sequences: \x1B[ followed by parameters and command letter
- * Control chars: 0x00-0x1F (except \n, \t), 0x7F-0x9F
+ * Security considerations:
+ * - ANSI CSI sequences: \x1B[ followed by parameters and command letter
+ * - ANSI OSC sequences: \x1B] followed by params and \x07 or \x1B\\ terminator
+ * - Control chars: 0x00-0x1F (except \n, \t), 0x7F-0x9F
+ * - Carriage returns: Can be used to overwrite terminal output
+ * - Unicode normalization: Prevent homoglyph attacks
  */
 function sanitizeOutput(str) {
   if (!str) return '';
-  // Remove ANSI escape sequences (color codes, cursor control, etc.)
-  // Pattern: ESC [ <parameters> <command>
+
+  // Remove ANSI CSI escape sequences (color codes, cursor control, etc.)
+  // Pattern: ESC [ <parameters> <command letter>
   str = str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+
+  // Remove ANSI OSC (Operating System Command) sequences
+  // Pattern: ESC ] <params> (terminated by BEL \x07 or ESC \)
+  str = str.replace(/\x1B\].*?(?:\x07|\x1B\\)/g, '');
+
   // Remove other ANSI sequences: ESC followed by any character
   str = str.replace(/\x1B./g, '');
+
+  // Remove carriage returns (can overwrite previous output)
+  str = str.replace(/\r/g, '');
+
   // Remove control characters (0x00-0x1F, 0x7F-0x9F) except newlines and tabs
-  return str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+  str = str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+
+  // Unicode normalization to NFC (Canonical Composition)
+  // Prevents homoglyph attacks and ensures consistent representation
+  return str.normalize('NFC');
 }
 
 if (!RAILWAY_SERVICE_ID) {

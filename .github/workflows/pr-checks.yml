@@ -6,6 +6,11 @@ on:
       - main
       - develop
 
+# Explicit permissions following principle of least privilege
+permissions:
+  contents: read        # Read repository contents
+  pull-requests: read   # Read PR metadata
+
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
