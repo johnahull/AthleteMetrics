@@ -130,33 +130,31 @@ describe('Rate Limiting Security - Production Safeguards', () => {
 
     // Attempt to make multiple requests that would trigger rate limiting
     // Using athlete creation endpoint (limit: 20 per 15 minutes)
-    const requests: Promise<request.Response>[] = [];
+    // Execute sequentially for deterministic results
+    const responses: request.Response[] = [];
     const timestamp = Date.now();
 
     for (let i = 0; i < 25; i++) {
-      requests.push(
-        prodAgent
-          .post('/api/athletes')
-          .send({
-            firstName: `Athlete${i}`,
-            lastName: `RateLimit${timestamp}`,
-            email: `athlete-${i}-${timestamp}@test.com`,
-            sports: ['Track']
-          })
-      );
+      const response = await prodAgent
+        .post('/api/athletes')
+        .send({
+          firstName: `Athlete${i}`,
+          lastName: `RateLimit${timestamp}`,
+          email: `athlete-${i}-${timestamp}@test.com`,
+          sports: ['Track']
+        });
+      responses.push(response);
     }
-
-    // Execute all requests
-    const responses = await Promise.all(requests);
 
     // Count successful and rate-limited responses
     const successCount = responses.filter(r => r.status === 201).length;
     const rateLimitedCount = responses.filter(r => r.status === 429).length;
 
     // Verify that rate limiting WAS enforced despite bypass flag
-    // At least some requests should be rate limited (typically after 20 successful ones)
-    expect(rateLimitedCount).toBeGreaterThan(0);
-    expect(successCount).toBeLessThanOrEqual(20);
+    // Exactly 20 requests should succeed, rest should be rate limited
+    expect(successCount).toBe(20);
+    expect(rateLimitedCount).toBe(5);
+    expect(responses[20].status).toBe(429); // First blocked request
 
     // Verify rate limit response includes appropriate headers
     const rateLimitedResponse = responses.find(r => r.status === 429);
@@ -196,30 +194,29 @@ describe('Rate Limiting Security - Production Safeguards', () => {
       .expect(200);
 
     // Attempt to make multiple analytics requests (limit: 50 per 15 minutes by default)
-    const requests: Promise<request.Response>[] = [];
+    // Execute sequentially for deterministic results
+    const responses: request.Response[] = [];
 
     for (let i = 0; i < 55; i++) {
-      requests.push(
-        prodAgent
-          .get('/api/analytics/simple')
-          .query({
-            metric: 'FLY10_TIME',
-            startDate: '2024-01-01',
-            endDate: '2024-12-31'
-          })
-      );
+      const response = await prodAgent
+        .get('/api/analytics/simple')
+        .query({
+          metric: 'FLY10_TIME',
+          startDate: '2024-01-01',
+          endDate: '2024-12-31'
+        });
+      responses.push(response);
     }
-
-    // Execute all requests
-    const responses = await Promise.all(requests);
 
     // Count successful and rate-limited responses
     const successCount = responses.filter(r => r.status === 200).length;
     const rateLimitedCount = responses.filter(r => r.status === 429).length;
 
     // Verify that rate limiting WAS enforced despite bypass flag
-    expect(rateLimitedCount).toBeGreaterThan(0);
-    expect(successCount).toBeLessThanOrEqual(50);
+    // Exactly 50 requests should succeed, rest should be rate limited
+    expect(successCount).toBe(50);
+    expect(rateLimitedCount).toBe(5);
+    expect(responses[50].status).toBe(429); // First blocked request
 
     // Verify rate limit response
     const rateLimitedResponse = responses.find(r => r.status === 429);
