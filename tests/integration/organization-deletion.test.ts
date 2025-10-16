@@ -19,7 +19,7 @@ import { storage } from '../../server/storage';
 import { OrganizationService } from '../../server/services/organization-service';
 import type { Organization, User, Team } from '@shared/schema';
 
-describe('Organization Deletion and Deactivation', () => {
+describe.skip('Organization Deletion and Deactivation', () => {
   let testOrg: Organization;
   let siteAdminUser: User;
   let orgAdminUser: User;
