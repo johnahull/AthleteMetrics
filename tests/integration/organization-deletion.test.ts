@@ -45,6 +45,17 @@ describe('Organization Deletion and Deactivation', () => {
       description: 'Test organization for deletion tests',
     });
 
+    // Verify organization was created
+    if (!testOrg || !testOrg.id) {
+      throw new Error('Failed to create test organization - organization is null or missing ID');
+    }
+
+    // Verify organization exists in database before proceeding
+    const verifyOrg = await storage.getOrganization(testOrg.id);
+    if (!verifyOrg) {
+      throw new Error(`Created organization ${testOrg.id} not found in database immediately after creation`);
+    }
+
     // Create site admin user
     const siteAdminData = await storage.createUser({
       username: `test-siteadmin-del-${timestamp}`,
@@ -92,57 +103,74 @@ describe('Organization Deletion and Deactivation', () => {
 
   afterAll(async () => {
     // Cleanup - track errors but don't fail the test
+    // Add null checks in case beforeAll() failed partway through
     const errors: Error[] = [];
 
-    try {
-      // Remove users from organization first
-      await storage.removeUserFromOrganization(athleteUser.id, testOrg.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to remove athlete from org: ${error instanceof Error ? error.message : String(error)}`));
+    // Remove users from organization first (only if they exist and testOrg exists)
+    if (athleteUser && testOrg) {
+      try {
+        await storage.removeUserFromOrganization(athleteUser.id, testOrg.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to remove athlete from org: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    try {
-      await storage.removeUserFromOrganization(coachUser.id, testOrg.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to remove coach from org: ${error instanceof Error ? error.message : String(error)}`));
+    if (coachUser && testOrg) {
+      try {
+        await storage.removeUserFromOrganization(coachUser.id, testOrg.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to remove coach from org: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    try {
-      await storage.removeUserFromOrganization(orgAdminUser.id, testOrg.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to remove org admin from org: ${error instanceof Error ? error.message : String(error)}`));
+    if (orgAdminUser && testOrg) {
+      try {
+        await storage.removeUserFromOrganization(orgAdminUser.id, testOrg.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to remove org admin from org: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    // Delete users
-    try {
-      await storage.deleteUser(athleteUser.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to delete athlete user: ${error instanceof Error ? error.message : String(error)}`));
+    // Delete users (only if they exist)
+    if (athleteUser) {
+      try {
+        await storage.deleteUser(athleteUser.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to delete athlete user: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    try {
-      await storage.deleteUser(coachUser.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to delete coach user: ${error instanceof Error ? error.message : String(error)}`));
+    if (coachUser) {
+      try {
+        await storage.deleteUser(coachUser.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to delete coach user: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    try {
-      await storage.deleteUser(orgAdminUser.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to delete org admin user: ${error instanceof Error ? error.message : String(error)}`));
+    if (orgAdminUser) {
+      try {
+        await storage.deleteUser(orgAdminUser.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to delete org admin user: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    try {
-      await storage.deleteUser(siteAdminUser.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to delete site admin user: ${error instanceof Error ? error.message : String(error)}`));
+    if (siteAdminUser) {
+      try {
+        await storage.deleteUser(siteAdminUser.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to delete site admin user: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
-    // Delete organization (hard delete to cleanup)
-    try {
-      await storage.deleteOrganization(testOrg.id);
-    } catch (error) {
-      errors.push(new Error(`Failed to delete test organization: ${error instanceof Error ? error.message : String(error)}`));
+    // Delete organization (hard delete to cleanup, only if it exists)
+    if (testOrg) {
+      try {
+        await storage.deleteOrganization(testOrg.id);
+      } catch (error) {
+        errors.push(new Error(`Failed to delete test organization: ${error instanceof Error ? error.message : String(error)}`));
+      }
     }
 
     // Report all errors (but don't fail test - cleanup errors shouldn't fail passing tests)
