@@ -387,14 +387,15 @@ export class AnalyticsService {
     // Date filtering is handled by timeframe configuration in the query layer
 
     // Query measurement counts per metric
+    // Use LEFT JOIN to include measurements from soft-deleted users (preserves historical data)
     const results = await db
       .select({
         metric: measurements.metric,
         count: sql<number>`count(*)::int`
       })
       .from(measurements)
-      .innerJoin(users, eq(measurements.userId, users.id))
-      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(users, eq(measurements.userId, users.id))
+      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
       .where(and(...conditions))
       .groupBy(measurements.metric);
 
@@ -484,6 +485,7 @@ export class AnalyticsService {
       whereConditions.push(lte(measurements.date, formatDateForDatabase(endDate)));
 
       // Query to get basic data
+      // Use LEFT JOIN to include measurements from soft-deleted users (Level 2 Immutability)
       const data: QueryResult[] = await db
         .select({
           measurementId: measurements.id,
@@ -492,14 +494,20 @@ export class AnalyticsService {
           value: measurements.value,
           date: measurements.date,
           teamId: measurements.teamId,
-          athleteName: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+          // Show "[Deleted User]" for soft-deleted users, preserving privacy while maintaining analytics
+          athleteName: sql<string>`
+            CASE
+              WHEN ${users.deletedAt} IS NOT NULL THEN '[Deleted User]'
+              ELSE ${users.firstName} || ' ' || ${users.lastName}
+            END
+          `,
           teamName: teams.name,
           gender: users.gender,
           birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
         })
         .from(measurements)
-        .innerJoin(users, eq(measurements.userId, users.id))
-        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
         .limit(10000); // Increased limit with proper safeguards
