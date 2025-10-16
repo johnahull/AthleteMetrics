@@ -13,6 +13,13 @@ echo "🔍 Running npm security audit..."
 # Exit codes: 0 = no vulnerabilities, 1+ = vulnerabilities found (severity-dependent)
 npm audit --audit-level=moderate --json > audit-results.json || true
 
+# Validate that audit results were generated
+if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
+  echo "❌ Failed to generate audit results"
+  echo "This may indicate npm is not properly installed or configured"
+  exit 1
+fi
+
 # Check for vulnerabilities using jq (should be available in GitHub Actions)
 if command -v jq &> /dev/null; then
   CRITICAL_COUNT=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json)

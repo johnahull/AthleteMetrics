@@ -158,6 +158,12 @@ async function railwayCommand(args) {
       if (code !== 0) {
         reject(new Error(`Railway CLI exited with code ${code}: ${sanitizeOutput(stderr)}`));
       } else {
+        // Fail fast if buffer was truncated - JSON may be corrupt
+        if (stdoutTruncated || stderrTruncated) {
+          reject(new Error('Railway CLI output exceeded buffer limit (1MB). This may indicate an issue with the Railway CLI or deployment. Cannot safely parse potentially corrupt JSON.'));
+          return;
+        }
+
         // Check for empty output before parsing
         if (!stdout || stdout.trim().length === 0) {
           reject(new Error(`Railway CLI returned empty output. stderr: ${sanitizeOutput(stderr)}`));

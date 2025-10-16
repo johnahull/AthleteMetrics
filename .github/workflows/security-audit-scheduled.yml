@@ -36,7 +36,21 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const auditResults = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
+
+            // Handle potential missing or malformed audit-results.json
+            let auditResults;
+            try {
+              auditResults = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
+            } catch (err) {
+              console.error('❌ Failed to read audit results:', err.message);
+              console.error('This indicates the security audit script failed before generating results');
+              // Create minimal structure for issue creation
+              auditResults = {
+                metadata: {
+                  vulnerabilities: { critical: 0, high: 0, moderate: 0 }
+                }
+              };
+            }
 
             const critical = auditResults.metadata.vulnerabilities.critical || 0;
             const high = auditResults.metadata.vulnerabilities.high || 0;
