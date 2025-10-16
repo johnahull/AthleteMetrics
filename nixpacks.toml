@@ -9,3 +9,8 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "npm run start"
+
+# Include scripts and migrations directories in the production image
+[staticAssets]
+"scripts" = "scripts"
+"migrations" = "migrations"
