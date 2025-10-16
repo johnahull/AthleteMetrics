@@ -151,7 +151,7 @@ async function runMigrations() {
     await migrationClient.unsafe(`SET statement_timeout = '${stmtTimeout}'`);
     console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: ${stmtTimeout})`);
 
-    const migrationsFolder = path.join(process.cwd(), 'drizzle', 'migrations');
+    const migrationsFolder = path.join(process.cwd(), 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
     // VALIDATION: Check migrations folder exists and has migrations before attempting migration
@@ -235,7 +235,7 @@ async function runMigrations() {
     console.error(error.stack);
 
     console.error('\n💡 Troubleshooting:');
-    console.error('  1. Check migration files in drizzle/migrations/ for syntax errors');
+    console.error('  1. Check migration files in migrations/ for syntax errors');
     console.error('  2. Verify database connection is available');
     console.error('  3. Check if schema changes conflict with existing data');
     console.error('  4. Review docs/database-migration-rollback.md for recovery procedures');
