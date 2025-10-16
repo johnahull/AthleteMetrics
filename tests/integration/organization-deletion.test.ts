@@ -28,6 +28,18 @@ describe('Organization Deletion and Deactivation', () => {
   let organizationService: OrganizationService;
 
   beforeAll(async () => {
+    // Reset module variables to prevent issues with test retries
+    // @ts-ignore - TypeScript doesn't allow assigning undefined to non-optional types
+    testOrg = undefined;
+    // @ts-ignore
+    siteAdminUser = undefined;
+    // @ts-ignore
+    orgAdminUser = undefined;
+    // @ts-ignore
+    coachUser = undefined;
+    // @ts-ignore
+    athleteUser = undefined;
+
     // Validate DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
       throw new Error(
