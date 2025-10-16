@@ -586,11 +586,13 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify team memberships are deleted
+    // Verify team memberships are SOFT DELETED (isActive = false, leftAt set)
     const teamsAfter = await db.select()
       .from(userTeams)
       .where(eq(userTeams.userId, siteAdmin.id));
-    expect(teamsAfter).toHaveLength(0);
+    expect(teamsAfter).toHaveLength(1);
+    expect(teamsAfter[0].isActive).toBe(false);
+    expect(teamsAfter[0].leftAt).toBeTruthy();
   });
 
   it('should handle site admin deletion with all foreign key relationships in one operation', async () => {
@@ -881,10 +883,10 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const deletedAthlete = await storage.getUser(athlete.id);
     expect(deletedAthlete).toBeUndefined();
 
-    // Query measurements again using analytics-style query
+    // Query measurements again using analytics-style query via team → organization path
     // This should STILL return measurements because:
     // 1. We use leftJoin for users (not innerJoin)
-    // 2. We keep userOrganizations records (not deleted with user)
+    // 2. Measurements → teamId → teams.organizationId path remains intact
     // 3. COALESCE with deletedAt check shows "[Deleted User]" for soft-deleted users
     const measurementsAfterDeletion = await db
       .select({
@@ -895,10 +897,10 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
       })
       .from(measurements)
       .leftJoin(users, eq(measurements.userId, users.id))
-      .leftJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+      .leftJoin(teams, eq(measurements.teamId, teams.id))
       .where(
         sql`${measurements.isVerified} = true
-            AND ${userOrganizations.organizationId} = ${testOrg.id}`
+            AND ${teams.organizationId} = ${testOrg.id}`
       );
 
     // ✅ CRITICAL: Measurements should still appear in analytics
@@ -1018,9 +1020,11 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
     const userOrgs = await db.select().from(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
     expect(userOrgs).toHaveLength(1);
 
-    // Note: userTeams are deleted (hybrid approach - teams less critical than org membership)
+    // Note: userTeams are SOFT DELETED (preserves historical team membership)
     const userTeamsData = await db.select().from(userTeams).where(eq(userTeams.userId, athlete.id));
-    expect(userTeamsData).toHaveLength(0);
+    expect(userTeamsData).toHaveLength(1);
+    expect(userTeamsData[0].isActive).toBe(false);
+    expect(userTeamsData[0].leftAt).toBeTruthy();
 
     // Measurements always preserved
     const measurementsData = await db.select().from(measurements).where(sql`${measurements.userId} = ${athlete.id}`);
