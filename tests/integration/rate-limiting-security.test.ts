@@ -141,7 +141,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
           firstName: `Athlete${i}`,
           lastName: `RateLimit${timestamp}`,
           email: `athlete-${i}-${timestamp}@test.com`,
-          sports: ['Track']
+          sports: ['Soccer']
         });
       responses.push(response);
     }
@@ -257,7 +257,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
           firstName: `TestAthlete${i}`,
           lastName: `Bypass${timestamp}`,
           email: `test-bypass-${i}-${timestamp}@test.com`,
-          sports: ['Track']
+          sports: ['Soccer']
         });
       responses.push(response);
     }
