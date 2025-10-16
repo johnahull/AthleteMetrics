@@ -9,7 +9,7 @@
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/api/health",
-    "healthcheckTimeout": 60
+    "healthcheckTimeout": 300
   },
   "environments": {
     "production": {
@@ -29,9 +29,7 @@
       "variables": {
         "NODE_ENV": "testing",
         "NODE_OPTIONS": "--max-old-space-size=2048",
-        "ENABLE_DEBUG_LOGGING": "true",
-        "BYPASS_ANALYTICS_RATE_LIMIT": "true",
-        "BYPASS_GENERAL_RATE_LIMIT": "true"
+        "ENABLE_DEBUG_LOGGING": "true"
       }
     }
   }
