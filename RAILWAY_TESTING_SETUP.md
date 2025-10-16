@@ -116,7 +116,27 @@ Required variables you should see:
 - ✅ `NODE_ENV` (auto-set to "testing" from railway.json)
 - ✅ `NODE_OPTIONS` (auto-set from railway.json)
 
-### 6. Deploy to Testing Environment
+### 6. Apply Database Migrations
+
+After setting up the database, you must apply the database schema migrations:
+
+```bash
+# Apply all migrations to the testing database
+railway run --environment testing npm run db:push
+```
+
+This step is **required** before first deployment. It will:
+- Create all database tables and relationships
+- Apply soft delete support for users
+- Set up performance indexes for measurements
+- Configure the database schema to match the application
+
+**Troubleshooting:**
+- If you get connection errors, verify `DATABASE_URL` is set correctly
+- If migrations fail, check that the database is empty or compatible with the current schema version
+- You can verify the connection with: `railway run --environment testing psql $DATABASE_URL -c '\dt'`
+
+### 7. Deploy to Testing Environment
 
 ```bash
 # Deploy using the convenience script
@@ -128,7 +148,7 @@ railway up
 
 **Note:** The convenience scripts automatically switch to the testing environment before deploying.
 
-### 7. Monitor Deployment
+### 8. Monitor Deployment
 
 ```bash
 # Watch deployment logs
@@ -138,14 +158,14 @@ npm run logs:testing
 railway logs --follow
 ```
 
-### 8. Get Testing Environment URL
+### 9. Get Testing Environment URL
 
 ```bash
 railway status
 # Look for the deployment URL
 ```
 
-### 9. Test the Deployment
+### 10. Test the Deployment
 
 Visit your testing URL and verify:
 - ✅ Health check endpoint: `https://your-testing-url.up.railway.app/api/health`
