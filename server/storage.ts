@@ -340,6 +340,20 @@ export class DatabaseStorage implements IStorage {
     return updatedUser;
   }
 
+  /**
+   * Deletes a user and all associated data in an atomic transaction.
+   *
+   * IMPORTANT DATA LOSS CONSIDERATIONS:
+   * - Measurements where user is the subject (userId) are DELETED
+   * - Measurements submitted by user (submittedBy) are DELETED, including measurements for other athletes
+   *   This is required because submittedBy is NOT NULL in the schema
+   * - If preserving measurement data is critical, consider reassigning to a system user instead of deleting
+   *
+   * PRESERVED DATA (set to NULL):
+   * - Audit logs (compliance requirement - immutable audit trail)
+   * - Measurements verified by user (verifiedBy is nullable)
+   * - Invitations accepted/cancelled by user (preserve invitation history)
+   */
   async deleteUser(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
@@ -1653,13 +1667,15 @@ export class DatabaseStorage implements IStorage {
       // Delete all user-organization relationships
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
-      // Delete all measurements for this user (as subject)
-      await tx.delete(measurements).where(eq(measurements.userId, id));
-
-      // Delete measurements submitted by this user
+      // Delete measurements where user is subject OR submitter
       // Note: submittedBy is NOT NULL, so we must delete rather than set to null
-      // This is acceptable as these measurements lose their submitter context
-      await tx.delete(measurements).where(eq(measurements.submittedBy, id));
+      // This covers both self-submitted measurements and measurements submitted by this user for others
+      await tx.delete(measurements).where(
+        or(
+          eq(measurements.userId, id),
+          eq(measurements.submittedBy, id)
+        )
+      );
 
       // Update measurements verified by this user (verifiedBy is nullable)
       await tx.update(measurements)
