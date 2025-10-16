@@ -55,6 +55,41 @@ function checkRailwayCLI() {
 }
 
 /**
+ * Verify Railway CLI authentication
+ */
+async function checkRailwayAuth() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('railway', ['whoami'], {
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Railway CLI authentication failed. Please check RAILWAY_TOKEN environment variable. Error: ${stderr}`));
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to verify Railway authentication: ${err.message}`));
+    });
+  });
+}
+
+/**
  * Execute Railway CLI command and parse JSON output
  */
 async function railwayCommand(args) {
@@ -133,6 +168,11 @@ async function waitForDeployment() {
   console.log('🔍 Checking Railway CLI installation...');
   await checkRailwayCLI();
   console.log('✅ Railway CLI found');
+
+  // Verify Railway CLI authentication
+  console.log('🔐 Verifying Railway authentication...');
+  const user = await checkRailwayAuth();
+  console.log(`✅ Authenticated as: ${user}`);
 
   console.log('⏳ Waiting for Railway deployment to complete...');
   console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
