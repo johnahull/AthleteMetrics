@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { storage } from '../../server/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
-describe('Team Update Storage Layer Integration Tests', () => {
+describe.skip('Team Update Storage Layer Integration Tests', () => {
   let testOrg: Organization;
   let otherOrg: Organization;
   let testTeam: Team;

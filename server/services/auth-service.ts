@@ -57,21 +57,38 @@ export class AuthService extends BaseService {
       }
 
       // Check organization status for non-site-admin users
+      // Note: Organization check happens after password verification, which already
+      // provides timing attack mitigation via bcrypt's constant-time comparison.
+      // The org check timing difference is negligible compared to bcrypt (~100ms),
+      // and fail-closed behavior prevents access even on error.
       if (user.isSiteAdmin !== true) {
-        const userOrganizations = await this.storage.getUserOrganizations(user.id);
+        try {
+          const userOrganizations = await this.storage.getUserOrganizations(user.id);
 
-        // If user has organizations, check if at least one is active
-        if (userOrganizations && userOrganizations.length > 0) {
-          const hasActiveOrganization = userOrganizations.some(
-            (uo: any) => uo.organization?.isActive === true
-          );
+          // If user has organizations, check if at least one is active
+          if (userOrganizations && userOrganizations.length > 0) {
+            const hasActiveOrganization = userOrganizations.some(
+              (uo) => uo.organization?.isActive === true
+            );
 
-          if (!hasActiveOrganization) {
-            return {
-              success: false,
-              error: "All your organizations have been deactivated. Please contact your administrator."
-            };
+            if (!hasActiveOrganization) {
+              // Log security event
+              console.warn(`Login denied: User ${user.id} has no active organizations`);
+
+              return {
+                success: false,
+                error: "All your organizations have been deactivated. Please contact your administrator."
+              };
+            }
           }
+        } catch (orgCheckError) {
+          console.error("AuthService.login: Error checking org status:", orgCheckError);
+
+          // Fail-closed for security: deny access on any org check error
+          return {
+            success: false,
+            error: "Unable to verify access. Please try again."
+          };
         }
       }
 
