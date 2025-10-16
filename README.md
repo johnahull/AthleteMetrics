@@ -118,70 +118,51 @@ npm start
 
 ## Running Tests
 
-### Unit Tests
+⚠️ **CRITICAL: NEVER RUN TESTS AGAINST PRODUCTION OR STAGING DATABASES!** ⚠️
+
+The application has built-in safeguards to prevent this, but always double-check your `DATABASE_URL`.
+
+### Quick Start
+
 ```bash
+# Run unit tests (no database required)
 npm run test:unit
+
+# For integration tests, create local test database
+createdb athletemetrics_test
+
+# Copy test environment template
+cp .env.test.example .env.test
+
+# Run all tests
+npm test                  # All tests (unit + integration)
+npm run test:integration  # Integration tests only (requires PostgreSQL)
 ```
 
-### Integration Tests
+### Safety Features
 
-**Prerequisites:** Integration tests require a PostgreSQL database.
+**Unit Tests**: Run without a database. Test React components, utilities, and pure logic with mocked dependencies.
 
-**Setup:**
-1. Create a test database:
-   ```bash
-   # Using psql
-   createdb athletemetrics_test
-   # Or using PostgreSQL CLI
-   psql -c "CREATE DATABASE athletemetrics_test;"
-   ```
+**Integration Tests**: Automatically validate that BLOCKS execution if:
+- `DATABASE_URL` is not set
+- `DATABASE_URL` contains: `railway.app`, `neon.tech`, `prod`, `staging`
+- `DATABASE_URL` doesn't include: `localhost` or `test`
 
-2. Set environment variables:
-   ```bash
-   export DATABASE_URL="postgresql://user:pass@localhost:5432/athletemetrics_test"
-   export NODE_ENV="test"  # Optional - automatically set by test scripts
-   export SESSION_SECRET="test-secret"  # Optional - has default in test setup
-   ```
+**If tests were accidentally run against production:**
+1. Run audit script: `tsx scripts/audit-test-data.ts`
+2. Backup database: `pg_dump $DATABASE_URL > backup.sql`
+3. Run cleanup: `CONFIRM_CLEANUP=yes tsx scripts/cleanup-test-data.ts`
 
-3. Run integration tests:
-   ```bash
-   npm run test:integration
-   ```
+### Detailed Testing Guide
 
-**Note:** Tests will automatically create and clean up test data. Ensure you're using a dedicated test database, not your development or production database.
+For comprehensive testing documentation, see **[docs/TESTING.md](docs/TESTING.md)** which includes:
+- Local test database setup
+- Docker PostgreSQL configuration
+- CI/CD integration
+- Test data cleanup procedures
+- Troubleshooting guide
+- Best practices
 
-### CI/CD Setup
+### CI/CD
 
-For continuous integration pipelines (GitHub Actions, CircleCI, etc.), you'll need to:
-
-1. **Provision a PostgreSQL service** in your CI configuration
-2. **Set environment variables:**
-   - `DATABASE_URL` - Connection string to CI PostgreSQL instance
-   - `NODE_ENV=test`
-   - `SESSION_SECRET` - Test secret value
-
-**Example GitHub Actions:**
-```yaml
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-      NODE_ENV: test
-      SESSION_SECRET: test-secret
-    steps:
-      - uses: actions/checkout@v3
-      - run: npm install
-      - run: npm run db:push
-      - run: npm run test:integration
-```
+Tests run automatically in GitHub Actions with ephemeral PostgreSQL containers. No manual configuration needed for pull requests - see `.github/workflows/pr-checks.yml`.

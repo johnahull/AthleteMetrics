@@ -9,11 +9,14 @@
     "start": "node dist/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "test": "NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest",
-    "test:ui": "NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest --ui",
-    "test:run": "NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run",
-    "test:unit": "NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.unit.config.ts",
-    "test:integration": "NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/run-migrations.js",
+    "db:validate": "node scripts/validate-migrations.js",
+    "test": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest",
+    "test:ui": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest --ui",
+    "test:run": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run",
+    "test:unit": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.unit.config.ts",
+    "test:integration": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -112,6 +115,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^14.3.1",
+    "@testing-library/user-event": "^14.6.1",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "4.17.21",
     "@types/express-session": "^1.18.0",
@@ -139,7 +143,7 @@
     "vitest": "^3.2.4"
   },
   "optionalDependencies": {
-    "bufferutil": "^4.0.8"
+    "bufferutil": "^4.0.9"
   },
   "overrides": {
     "esbuild": "^0.25.0"

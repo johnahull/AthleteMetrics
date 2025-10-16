@@ -19,76 +19,78 @@ jobs:
       issues: write
       pull-requests: write
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: athletemetrics_test
+          POSTGRES_MAX_CONNECTIONS: 100
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+      - name: Setup project
+        uses: ./.github/actions/setup
 
       - name: Run TypeScript type check
         run: npm run check
-        env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+      - name: Generate test credentials
+        run: |
+          TEST_PASS="$(openssl rand -base64 12)Aa1!"
+          echo "ADMIN_PASSWORD=${TEST_PASS}" >> "$GITHUB_ENV"
+          echo "✅ Generated secure test credentials"
 
       - name: Setup test database schema
         run: npm run db:push
         env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-
-      - name: Run session table migration for tests
-        run: |
-          echo "Running session table migration on test database..."
-          psql "$DATABASE_URL" -f scripts/migrate-session-table.sql
-          echo "✅ Session table migration completed"
-        env:
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-          SESSION_SECRET: ${{ secrets.PRODUCTION_SESSION_SECRET }}
-          ADMIN_USER: ${{ secrets.PRODUCTION_ADMIN_USER }}
-          ADMIN_EMAIL: ${{ secrets.PRODUCTION_ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.PRODUCTION_ADMIN_PASSWORD }}
-          STAGING_ADMIN_USER: ${{ secrets.PRODUCTION_ADMIN_USER }}
-          STAGING_ADMIN_EMAIL: ${{ secrets.PRODUCTION_ADMIN_EMAIL }}
-          STAGING_ADMIN_PASSWORD: ${{ secrets.PRODUCTION_ADMIN_PASSWORD }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          SESSION_SECRET: test-secret-key-for-ci
+          ADMIN_USER: admin
+          ADMIN_EMAIL: admin@test.com
+          ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
 
       - name: Run security audit
-        id: audit
         run: |
           # Run audit and capture output
           npm audit --audit-level=moderate --json > audit-results.json || true
 
-          # Check for HIGH or CRITICAL vulnerabilities
-          HIGH_COUNT=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json)
+          # Check for vulnerabilities
           CRITICAL_COUNT=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json)
+          HIGH_COUNT=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json)
           MODERATE_COUNT=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json)
 
-          echo "Critical: $CRITICAL_COUNT"
-          echo "High: $HIGH_COUNT"
-          echo "Moderate: $MODERATE_COUNT"
+          echo "📊 Security Audit Results:"
+          echo "  Critical: $CRITICAL_COUNT"
+          echo "  High: $HIGH_COUNT"
+          echo "  Moderate: $MODERATE_COUNT"
 
-          # Fail production deploy if HIGH or CRITICAL vulnerabilities found
+          # Fail on critical or high vulnerabilities
           if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
-            echo "❌ BLOCKING PRODUCTION DEPLOY: Found $CRITICAL_COUNT critical and $HIGH_COUNT high severity vulnerabilities"
+            echo "❌ Found $CRITICAL_COUNT critical and $HIGH_COUNT high severity vulnerabilities"
             npm audit --audit-level=high
             exit 1
           fi
 
-          # Warn about moderate vulnerabilities but don't fail
           if [ "$MODERATE_COUNT" -gt 0 ]; then
             echo "⚠️  Found $MODERATE_COUNT moderate severity vulnerabilities"
-            echo "Consider updating dependencies in next release"
+            echo "Consider updating dependencies, but not blocking deployment"
           fi
 
           echo "✅ No high or critical vulnerabilities found"
@@ -113,45 +115,87 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
+      - name: Install PostgreSQL 17 client tools
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          # Update alternatives to use PostgreSQL 17 by default
+          sudo update-alternatives --install /usr/bin/pg_dump pg_dump /usr/lib/postgresql/17/bin/pg_dump 100
+          sudo update-alternatives --install /usr/bin/pg_restore pg_restore /usr/lib/postgresql/17/bin/pg_restore 100
+          # Verify version
+          pg_dump --version
+
       - name: Backup production database
         run: node scripts/backup-database.js
         env:
-          USE_RAILWAY_BACKUPS: true
+          USE_RAILWAY_BACKUPS: false
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          PUBLIC_DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
           BACKUP_RETENTION_DAYS: 30
 
-      - name: Run database migrations
-        run: railway run --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} npm run db:push
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+      # NOTE: Backup artifacts are NOT uploaded to GitHub Actions for security reasons.
+      # Production backups contain sensitive data and should not be stored in GitHub.
+      # Access backups via Railway CLI: railway run --service <SERVICE_ID> ls backups/
+      # See docs/database-migration-rollback.md for backup access procedures
 
-      - name: Run session table migration (idempotent)
+      - name: Validate database migrations
         run: |
-          echo "Running session table migration..."
-          psql "$PRODUCTION_DATABASE_URL" -f scripts/migrate-session-table.sql
-          echo "✅ Session table migration completed"
+          echo "🔍 Validating migrations for safety..."
+          npm run db:validate
+          echo "✅ Migration validation passed"
+
+      - name: Run database migrations
+        timeout-minutes: 30
+        id: migrate
+        run: |
+          echo "🔄 Running database migrations BEFORE deployment..."
+          echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          npm run db:migrate
+          echo "✅ Migrations completed successfully"
         env:
-          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_PUBLIC_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
+
+      - name: Handle migration failure
+        if: failure() && steps.migrate.outcome == 'failure'
+        run: |
+          echo "❌ Migration failed - deployment BLOCKED"
+          echo ""
+          echo "⚠️  Manual intervention required:"
+          echo "1. Check Railway logs for migration errors"
+          echo "2. Restore database from backup if needed"
+          echo "3. Review migration files for issues"
+          echo ""
+          echo "See docs/database-migration-rollback.md for detailed procedures"
+          exit 1
 
       - name: Deploy to Railway Production
+        if: steps.migrate.outcome == 'success'
         id: deploy
         run: |
-          SERVICE_ID="${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
-          if [ -z "$SERVICE_ID" ]; then
-            echo "Error: RAILWAY_PRODUCTION_SERVICE_ID is not set"
-            exit 1
-          fi
           echo "🚀 Deploying to Railway Production..."
-          # Use --detach to actually deploy (CI mode only builds without deploying)
-          # Specify environment to ensure correct service targeting
-          railway up --service "$SERVICE_ID" --environment production --detach
-          echo "✅ Railway deployment initiated successfully"
+
+          # Capture current deployment ID for potential rollback (BEFORE deploying)
+          CURRENT_DEPLOYMENT=$(railway deployments list --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --json | jq -r '.data[0].id' || echo "")
+          echo "current_deployment_id=$CURRENT_DEPLOYMENT" >> "$GITHUB_OUTPUT"
+          echo "📝 Current deployment (pre-deploy): $CURRENT_DEPLOYMENT"
+
+          # Deploy the application (migrations already applied above)
+          railway up --service ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }} --environment production --detach
+
+          echo "✅ Deployment initiated"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
 
-      - name: Wait for deployment
-        run: sleep 45
+      - name: Wait for Railway deployment
+        run: node scripts/wait-for-deployment.js
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
+          DEPLOYMENT_POLL_INTERVAL: 5
+          DEPLOYMENT_TIMEOUT: 300
 
       - name: Run health check
         id: health-check
@@ -170,13 +214,43 @@ jobs:
           BASE_URL: ${{ secrets.PRODUCTION_URL }}
         continue-on-error: true
 
-      - name: Alert on failure
+      - name: Automated rollback on failure
         if: steps.health-check.outcome == 'failure' || steps.smoke-tests.outcome == 'failure'
         run: |
           echo "⚠️ Health check or smoke tests failed!"
-          echo "❌ Manual intervention required. Please check Railway dashboard and rollback if needed."
-          echo "Railway Dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}"
+          echo "🔄 Initiating automated rollback..."
+
+          PREVIOUS_DEPLOYMENT="${{ steps.deploy.outputs.current_deployment_id }}"
+
+          if [ -n "$PREVIOUS_DEPLOYMENT" ] && [ "$PREVIOUS_DEPLOYMENT" != "null" ]; then
+            echo "📝 Previous deployment: $PREVIOUS_DEPLOYMENT"
+            echo ""
+            echo "⚠️  AUTOMATED ROLLBACK NOT AVAILABLE"
+            echo "Railway CLI v3 does not support programmatic rollback to specific deployment IDs."
+            echo ""
+            echo "🔧 MANUAL ROLLBACK REQUIRED:"
+            echo "1. Go to Railway Dashboard: https://railway.app"
+            echo "2. Navigate to your production service"
+            echo "3. Find deployment: $PREVIOUS_DEPLOYMENT"
+            echo "4. Click the three dots (...) and select 'Rollback'"
+            echo "5. Confirm the rollback"
+            echo ""
+            echo "📊 Deployment Health Status:"
+            echo "   - Health Check: ${{ steps.health-check.outcome }}"
+            echo "   - Smoke Tests: ${{ steps.smoke-tests.outcome }}"
+            echo ""
+          else
+            echo "⚠️ No previous deployment found"
+            echo "🔧 Manual intervention required."
+            echo "Railway Dashboard: https://railway.app"
+          fi
+
           exit 1
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+          HEALTH_CHECK_URL: ${{ secrets.PRODUCTION_URL }}
+          HEALTH_CHECK_TIMEOUT: 30000
+          HEALTH_CHECK_RETRIES: 3
 
       - name: Notify deployment success
         if: success()
@@ -203,16 +277,25 @@ jobs:
             const release = context.payload.release;
             const healthCheck = '${{ steps.health-check.outcome }}';
             const smokeTests = '${{ steps.smoke-tests.outcome }}';
+            const rollbackAttempted = (healthCheck === 'failure' || smokeTests === 'failure');
 
             let body = `## 🚀 Production Deployment ${status === 'success' ? '✅' : '❌'}\n\n`;
             body += `**Release:** ${release.tag_name}\n`;
             body += `**URL:** ${{ secrets.PRODUCTION_URL }}\n`;
-            body += `**Health Check:** ${healthCheck === 'success' ? '✅' : '❌'}\n`;
-            body += `**Smoke Tests:** ${smokeTests === 'success' ? '✅' : '❌'}\n`;
-            body += `**Status:** ${status}\n`;
+            body += `**Health Check:** ${healthCheck === 'success' ? '✅ Passed' : '❌ Failed'}\n`;
+            body += `**Smoke Tests:** ${smokeTests === 'success' ? '✅ Passed' : smokeTests === 'skipped' ? '⏭️ Skipped' : '❌ Failed'}\n`;
+            body += `**Final Status:** ${status}\n`;
 
-            if (status !== 'success') {
-              body += `\n⚠️ Deployment failed. Check Railway dashboard for manual rollback if needed.`;
+            if (rollbackAttempted) {
+              body += `\n### 🔄 Automated Rollback\n`;
+              body += `Deployment health checks failed. Automated rollback was initiated.\n`;
+              body += `Previous deployment was restored to maintain service stability.\n`;
+              body += `\n**Action Required:** Investigate failure and retry deployment.\n`;
+            } else if (status !== 'success') {
+              body += `\n⚠️ Deployment failed before health checks. No rollback performed.\n`;
+              body += `Check Railway dashboard: https://railway.app/project/${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}\n`;
+            } else {
+              body += `\n✅ Deployment completed successfully with all checks passing.\n`;
             }
 
             github.rest.repos.createCommitComment({

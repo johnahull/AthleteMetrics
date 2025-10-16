@@ -1,0 +1,128 @@
+name: Security Audit
+
+# Reusable workflow for npm security audits
+# Can be called from other workflows or run on schedule
+
+on:
+  workflow_call:
+    inputs:
+      fail-on-severity:
+        description: 'Fail on this severity level or higher (moderate, high, critical)'
+        required: false
+        type: string
+        default: 'high'
+    outputs:
+      critical-count:
+        description: 'Number of critical vulnerabilities'
+        value: ${{ jobs.audit.outputs.critical-count }}
+      high-count:
+        description: 'Number of high vulnerabilities'
+        value: ${{ jobs.audit.outputs.high-count }}
+      moderate-count:
+        description: 'Number of moderate vulnerabilities'
+        value: ${{ jobs.audit.outputs.moderate-count }}
+
+  # Can also be triggered manually or on schedule
+  workflow_dispatch:
+    inputs:
+      fail-on-severity:
+        description: 'Fail on this severity level or higher'
+        required: false
+        type: choice
+        options:
+          - moderate
+          - high
+          - critical
+        default: 'high'
+
+  schedule:
+    # Run weekly security audit on Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+
+jobs:
+  audit:
+    name: npm Security Audit
+    runs-on: ubuntu-latest
+    outputs:
+      critical-count: ${{ steps.audit.outputs.critical-count }}
+      high-count: ${{ steps.audit.outputs.high-count }}
+      moderate-count: ${{ steps.audit.outputs.moderate-count }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup project
+        uses: ./.github/actions/setup
+
+      - name: Run security audit
+        id: audit
+        run: |
+          # Run audit and capture output
+          npm audit --audit-level=moderate --json > audit-results.json || true
+
+          # Check for vulnerabilities
+          CRITICAL_COUNT=$(jq '.metadata.vulnerabilities.critical // 0' audit-results.json)
+          HIGH_COUNT=$(jq '.metadata.vulnerabilities.high // 0' audit-results.json)
+          MODERATE_COUNT=$(jq '.metadata.vulnerabilities.moderate // 0' audit-results.json)
+          LOW_COUNT=$(jq '.metadata.vulnerabilities.low // 0' audit-results.json)
+
+          # Output results (grouped to avoid SC2129 shellcheck warning)
+          {
+            echo "critical-count=$CRITICAL_COUNT"
+            echo "high-count=$HIGH_COUNT"
+            echo "moderate-count=$MODERATE_COUNT"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "📊 Security Audit Results:"
+          echo "  Critical: $CRITICAL_COUNT"
+          echo "  High: $HIGH_COUNT"
+          echo "  Moderate: $MODERATE_COUNT"
+          echo "  Low: $LOW_COUNT"
+
+          # Determine if we should fail based on input
+          FAIL_LEVEL="${{ inputs.fail-on-severity || 'high' }}"
+          SHOULD_FAIL=false
+
+          case "$FAIL_LEVEL" in
+            critical)
+              if [ "$CRITICAL_COUNT" -gt 0 ]; then
+                SHOULD_FAIL=true
+                echo "❌ Found $CRITICAL_COUNT critical vulnerabilities"
+              fi
+              ;;
+            high)
+              if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+                SHOULD_FAIL=true
+                echo "❌ Found $CRITICAL_COUNT critical and $HIGH_COUNT high severity vulnerabilities"
+              fi
+              ;;
+            moderate)
+              if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ] || [ "$MODERATE_COUNT" -gt 0 ]; then
+                SHOULD_FAIL=true
+                echo "❌ Found vulnerabilities at moderate or higher severity"
+              fi
+              ;;
+          esac
+
+          if [ "$SHOULD_FAIL" = true ]; then
+            echo ""
+            echo "🔍 Vulnerability Details:"
+            npm audit --audit-level="$FAIL_LEVEL"
+            exit 1
+          fi
+
+          if [ "$MODERATE_COUNT" -gt 0 ] && [ "$FAIL_LEVEL" != "moderate" ]; then
+            echo "⚠️  Found $MODERATE_COUNT moderate severity vulnerabilities"
+            echo "Consider updating dependencies, but not blocking workflow"
+          fi
+
+          echo "✅ No vulnerabilities found at $FAIL_LEVEL severity or higher"
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-results
+          path: audit-results.json
+          retention-days: 30

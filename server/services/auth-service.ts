@@ -56,6 +56,25 @@ export class AuthService extends BaseService {
         return { success: false, error: "Invalid credentials" };
       }
 
+      // Check organization status for non-site-admin users
+      if (user.isSiteAdmin !== true) {
+        const userOrganizations = await this.storage.getUserOrganizations(user.id);
+
+        // If user has organizations, check if at least one is active
+        if (userOrganizations && userOrganizations.length > 0) {
+          const hasActiveOrganization = userOrganizations.some(
+            (uo: any) => uo.organization?.isActive === true
+          );
+
+          if (!hasActiveOrganization) {
+            return {
+              success: false,
+              error: "All your organizations have been deactivated. Please contact your administrator."
+            };
+          }
+        }
+      }
+
       return { success: true, user };
     } catch (error) {
       console.error("AuthService.login:", error);

@@ -53,9 +53,27 @@ export function registerAthleteRoutes(app: Express) {
     try {
       // Parse and validate query parameters with proper typing
       const filters: Parameters<typeof storage.getAthletes>[0] = {};
-      
+
       if (req.query.teamId) filters.teamId = req.query.teamId as string;
-      if (req.query.organizationId) filters.organizationId = req.query.organizationId as string;
+
+      // For org admins and coaches, automatically filter by their organization unless they're a site admin
+      const user = req.session.user;
+      console.log('[GET /api/athletes] User:', {
+        id: user?.id,
+        username: user?.username,
+        role: user?.role,
+        isSiteAdmin: user?.isSiteAdmin,
+        primaryOrganizationId: user?.primaryOrganizationId
+      });
+
+      if (req.query.organizationId) {
+        filters.organizationId = req.query.organizationId as string;
+      } else if (user && !isSiteAdmin(user) && user.primaryOrganizationId) {
+        filters.organizationId = user.primaryOrganizationId;
+      }
+
+      console.log('[GET /api/athletes] Filters:', filters);
+
       if (req.query.birthYearFrom) {
         const year = parseInt(req.query.birthYearFrom as string);
         if (!isNaN(year)) filters.birthYearFrom = year;
@@ -68,7 +86,9 @@ export function registerAthleteRoutes(app: Express) {
       if (req.query.gender) filters.gender = req.query.gender as string;
 
       const athletes = await storage.getAthletes(filters);
-      
+
+      console.log('[GET /api/athletes] Found', athletes.length, 'athletes');
+
       // Transform the data to match the frontend's expected format
       const transformedAthletes = athletes.map(athlete => ({
         id: athlete.id,
