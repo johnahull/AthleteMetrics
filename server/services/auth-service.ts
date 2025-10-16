@@ -57,6 +57,10 @@ export class AuthService extends BaseService {
       }
 
       // Check organization status for non-site-admin users
+      // Note: Organization check happens after password verification, which already
+      // provides timing attack mitigation via bcrypt's constant-time comparison.
+      // The org check timing difference is negligible compared to bcrypt (~100ms),
+      // and fail-closed behavior prevents access even on error.
       if (user.isSiteAdmin !== true) {
         try {
           const userOrganizations = await this.storage.getUserOrganizations(user.id);
@@ -80,7 +84,7 @@ export class AuthService extends BaseService {
         } catch (orgCheckError) {
           console.error("AuthService.login: Error checking org status:", orgCheckError);
 
-          // Fail-closed for security
+          // Fail-closed for security: deny access on any org check error
           return {
             success: false,
             error: "Unable to verify access. Please try again."

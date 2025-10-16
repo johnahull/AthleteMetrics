@@ -162,12 +162,14 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     expect(rateLimitedResponse?.body.message).toContain('Too many requests');
 
     // Clean up created athletes
+    // Note: Using deleteUser is correct - in the unified model, athletes are users
+    // The /api/athletes endpoint creates users with athlete role
     for (const response of responses) {
-      if (response.status === 201 && response.body.id) {
+      if (response.status === 201 && response.body?.id) {
         try {
           await storage.deleteUser(response.body.id);
         } catch (error) {
-          // Ignore cleanup errors
+          // Ignore cleanup errors (athlete may have already been deleted)
         }
       }
     }
@@ -264,13 +266,14 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     const successCount = responses.filter(r => r.status === 201).length;
     expect(successCount).toBe(25);
 
-    // Clean up
+    // Clean up created athletes
+    // Note: Using deleteUser is correct - in the unified model, athletes are users
     for (const response of responses) {
-      if (response.status === 201 && response.body.id) {
+      if (response.status === 201 && response.body?.id) {
         try {
           await storage.deleteUser(response.body.id);
         } catch (error) {
-          // Ignore cleanup errors
+          // Ignore cleanup errors (athlete may have already been deleted)
         }
       }
     }
