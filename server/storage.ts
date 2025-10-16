@@ -410,6 +410,9 @@ export class DatabaseStorage implements IStorage {
   async deleteUser(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Set SERIALIZABLE isolation level to prevent race conditions
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+
       // Revoke all active sessions for security (explicit revocation)
       // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
       const { sessions } = await import('@shared/schema');
@@ -447,27 +450,27 @@ export class DatabaseStorage implements IStorage {
 
       // Update invitations where this user accepted/cancelled them (keep invitation history)
       await tx.update(invitations)
-        .set({ acceptedBy: null as any })
+        .set({ acceptedBy: sql`NULL` })
         .where(eq(invitations.acceptedBy, id));
 
       await tx.update(invitations)
-        .set({ cancelledBy: null as any })
+        .set({ cancelledBy: sql`NULL` })
         .where(eq(invitations.cancelledBy, id));
 
       // Update invitations created BY this user (preserve invitation history)
       await tx.update(invitations)
-        .set({ invitedBy: null as any })
+        .set({ invitedBy: sql`NULL` })
         .where(eq(invitations.invitedBy, id));
 
       // Update invitations FOR this user (as athlete/playerId) (preserve invitation history)
       await tx.update(invitations)
-        .set({ playerId: null as any })
+        .set({ playerId: sql`NULL` })
         .where(eq(invitations.playerId, id));
 
       // Preserve audit logs for compliance (set userId to null)
       // Schema has onDelete: 'set null' - audit trail must be immutable
       await tx.update(auditLogs)
-        .set({ userId: null as any })
+        .set({ userId: sql`NULL` })
         .where(eq(auditLogs.userId, id));
 
       // SOFT DELETE: Mark user as deleted and inactive instead of removing the record
@@ -502,6 +505,9 @@ export class DatabaseStorage implements IStorage {
    */
   async hardDeleteUser(id: string): Promise<void> {
     await db.transaction(async (tx: any) => {
+      // Set SERIALIZABLE isolation level to prevent race conditions
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+
       const { sessions } = await import('@shared/schema');
 
       // Delete all sessions
@@ -527,7 +533,7 @@ export class DatabaseStorage implements IStorage {
 
       // Preserve audit logs for compliance (set userId to null)
       await tx.update(auditLogs)
-        .set({ userId: null as any })
+        .set({ userId: sql`NULL` })
         .where(eq(auditLogs.userId, id));
 
       // HARD DELETE: Permanently remove user record

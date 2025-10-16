@@ -12,7 +12,7 @@
 -- The partial index only includes active users (deletedAt IS NULL), making it
 -- smaller and more efficient than a full index on the id column.
 
-CREATE INDEX IF NOT EXISTS idx_users_id_not_deleted
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_id_not_deleted
 ON users(id)
 WHERE deleted_at IS NULL;
 
