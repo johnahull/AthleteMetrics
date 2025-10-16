@@ -5,9 +5,19 @@ import {
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+
+/**
+ * Helper function to create a WHERE condition that excludes soft-deleted users.
+ * This prevents code duplication of `sql`${users.deletedAt} IS NULL`` across multiple methods.
+ *
+ * Usage: .where(and(eq(users.id, id), whereUserNotDeleted()))
+ */
+function whereUserNotDeleted(): SQL {
+  return sql`${users.deletedAt} IS NULL`;
+}
 
 export interface IStorage {
   // Authentication & Users
@@ -20,6 +30,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
+  hardDeleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
@@ -200,7 +211,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(
       and(
         eq(users.username, username),
-        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+        whereUserNotDeleted() // Exclude soft-deleted users
       )
     );
     if (!user) return null;
@@ -213,7 +224,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(
       and(
         arrayContains(users.emails, [email]),
-        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+        whereUserNotDeleted() // Exclude soft-deleted users
       )
     );
     if (!user) return null;
@@ -227,7 +238,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(
       and(
         sql`${email} = ANY(${users.emails})`,
-        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+        whereUserNotDeleted() // Exclude soft-deleted users
       )
     );
     return user || undefined;
@@ -237,7 +248,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(
       and(
         eq(users.username, username),
-        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+        whereUserNotDeleted() // Exclude soft-deleted users
       )
     );
     return user || undefined;
@@ -296,7 +307,7 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     return await db.select().from(users)
-      .where(sql`${users.deletedAt} IS NULL`) // Exclude soft-deleted users
+      .where(whereUserNotDeleted()) // Exclude soft-deleted users
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
@@ -304,7 +315,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users)
       .where(and(
         eq(users.isSiteAdmin, true),
-        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+        whereUserNotDeleted() // Exclude soft-deleted users
       ))
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
@@ -317,7 +328,7 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(
       and(
         eq(users.id, id),
-        sql`${users.deletedAt} IS NULL` // Exclude soft-deleted users
+        whereUserNotDeleted() // Exclude soft-deleted users
       )
     );
     return user || undefined;
@@ -374,23 +385,27 @@ export class DatabaseStorage implements IStorage {
    * SOFT DELETE: User record is marked as deleted but preserved
    * - Sets deletedAt timestamp on user record
    * - User account becomes inaccessible but data integrity is maintained
-   * - User can be queried with isNull(deletedAt) filter to exclude soft-deleted users
+   * - User can be queried with whereUserNotDeleted() to exclude soft-deleted users
+   *
+   * SOFT DELETIONS (preserved with isActive=false):
+   * - User-team relationships (soft deleted for audit trail - set isActive=false and leftAt timestamp)
    *
    * HARD DELETIONS (fully removed):
    * - Sessions (security requirement - explicit revocation)
    * - Email verification tokens (no longer needed)
    * - Athlete profiles (personal metadata)
-   * - User-team relationships (membership history not critical)
-   * - Invitations created BY user (invitation management)
-   * - Invitations FOR user (as athlete/playerId)
    *
-   * PRESERVED DATA:
+   * PRESERVED DATA (nullified foreign keys):
    * - User record (soft deleted with deletedAt timestamp)
    * - User-organization relationships (kept to preserve measurement organization context)
    * - Measurements (NEVER TOUCHED - immutable snapshots in time)
    *   - userId, submittedBy, verifiedBy remain as historical references
    * - Audit logs (compliance requirement - immutable audit trail, userId set to NULL)
-   * - Invitations accepted/cancelled by user (preserve invitation history, set to NULL)
+   * - Invitations (preserve invitation history, foreign keys set to NULL)
+   *   - invitedBy set to NULL (preserve invitation record)
+   *   - playerId set to NULL (preserve invitation record)
+   *   - acceptedBy already handled (set to NULL)
+   *   - cancelledBy already handled (set to NULL)
    */
   async deleteUser(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
@@ -406,8 +421,14 @@ export class DatabaseStorage implements IStorage {
       // Delete athlete profiles
       await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
-      // Delete all user-team relationships
-      await tx.delete(userTeams).where(eq(userTeams.userId, id));
+      // SOFT DELETE user-team relationships instead of hard delete
+      // This preserves historical team membership for audit trail
+      await tx.update(userTeams)
+        .set({
+          isActive: false,
+          leftAt: new Date()
+        })
+        .where(eq(userTeams.userId, id));
 
       // Delete user-organization relationships
       // Note: Measurements can still be queried by organization via:
@@ -419,6 +440,9 @@ export class DatabaseStorage implements IStorage {
       // userId, submittedBy, and verifiedBy remain as historical references
       // even though the user no longer exists
 
+      // PRESERVE INVITATION HISTORY: Set foreign keys to NULL instead of deleting
+      // This maintains a complete audit trail of all invitation activity
+
       // Update invitations where this user accepted/cancelled them (keep invitation history)
       await tx.update(invitations)
         .set({ acceptedBy: null as any })
@@ -428,11 +452,15 @@ export class DatabaseStorage implements IStorage {
         .set({ cancelledBy: null as any })
         .where(eq(invitations.cancelledBy, id));
 
-      // Delete invitations created BY this user
-      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+      // Update invitations created BY this user (preserve invitation history)
+      await tx.update(invitations)
+        .set({ invitedBy: null as any })
+        .where(eq(invitations.invitedBy, id));
 
-      // Delete invitations FOR this user (as athlete/playerId)
-      await tx.delete(invitations).where(eq(invitations.playerId, id));
+      // Update invitations FOR this user (as athlete/playerId) (preserve invitation history)
+      await tx.update(invitations)
+        .set({ playerId: null as any })
+        .where(eq(invitations.playerId, id));
 
       // Preserve audit logs for compliance (set userId to null)
       // Schema has onDelete: 'set null' - audit trail must be immutable
@@ -447,6 +475,61 @@ export class DatabaseStorage implements IStorage {
           isActive: false
         })
         .where(eq(users.id, id));
+    });
+  }
+
+  /**
+   * GDPR COMPLIANCE: Permanently delete all user data from the database.
+   *
+   * This method is ONLY for GDPR "right to erasure" requests or legal compliance.
+   * Use deleteUser() for normal account deletion (soft delete).
+   *
+   * WARNING: This is irreversible and will:
+   * - Permanently delete user record
+   * - Delete all user-organization relationships
+   * - Delete all user-team relationships
+   * - Delete all invitations sent by/for/accepted by/cancelled by this user
+   * - Delete all athlete profiles
+   * - Delete all email verification tokens
+   * - Delete all sessions
+   * - Set audit logs userId to NULL (preserve compliance trail)
+   * - Set measurement foreign keys to NULL (preserve statistical data)
+   *
+   * IMPORTANT: This does NOT delete measurements themselves (they remain for statistical purposes)
+   * but removes the ability to identify the user in those measurements.
+   */
+  async hardDeleteUser(id: string): Promise<void> {
+    await db.transaction(async (tx: any) => {
+      const { sessions } = await import('@shared/schema');
+
+      // Delete all sessions
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
+      // Delete user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
+
+      // Delete user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete all invitations related to this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+      await tx.delete(invitations).where(eq(invitations.acceptedBy, id));
+      await tx.delete(invitations).where(eq(invitations.cancelledBy, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
+
+      // HARD DELETE: Permanently remove user record
+      await tx.delete(users).where(eq(users.id, id));
     });
   }
 
