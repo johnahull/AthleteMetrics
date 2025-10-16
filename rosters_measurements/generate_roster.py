@@ -5,7 +5,7 @@ from pathlib import Path
 
 HEADERS = [
     "firstName","lastName","birthDate","birthYear","graduationYear","gender",
-    "emails","phoneNumbers","sports","height","weight","school","teamName"
+    "emails","phoneNumbers","sports","height","weight","school","teamName","competitiveLevel"
 ]
 
 FIRST_NAMES_M = ["Ethan","Liam","Noah","Mason","Jacob","Aiden","James","Elijah","Benjamin","Lucas",
@@ -27,6 +27,7 @@ def parse_args():
     p.add_argument("--birth_year_min", type=int, help="Min birth year (inclusive, overrides age_group)")
     p.add_argument("--birth_year_max", type=int, help="Max birth year (inclusive, overrides age_group)")
     p.add_argument("--team_name", default=None, help="Team name; if omitted, auto-generated")
+    p.add_argument("--competitive_level", type=int, choices=[1,2,3,4,5], help="Competitive level (1=Elite, 5=Beginner); if omitted, auto-assigned based on age group")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     return p.parse_args()
 
@@ -85,6 +86,49 @@ def pick_first_name(gender: str):
     # mixed
     return random.choice(FIRST_NAMES_M + FIRST_NAMES_F)
 
+def auto_assign_competitive_level(age_group: str) -> int:
+    """Auto-assign competitive level based on age group probability distributions.
+
+    Level 1 = Elite (most competitive/athletic)
+    Level 5 = Beginner (least competitive/athletic)
+    """
+    if age_group == "pro":
+        # Professional teams are all elite level
+        return 1
+    elif age_group == "college":
+        # College: 60% elite/advanced (1-2), 30% intermediate (3), 10% rec/beginner (4-5)
+        weights = [0.30, 0.30, 0.30, 0.07, 0.03]  # [L1, L2, L3, L4, L5]
+    elif age_group == "high_school":
+        # High school: more spread across levels
+        weights = [0.20, 0.20, 0.20, 0.25, 0.15]  # Balanced distribution
+    else:  # middle_school
+        # Middle school: skewed toward development levels
+        weights = [0.05, 0.05, 0.30, 0.35, 0.25]  # Most are rec/development
+
+    return random.choices([1, 2, 3, 4, 5], weights=weights)[0]
+
+def get_level_prefix(competitive_level: int) -> str:
+    """Get team name prefix based on competitive level."""
+    prefixes = {
+        1: ["Elite", "Premier", "Select", "Apex", "United"],
+        2: ["Competitive", "Advanced", "Club", "Academy", "Select"],
+        3: ["Academy", "Club", "Team", "United", "FC"],
+        4: ["Rec", "Community", "Local", "League", "Squad"],
+        5: ["Beginner", "Development", "Youth", "Intro", "Starter"]
+    }
+    return random.choice(prefixes[competitive_level])
+
+def get_level_suffix(competitive_level: int) -> str:
+    """Get team name suffix based on competitive level."""
+    suffixes = {
+        1: ["Thunder", "Storm", "Lightning", "Blaze", "Force"],
+        2: ["Lightning", "Blaze", "Phoenix", "Strikers", "Hawks"],
+        3: ["Phoenix", "United", "FC", "Stars", "Wanderers"],
+        4: ["Stars", "Strikers", "Rovers", "Kickers", "United"],
+        5: ["Dragons", "Squad", "Team", "Club", "United"]
+    }
+    return random.choice(suffixes[competitive_level])
+
 def main():
     args = parse_args()
     random.seed(args.seed)
@@ -109,13 +153,24 @@ def main():
     if by_min > by_max:
         by_min, by_max = by_max, by_min
 
+    # Determine competitive level
+    if args.competitive_level:
+        competitive_level = args.competitive_level
+    elif age_group:
+        competitive_level = auto_assign_competitive_level(age_group)
+    else:
+        # Default to intermediate if no age group
+        competitive_level = 3
+
     # Auto team name if needed
     if args.team_name:
         team = args.team_name
     else:
         cohort = random.randint(by_min, by_max)
         suffix = "B" if gender == "Male" else ("G" if gender == "Female" else "X")
-        team = f"{sport} {cohort}{suffix} Squad"
+        prefix = get_level_prefix(competitive_level)
+        team_suffix = get_level_suffix(competitive_level)
+        team = f"{prefix} {team_suffix} {cohort}{suffix}"
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +211,8 @@ def main():
             "height": ht,
             "weight": wt,
             "school": school,
-            "teamName": team
+            "teamName": team,
+            "competitiveLevel": competitive_level
         })
 
     with out_path.open("w", newline="", encoding="utf-8") as f:
@@ -166,6 +222,7 @@ def main():
 
     print(f"Wrote roster: {out_path}")
     print(f"Team: {team} | Players: {len(rows)} | Gender: {gender} | Sport: {sport}")
+    print(f"Competitive Level: {competitive_level} ({'Elite' if competitive_level == 1 else 'Advanced' if competitive_level == 2 else 'Intermediate' if competitive_level == 3 else 'Recreational' if competitive_level == 4 else 'Beginner'})")
     age_group_msg = f" | Age group: {age_group}" if age_group else ""
     print(f"Birth years: {by_min}–{by_max}{age_group_msg}")
 
