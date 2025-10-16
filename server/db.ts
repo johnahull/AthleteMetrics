@@ -15,6 +15,26 @@ const DATABASE_URL = process.env.DATABASE_URL;
 // PostgreSQL configuration with connection pooling
 const isProduction = process.env.NODE_ENV === 'production';
 
+// SECURITY: Prevent testing environment from accessing production database
+if (process.env.NODE_ENV === 'testing' && DATABASE_URL?.includes('production')) {
+  throw new Error(
+    'SECURITY: Testing environment cannot connect to production database. ' +
+    'Check your DATABASE_URL configuration.'
+  );
+}
+
+// SECURITY: Validate bypass flags are not enabled in production
+if (isProduction) {
+  if (process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true') {
+    console.error('❌ SECURITY ERROR: BYPASS_ANALYTICS_RATE_LIMIT enabled in production');
+    process.exit(1);
+  }
+  if (process.env.BYPASS_GENERAL_RATE_LIMIT === 'true') {
+    console.error('❌ SECURITY ERROR: BYPASS_GENERAL_RATE_LIMIT enabled in production');
+    process.exit(1);
+  }
+}
+
 // Neon PostgreSQL tier configuration
 // Set NEON_TIER environment variable to match your Neon plan
 // This prevents connection exhaustion and optimizes costs

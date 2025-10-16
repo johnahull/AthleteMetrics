@@ -30,6 +30,11 @@ const createLimiter = rateLimit({
   message: { message: "Too many account creation attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Always enforce rate limiting in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
 });
 
 // Rate limiting for site admin creation (more restrictive)
@@ -39,6 +44,11 @@ const siteAdminCreateLimiter = rateLimit({
   message: { message: "Too many site admin creation attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Always enforce rate limiting in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
 });
 
 // Rate limiting for username enumeration prevention

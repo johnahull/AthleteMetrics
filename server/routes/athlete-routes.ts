@@ -34,6 +34,11 @@ const athleteLimiter = rateLimit({
   message: { message: "Too many athlete requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Always enforce rate limiting in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
 });
 
 // Stricter rate limiting for delete operations
@@ -43,6 +48,11 @@ const athleteDeleteLimiter = rateLimit({
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Always enforce rate limiting in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
 });
 
 export function registerAthleteRoutes(app: Express) {
