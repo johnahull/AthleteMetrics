@@ -365,6 +365,8 @@ export class AnalyticsService {
     ];
 
     // Apply team filter - filter by athlete team membership
+    // Note: Don't filter by userTeams.isActive to include measurements from soft-deleted users
+    // (Level 2 Immutability - measurements preserved even after user deletion)
     if (filters.teams && filters.teams.length > 0) {
       conditions.push(
         exists(
@@ -372,8 +374,7 @@ export class AnalyticsService {
             .where(
               and(
                 eq(userTeams.userId, users.id),
-                inArray(userTeams.teamId, filters.teams),
-                eq(userTeams.isActive, true)
+                inArray(userTeams.teamId, filters.teams)
               )
             )
         )
@@ -456,14 +457,15 @@ export class AnalyticsService {
       if (request.filters.teams && request.filters.teams.length > 0) {
         // Filter to only include measurements from athletes who belong to the selected teams
         // This narrows down the comparison group, regardless of individual athlete being analyzed
+        // Note: Don't filter by userTeams.isActive to include measurements from soft-deleted users
+        // (Level 2 Immutability - measurements preserved even after user deletion)
         whereConditions.push(
           exists(
             db.select().from(userTeams)
               .where(
                 and(
                   eq(userTeams.userId, users.id),
-                  inArray(userTeams.teamId, request.filters.teams),
-                  eq(userTeams.isActive, true)
+                  inArray(userTeams.teamId, request.filters.teams)
                 )
               )
           )
