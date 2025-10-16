@@ -9,9 +9,9 @@
 // Set environment variables BEFORE any imports
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-secret-key-for-integration-tests-only-at-least-32-characters-long';
-process.env.ADMIN_USER = 'admin';
-process.env.ADMIN_EMAIL = 'admin@test.com';
-process.env.ADMIN_PASSWORD = 'TestPassword123!';
+process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
+process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // Bypass rate limits for these tests
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
