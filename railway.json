@@ -9,11 +9,6 @@
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/api/health",
-    // Reduced from 300s to 90s based on observed cold start times:
-    // - Express server typically starts in 5-15s
-    // - Database connection via Neon WebSocket: 2-5s
-    // - 90s provides 6x safety margin for cold starts
-    // - Railway's default timeout is 100s, so 90s aligns with platform limits
     "healthcheckTimeout": 90
   },
   "environments": {

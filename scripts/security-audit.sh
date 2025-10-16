@@ -8,6 +8,9 @@ set -e
 echo "🔍 Running npm security audit..."
 
 # Run audit and capture output
+# Note: npm audit returns non-zero exit codes even for informational output,
+# so we use `|| true` to prevent script termination while we parse the JSON results.
+# Exit codes: 0 = no vulnerabilities, 1+ = vulnerabilities found (severity-dependent)
 npm audit --audit-level=moderate --json > audit-results.json || true
 
 # Check for vulnerabilities using jq (should be available in GitHub Actions)
