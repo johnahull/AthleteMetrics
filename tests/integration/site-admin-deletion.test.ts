@@ -543,7 +543,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     expect(measurementsAfter[0].id).toBe(measurement.id);
   });
 
-  it('should delete site admin organization memberships', async () => {
+  it('should preserve site admin organization memberships (soft delete)', async () => {
     // Organization membership already created in beforeEach
 
     // Verify organization membership exists before deletion
@@ -556,15 +556,15 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // Delete site admin
     await storage.deleteUser(siteAdmin.id);
 
-    // Verify admin is deleted
+    // Verify admin is deleted (soft delete - not returned by getUser)
     const deletedAdmin = await storage.getUser(siteAdmin.id);
     expect(deletedAdmin).toBeUndefined();
 
-    // Verify organization memberships are deleted
+    // Verify organization memberships are PRESERVED (for measurement context)
     const orgsAfter = await db.select()
       .from(userOrganizations)
       .where(eq(userOrganizations.userId, siteAdmin.id));
-    expect(orgsAfter).toHaveLength(0);
+    expect(orgsAfter).toHaveLength(1);
   });
 
   it('should delete site admin team memberships', async () => {
@@ -883,16 +883,17 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // This should STILL return measurements because:
     // 1. We use leftJoin for users (not innerJoin)
     // 2. We keep userOrganizations records (not deleted with user)
+    // 3. COALESCE with deletedAt check shows "[Deleted User]" for soft-deleted users
     const measurementsAfterDeletion = await db
       .select({
         userId: measurements.userId,
         metric: measurements.metric,
         value: measurements.value,
-        athleteName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, '[Deleted User]')`,
+        athleteName: sql<string>`COALESCE(CASE WHEN ${users.deletedAt} IS NOT NULL THEN '[Deleted User]' ELSE ${users.firstName} || ' ' || ${users.lastName} END, '[Deleted User]')`,
       })
       .from(measurements)
       .leftJoin(users, eq(measurements.userId, users.id))
-      .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .leftJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
       .where(
         sql`${measurements.isVerified} = true
             AND ${userOrganizations.organizationId} = ${testOrg.id}`
@@ -901,7 +902,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // ✅ CRITICAL: Measurements should still appear in analytics
     expect(measurementsAfterDeletion).toHaveLength(2);
 
-    // ✅ Athlete name should show "[Deleted User]" via COALESCE
+    // ✅ Athlete name should show "[Deleted User]" for soft-deleted users
     expect(measurementsAfterDeletion[0].athleteName).toBe('[Deleted User]');
 
     // ✅ Original userId should be preserved
@@ -1011,13 +1012,15 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
     // Delete athlete
     await storage.deleteUser(athlete.id);
 
-    // Verify ALL relationships preserved
+    // Verify user-organization relationships preserved (for measurement context)
     const userOrgs = await db.select().from(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
     expect(userOrgs).toHaveLength(1);
 
+    // Note: userTeams are deleted (hybrid approach - teams less critical than org membership)
     const userTeamsData = await db.select().from(userTeams).where(eq(userTeams.userId, athlete.id));
-    expect(userTeamsData).toHaveLength(1);
+    expect(userTeamsData).toHaveLength(0);
 
+    // Measurements always preserved
     const measurementsData = await db.select().from(measurements).where(sql`${measurements.userId} = ${athlete.id}`);
     expect(measurementsData).toHaveLength(1);
   });
@@ -1046,6 +1049,15 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
   });
 
   it('should exclude soft-deleted users from authentication', async () => {
+    // Hash the password for authentication test
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.hash('password123', 10);
+
+    // Update athlete with hashed password
+    await db.update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, athlete.id));
+
     // Verify authentication works before deletion
     const authBefore = await storage.authenticateUser(athlete.username, 'password123');
     expect(authBefore).toBeTruthy();
@@ -1082,9 +1094,10 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
     // Create session for athlete
     await db.insert(sessions).values({
-      id: 'test-session-id',
-      userId: athlete.id,
-      expiresAt: new Date(Date.now() + 86400000) // 24 hours
+      sid: 'test-session-id',
+      sess: { cookie: { maxAge: 86400000 } },
+      expire: new Date(Date.now() + 86400000), // 24 hours
+      userId: athlete.id
     });
 
     // Delete athlete
