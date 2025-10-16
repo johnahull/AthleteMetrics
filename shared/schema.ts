@@ -11,6 +11,8 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull().unique(),
   description: text("description"),
   location: text("location"),
+  isActive: boolean("is_active").default(true).notNull(),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -64,6 +66,7 @@ export const users = pgTable("users", {
   // System fields
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  deletedAt: timestamp("deleted_at"), // Soft delete - user marked as deleted but data preserved
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -91,9 +94,11 @@ export const userTeams = pgTable("user_teams", {
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id), // Changed from playerId to userId
-  submittedBy: varchar("submitted_by").notNull().references(() => users.id),
-  verifiedBy: varchar("verified_by").references(() => users.id),
+  // Historical reference fields - NO foreign key constraints
+  // These are immutable snapshots in time that may reference deleted users
+  userId: varchar("user_id").notNull(), // Athlete - historical reference (no FK)
+  submittedBy: varchar("submitted_by").notNull(), // Who recorded it - historical reference (no FK)
+  verifiedBy: varchar("verified_by"), // Who verified it - historical reference (no FK)
   isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement
@@ -127,9 +132,9 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
-  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility)
+  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility). NULL if user was deleted (preserves invitation history)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
-  invitedBy: varchar("invited_by").notNull().references(() => users.id),
+  invitedBy: varchar("invited_by").references(() => users.id), // User who sent invitation. NULL if user was deleted (preserves invitation history)
   token: text("token").notNull().unique(),
   // Enhanced tracking fields
   status: text("status").default("pending"), // "pending", "accepted", "expired", "cancelled" - made nullable for backward compatibility
@@ -148,20 +153,27 @@ export const invitations = pgTable("invitations", {
 
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  action: text("action").notNull(), // e.g., "site_admin_access", "role_change", "user_create"
-  resourceType: text("resource_type"), // e.g., "organization", "user", "team"
-  resourceId: varchar("resource_id"), // ID of the affected resource
-  details: text("details"), // JSON string with additional context
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  // Foreign key with ON DELETE SET NULL to preserve audit logs when user is deleted
+  // Maintains compliance trail while allowing user cleanup
+  // Note: Nullable by default in Drizzle (no .notNull() call)
+  userId: varchar("user_id", { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  action: varchar("action", { length: 100 }).notNull(), // e.g., "site_admin_access", "role_change", "user_create"
+  resourceType: varchar("resource_type", { length: 50 }), // e.g., "organization", "user", "team"
+  resourceId: varchar("resource_id", { length: 255 }), // ID of the affected resource
+  details: text("details"), // JSON string with additional context (sanitized to prevent log injection)
+  ipAddress: varchar("ip_address", { length: 45 }), // IPv6 max length is 45 characters
+  userAgent: varchar("user_agent", { length: 500 }), // User agents can be long, but limit to prevent abuse
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Index for efficient querying by user and time
   userTimeIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_user_time_idx ON ${table} (${table.userId}, ${table.createdAt} DESC)`,
   // Index for querying by action type
   actionIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_action_idx ON ${table} (${table.action}, ${table.createdAt} DESC)`,
+  // Index for querying by resource type and ID (compliance queries)
+  resourceIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON ${table} (${table.resourceType}, ${table.resourceId}, ${table.createdAt} DESC)`,
+  // Index for time-based queries (data retention policies)
+  createdAtIdx: sql`CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON ${table} (${table.createdAt} DESC)`,
 }));
 
 // PostgreSQL session store for connect-pg-simple
@@ -307,6 +319,18 @@ export const emailVerificationTokensRelations = relations(emailVerificationToken
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
   id: true,
   createdAt: true,
+  isActive: true, // Managed by system
+  deletedAt: true, // Managed by system
+});
+
+// Organization status update schema
+export const updateOrganizationStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+
+// Organization deletion validation schema
+export const deleteOrganizationSchema = z.object({
+  confirmationName: z.string().min(1, "Organization name confirmation is required"),
 });
 
 export const insertTeamSchema = createInsertSchema(teams).omit({
@@ -473,6 +497,8 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
+export type UpdateOrganizationStatus = z.infer<typeof updateOrganizationStatusSchema>;
+export type DeleteOrganization = z.infer<typeof deleteOrganizationSchema>;
 
 export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type Team = typeof teams.$inferSelect;

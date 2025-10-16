@@ -269,7 +269,8 @@ export async function initializeDefaultUser() {
     let passwordMatches = false;
     let userCreated = false;
 
-    await db.transaction(async (tx) => {
+    try {
+      await db.transaction(async (tx) => {
       // CRITICAL: Fetch and lock user row inside transaction to prevent TOCTOU
       // This prevents race condition where user data could change between fetch and lock
       // SELECT FOR UPDATE locks the row AND fetches fresh data in one atomic operation
@@ -433,6 +434,22 @@ export async function initializeDefaultUser() {
         });
       }
     });
+    } catch (txError: any) {
+      // Handle duplicate username errors from transaction
+      // This can happen when multiple processes/tests try to create the admin user concurrently
+      const errorMessage = txError?.message || String(txError);
+      const isDuplicateUsername = (errorMessage.includes('duplicate key') || errorMessage.includes('duplicate')) &&
+                                   (errorMessage.includes('users_username_unique') || errorMessage.includes('username'));
+
+      if (isDuplicateUsername) {
+        // Admin user already exists (created by concurrent transaction) - this is OK
+        console.log(`Admin user "${adminUser}" already exists (created by concurrent process)`);
+        return; // Exit function successfully - user exists
+      }
+
+      // Re-throw other transaction errors
+      throw txError;
+    }
 
     // Console logging after successful transaction
     if (userCreated) {
@@ -444,17 +461,13 @@ export async function initializeDefaultUser() {
   } catch (error) {
     console.error("Error initializing default user:", error);
 
-    // In test mode, process.exit is mocked to throw an error
-    // We need to catch and rethrow that error for test assertions
-    try {
+    // In test environments, throw the error so tests can assert on it
+    // In production, exit the process to prevent running with broken admin setup
+    if (process.env.NODE_ENV === 'test') {
+      throw error;
+    } else {
       process.exit(1);
-    } catch (exitError) {
-      // If process.exit throws (due to test mock), rethrow it
-      throw exitError;
     }
-
-    // If process.exit didn't throw (production), the process will have exited
-    // This line is unreachable in production
   }
 }
 
@@ -647,7 +660,9 @@ export async function registerRoutes(app: Express) {
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
     ];
 
-    if (skipCsrfPaths.some(path => req.path.startsWith(path)) ||
+    // Use exact path matching to prevent path traversal attacks
+    // Do NOT use startsWith() as it allows bypasses like "/login/../protected"
+    if (skipCsrfPaths.includes(req.path) ||
         skipCsrfPatterns.some(pattern => pattern.test(req.path))) {
       return next();
     }
@@ -678,12 +693,14 @@ export async function registerRoutes(app: Express) {
 
   // Generate CSRF token endpoint
   app.get('/api/csrf-token', (req: Request, res: Response) => {
-    const secret = csrfTokens.secretSync();
+    // Reuse existing secret to prevent multi-tab invalidation
+    let secret = (req.session as any)?.csrfSecret;
+    if (!secret) {
+      secret = csrfTokens.secretSync();
+      (req.session as any).csrfSecret = secret;
+    }
+
     const token = csrfTokens.create(secret);
-
-    // Store secret in session
-    (req.session as any).csrfSecret = secret;
-
     res.json({ csrfToken: token });
   });
 
@@ -1293,10 +1310,15 @@ export async function registerRoutes(app: Express) {
           orgContextForFiltering = requestedOrgId;
         } else {
           // Use user's primary organization
-          if (!currentUser.primaryOrganizationId) {
-            return res.json([]); // No primary org, so no teams to show
-          }
           orgContextForFiltering = currentUser.primaryOrganizationId;
+          if (!orgContextForFiltering) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            orgContextForFiltering = userOrgs[0]?.organizationId;
+            if (!orgContextForFiltering) {
+              return res.json([]); // No organization context, so no teams to show
+            }
+          }
         }
       }
 
@@ -2106,10 +2128,15 @@ export async function registerRoutes(app: Express) {
           orgContextForFiltering = requestedOrgId;
         } else {
           // Use user's primary organization
-          if (!currentUser.primaryOrganizationId) {
-            return res.json([]); // No primary org, so no athletes to show
-          }
           orgContextForFiltering = currentUser.primaryOrganizationId;
+          if (!orgContextForFiltering) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            orgContextForFiltering = userOrgs[0]?.organizationId;
+            if (!orgContextForFiltering) {
+              return res.json([]); // No primary org, so no athletes to show
+            }
+          }
         }
 
         // Athletes can only see their own athlete data
@@ -2321,10 +2348,15 @@ export async function registerRoutes(app: Express) {
           }
           orgContextForFiltering = requestedOrgId;
         } else {
-          if (!currentUser.primaryOrganizationId) {
-            return res.json([]);
-          }
           orgContextForFiltering = currentUser.primaryOrganizationId;
+          if (!orgContextForFiltering) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            orgContextForFiltering = userOrgs[0]?.organizationId;
+            if (!orgContextForFiltering) {
+              return res.json([]);
+            }
+          }
         }
       }
 
@@ -2897,18 +2929,23 @@ export async function registerRoutes(app: Express) {
           return res.status(400).json({ message: "Organization ID required for team statistics" });
         }
       } else {
-        // Non-site admins see their organization stats only
-        organizationId = currentUser.primaryOrganizationId;
-        if (!organizationId) {
-          return res.json([]); // No organization context, return empty stats
-        }
-
-        // Validate user has access to requested organization if different from primary
-        if (requestedOrgId && requestedOrgId !== organizationId) {
+        // Non-site admins: use requested org if provided and accessible
+        if (requestedOrgId) {
           if (!await canAccessOrganization(currentUser, requestedOrgId)) {
             return res.status(403).json({ message: "Access denied to requested organization" });
           }
           organizationId = requestedOrgId;
+        } else {
+          // Fall back to primary organization
+          organizationId = currentUser.primaryOrganizationId;
+          if (!organizationId) {
+            // Fallback to user's first organization from userOrganizations
+            const userOrgs = await storage.getUserOrganizations(currentUser.id);
+            organizationId = userOrgs[0]?.organizationId;
+            if (!organizationId) {
+              return res.json([]); // No organization context, return empty stats
+            }
+          }
         }
       }
 
@@ -3474,7 +3511,7 @@ export async function registerRoutes(app: Express) {
       // Enrich with additional data
       const enrichedInvitations = await Promise.all(
         filteredInvitations.map(async (invitation) => {
-          const inviter = await storage.getUser(invitation.invitedBy);
+          const inviter = invitation.invitedBy ? await storage.getUser(invitation.invitedBy) : null;
           const organization = await storage.getOrganization(invitation.organizationId);
 
           return {
@@ -5396,37 +5433,39 @@ export async function registerRoutes(app: Express) {
       // Get athletes filtered by organization
       const athletes = await storage.getAthletes({ organizationId: effectiveOrganizationId });
 
-      // Transform to CSV format with all database fields
+      // Transform to CSV format matching import template
+      // Headers match client/src/pages/import-export.tsx athletesTemplate (line 689)
       const csvHeaders = [
-        'id', 'firstName', 'lastName', 'fullName', 'username', 'emails', 'phoneNumbers',
-        'birthDate', 'birthYear', 'graduationYear', 'school', 'sports', 'height', 'weight',
-        'teams', 'isActive', 'createdAt'
+        'firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear',
+        'gender', 'emails', 'phoneNumbers', 'sports', 'height', 'weight',
+        'school', 'teamName'
       ];
 
-      const csvRows = (athletes as any[]).map((athlete: any) => {
-        const teams = athlete.teams ? athlete.teams.map((t: any) => t.name).join(';') : '';
+      // Check for multi-team athletes that will lose data in export
+      const multiTeamAthletes = athletes.filter(athlete => athlete.teams && athlete.teams.length > 1);
+      const hasMultiTeamAthletes = multiTeamAthletes.length > 0;
+
+      const csvRows = athletes.map(athlete => {
+        // Export first team only as "teamName" (singular) to match import format
+        const teamName = athlete.teams && athlete.teams.length > 0 ? athlete.teams[0].name : '';
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
         const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
         const sports = Array.isArray(athlete.sports) ? athlete.sports.join(';') : (athlete.sports || '');
 
         return [
-          athlete.id,
-          athlete.firstName,
-          athlete.lastName,
-          athlete.fullName,
-          athlete.username,
-          emails,
-          phoneNumbers,
+          athlete.firstName || '',
+          athlete.lastName || '',
           athlete.birthDate || '',
           athlete.birthYear || '',
           athlete.graduationYear || '',
-          athlete.school || '',
+          athlete.gender || '',
+          emails,
+          phoneNumbers,
           sports,
           athlete.height || '',
           athlete.weight || '',
-          teams,
-          athlete.isActive,
-          athlete.createdAt
+          athlete.school || '',
+          teamName
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
           let value = String(field || '');
@@ -5444,6 +5483,12 @@ export async function registerRoutes(app: Express) {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="athletes.csv"');
+
+      // Warn if multi-team athletes have data loss
+      if (hasMultiTeamAthletes) {
+        res.setHeader('X-Export-Warning', `${multiTeamAthletes.length} athlete(s) with multiple teams; only first team exported`);
+      }
+
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting athletes:", error);
@@ -5506,38 +5551,34 @@ export async function registerRoutes(app: Express) {
       // Get measurements with filtering
       const measurements = await storage.getMeasurements(filters);
 
-      // Transform to CSV format with all database fields including gender
+      // Transform to CSV format matching import template
+      // Headers match client/src/pages/import-export.tsx measurementsTemplate (line 694)
       const csvHeaders = [
-        'id', 'firstName', 'lastName', 'fullName', 'birthYear', 'gender', 'teams',
-        'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes',
-        'submittedBy', 'verifiedBy', 'isVerified', 'createdAt'
+        'firstName', 'lastName', 'gender', 'teamName', 'date', 'age',
+        'metric', 'value', 'units', 'flyInDistance', 'notes'
       ];
+
+      // Check for measurements with multi-team users that will lose data in export
+      const multiTeamMeasurements = measurements.filter(m => m.user?.teams && m.user.teams.length > 1);
+      const hasMultiTeamMeasurements = multiTeamMeasurements.length > 0;
 
       const csvRows = measurements.map(measurement => {
         const user = measurement.user;
-        const teams = user?.teams ? user.teams.map((t: any) => t.name).join(';') : '';
-        const submittedBy = measurement.submittedBy || '';
-        const verifiedBy = measurement.verifiedBy || '';
+        // Export first team only as "teamName" (singular) to match import format
+        const teamName = user?.teams && user.teams.length > 0 ? user.teams[0].name : '';
 
         return [
-          measurement.id,
           user?.firstName || '',
           user?.lastName || '',
-          user?.fullName || '',
-          user?.birthYear || '',
           user?.gender || '',
-          teams,
-          measurement.date,
-          measurement.age,
-          measurement.metric,
-          measurement.value,
-          measurement.units,
+          teamName,
+          measurement.date || '',
+          measurement.age || '',
+          measurement.metric || '',
+          measurement.value || '',
+          measurement.units || '',
           measurement.flyInDistance || '',
-          measurement.notes || '',
-          submittedBy,
-          verifiedBy,
-          measurement.isVerified,
-          measurement.createdAt
+          measurement.notes || ''
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
           let value = String(field || '');
@@ -5555,6 +5596,12 @@ export async function registerRoutes(app: Express) {
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename="measurements.csv"');
+
+      // Warn if measurements have multi-team users with data loss
+      if (hasMultiTeamMeasurements) {
+        res.setHeader('X-Export-Warning', `${multiTeamMeasurements.length} measurement(s) from athletes with multiple teams; only first team exported`);
+      }
+
       res.send(csvContent);
     } catch (error) {
       console.error("Error exporting measurements:", error);

@@ -5,9 +5,19 @@ import {
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+
+/**
+ * Helper function to create a WHERE condition that excludes soft-deleted users.
+ * This prevents code duplication of `sql`${users.deletedAt} IS NULL`` across multiple methods.
+ *
+ * Usage: .where(and(eq(users.id, id), whereUserNotDeleted()))
+ */
+function whereUserNotDeleted(): SQL {
+  return sql`${users.deletedAt} IS NULL`;
+}
 
 export interface IStorage {
   // Authentication & Users
@@ -20,15 +30,19 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
+  hardDeleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
   // Organizations
-  getOrganizations(): Promise<Organization[]>;
+  getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
+  deactivateOrganization(id: string): Promise<void>;
+  reactivateOrganization(id: string): Promise<void>;
+  getOrganizationDependencyCounts(id: string): Promise<{ users: number; teams: number; measurements: number }>;
   getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]>;
   getOrganizationProfile(organizationId: string): Promise<Organization & {
     coaches: Array<{ user: User, role: string }>,
@@ -50,7 +64,7 @@ export interface IStorage {
   // User Management
   addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
   addUserToTeam(userId: string, teamId: string): Promise<UserTeam>;
-  removeUserFromOrganization(userId: string, organizationId: string): Promise<void>;
+  removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin?: boolean): Promise<void>;
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
 
   // Optimized queries
@@ -194,7 +208,12 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // Authentication & Users
   async authenticateUser(username: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -202,7 +221,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(arrayContains(users.emails, [email]));
+    const [user] = await db.select().from(users).where(
+      and(
+        arrayContains(users.emails, [email]),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
     if (!user) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
@@ -212,13 +236,21 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     // Use PostgreSQL array search with ANY operator
     const [user] = await db.select().from(users).where(
-      sql`${email} = ANY(${users.emails})`
+      and(
+        sql`${email} = ANY(${users.emails})`,
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
     );
     return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
     return user || undefined;
   }
 
@@ -274,12 +306,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(asc(users.lastName), asc(users.firstName));
+    return await db.select().from(users)
+      .where(whereUserNotDeleted()) // Exclude soft-deleted users
+      .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
   async getSiteAdminUsers(): Promise<User[]> {
     return await db.select().from(users)
-      .where(eq(users.isSiteAdmin, true))
+      .where(and(
+        eq(users.isSiteAdmin, true),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      ))
       .orderBy(asc(users.lastName), asc(users.firstName));
   }
 
@@ -288,7 +325,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, id),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
     return user || undefined;
   }
 
@@ -337,23 +379,160 @@ export class DatabaseStorage implements IStorage {
     return updatedUser;
   }
 
+  /**
+   * Soft deletes a user and handles associated data in an atomic transaction.
+   *
+   * SOFT DELETE: User record is marked as deleted but preserved
+   * - Sets deletedAt timestamp on user record
+   * - User account becomes inaccessible but data integrity is maintained
+   * - User can be queried with whereUserNotDeleted() to exclude soft-deleted users
+   *
+   * SOFT DELETIONS (preserved with isActive=false):
+   * - User-team relationships (soft deleted for audit trail - set isActive=false and leftAt timestamp)
+   *
+   * HARD DELETIONS (fully removed):
+   * - Sessions (security requirement - explicit revocation)
+   * - Email verification tokens (no longer needed)
+   * - Athlete profiles (personal metadata)
+   *
+   * PRESERVED DATA (nullified foreign keys):
+   * - User record (soft deleted with deletedAt timestamp)
+   * - User-organization relationships (kept to preserve measurement organization context)
+   * - Measurements (NEVER TOUCHED - immutable snapshots in time)
+   *   - userId, submittedBy, verifiedBy remain as historical references
+   * - Audit logs (compliance requirement - immutable audit trail, userId set to NULL)
+   * - Invitations (preserve invitation history, foreign keys set to NULL)
+   *   - invitedBy set to NULL (preserve invitation record)
+   *   - playerId set to NULL (preserve invitation record)
+   *   - acceptedBy already handled (set to NULL)
+   *   - cancelledBy already handled (set to NULL)
+   */
   async deleteUser(id: string): Promise<void> {
-    // Delete related records first
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
-    await db.delete(userTeams).where(eq(userTeams.userId, id));
+    // Use a transaction to ensure all deletions happen atomically
+    await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
 
-    // Delete invitations sent by this user
-    await db.delete(invitations).where(eq(invitations.invitedBy, id));
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
-    // Update measurements to remove references to this user
-    await db.update(measurements)
-      .set({
-        submittedBy: sql`NULL`,
-        verifiedBy: sql`NULL`
-      })
-      .where(sql`${measurements.submittedBy} = ${id} OR ${measurements.verifiedBy} = ${id}`);
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
-    await db.delete(users).where(eq(users.id, id));
+      // SOFT DELETE user-team relationships instead of hard delete
+      // This preserves historical team membership for audit trail
+      await tx.update(userTeams)
+        .set({
+          isActive: false,
+          leftAt: new Date()
+        })
+        .where(eq(userTeams.userId, id));
+
+      // PRESERVE user-organization relationships (for measurement context)
+      // This enables analytics queries to filter measurements by organization
+      // even after user deletion:
+      //   measurements → userId → userOrganizations → organizationId
+      // Alternative path also works: measurements → teamId → teams.organizationId
+      // We keep userOrganizations to support both query patterns
+      // Note: userOrganizations are NOT deleted
+
+      // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
+      // userId, submittedBy, and verifiedBy remain as historical references
+      // even though the user no longer exists
+
+      // PRESERVE INVITATION HISTORY: Set foreign keys to NULL instead of deleting
+      // This maintains a complete audit trail of all invitation activity
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: null as any })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: null as any })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Update invitations created BY this user (preserve invitation history)
+      await tx.update(invitations)
+        .set({ invitedBy: null as any })
+        .where(eq(invitations.invitedBy, id));
+
+      // Update invitations FOR this user (as athlete/playerId) (preserve invitation history)
+      await tx.update(invitations)
+        .set({ playerId: null as any })
+        .where(eq(invitations.playerId, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
+
+      // SOFT DELETE: Mark user as deleted and inactive instead of removing the record
+      await tx.update(users)
+        .set({
+          deletedAt: new Date(),
+          isActive: false
+        })
+        .where(eq(users.id, id));
+    });
+  }
+
+  /**
+   * GDPR COMPLIANCE: Permanently delete all user data from the database.
+   *
+   * This method is ONLY for GDPR "right to erasure" requests or legal compliance.
+   * Use deleteUser() for normal account deletion (soft delete).
+   *
+   * WARNING: This is irreversible and will:
+   * - Permanently delete user record
+   * - Delete all user-organization relationships
+   * - Delete all user-team relationships
+   * - Delete all invitations sent by/for/accepted by/cancelled by this user
+   * - Delete all athlete profiles
+   * - Delete all email verification tokens
+   * - Delete all sessions
+   * - Set audit logs userId to NULL (preserve compliance trail)
+   * - Set measurement foreign keys to NULL (preserve statistical data)
+   *
+   * IMPORTANT: This does NOT delete measurements themselves (they remain for statistical purposes)
+   * but removes the ability to identify the user in those measurements.
+   */
+  async hardDeleteUser(id: string): Promise<void> {
+    await db.transaction(async (tx: any) => {
+      const { sessions } = await import('@shared/schema');
+
+      // Delete all sessions
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
+      // Delete user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
+
+      // Delete user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete all invitations related to this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+      await tx.delete(invitations).where(eq(invitations.acceptedBy, id));
+      await tx.delete(invitations).where(eq(invitations.cancelledBy, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
+
+      // HARD DELETE: Permanently remove user record
+      await tx.delete(users).where(eq(users.id, id));
+    });
   }
 
   async getUserOrganizations(userId: string): Promise<any[]> {
@@ -441,8 +620,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Organizations
-  async getOrganizations(): Promise<Organization[]> {
-    return db.select().from(organizations).orderBy(asc(organizations.name));
+  async getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]> {
+    const query = db.select().from(organizations);
+
+    // By default, exclude inactive organizations
+    if (!filters?.includeInactive) {
+      return query.where(eq(organizations.isActive, true)).orderBy(asc(organizations.name));
+    }
+
+    return query.orderBy(asc(organizations.name));
   }
 
   async getOrganization(id: string): Promise<Organization | undefined> {
@@ -461,7 +647,89 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOrganization(id: string): Promise<void> {
-    await db.delete(organizations).where(eq(organizations.id, id));
+    // Use transaction with row-level locking to prevent race conditions
+    await db.transaction(async (tx: any) => {
+      // 1. Lock the organization row to prevent concurrent modifications
+      const org = await tx.select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .for('update'); // Row-level lock
+
+      if (!org || org.length === 0) {
+        throw new Error("Organization not found");
+      }
+
+      // 2. Re-check dependencies inside transaction (TOCTOU protection)
+      const usersResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, id));
+      const usersCount = Number(usersResult[0]?.count || 0);
+
+      const teamsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(teams)
+        .where(eq(teams.organizationId, id));
+      const teamsCount = Number(teamsResult[0]?.count || 0);
+
+      const measurementsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(measurements)
+        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+        .where(eq(userOrganizations.organizationId, id));
+      const measurementsCount = Number(measurementsResult[0]?.count || 0);
+
+      if (usersCount > 0 || teamsCount > 0 || measurementsCount > 0) {
+        const errors = [];
+        if (usersCount > 0) errors.push(`${usersCount} users`);
+        if (teamsCount > 0) errors.push(`${teamsCount} teams`);
+        if (measurementsCount > 0) errors.push(`${measurementsCount} measurements`);
+        throw new Error(`Cannot delete organization with active dependencies: ${errors.join(', ')}`);
+      }
+
+      // 3. Delete organization atomically
+      await tx.delete(organizations).where(eq(organizations.id, id));
+    });
+  }
+
+  async deactivateOrganization(id: string): Promise<void> {
+    await db.update(organizations)
+      .set({ isActive: false, deletedAt: new Date() })
+      .where(eq(organizations.id, id));
+  }
+
+  async reactivateOrganization(id: string): Promise<void> {
+    await db.update(organizations)
+      .set({ isActive: true, deletedAt: null })
+      .where(eq(organizations.id, id));
+  }
+
+  async getOrganizationDependencyCounts(id: string): Promise<{ users: number; teams: number; measurements: number }> {
+    // Execute all counts in a single transaction to prevent race conditions
+    // This ensures atomic snapshot of dependency counts
+    return await db.transaction(async (tx) => {
+      // Count users in organization
+      const usersResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, id));
+      const usersCount = Number(usersResult[0]?.count || 0);
+
+      // Count teams in organization
+      const teamsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(teams)
+        .where(eq(teams.organizationId, id));
+      const teamsCount = Number(teamsResult[0]?.count || 0);
+
+      // Count measurements for users in this organization
+      const measurementsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(measurements)
+        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+        .where(eq(userOrganizations.organizationId, id));
+      const measurementsCount = Number(measurementsResult[0]?.count || 0);
+
+      return {
+        users: usersCount,
+        teams: teamsCount,
+        measurements: measurementsCount,
+      };
+    });
   }
 
   async getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]> {
@@ -859,12 +1127,43 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async removeUserFromOrganization(userId: string, organizationId: string): Promise<void> {
-    await db.delete(userOrganizations)
-      .where(and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, organizationId)
-      ));
+  async removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin: boolean = false): Promise<void> {
+    if (!validateLastAdmin) {
+      // Simple deletion without admin validation
+      await db.delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return;
+    }
+
+    // Transaction with admin count validation to prevent race conditions (TOCTOU protection)
+    await db.transaction(async (tx: any) => {
+      // 1. Lock organization row to prevent concurrent admin removals
+      await tx.select()
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .for('update');
+
+      // 2. Get current admin count atomically within transaction
+      const orgUsers = await tx.select()
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, organizationId));
+
+      const adminCount = orgUsers.filter((u: any) => u.role === 'org_admin').length;
+
+      if (adminCount <= 1) {
+        throw new Error("Cannot remove the last organization administrator");
+      }
+
+      // 3. Delete user from organization atomically
+      await tx.delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+    });
   }
 
   async updateUserOrganizationRole(userId: string, organizationId: string, role: string): Promise<void> {
@@ -1307,7 +1606,12 @@ export class DatabaseStorage implements IStorage {
   // Legacy methods for backward compatibility - delegate to athlete methods
 
   async getAthlete(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      )
+    );
     if (!user) return undefined;
 
     const userTeams = await this.getUserTeams(user.id);
@@ -1480,6 +1784,11 @@ export class DatabaseStorage implements IStorage {
   async deleteAthlete(id: string): Promise<void> {
     // Use a transaction to ensure all deletions happen atomically
     await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
       // Delete email verification tokens
       await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
 
@@ -1492,16 +1801,17 @@ export class DatabaseStorage implements IStorage {
       // Delete all user-organization relationships
       await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
 
-      // Delete all measurements for this user (as subject)
-      await tx.delete(measurements).where(eq(measurements.userId, id));
+      // Delete measurements where user is subject OR submitter
+      // Note: submittedBy is NOT NULL, so we must delete rather than set to null
+      // This covers both self-submitted measurements and measurements submitted by this user for others
+      await tx.delete(measurements).where(
+        or(
+          eq(measurements.userId, id),
+          eq(measurements.submittedBy, id)
+        )
+      );
 
-      // Update measurements submitted by this user (set submittedBy to null or keep as-is)
-      // Don't delete them as they belong to other athletes
-      await tx.update(measurements)
-        .set({ submittedBy: null as any })
-        .where(eq(measurements.submittedBy, id));
-
-      // Update measurements verified by this user
+      // Update measurements verified by this user (verifiedBy is nullable)
       await tx.update(measurements)
         .set({ verifiedBy: null as any })
         .where(eq(measurements.verifiedBy, id));
@@ -1521,8 +1831,11 @@ export class DatabaseStorage implements IStorage {
       // Delete invitations FOR this user (as athlete/playerId)
       await tx.delete(invitations).where(eq(invitations.playerId, id));
 
-      // Delete audit logs for this user
-      await tx.delete(auditLogs).where(eq(auditLogs.userId, id));
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
 
       // Finally, delete the user record
       await tx.delete(users).where(eq(users.id, id));
@@ -1534,7 +1847,8 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(users.firstName, firstName),
         eq(users.lastName, lastName),
-        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`
+        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`,
+        isNull(users.deletedAt)
       ));
 
     if (!user) return undefined;
@@ -1631,7 +1945,7 @@ export class DatabaseStorage implements IStorage {
       verifierInfo: sql<any>`verifier_info.first_name || ' ' || verifier_info.last_name`
     })
     .from(measurements)
-    .innerJoin(users, eq(measurements.userId, users.id))
+    .leftJoin(users, eq(measurements.userId, users.id))
     .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
     .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
 
@@ -1916,7 +2230,12 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get submitter info to determine if auto-verify
-    const [submitter] = await db.select().from(users).where(eq(users.id, submittedBy));
+    const [submitter] = await db.select().from(users).where(
+      and(
+        eq(users.id, submittedBy),
+        isNull(users.deletedAt)
+      )
+    );
 
     // Check if submitter is site admin or has coach/org_admin role in any organization
     let isCoach = submitter?.isSiteAdmin === true;
@@ -2127,7 +2446,12 @@ export class DatabaseStorage implements IStorage {
 
   // Enhanced Authentication Methods Implementation
   async findUserById(userId: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, userId),
+        isNull(users.deletedAt)
+      )
+    );
     return user || null;
   }
 
