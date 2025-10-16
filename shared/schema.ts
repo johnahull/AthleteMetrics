@@ -132,9 +132,9 @@ export const invitations = pgTable("invitations", {
   lastName: text("last_name"), // Optional pre-filled name
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   teamIds: text("team_ids").array(),
-  playerId: varchar("player_id").references(() => users.id), // Reference to existing athlete (kept as playerId for DB compatibility). NULL if user was deleted (preserves invitation history)
+  playerId: varchar("player_id").references(() => users.id, { onDelete: 'set null' }), // Reference to existing athlete (kept as playerId for DB compatibility). NULL if user was deleted (preserves invitation history)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
-  invitedBy: varchar("invited_by").references(() => users.id), // User who sent invitation. NULL if user was deleted (preserves invitation history)
+  invitedBy: varchar("invited_by").references(() => users.id, { onDelete: 'set null' }), // User who sent invitation. NULL if user was deleted (preserves invitation history)
   token: text("token").notNull().unique(),
   // Enhanced tracking fields
   status: text("status").default("pending"), // "pending", "accepted", "expired", "cancelled" - made nullable for backward compatibility
@@ -142,9 +142,9 @@ export const invitations = pgTable("invitations", {
   emailSent: boolean("email_sent").default(false).notNull(),
   emailSentAt: timestamp("email_sent_at"),
   acceptedAt: timestamp("accepted_at"),
-  acceptedBy: varchar("accepted_by").references(() => users.id), // User ID created from invitation
+  acceptedBy: varchar("accepted_by").references(() => users.id, { onDelete: 'set null' }), // User ID created from invitation
   cancelledAt: timestamp("cancelled_at"),
-  cancelledBy: varchar("cancelled_by").references(() => users.id),
+  cancelledBy: varchar("cancelled_by").references(() => users.id, { onDelete: 'set null' }),
   lastAttemptAt: timestamp("last_attempt_at"), // Track failed acceptance attempts
   attemptCount: integer("attempt_count").default(0).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
