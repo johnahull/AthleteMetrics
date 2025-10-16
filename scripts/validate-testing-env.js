@@ -26,6 +26,23 @@ const STAGING_DB_PATTERNS = [
   /stg[_-]?db/i
 ];
 
+// Production hostname patterns to detect production database servers
+const PRODUCTION_HOST_PATTERNS = [
+  /\.prod\./i,
+  /production.*\.railway\.app/i,
+  /aws-.*-prod/i,
+  /azure.*prod/i,
+  /gcp.*prod/i
+];
+
+// Required environment variables for the application to function
+const REQUIRED_ENV_VARS = [
+  'DATABASE_URL',
+  'SESSION_SECRET',
+  'ADMIN_USER',
+  'ADMIN_PASS'
+];
+
 function validateDatabaseIsolation() {
   const databaseUrl = process.env.DATABASE_URL;
   const nodeEnv = process.env.NODE_ENV;
@@ -46,16 +63,20 @@ function validateDatabaseIsolation() {
     return false;
   }
 
-  // Extract database name from connection string
+  // Extract database name and hostname from connection string
   // Format: postgresql://user:pass@host:port/database_name?options
   const dbNameMatch = databaseUrl.match(/\/([^/?]+)(?:\?|$)/);
   const databaseName = dbNameMatch ? dbNameMatch[1] : '';
 
+  const hostMatch = databaseUrl.match(/\/\/[^@]+@([^:/]+)/);
+  const hostname = hostMatch ? hostMatch[1] : '';
+
   console.log(`   Database URL: ${databaseUrl.substring(0, 30)}...`);
+  console.log(`   Database Host: ${hostname}`);
   console.log(`   Database Name: ${databaseName}`);
   console.log(`   Environment: ${nodeEnv}\n`);
 
-  // Check against production patterns
+  // Check database name against production patterns
   for (const pattern of PRODUCTION_DB_PATTERNS) {
     if (pattern.test(databaseName)) {
       console.error('❌ VALIDATION FAILED: Testing environment appears to be using a PRODUCTION database');
@@ -66,6 +87,20 @@ function validateDatabaseIsolation() {
       console.error('      railway add --environment testing  # Select PostgreSQL');
       console.error('   2. Or manually set DATABASE_URL to a testing-specific database:');
       console.error('      railway variables --set "DATABASE_URL=postgresql://...athletemetrics_testing"\n');
+      return false;
+    }
+  }
+
+  // Check hostname against production patterns (prevents bypass via query params)
+  for (const pattern of PRODUCTION_HOST_PATTERNS) {
+    if (pattern.test(hostname) || pattern.test(databaseUrl)) {
+      console.error('❌ VALIDATION FAILED: Testing environment appears to be using a PRODUCTION database server');
+      console.error(`   Database host "${hostname}" matches production pattern: ${pattern}\n`);
+      console.error('   🚨 DANGER: Deploying to testing could corrupt production data!\n');
+      console.error('   To fix this:');
+      console.error('   1. Create a separate database for testing:');
+      console.error('      railway add --environment testing  # Select PostgreSQL');
+      console.error('   2. Or manually set DATABASE_URL to a testing-specific database server\n');
       return false;
     }
   }
@@ -83,9 +118,22 @@ function validateDatabaseIsolation() {
     }
   }
 
+  // Check required environment variables
+  const missingVars = REQUIRED_ENV_VARS.filter(varName => !process.env[varName]);
+  if (missingVars.length > 0) {
+    console.error('❌ VALIDATION FAILED: Missing required environment variables');
+    console.error(`   Missing: ${missingVars.join(', ')}\n`);
+    console.error('   To fix this:');
+    console.error('   1. Set missing variables in Railway testing environment:');
+    console.error('      railway variables --environment testing');
+    console.error('   2. See RAILWAY_TESTING_SETUP.md for required variable values\n');
+    return false;
+  }
+
   // Validation passed
   console.log('✅ Database isolation validation PASSED');
-  console.log(`   Database "${databaseName}" appears to be isolated for testing\n`);
+  console.log(`   Database "${databaseName}" appears to be isolated for testing`);
+  console.log(`✅ All required environment variables are set\n`);
   return true;
 }
 

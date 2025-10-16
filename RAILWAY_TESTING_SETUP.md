@@ -261,6 +261,11 @@ const isProduction = process.env.NODE_ENV === 'production';
 if (isProduction) {
   return false; // Always enforce rate limiting in production
 }
+
+// Skip rate limiting only if explicitly enabled via environment flag in non-production
+// This prevents accidental bypass in production
+const userIsSiteAdmin = isSiteAdmin(req.session.user);
+return process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true' && userIsSiteAdmin;
 ```
 
 **Why this is safe:**
