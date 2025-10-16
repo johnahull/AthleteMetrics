@@ -24,10 +24,18 @@ const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
 
 /**
  * Sanitize output to prevent command injection via control characters
- * Removes control characters and ANSI escape sequences
+ * Removes ANSI escape sequences and control characters
+ *
+ * ANSI sequences: \x1B[ followed by parameters and command letter
+ * Control chars: 0x00-0x1F (except \n, \t), 0x7F-0x9F
  */
 function sanitizeOutput(str) {
   if (!str) return '';
+  // Remove ANSI escape sequences (color codes, cursor control, etc.)
+  // Pattern: ESC [ <parameters> <command>
+  str = str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+  // Remove other ANSI sequences: ESC followed by any character
+  str = str.replace(/\x1B./g, '');
   // Remove control characters (0x00-0x1F, 0x7F-0x9F) except newlines and tabs
   return str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
 }

@@ -73,8 +73,8 @@ jobs:
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
-          # Verify GPG key fingerprint for security
-          sudo gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/postgresql.gpg --fingerprint | grep -q "B97B 0AFC AA1A 47F0 44F2  44A0 7FCC 7D46 ACCC 4CF8" || { echo "❌ PostgreSQL GPG key fingerprint verification failed"; exit 1; }
+          # Verify GPG key fingerprint for security (specify key ID for precise matching)
+          sudo gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/postgresql.gpg --fingerprint ACCC4CF8 | grep -q "B97B 0AFC AA1A 47F0 44F2  44A0 7FCC 7D46 ACCC 4CF8" || { echo "❌ PostgreSQL GPG key fingerprint verification failed"; exit 1; }
           echo "✅ PostgreSQL GPG key fingerprint verified"
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
