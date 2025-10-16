@@ -65,7 +65,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     // Create Express app with routes
     app = express();
     app.use(express.json());
-    registerRoutes(app);
+    await registerRoutes(app);
     agent = request.agent(app);
 
     // Login as site admin
@@ -116,7 +116,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     // (Route limiters read NODE_ENV at initialization time)
     const prodApp = express();
     prodApp.use(express.json());
-    registerRoutes(prodApp);
+    await registerRoutes(prodApp);
     const prodAgent = request.agent(prodApp);
 
     // Login as site admin
@@ -183,7 +183,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     // Create a new Express app with production settings
     const prodApp = express();
     prodApp.use(express.json());
-    registerRoutes(prodApp);
+    await registerRoutes(prodApp);
     const prodAgent = request.agent(prodApp);
 
     // Login as site admin
@@ -234,7 +234,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     // Create a new Express app with test settings
     const testApp = express();
     testApp.use(express.json());
-    registerRoutes(testApp);
+    await registerRoutes(testApp);
     const testAgent = request.agent(testApp);
 
     // Login
