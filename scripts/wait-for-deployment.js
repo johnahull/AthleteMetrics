@@ -169,20 +169,21 @@ async function waitForDeployment() {
   await checkRailwayCLI();
   console.log('✅ Railway CLI found');
 
-  // Verify Railway CLI authentication
+  // Verify Railway CLI authentication before waiting
+  // This provides faster feedback if auth is misconfigured
   console.log('🔐 Verifying Railway authentication...');
   const user = await checkRailwayAuth();
   console.log(`✅ Authenticated as: ${user}`);
-
-  console.log('⏳ Waiting for Railway deployment to complete...');
-  console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
-  console.log(`   Timeout: ${TIMEOUT / 1000}s`);
 
   // Initial delay to allow Railway API to register the new deployment
   // Without this, we may poll the previous deployment instead of the new one
   const INITIAL_DELAY = 10000; // 10 seconds
   console.log(`⏸️  Initial delay: ${INITIAL_DELAY / 1000}s (waiting for Railway to register new deployment)`);
   await new Promise(resolve => setTimeout(resolve, INITIAL_DELAY));
+
+  console.log('⏳ Waiting for Railway deployment to complete...');
+  console.log(`   Poll interval: ${POLL_INTERVAL / 1000}s`);
+  console.log(`   Timeout: ${TIMEOUT / 1000}s`);
 
   const startTime = Date.now();
   let lastStatus = null;
