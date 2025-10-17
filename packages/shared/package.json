@@ -25,5 +25,13 @@
     "./username-validation": "./username-validation.ts",
     "./utils/number-conversion": "./utils/number-conversion.ts",
     "./utils/statistics": "./utils/statistics.ts"
+  },
+  "dependencies": {
+    "date-fns": "^3.6.0",
+    "drizzle-orm": "^0.39.3",
+    "drizzle-zod": "^0.7.0",
+    "dompurify": "^3.2.6",
+    "zod": "^3.24.2",
+    "zod-validation-error": "^3.4.0"
   }
 }
