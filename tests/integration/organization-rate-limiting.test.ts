@@ -29,7 +29,7 @@ process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { storage } from '../../server/storage';
+import { storage } from '../../packages/api/storage';
 import type { Organization, User } from '@shared/schema';
 
 // Mock vite module before importing registerRoutes
@@ -38,7 +38,7 @@ vi.mock('../../server/vite.js', () => ({
   serveStatic: vi.fn()
 }));
 
-import { registerRoutes } from '../../server/routes';
+import { registerRoutes } from '../../packages/api/routes';
 
 describe('Organization Deletion Rate Limiting', () => {
   let siteAdminUser: User;

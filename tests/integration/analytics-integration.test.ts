@@ -25,8 +25,8 @@ vi.mock('../../server/vite.js', () => ({
   serveStatic: vi.fn()
 }));
 
-import { registerRoutes } from '../../server/routes';
-import { db } from '../../server/db';
+import { registerRoutes } from '../../packages/api/routes';
+import { db } from '../../packages/api/db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSiteAdmin } from '../../shared/auth-utils';
+import { isSiteAdmin } from '@shared/auth-utils';
 
 /**
  * Tests for site admin detection logic

@@ -6,8 +6,8 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { db } from '../../server/db';
-import { users } from '../../shared/schema';
+import { db } from '../../packages/api/db';
+import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('isSiteAdmin Migration Tests', () => {

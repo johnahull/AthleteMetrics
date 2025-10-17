@@ -10,7 +10,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@l
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
-import { db } from '../../server/db';
+import { db } from '../../packages/api/db';
 import { users, auditLogs } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import type { User } from '@shared/schema';
@@ -22,8 +22,8 @@ vi.mock('../../server/vite.js', () => ({
 }));
 
 // Import storage and the actual function we're testing
-import { storage } from '../../server/storage';
-import { initializeDefaultUser } from '../../server/routes';
+import { storage } from '../../packages/api/storage';
+import { initializeDefaultUser } from '../../packages/api/routes';
 
 describe('Admin User Initialization', () => {
   let originalEnv: NodeJS.ProcessEnv;

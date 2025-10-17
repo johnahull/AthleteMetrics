@@ -3,8 +3,8 @@
 // Run with: export $(cat .env | xargs) && npm run test:run -- tests/integration/critical-fixes.test.ts
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { db } from '../../server/db';
-import { storage } from '../../server/storage';
+import { db } from '../../packages/api/db';
+import { storage } from '../../packages/api/storage';
 import {
   users,
   organizations,
@@ -20,7 +20,7 @@ import {
   type User,
   type Organization,
   type Team,
-} from '../../shared/schema';
+} from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
 
 describe('Critical Fix 2: User-Team Soft Delete', () => {

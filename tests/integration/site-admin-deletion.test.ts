@@ -2,8 +2,8 @@
 // This prevents accidentally running tests against wrong database
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { db } from '../../server/db';
-import { storage } from '../../server/storage';
+import { db } from '../../packages/api/db';
+import { storage } from '../../packages/api/storage';
 import {
   users,
   organizations,
@@ -20,7 +20,7 @@ import {
   type Organization,
   type Team,
   type Measurement
-} from '../../shared/schema';
+} from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
 
 describe('Site Admin Deletion with Foreign Key Cleanup', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '../../shared/password-requirements';
+import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
 
 describe('Password Requirements Validation', () => {
   describe('validatePassword', () => {

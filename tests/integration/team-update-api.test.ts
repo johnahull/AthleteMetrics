@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { storage } from '../../server/storage';
+import { storage } from '../../packages/api/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
 // Mock vite module before importing registerRoutes
@@ -24,7 +24,7 @@ vi.mock('../../server/vite.js', () => ({
   serveStatic: vi.fn()
 }));
 
-import { registerRoutes } from '../../server/routes';
+import { registerRoutes } from '../../packages/api/routes';
 
 describe.skip('Team Update API Integration Tests', () => {
   let app: Express;
