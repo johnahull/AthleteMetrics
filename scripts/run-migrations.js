@@ -118,6 +118,8 @@ async function releaseMigrationLock(client, lockIds) {
 
 async function runMigrations() {
   console.log('🔄 Running database migrations...\n');
+  console.log(`📂 Current working directory: ${process.cwd()}`);
+  console.log(`📂 Script directory: ${__dirname}`);
 
   const migrationClient = postgres(DATABASE_URL, {
     max: 1,
@@ -151,7 +153,9 @@ async function runMigrations() {
     await migrationClient.unsafe(`SET statement_timeout = '${stmtTimeout}'`);
     console.log(`🔒 PostgreSQL safety timeouts configured (lock: ${lockTimeout}, statement: ${stmtTimeout})`);
 
-    const migrationsFolder = path.join(process.cwd(), 'migrations');
+    // Use __dirname to resolve migrations folder relative to script location
+    // This ensures it works regardless of where the script is executed from
+    const migrationsFolder = path.join(__dirname, '..', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
     // Import fs for file operations
