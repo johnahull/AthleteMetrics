@@ -1096,7 +1096,7 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
   it('should revoke sessions when soft deleting user', async () => {
     // Import sessions dynamically
-    const { sessions } = await import('../../shared/schema');
+    const { sessions } = await import('@shared/schema');
 
     // Create session for athlete
     await db.insert(sessions).values({
