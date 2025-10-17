@@ -184,21 +184,6 @@ async function runMigrations() {
     const trackingExists = trackingCheck[0]?.tracking_exists;
     console.log(`   Migration tracking exists: ${trackingExists ? 'YES' : 'NO'}`);
 
-    // If schema exists AND tracking exists, database is already migrated - exit early
-    if (schemaExists && trackingExists) {
-      console.log('✅ Database schema and migration tracking already exist');
-      console.log('✅ No migrations to apply - database is up to date');
-
-      // Release lock before exiting
-      if (lockId !== null) {
-        await releaseMigrationLock(migrationClient, lockId);
-        lockId = null;
-        globalLockId = null;
-      }
-
-      process.exit(0);
-    }
-
     // If schema exists but tracking doesn't, initialize tracking table
     // This handles databases created via drizzle-kit push
     if (schemaExists && !trackingExists) {
