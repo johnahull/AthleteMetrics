@@ -1,6 +1,7 @@
 {
   "name": "@athletemetrics/web",
   "version": "0.2.0",
+  "description": "React frontend application for AthleteMetrics",
   "private": true,
   "type": "module",
   "scripts": {

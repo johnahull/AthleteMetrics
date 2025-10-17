@@ -38,11 +38,15 @@ RUN apk add --no-cache \
     tesseract-ocr \
     tesseract-ocr-data-eng
 
-# Copy package files
+# Copy package files including workspace package.json files
 COPY package*.json ./
+COPY packages/api/package.json ./packages/api/
+COPY packages/web/package.json ./packages/web/
+COPY packages/shared/package.json ./packages/shared/
 
-# Install only production dependencies
-RUN npm ci --only=production
+# Install only production dependencies for API and shared workspaces
+# Note: Web dependencies are not needed at runtime since frontend is pre-built
+RUN npm ci --only=production --workspace=@athletemetrics/api --workspace=@athletemetrics/shared
 
 # Copy built application from builder stage
 # Note: With npm workspaces, dist/index.js bundles all code including shared types

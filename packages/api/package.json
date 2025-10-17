@@ -1,6 +1,7 @@
 {
   "name": "@athletemetrics/api",
   "version": "0.2.0",
+  "description": "Backend API server for AthleteMetrics",
   "private": true,
   "type": "module",
   "main": "./index.ts",

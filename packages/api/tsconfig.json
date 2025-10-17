@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../dist",
+    "rootDir": ".",
+    "types": ["node"],
+    "lib": ["ES2018"],
+    "jsx": "preserve"
+  },
+  "include": ["./**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "__tests__"]
+}
