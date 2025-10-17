@@ -184,9 +184,20 @@ async function runMigrations() {
     const trackingExists = trackingCheck[0]?.tracking_exists;
     console.log(`   Migration tracking exists: ${trackingExists ? 'YES' : 'NO'}`);
 
-    // If schema exists but tracking doesn't, initialize tracking table
+    // Check if tracking table is empty (even if it exists structurally)
+    let trackingIsEmpty = false;
+    if (trackingExists) {
+      const countCheck = await migrationClient.unsafe(`
+        SELECT COUNT(*) as count FROM drizzle.__drizzle_migrations
+      `);
+      const migrationCount = parseInt(countCheck[0]?.count) || 0;
+      trackingIsEmpty = migrationCount === 0;
+      console.log(`   Migrations tracked: ${migrationCount}`);
+    }
+
+    // If schema exists but tracking is missing or empty, initialize tracking table
     // This handles databases created via drizzle-kit push
-    if (schemaExists && !trackingExists) {
+    if (schemaExists && (!trackingExists || trackingIsEmpty)) {
       console.log('⚠️  Database schema exists but migration tracking is missing');
       console.log('   This indicates the database was created via drizzle-kit push');
       console.log('   Initializing migration tracking table...');
