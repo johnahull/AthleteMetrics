@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseCSV, validateAthleteCSV, validateMeasurementCSV } from '../../client/src/lib/csv';
+import { parseCSV, validateAthleteCSV, validateMeasurementCSV } from '../../packages/web/src/lib/csv';
 
 describe('CSV Import Security Tests', () => {
   describe('File Size Validation', () => {

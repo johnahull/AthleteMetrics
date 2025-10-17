@@ -25,8 +25,8 @@ vi.mock('../../client/src/components/charts/ChartContainer', () => ({
     );
   }
 }));
-import { ChartContainer } from '../../client/src/components/charts/ChartContainer';
-import { ErrorBoundary } from '../../client/src/components/ErrorBoundary';
+import { ChartContainer } from '../../packages/web/src/components/charts/ChartContainer';
+import { ErrorBoundary } from '../../packages/web/src/components/ErrorBoundary';
 import type { ChartDataPoint, ChartConfiguration } from '@shared/analytics-types';
 
 // Mock Chart.js
