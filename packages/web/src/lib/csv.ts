@@ -474,17 +474,17 @@ export function aggregateBatchResults(batchResults: BatchResult[]): BatchResult 
     }
 
     // Aggregate results
-    if (result.results) {
+    if (result.results && aggregated.results) {
       aggregated.results.push(...result.results);
     }
 
     // Aggregate created teams
-    if (result.createdTeams) {
+    if (result.createdTeams && aggregated.createdTeams) {
       aggregated.createdTeams.push(...result.createdTeams);
     }
 
     // Aggregate created athletes
-    if (result.createdAthletes) {
+    if (result.createdAthletes && aggregated.createdAthletes) {
       aggregated.createdAthletes.push(...result.createdAthletes);
     }
   });
