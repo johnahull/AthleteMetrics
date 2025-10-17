@@ -2,6 +2,12 @@
 import argparse, csv, random
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Tuple
+
+# Competitive level constants
+COMPETITIVE_LEVEL_DEFAULT = 3  # Intermediate baseline
+COMPETITIVE_LEVEL_MIN = 1
+COMPETITIVE_LEVEL_MAX = 5
 
 HEADERS = [
     "firstName","lastName","birthDate","birthYear","graduationYear","gender",
@@ -108,7 +114,21 @@ def auto_assign_competitive_level(age_group: str) -> int:
     return random.choices([1, 2, 3, 4, 5], weights=weights)[0]
 
 def get_level_prefix(competitive_level: int) -> str:
-    """Get team name prefix based on competitive level."""
+    """Get team name prefix based on competitive level.
+
+    Returns a randomly selected prefix from a level-appropriate pool:
+    - Level 1 (Elite): High-performance identifiers (Elite, Premier, Apex)
+    - Level 2 (Advanced): Competitive branding (Competitive, Advanced, Academy)
+    - Level 3 (Intermediate): Standard team names (Academy, Club, Team)
+    - Level 4 (Recreational): Community-focused names (Rec, Community, Local)
+    - Level 5 (Beginner): Development-oriented names (Beginner, Development, Youth)
+
+    Args:
+        competitive_level: Integer from 1-5 representing team competitive level
+
+    Returns:
+        String prefix for team name construction
+    """
     prefixes = {
         1: ["Elite", "Premier", "Select", "Apex", "United"],
         2: ["Competitive", "Advanced", "Club", "Academy", "Select"],
@@ -119,7 +139,21 @@ def get_level_prefix(competitive_level: int) -> str:
     return random.choice(prefixes[competitive_level])
 
 def get_level_suffix(competitive_level: int) -> str:
-    """Get team name suffix based on competitive level."""
+    """Get team name suffix based on competitive level.
+
+    Returns a randomly selected suffix from a level-appropriate pool:
+    - Level 1 (Elite): Powerful/dynamic terms (Thunder, Storm, Force)
+    - Level 2 (Advanced): Competitive identifiers (Lightning, Phoenix, Hawks)
+    - Level 3 (Intermediate): Standard team suffixes (United, FC, Stars)
+    - Level 4 (Recreational): Common sports names (Strikers, Rovers, Kickers)
+    - Level 5 (Beginner): Simple team identifiers (Dragons, Squad, Team)
+
+    Args:
+        competitive_level: Integer from 1-5 representing team competitive level
+
+    Returns:
+        String suffix for team name construction
+    """
     suffixes = {
         1: ["Thunder", "Storm", "Lightning", "Blaze", "Force"],
         2: ["Lightning", "Blaze", "Phoenix", "Strikers", "Hawks"],
@@ -160,7 +194,7 @@ def main():
         competitive_level = auto_assign_competitive_level(age_group)
     else:
         # Default to intermediate if no age group
-        competitive_level = 3
+        competitive_level = COMPETITIVE_LEVEL_DEFAULT
 
     # Auto team name if needed
     if args.team_name:
