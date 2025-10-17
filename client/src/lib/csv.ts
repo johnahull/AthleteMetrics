@@ -289,3 +289,54 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
     errors,
   };
 }
+
+/**
+ * Split an array of data into chunks of specified size
+ * @param data - Array of data objects to split
+ * @param chunkSize - Maximum size of each chunk
+ * @returns Array of chunks, where each chunk is an array of data objects
+ */
+export function chunkCSVData(data: any[], chunkSize: number): any[][] {
+  if (data.length === 0) return [];
+
+  const chunks: any[][] = [];
+  for (let i = 0; i < data.length; i += chunkSize) {
+    chunks.push(data.slice(i, i + chunkSize));
+  }
+
+  return chunks;
+}
+
+/**
+ * Create a CSV string from a chunk of data with specified headers
+ * @param chunk - Array of data objects
+ * @param headers - Array of header names (determines column order)
+ * @returns CSV string with headers and data rows
+ */
+export function createCSVFromChunk(chunk: any[], headers: string[]): string {
+  // Helper function to escape and format a single cell value
+  const formatCell = (value: any): string => {
+    // Handle null/undefined
+    if (value === null || value === undefined) return '';
+
+    const strValue = String(value);
+
+    // If value contains comma, quote, or newline, wrap in quotes and escape internal quotes
+    if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+      return `"${strValue.replace(/"/g, '""')}"`;
+    }
+
+    return strValue;
+  };
+
+  // Create header row
+  const headerRow = headers.join(',');
+
+  // Create data rows
+  const dataRows = chunk.map(row => {
+    return headers.map(header => formatCell(row[header])).join(',');
+  });
+
+  // Combine header and data rows
+  return [headerRow, ...dataRows].join('\n');
+}
