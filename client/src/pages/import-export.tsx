@@ -7,7 +7,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CloudUpload, Download, Copy, Info, AlertTriangle, Users, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { downloadCSV } from "@/lib/csv";
+import {
+  downloadCSV,
+  parseCSV,
+  chunkCSVData,
+  createCSVFromChunk,
+  needsBatchProcessing,
+  getBatchInfo,
+  aggregateBatchResults
+} from "@/lib/csv";
 import { PhotoUpload } from "@/components/photo-upload";
 import { ColumnMappingDialog } from "@/components/import/ColumnMappingDialog";
 import { PreviewTableDialog } from "@/components/import/PreviewTableDialog";
@@ -62,6 +70,9 @@ export default function ImportExport() {
   const [showColumnMappingDialog, setShowColumnMappingDialog] = useState(false);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [showBatchSplitDialog, setShowBatchSplitDialog] = useState(false);
+  const [largeParsedFile, setLargeParsedFile] = useState<{ file: File; data: any[]; headers: string[] } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; rowsProcessed: number } | null>(null);
   const { toast } = useToast();
   const { user, userOrganizations, organizationContext } = useAuth();
 
@@ -547,7 +558,100 @@ export default function ImportExport() {
     });
   };
 
-  const handleImport = () => {
+  // Process a large file that exceeds 10k rows by splitting into batches
+  const processLargeFile = async (file: File, data: any[], headers: string[]) => {
+    const MAX_ROWS_PER_BATCH = 10000;
+    const batchInfo = getBatchInfo(data.length, MAX_ROWS_PER_BATCH);
+
+    setBatchProgress({ current: 0, total: batchInfo.batchCount, rowsProcessed: 0 });
+    setImportStartTime(Date.now());
+    setElapsedSeconds(0);
+    setCancelImport(false);
+
+    // Split data into chunks
+    const chunks = chunkCSVData(data, MAX_ROWS_PER_BATCH);
+    const batchResults: any[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      // Check if cancelled
+      if (cancelImport) {
+        setBatchProgress(null);
+        setImportStartTime(null);
+        setElapsedSeconds(0);
+        toast({
+          title: "Import Cancelled",
+          description: `Cancelled after processing ${i} of ${chunks.length} batches (${i * MAX_ROWS_PER_BATCH} rows)`,
+          variant: "default",
+        });
+        return;
+      }
+
+      const chunk = chunks[i];
+      const rowsProcessed = i * MAX_ROWS_PER_BATCH + chunk.length;
+      setBatchProgress({ current: i + 1, total: chunks.length, rowsProcessed });
+
+      try {
+        // Create CSV from chunk
+        const csvContent = createCSVFromChunk(chunk, headers);
+        const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+        const batchFile = new File([csvBlob], file.name, { type: 'text/csv' });
+
+        const options = buildImportOptions();
+
+        // For batch imports, automatically create teams without confirmation
+        if (options.teamHandling === 'auto_create_confirm') {
+          options.teamHandling = 'auto_create_silent';
+        }
+
+        const result = await importMutation.mutateAsync({
+          file: batchFile,
+          type: importType,
+          mode: importMode,
+          teamId: selectedTeamId,
+          options
+        });
+
+        batchResults.push(result);
+      } catch (error) {
+        // On error, still continue processing remaining batches but track the error
+        batchResults.push({
+          error: error instanceof Error ? error.message : 'Unknown error',
+          totalRows: chunk.length,
+          errors: [{ message: error instanceof Error ? error.message : 'Unknown error' }],
+          summary: { created: 0, updated: 0, matched: 0, skipped: chunk.length }
+        });
+      }
+    }
+
+    // Aggregate results
+    const aggregated = aggregateBatchResults(batchResults);
+    setImportResults(aggregated);
+
+    setBatchProgress(null);
+    setImportStartTime(null);
+    setElapsedSeconds(0);
+    setCancelImport(false);
+
+    // Show success toast
+    const hasErrors = aggregated.errors.length > 0;
+    const parts: string[] = [`Processed ${aggregated.totalRows} rows in ${batchInfo.batchCount} batches`];
+
+    if (aggregated.summary.created > 0) parts.push(`${aggregated.summary.created} created`);
+    if (aggregated.summary.updated > 0) parts.push(`${aggregated.summary.updated} updated`);
+    if (aggregated.summary.matched > 0) parts.push(`${aggregated.summary.matched} matched`);
+    if (aggregated.summary.skipped > 0) parts.push(`${aggregated.summary.skipped} skipped`);
+    if (hasErrors) parts.push(`${aggregated.errors.length} errors`);
+
+    const description = parts.join(', ') + '.';
+
+    toast({
+      title: hasErrors ? "Batch Import Complete with Errors" : "Batch Import Complete",
+      description,
+      variant: hasErrors ? "destructive" : "default",
+    });
+  };
+
+  const handleImport = async () => {
     if (uploadFiles.length === 0) {
       toast({
         title: "Error",
@@ -570,8 +674,38 @@ export default function ImportExport() {
       return;
     }
 
-    // Single file - use existing flow
+    // Single file - check if it needs batch processing (>10k rows)
     const uploadFile = uploadFiles[0];
+    const rowCount = fileRowCounts.get(uploadFile.name);
+
+    // If row count is available and exceeds 10k, parse and offer batch processing
+    if (rowCount && needsBatchProcessing(rowCount)) {
+      // Parse the file to get the data
+      const text = await uploadFile.text();
+      const parsed = parseCSV(text);
+
+      if (parsed.length === 0) {
+        toast({
+          title: "Error",
+          description: "CSV file appears to be empty or invalid",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Extract headers
+      const headers = Object.keys(parsed[0]);
+      const batchInfo = getBatchInfo(parsed.length);
+
+      // Store parsed data and show confirmation dialog
+      setLargeParsedFile({ file: uploadFile, data: parsed, headers });
+      setShowBatchSplitDialog(true);
+
+      return;
+    }
+
+    // Regular single file processing - use existing flow
+    // uploadFile is already declared above at line 678
 
     // If column mapping is enabled, start with CSV parsing
     if (useColumnMapping) {
@@ -1077,15 +1211,23 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   )}
 
                   {/* Progress Indicator */}
-                  {processingProgress && (
+                  {(processingProgress || batchProgress) && (
                     <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       <div className="flex items-center justify-between text-sm text-blue-800 mb-2">
                         <div className="flex-1">
                           <div className="font-medium">
-                            Processing {uploadFiles[processingProgress.current - 1]?.name || 'file'}
+                            {batchProgress
+                              ? `Processing Large File in Batches`
+                              : `Processing ${uploadFiles[processingProgress!.current - 1]?.name || 'file'}`
+                            }
                           </div>
                           <div className="text-xs text-blue-600 mt-1">
-                            {(() => {
+                            {batchProgress ? (
+                              <>
+                                {batchProgress.rowsProcessed.toLocaleString()} rows processed
+                                {elapsedSeconds > 0 && ` • ⏱ ${formatElapsedTime(elapsedSeconds)} elapsed`}
+                              </>
+                            ) : processingProgress && (() => {
                               const currentFile = uploadFiles[processingProgress.current - 1];
                               const rowCount = currentFile ? fileRowCounts.get(currentFile.name) : 0;
                               return (
@@ -1099,13 +1241,22 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                           </div>
                         </div>
                         <span className="text-xs font-medium">
-                          {processingProgress.current}/{processingProgress.total}
+                          {batchProgress
+                            ? `Batch ${batchProgress.current}/${batchProgress.total}`
+                            : processingProgress && `${processingProgress.current}/${processingProgress.total}`
+                          }
                         </span>
                       </div>
                       <div className="w-full bg-blue-200 rounded-full h-2">
                         <div
                           className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${(processingProgress.current / processingProgress.total) * 100}%` }}
+                          style={{
+                            width: batchProgress
+                              ? `${(batchProgress.current / batchProgress.total) * 100}%`
+                              : processingProgress
+                              ? `${(processingProgress.current / processingProgress.total) * 100}%`
+                              : '0%'
+                          }}
                         />
                       </div>
                     </div>
@@ -1114,11 +1265,13 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   <div className="flex gap-2">
                     <Button
                       onClick={handleImport}
-                      disabled={uploadFiles.length === 0 || importMutation.isPending || processingProgress !== null}
+                      disabled={uploadFiles.length === 0 || importMutation.isPending || processingProgress !== null || batchProgress !== null}
                       className="flex-1"
                       data-testid="button-import"
                     >
-                      {processingProgress
+                      {batchProgress
+                        ? `Processing Batch ${batchProgress.current}/${batchProgress.total}...`
+                        : processingProgress
                         ? `Processing ${processingProgress.current}/${processingProgress.total}...`
                         : importMutation.isPending && uploadFiles.length === 1
                         ? (() => {
@@ -1134,7 +1287,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                         : `Import ${uploadFiles.length > 1 ? `${uploadFiles.length} Files` : 'Data'}`}
                     </Button>
 
-                    {(processingProgress !== null || importMutation.isPending) && (
+                    {(processingProgress !== null || batchProgress !== null || importMutation.isPending) && (
                       <Button
                         onClick={() => setCancelImport(true)}
                         variant="outline"
@@ -1538,6 +1691,60 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                 disabled={importMutation.isPending}
               >
                 {importMutation.isPending ? "Creating Teams & Importing..." : "Create Teams & Import"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Batch Split Confirmation Dialog */}
+        <Dialog open={showBatchSplitDialog} onOpenChange={setShowBatchSplitDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Large File Detected</DialogTitle>
+              <DialogDescription>
+                This file contains {largeParsedFile?.data.length.toLocaleString()} rows, which exceeds the 10,000 row limit.
+                {largeParsedFile && (() => {
+                  const batchInfo = getBatchInfo(largeParsedFile.data.length);
+                  return (
+                    <>
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h4 className="font-medium text-blue-900 mb-2">Auto-Split Details:</h4>
+                        <ul className="text-sm text-blue-800 space-y-1">
+                          <li>• File will be split into <strong>{batchInfo.batchCount} batches</strong></li>
+                          <li>• Each batch will contain up to <strong>10,000 rows</strong></li>
+                          <li>• Last batch will have <strong>{batchInfo.lastBatchSize.toLocaleString()} rows</strong></li>
+                          <li>• Batches will be processed sequentially</li>
+                          <li>• Results will be aggregated automatically</li>
+                        </ul>
+                      </div>
+                      <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                        <AlertTriangle className="h-4 w-4 inline mr-1" />
+                        <strong>Note:</strong> Teams will be created automatically without confirmation during batch processing.
+                      </div>
+                    </>
+                  );
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowBatchSplitDialog(false);
+                  setLargeParsedFile(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowBatchSplitDialog(false);
+                  if (largeParsedFile) {
+                    processLargeFile(largeParsedFile.file, largeParsedFile.data, largeParsedFile.headers);
+                  }
+                }}
+              >
+                Proceed with Auto-Split
               </Button>
             </DialogFooter>
           </DialogContent>
