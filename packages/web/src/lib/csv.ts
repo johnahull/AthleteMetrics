@@ -1,3 +1,40 @@
+import Papa from 'papaparse';
+
+// Constants for batch processing
+export const MAX_ROWS_PER_BATCH = 10000;
+export const MAX_SAFE_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Type definitions for batch processing
+export interface BatchResult {
+  totalRows: number;
+  errors: ImportError[];
+  warnings: ImportWarning[];
+  summary: {
+    created: number;
+    updated: number;
+    matched: number;
+    skipped: number;
+  };
+  results?: any[];
+  createdTeams?: any[];
+  createdAthletes?: any[];
+  failed?: boolean;
+  batchNumber?: number;
+}
+
+export interface ImportError {
+  row?: number;
+  field?: string;
+  message: string;
+  batch?: number;
+}
+
+export interface ImportWarning {
+  row?: number;
+  message: string;
+  batch?: number;
+}
+
 export function downloadCSV(csvContent: string, filename: string) {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -15,45 +52,63 @@ export function downloadCSV(csvContent: string, filename: string) {
   }
 }
 
-export function parseCSV(csvText: string): any[] {
-  const lines = csvText.split('\n').filter(line => line.trim());
-  if (lines.length === 0) return [];
-  
-  const headers = lines[0].split(',').map(header => header.trim());
-  const data = [];
-  
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(value => value.trim());
-    const row: any = {};
-    
-    headers.forEach((header, index) => {
-      row[header] = values[index] || '';
-    });
-    
-    data.push(row);
-  }
-  
-  return data;
-}
-
 /**
  * Sanitize a CSV cell value to prevent formula injection attacks
+ * This function handles both input and output sanitization.
+ *
  * @param value - The cell value to sanitize
- * @returns Sanitized value safe for CSV export
+ * @returns Sanitized value safe for CSV processing
  */
-function sanitizeCSVCell(value: any): string {
+export function sanitizeCSVCell(value: any): string {
   if (value === null || value === undefined) return '';
 
   const strValue = String(value);
 
   // Prevent CSV formula injection by prefixing dangerous characters with a single quote
   // Dangerous characters: =, +, -, @, tab, carriage return
+  // Exception: Allow negative numbers (e.g., -10, -3.14)
   if (/^[=+\-@\t\r]/.test(strValue)) {
+    // Allow negative numbers: starts with - and is followed by digits
+    if (/^-\d+\.?\d*$/.test(strValue)) {
+      return strValue;
+    }
     return `'${strValue}`;
   }
 
   return strValue;
 }
+
+/**
+ * Parse CSV text into array of objects using PapaParse
+ *
+ * Uses PapaParse for robust CSV parsing that correctly handles:
+ * - Commas within quoted fields
+ * - Escaped quotes within quoted fields
+ * - Multi-line values within quoted fields
+ * - Various CSV dialects and edge cases
+ *
+ * All values are sanitized to prevent formula injection attacks.
+ *
+ * @param csvText - Raw CSV text to parse
+ * @returns Array of objects with header keys
+ */
+export function parseCSV(csvText: string): any[] {
+  if (!csvText || !csvText.trim()) return [];
+
+  const result = Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: true,
+    transform: sanitizeCSVCell,
+    transformHeader: (header: string) => header.trim()
+  });
+
+  if (result.errors && result.errors.length > 0) {
+    console.warn('CSV parsing warnings:', result.errors);
+  }
+
+  return result.data as any[];
+}
+
 
 export function arrayToCSV(data: any[], headers?: string[]): string {
   if (data.length === 0) return '';
@@ -288,4 +343,151 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
     valid: errors.length === 0,
     errors,
   };
+}
+
+/**
+ * Split an array of data into chunks of specified size
+ * @param data - Array of data objects to split
+ * @param chunkSize - Maximum size of each chunk
+ * @returns Array of chunks, where each chunk is an array of data objects
+ */
+export function chunkCSVData(data: any[], chunkSize: number): any[][] {
+  if (data.length === 0) return [];
+
+  const chunks: any[][] = [];
+  for (let i = 0; i < data.length; i += chunkSize) {
+    chunks.push(data.slice(i, i + chunkSize));
+  }
+
+  return chunks;
+}
+
+/**
+ * Create a CSV string from a chunk of data with specified headers
+ * @param chunk - Array of data objects
+ * @param headers - Array of header names (determines column order)
+ * @returns CSV string with headers and data rows
+ */
+export function createCSVFromChunk(chunk: any[], headers: string[]): string {
+  // Helper function to escape and format a single cell value
+  const formatCell = (value: any): string => {
+    // Handle null/undefined
+    if (value === null || value === undefined) return '';
+
+    const strValue = String(value);
+
+    // If value contains comma, quote, or newline, wrap in quotes and escape internal quotes
+    if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
+      return `"${strValue.replace(/"/g, '""')}"`;
+    }
+
+    return strValue;
+  };
+
+  // Create header row
+  const headerRow = headers.join(',');
+
+  // Create data rows
+  const dataRows = chunk.map(row => {
+    return headers.map(header => formatCell(row[header])).join(',');
+  });
+
+  // Combine header and data rows
+  return [headerRow, ...dataRows].join('\n');
+}
+
+/**
+ * Helper function to determine if a file needs batch processing
+ */
+export function needsBatchProcessing(rowCount: number, maxRowsPerBatch: number = MAX_ROWS_PER_BATCH): boolean {
+  return rowCount > maxRowsPerBatch;
+}
+
+/**
+ * Helper function to calculate batch information
+ */
+export function getBatchInfo(rowCount: number, maxRowsPerBatch: number = MAX_ROWS_PER_BATCH) {
+  if (rowCount <= maxRowsPerBatch) {
+    return {
+      needsBatching: false,
+      batchCount: 1,
+      rowsPerBatch: rowCount,
+      lastBatchSize: rowCount
+    };
+  }
+
+  const batchCount = Math.ceil(rowCount / maxRowsPerBatch);
+  const lastBatchSize = rowCount % maxRowsPerBatch || maxRowsPerBatch;
+
+  return {
+    needsBatching: true,
+    batchCount,
+    rowsPerBatch: maxRowsPerBatch,
+    lastBatchSize
+  };
+}
+
+/**
+ * Aggregate results from multiple batch imports
+ */
+export function aggregateBatchResults(batchResults: BatchResult[]): BatchResult {
+  const aggregated: BatchResult = {
+    totalRows: 0,
+    errors: [] as ImportError[],
+    warnings: [] as ImportWarning[],
+    summary: {
+      created: 0,
+      updated: 0,
+      matched: 0,
+      skipped: 0
+    },
+    results: [] as any[],
+    createdTeams: [] as any[],
+    createdAthletes: [] as any[]
+  };
+
+  batchResults.forEach((result, batchIndex) => {
+    aggregated.totalRows += result.totalRows || 0;
+
+    // Aggregate errors with batch context
+    if (result.errors && result.errors.length > 0) {
+      result.errors.forEach((error: any) => {
+        aggregated.errors.push({
+          ...error,
+          batch: batchIndex + 1,
+          message: `[Batch ${batchIndex + 1}] ${error.message || error}`
+        });
+      });
+    }
+
+    // Aggregate warnings
+    if (result.warnings && result.warnings.length > 0) {
+      aggregated.warnings.push(...result.warnings);
+    }
+
+    // Aggregate summary counts
+    if (result.summary) {
+      aggregated.summary.created += result.summary.created || 0;
+      aggregated.summary.updated += result.summary.updated || 0;
+      aggregated.summary.matched += result.summary.matched || 0;
+      aggregated.summary.skipped += result.summary.skipped || 0;
+    }
+
+    // Aggregate results
+    if (result.results) {
+      aggregated.results.push(...result.results);
+    }
+
+    // Aggregate created teams
+    if (result.createdTeams) {
+      aggregated.createdTeams.push(...result.createdTeams);
+    }
+
+    // Aggregate created athletes
+    if (result.createdAthletes) {
+      aggregated.createdAthletes.push(...result.createdAthletes);
+    }
+  });
+
+  return aggregated;
 }

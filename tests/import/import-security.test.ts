@@ -48,41 +48,48 @@ describe('CSV Import Security Tests', () => {
   });
 
   describe('CSV Injection Prevention', () => {
-    it('should detect formula injection attempts with = prefix', () => {
+    it('should sanitize formula injection attempts with = prefix', () => {
       const maliciousCSV = 'firstName,lastName,email\n=1+1,Doe,test@example.com';
       const parsed = parseCSV(maliciousCSV);
 
-      expect(parsed[0].firstName).toBe('=1+1');
-      // Server should sanitize this before processing
-      const startsWithFormula = parsed[0].firstName.startsWith('=');
-      expect(startsWithFormula).toBe(true);
+      // Sanitization adds a single quote prefix to prevent formula execution
+      expect(parsed[0].firstName).toBe("'=1+1");
+      const isSanitized = parsed[0].firstName.startsWith("'");
+      expect(isSanitized).toBe(true);
     });
 
-    it('should detect formula injection with + prefix', () => {
+    it('should sanitize formula injection with + prefix', () => {
       const maliciousCSV = 'firstName,lastName,email\n+1+1,Doe,test@example.com';
       const parsed = parseCSV(maliciousCSV);
 
-      expect(parsed[0].firstName).toBe('+1+1');
-      const startsWithFormula = parsed[0].firstName.startsWith('+');
-      expect(startsWithFormula).toBe(true);
+      // Sanitization adds a single quote prefix to prevent formula execution
+      expect(parsed[0].firstName).toBe("'+1+1");
+      const isSanitized = parsed[0].firstName.startsWith("'");
+      expect(isSanitized).toBe(true);
     });
 
-    it('should detect formula injection with - prefix', () => {
+    it('should sanitize formula injection with - prefix (except negative numbers)', () => {
+      // Negative numbers should NOT be sanitized
+      const negativeNumberCSV = 'firstName,lastName,email\n-123,Doe,test@example.com';
+      const parsedNumber = parseCSV(negativeNumberCSV);
+      expect(parsedNumber[0].firstName).toBe('-123');
+
+      // Formula-like values starting with - should be sanitized
       const maliciousCSV = 'firstName,lastName,email\n-1+1,Doe,test@example.com';
       const parsed = parseCSV(maliciousCSV);
-
-      expect(parsed[0].firstName).toBe('-1+1');
-      const startsWithFormula = parsed[0].firstName.startsWith('-');
-      expect(startsWithFormula).toBe(true);
+      expect(parsed[0].firstName).toBe("'-1+1");
+      const isSanitized = parsed[0].firstName.startsWith("'");
+      expect(isSanitized).toBe(true);
     });
 
-    it('should detect formula injection with @ prefix', () => {
+    it('should sanitize formula injection with @ prefix', () => {
       const maliciousCSV = 'firstName,lastName,email\n@SUM(1+1),Doe,test@example.com';
       const parsed = parseCSV(maliciousCSV);
 
-      expect(parsed[0].firstName).toBe('@SUM(1+1)');
-      const startsWithFormula = parsed[0].firstName.startsWith('@');
-      expect(startsWithFormula).toBe(true);
+      // Sanitization adds a single quote prefix to prevent formula execution
+      expect(parsed[0].firstName).toBe("'@SUM(1+1)");
+      const isSanitized = parsed[0].firstName.startsWith("'");
+      expect(isSanitized).toBe(true);
     });
 
     it('should detect DDE (Dynamic Data Exchange) injection', () => {
