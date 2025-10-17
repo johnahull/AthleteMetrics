@@ -15,25 +15,64 @@ export function downloadCSV(csvContent: string, filename: string) {
   }
 }
 
+/**
+ * Parse CSV text into array of objects
+ *
+ * ⚠️ WARNING: This is a simplified CSV parser with known limitations:
+ * - Does NOT handle commas within quoted fields correctly
+ * - Does NOT handle escaped quotes within quoted fields
+ * - Does NOT handle multi-line values within quoted fields
+ * - Uses naive split(',') which breaks on properly quoted CSV values
+ *
+ * RECOMMENDATION: Replace with PapaParse library for production use:
+ * - npm install papaparse @types/papaparse
+ * - import Papa from 'papaparse'
+ * - Papa.parse(csvText, { header: true, skipEmptyLines: true })
+ *
+ * This implementation includes basic formula injection prevention but
+ * should be replaced with a robust CSV parser for security and reliability.
+ *
+ * @param csvText - Raw CSV text to parse
+ * @returns Array of objects with header keys
+ */
 export function parseCSV(csvText: string): any[] {
   const lines = csvText.split('\n').filter(line => line.trim());
   if (lines.length === 0) return [];
-  
+
   const headers = lines[0].split(',').map(header => header.trim());
   const data = [];
-  
+
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(',').map(value => value.trim());
     const row: any = {};
-    
+
     headers.forEach((header, index) => {
-      row[header] = values[index] || '';
+      const value = values[index] || '';
+      // Sanitize value to prevent formula injection
+      row[header] = sanitizeCSVInput(value);
     });
-    
+
     data.push(row);
   }
-  
+
   return data;
+}
+
+/**
+ * Sanitize CSV input to prevent formula injection attacks
+ * @param value - The input value to sanitize
+ * @returns Sanitized value safe for processing
+ */
+function sanitizeCSVInput(value: string): string {
+  if (!value) return '';
+
+  // Prevent CSV formula injection by prefixing dangerous characters with a single quote
+  // Dangerous characters: =, +, -, @, tab, carriage return
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return `'${value}`;
+  }
+
+  return value;
 }
 
 /**

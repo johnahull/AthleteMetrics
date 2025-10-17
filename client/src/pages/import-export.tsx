@@ -73,6 +73,7 @@ export default function ImportExport() {
   const [showBatchSplitDialog, setShowBatchSplitDialog] = useState(false);
   const [largeParsedFile, setLargeParsedFile] = useState<{ file: File; data: any[]; headers: string[] } | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; rowsProcessed: number } | null>(null);
+  const [batchImportIds, setBatchImportIds] = useState<string[]>([]); // Track created records for potential rollback
   const { toast } = useToast();
   const { user, userOrganizations, organizationContext } = useAuth();
 
@@ -571,6 +572,7 @@ export default function ImportExport() {
     // Split data into chunks
     const chunks = chunkCSVData(data, MAX_ROWS_PER_BATCH);
     const batchResults: any[] = [];
+    const successfulBatches: number[] = []; // Track which batches succeeded
 
     for (let i = 0; i < chunks.length; i++) {
       // Check if cancelled
@@ -578,9 +580,16 @@ export default function ImportExport() {
         setBatchProgress(null);
         setImportStartTime(null);
         setElapsedSeconds(0);
+
+        // Show cancellation message with info about partial import
+        const successCount = successfulBatches.length;
+        const rowsImported = successCount * MAX_ROWS_PER_BATCH;
+
         toast({
           title: "Import Cancelled",
-          description: `Cancelled after processing ${i} of ${chunks.length} batches (${i * MAX_ROWS_PER_BATCH} rows)`,
+          description: successCount > 0
+            ? `Cancelled after processing ${i} of ${chunks.length} batches. ${rowsImported} rows were successfully imported before cancellation.`
+            : `Cancelled after processing ${i} of ${chunks.length} batches (${i * MAX_ROWS_PER_BATCH} rows)`,
           variant: "default",
         });
         return;
@@ -612,13 +621,29 @@ export default function ImportExport() {
         });
 
         batchResults.push(result);
+        successfulBatches.push(i); // Track successful batch
       } catch (error) {
-        // On error, still continue processing remaining batches but track the error
+        // On error, warn user about partial import
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const successCount = successfulBatches.length;
+        const rowsImported = successCount * MAX_ROWS_PER_BATCH;
+
+        toast({
+          title: "Batch Import Error",
+          description: successCount > 0
+            ? `Batch ${i + 1} failed: ${errorMsg}. ${rowsImported} rows were successfully imported before this error. Continuing with remaining batches...`
+            : `Batch ${i + 1} failed: ${errorMsg}. Continuing with remaining batches...`,
+          variant: "destructive",
+        });
+
+        // Track the error but continue processing
         batchResults.push({
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMsg,
           totalRows: chunk.length,
-          errors: [{ message: error instanceof Error ? error.message : 'Unknown error' }],
-          summary: { created: 0, updated: 0, matched: 0, skipped: chunk.length }
+          errors: [{ message: errorMsg, batch: i + 1 }],
+          summary: { created: 0, updated: 0, matched: 0, skipped: chunk.length },
+          failed: true,
+          batchNumber: i + 1
         });
       }
     }
@@ -626,6 +651,9 @@ export default function ImportExport() {
     // Aggregate results
     const aggregated = aggregateBatchResults(batchResults);
     setImportResults(aggregated);
+
+    // Clean up memory: clear large parsed file data
+    setLargeParsedFile(null);
 
     setBatchProgress(null);
     setImportStartTime(null);
