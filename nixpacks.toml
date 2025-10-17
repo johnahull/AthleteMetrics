@@ -5,15 +5,7 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = [
-  "npm run build",
-  "echo 'Copying scripts and migrations...'",
-  "mkdir -p /app/scripts /app/migrations",
-  "cp -r scripts/* /app/scripts/ || echo 'WARNING: scripts copy failed'",
-  "cp -r migrations/* /app/migrations/ || echo 'WARNING: migrations copy failed'",
-  "ls -la /app/scripts/ || echo 'WARNING: /app/scripts/ not found'",
-  "ls -la /app/migrations/ || echo 'WARNING: /app/migrations/ not found'"
-]
+cmds = ["npm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "npm run db:migrate && npm run start"
