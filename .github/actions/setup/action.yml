@@ -27,10 +27,10 @@ runs:
         path: |
           node_modules
           packages/*/node_modules
-        key: ${{ runner.os }}-node-${{ inputs.node-version }}-${{ hashFiles('package-lock.json') }}${{ inputs.cache-key-suffix }}
+        # v2 suffix invalidates old pre-workspace caches
+        key: ${{ runner.os }}-node-${{ inputs.node-version }}-v2-${{ hashFiles('package-lock.json') }}${{ inputs.cache-key-suffix }}
         restore-keys: |
-          ${{ runner.os }}-node-${{ inputs.node-version }}-
-          ${{ runner.os }}-node-
+          ${{ runner.os }}-node-${{ inputs.node-version }}-v2-
 
     - name: Install dependencies
       if: steps.cache-node-modules.outputs.cache-hit != 'true'
