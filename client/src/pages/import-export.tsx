@@ -706,13 +706,17 @@ export default function ImportExport() {
     const uploadFile = uploadFiles[0];
     const rowCount = fileRowCounts.get(uploadFile.name);
 
-    // If row count is available and exceeds 10k, parse and offer batch processing
-    if (rowCount && needsBatchProcessing(rowCount)) {
-      // Check file size and warn if very large
+    // For large files (>1MB), we need to parse them to determine if batch processing is needed
+    // This is because countCSVRows() skips files >1MB to avoid memory issues during upload
+    const shouldCheckForBatchProcessing = rowCount === 0 && uploadFile.size > 1 * 1024 * 1024;
+
+    // If row count is available and exceeds 10k, OR if we need to check a large file
+    if ((rowCount && needsBatchProcessing(rowCount)) || shouldCheckForBatchProcessing) {
+      // Show warning BEFORE parsing if file is very large (>50MB)
       if (uploadFile.size > MAX_SAFE_FILE_SIZE) {
         toast({
           title: "Large File Warning",
-          description: `This file is ${(uploadFile.size / 1024 / 1024).toFixed(1)}MB. Files over 50MB may cause browser slowdown.`,
+          description: `This file is ${(uploadFile.size / 1024 / 1024).toFixed(1)}MB. Files over 50MB may cause browser slowdown during processing.`,
           variant: "default",
         });
       }
@@ -730,15 +734,21 @@ export default function ImportExport() {
         return;
       }
 
-      // Extract headers
-      const headers = Object.keys(parsed[0]);
-      const batchInfo = getBatchInfo(parsed.length);
+      // If this was a large file check and it doesn't actually need batching, proceed with normal flow
+      if (shouldCheckForBatchProcessing && !needsBatchProcessing(parsed.length)) {
+        // Fall through to regular processing below
+        // (no return here - we continue to the regular flow)
+      } else {
+        // Extract headers and show batch split dialog
+        const headers = Object.keys(parsed[0]);
+        const batchInfo = getBatchInfo(parsed.length);
 
-      // Store parsed data and show confirmation dialog
-      setLargeParsedFile({ file: uploadFile, data: parsed, headers });
-      setShowBatchSplitDialog(true);
+        // Store parsed data and show confirmation dialog
+        setLargeParsedFile({ file: uploadFile, data: parsed, headers });
+        setShowBatchSplitDialog(true);
 
-      return;
+        return;
+      }
     }
 
     // Regular single file processing - use existing flow
