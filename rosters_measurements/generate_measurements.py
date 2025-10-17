@@ -2,6 +2,12 @@
 import argparse, csv, random, sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, List, Tuple, Any, Optional
+
+# Competitive level constants
+COMPETITIVE_LEVEL_DEFAULT = 3  # Intermediate baseline
+COMPETITIVE_LEVEL_MIN = 1
+COMPETITIVE_LEVEL_MAX = 5
 
 # ---- Config: metric specs ----
 # Center/SD are for adult male baseline; min/max expanded to accommodate all ages/genders
@@ -60,7 +66,15 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     return p.parse_args()
 
-def read_roster(path):
+def read_roster(path: str) -> List[Dict[str, Any]]:
+    """Read roster CSV and return list of player dictionaries.
+
+    Args:
+        path: Path to roster CSV file
+
+    Returns:
+        List of dictionaries containing player data from CSV
+    """
     with open(path, newline="", encoding="utf-8") as f:
         r = csv.DictReader(f)
         rows = [row for row in r]
@@ -68,7 +82,17 @@ def read_roster(path):
     # firstName,lastName,birthDate,birthYear,graduationYear,gender,emails,phoneNumbers,sports,height,weight,school,teamName
     return rows
 
-def rand_dates(n, start_str, end_str):
+def rand_dates(n: int, start_str: str, end_str: str) -> List[Any]:
+    """Generate n random dates between start and end dates.
+
+    Args:
+        n: Number of random dates to generate
+        start_str: Start date as YYYY-MM-DD string
+        end_str: End date as YYYY-MM-DD string
+
+    Returns:
+        Sorted list of random date objects
+    """
     start = datetime.strptime(start_str, "%Y-%m-%d").date()
     end = datetime.strptime(end_str, "%Y-%m-%d").date()
     span = (end - start).days
@@ -77,7 +101,16 @@ def rand_dates(n, start_str, end_str):
         ds.add(start + timedelta(days=random.randint(0, span)))
     return sorted(ds)
 
-def age_on(birth_date_str, on_date):
+def age_on(birth_date_str: str, on_date: Any) -> Any:
+    """Calculate age on a given date from birth date string.
+
+    Args:
+        birth_date_str: Birth date as YYYY-MM-DD string
+        on_date: Date object to calculate age on
+
+    Returns:
+        Integer age in years, or empty string if birth date is invalid
+    """
     # birth_date as YYYY-MM-DD
     try:
         bd = datetime.strptime(birth_date_str, "%Y-%m-%d").date()
@@ -86,10 +119,20 @@ def age_on(birth_date_str, on_date):
     years = on_date.year - bd.year - ((on_date.month, on_date.day) < (bd.month, bd.day))
     return years
 
-def clamp(x, lo, hi):
+def clamp(x: float, lo: float, hi: float) -> float:
+    """Clamp value between lower and upper bounds.
+
+    Args:
+        x: Value to clamp
+        lo: Lower bound
+        hi: Upper bound
+
+    Returns:
+        Value clamped between lo and hi
+    """
     return max(lo, min(hi, x))
 
-def get_age_bracket(age):
+def get_age_bracket(age: Any) -> str:
     """Map age to performance bracket with validation."""
     if age is None or age == "":
         return "college_plus"  # default if age unknown
@@ -113,8 +156,19 @@ def get_age_bracket(age):
     else:
         return "college_plus"
 
-def get_adjustment_factor(age, gender, metric, metric_spec, competitive_level=None):
-    """Calculate combined age + gender + competitive level adjustment factor for a metric."""
+def get_adjustment_factor(age: Any, gender: str, metric: str, metric_spec: Dict[str, Any], competitive_level: Optional[int] = None) -> float:
+    """Calculate combined age + gender + competitive level adjustment factor for a metric.
+
+    Args:
+        age: Athlete's age (int, float, or empty string)
+        gender: Athlete's gender ("Male", "Female", or other)
+        metric: Metric name (e.g., "FLY10_TIME")
+        metric_spec: Dictionary containing metric configuration
+        competitive_level: Optional competitive level (1-5), defaults to intermediate
+
+    Returns:
+        Combined adjustment factor as a float
+    """
     # Get age bracket multiplier
     bracket = get_age_bracket(age)
     age_mult = AGE_BRACKETS[bracket]
@@ -147,8 +201,15 @@ def get_adjustment_factor(age, gender, metric, metric_spec, competitive_level=No
 
     return combined
 
-def athlete_baseline_offsets(roster_rows):
-    """Give each athlete a stable baseline offset per metric so their data is consistent across dates."""
+def athlete_baseline_offsets(roster_rows: List[Dict[str, Any]]) -> Dict[Tuple[str, str, str], Dict[str, float]]:
+    """Give each athlete a stable baseline offset per metric so their data is consistent across dates.
+
+    Args:
+        roster_rows: List of dictionaries containing player data
+
+    Returns:
+        Dictionary mapping (firstName, lastName, teamName) tuples to metric offset dictionaries
+    """
     offsets = {}
     for a in roster_rows:
         key = (a.get("firstName","").strip(), a.get("lastName","").strip(), a.get("teamName","").strip())
@@ -159,7 +220,24 @@ def athlete_baseline_offsets(roster_rows):
         offsets[key] = per_metric
     return offsets
 
-def gen_value(spec, base_offset, day_index, jitter_sd, age=None, gender=None, metric=None, competitive_level=None):
+def gen_value(spec: Dict[str, Any], base_offset: float, day_index: int, jitter_sd: float,
+              age: Any = None, gender: Optional[str] = None, metric: Optional[str] = None,
+              competitive_level: Optional[int] = None) -> float:
+    """Generate a performance measurement value with adjustments.
+
+    Args:
+        spec: Metric specification dictionary
+        base_offset: Athlete-specific baseline offset
+        day_index: Number of days since first measurement
+        jitter_sd: Standard deviation for within-session jitter
+        age: Athlete's age (optional)
+        gender: Athlete's gender (optional)
+        metric: Metric name (optional)
+        competitive_level: Competitive level 1-5 (optional)
+
+    Returns:
+        Generated measurement value clamped to metric min/max
+    """
     # Apply age, gender, and competitive level adjustments to center baseline
     center = spec["center"]
     # Explicitly check for None and empty string to handle all edge cases
@@ -204,9 +282,9 @@ def main():
             birthDate = a.get("birthDate","")
             # Read competitive level from roster (with fallback to intermediate)
             try:
-                competitive_level = int(a.get("competitiveLevel", 3))
+                competitive_level = int(a.get("competitiveLevel", COMPETITIVE_LEVEL_DEFAULT))
             except (ValueError, TypeError):
-                competitive_level = 3  # Default to intermediate if invalid/missing
+                competitive_level = COMPETITIVE_LEVEL_DEFAULT  # Default to intermediate if invalid/missing
 
             for di, d in enumerate(sorted(dates)):
                 age = age_on(birthDate, d)
