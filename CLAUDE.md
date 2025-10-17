@@ -34,19 +34,19 @@ When ENABLED:
 **Keywords:** `implement feature`, `TDD`, `test-first`, `implement with tests`, `feature implementation`
 
 #### Database Schema Agent (`database-schema-agent`) 🔵
-**Auto-invoke:** `shared/schema.ts` changes, migrations, Drizzle ORM, table/column modifications
+**Auto-invoke:** `packages/shared/schema.ts` changes, migrations, Drizzle ORM, table/column modifications
 **Keywords:** `schema`, `database`, `drizzle`, `migration`, `table`, `postgres`, `measurements`, `users`, `teams`
 
 #### Analytics & Visualization Agent (`analytics-visualization-agent`) 🟢
-**Auto-invoke:** Charts in `client/src/components/charts/`, Chart.js, statistical analysis, data visualization
+**Auto-invoke:** Charts in `packages/web/src/components/charts/`, Chart.js, statistical analysis, data visualization
 **Keywords:** `chart`, `analytics`, `visualization`, `statistics`, `percentile`, `MultiLineChart`, `BoxPlotChart`
 
 #### Security & Authentication Agent (`security-authentication-agent`) 🔴
-**Auto-invoke:** `server/auth/` files, permissions, RBAC, rate limiting, session management, user roles
+**Auto-invoke:** `packages/api/auth/` files, permissions, RBAC, rate limiting, session management, user roles
 **Keywords:** `auth`, `authentication`, `authorization`, `permission`, `role`, `rbac`, `session`, `mfa`, `login`
 
 #### OCR & Image Processing Agent (`ocr-image-processing-agent`) 🟡
-**Auto-invoke:** `server/ocr/` files, image upload, text extraction, measurement pattern recognition
+**Auto-invoke:** `packages/api/ocr/` files, image upload, text extraction, measurement pattern recognition
 **Keywords:** `ocr`, `tesseract`, `image processing`, `text extraction`, `photo upload`, `pattern recognition`
 
 #### Data Import/Export Agent (`data-import-export-agent`) 🟠
@@ -58,7 +58,7 @@ When ENABLED:
 **Keywords:** `form`, `validation`, `zod`, `react hook form`, `schema validation`, `form state`, `submit`
 
 #### API & Route Architecture Agent (`api-route-architecture-agent`) ⚪
-**Auto-invoke:** `server/routes/` files, REST API design, middleware, endpoint organization
+**Auto-invoke:** `packages/api/routes/` files, REST API design, middleware, endpoint organization
 **Keywords:** `routes`, `api`, `endpoint`, `express`, `middleware`, `request`, `response`, `REST`
 
 #### UI Component Library Agent (`ui-component-library-agent`) 🔷
@@ -137,13 +137,13 @@ When ENABLED:
 | Task Type | Agent(s) |
 |-----------|----------|
 | TDD/test-first implementation | `test-driven-feature-agent` |
-| `shared/schema.ts` changes, migrations | `database-schema-agent` |
-| Charts in `client/src/components/charts/` | `analytics-visualization-agent` |
-| `server/auth/` files, permissions, RBAC | `security-authentication-agent` |
-| `server/ocr/` files, photo uploads | `ocr-image-processing-agent` |
+| `packages/shared/schema.ts` changes, migrations | `database-schema-agent` |
+| Charts in `packages/web/src/components/charts/` | `analytics-visualization-agent` |
+| `packages/api/auth/` files, permissions, RBAC | `security-authentication-agent` |
+| `packages/api/ocr/` files, photo uploads | `ocr-image-processing-agent` |
 | CSV import/export, bulk operations | `data-import-export-agent` |
 | Forms, React Hook Form, Zod validation | `form-validation-agent` |
-| `server/routes/`, API endpoints | `api-route-architecture-agent` |
+| `packages/api/routes/`, API endpoints | `api-route-architecture-agent` |
 | shadcn/ui, Tailwind, design system | `ui-component-library-agent` |
 | Performance issues, caching | `performance-optimization-agent` |
 | Unit/integration tests, coverage | `testing-qa-agent` |
@@ -171,21 +171,23 @@ When ENABLED:
 - `npm run db:push` - Push database schema changes to PostgreSQL
 
 ### Database Operations
-- `npm run db:push` - Apply schema changes from `shared/schema.ts` to database
+- `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database
 - Database migrations are handled through Drizzle Kit configuration in `drizzle.config.ts`
 
 ## Project Architecture
 
 ### Monorepo Structure
-This is a full-stack TypeScript application with a shared schema approach:
+This is a full-stack TypeScript application organized as an npm workspaces monorepo:
 
-- **`client/`** - React frontend built with Vite
-- **`server/`** - Express.js backend API
-- **`shared/`** - Shared types, schemas, and database definitions
+- **`packages/api/`** (workspace: `@athletemetrics/api`) - Express.js backend API server
+- **`packages/web/`** (workspace: `@athletemetrics/web`) - React frontend built with Vite
+- **`packages/shared/`** (workspace: `@athletemetrics/shared`) - Shared types, schemas, and database definitions
+
+Each workspace has its own `package.json` and `tsconfig.json` for proper dependency isolation and TypeScript configuration.
 
 ### Path Aliases
-- `@/*` → `client/src/*` (frontend components, pages, utils)
-- `@shared/*` → `shared/*` (database schema, types)
+- `@/*` → `packages/web/src/*` (frontend components, pages, utils)
+- `@shared/*` → `packages/shared/*` (database schema, types)
 - `@assets/*` → `attached_assets/*` (static assets)
 
 ### Database Schema Architecture

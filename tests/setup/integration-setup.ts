@@ -78,7 +78,7 @@ console.log('✅ Integration test database validated:', sanitizedUrl);
 console.log('   Environment:', process.env.NODE_ENV || 'test');
 
 import { beforeAll, afterAll } from 'vitest';
-import { closeDatabase } from '../../server/db.js';
+import { closeDatabase } from '../../packages/api/db.js';
 
 // Store original console methods
 const originalConsoleLog = console.log;

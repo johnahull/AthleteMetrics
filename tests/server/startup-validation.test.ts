@@ -41,12 +41,12 @@ describe('Server Startup Validation', () => {
     };
 
     // Mock registerRoutes to return mock server
-    vi.doMock('../../server/routes', () => ({
+    vi.doMock('../../packages/api/routes', () => ({
       registerRoutes: vi.fn().mockResolvedValue(mockServer)
     }));
 
     // Mock setupVite and serveStatic to prevent build directory errors
-    vi.doMock('../../server/vite.js', () => ({
+    vi.doMock('../../packages/api/vite.js', () => ({
       setupVite: vi.fn().mockResolvedValue(undefined),
       serveStatic: vi.fn()
     }));
@@ -62,8 +62,8 @@ describe('Server Startup Validation', () => {
     mockConsoleWarn.mockRestore();
 
     // Clean up module mocks
-    vi.doUnmock('../../server/routes');
-    vi.doUnmock('../../server/vite.js');
+    vi.doUnmock('../../packages/api/routes');
+    vi.doUnmock('../../packages/api/vite.js');
   });
 
   describe('NODE_ENV validation', () => {
@@ -73,7 +73,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Server may fail to start for other reasons (e.g., database connection)
       }
@@ -91,7 +91,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Server will attempt to start and may fail for other reasons
         // We're only testing that NODE_ENV validation passes
@@ -113,7 +113,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Server will attempt to start and may fail for other reasons
       }
@@ -137,7 +137,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Import may throw after process.exit is called
       }
@@ -159,7 +159,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Import may throw after process.exit is called
       }
@@ -178,7 +178,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Server will attempt to start and may fail for other reasons
       }
@@ -197,7 +197,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Server will attempt to start and may fail for other reasons
       }
@@ -221,7 +221,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Import may throw after process.exit is called
       }
@@ -245,7 +245,7 @@ describe('Server Startup Validation', () => {
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
-        await import('../../server/index');
+        await import('../../packages/api/index');
       } catch (error) {
         // Server may fail to start for other reasons (e.g., database connection)
         // but validation should pass

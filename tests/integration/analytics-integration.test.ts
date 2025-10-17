@@ -20,13 +20,13 @@ import type { Express } from 'express';
 import type { AnalyticsRequest } from '@shared/analytics-types';
 
 // Mock vite module before importing registerRoutes to prevent build directory errors
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
 
-import { registerRoutes } from '../../server/routes';
-import { db } from '../../server/db';
+import { registerRoutes } from '../../packages/api/routes';
+import { db } from '../../packages/api/db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 

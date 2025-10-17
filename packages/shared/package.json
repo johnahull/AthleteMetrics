@@ -1,0 +1,37 @@
+{
+  "name": "@athletemetrics/shared",
+  "version": "0.2.0",
+  "description": "Shared types, schemas, and utilities for AthleteMetrics",
+  "private": true,
+  "type": "module",
+  "main": "./schema.ts",
+  "types": "./schema.ts",
+  "exports": {
+    "./schema": "./schema.ts",
+    "./analytics-types": "./analytics-types.ts",
+    "./analytics-utils": "./analytics-utils.ts",
+    "./auth-utils": "./auth-utils.ts",
+    "./boolean-utils": "./boolean-utils.ts",
+    "./constants": "./constants.ts",
+    "./enhanced-auth-schema": "./enhanced-auth-schema.ts",
+    "./error-utils": "./error-utils.ts",
+    "./import-types": "./import-types.ts",
+    "./input-sanitization": "./input-sanitization.ts",
+    "./ocr-types": "./ocr-types.ts",
+    "./password-requirements": "./password-requirements.ts",
+    "./password-validation": "./password-validation.ts",
+    "./role-types": "./role-types.ts",
+    "./season-utils": "./season-utils.ts",
+    "./username-validation": "./username-validation.ts",
+    "./utils/number-conversion": "./utils/number-conversion.ts",
+    "./utils/statistics": "./utils/statistics.ts"
+  },
+  "dependencies": {
+    "date-fns": "^3.6.0",
+    "drizzle-orm": "^0.39.3",
+    "drizzle-zod": "^0.7.0",
+    "dompurify": "^3.2.6",
+    "zod": "^3.24.2",
+    "zod-validation-error": "^3.4.0"
+  }
+}

@@ -49,7 +49,7 @@ async function getDbConnection() {
 
 async function getPackageJson() {
   if (!packageJsonCache) {
-    packageJsonCache = await import('../package.json');
+    packageJsonCache = await import('../../package.json');
   }
   return packageJsonCache;
 }

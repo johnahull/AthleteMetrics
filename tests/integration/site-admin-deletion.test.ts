@@ -2,8 +2,8 @@
 // This prevents accidentally running tests against wrong database
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { db } from '../../server/db';
-import { storage } from '../../server/storage';
+import { db } from '../../packages/api/db';
+import { storage } from '../../packages/api/storage';
 import {
   users,
   organizations,
@@ -20,7 +20,7 @@ import {
   type Organization,
   type Team,
   type Measurement
-} from '../../shared/schema';
+} from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
 
 describe('Site Admin Deletion with Foreign Key Cleanup', () => {
@@ -1096,7 +1096,7 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
   it('should revoke sessions when soft deleting user', async () => {
     // Import sessions dynamically
-    const { sessions } = await import('../../shared/schema');
+    const { sessions } = await import('@shared/schema');
 
     // Create session for athlete
     await db.insert(sessions).values({
@@ -1148,7 +1148,7 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
   it('should include measurements from soft-deleted users in analytics queries', async () => {
     // Import AnalyticsService
-    const { AnalyticsService } = await import('../../server/analytics-simple');
+    const { AnalyticsService } = await import('../../packages/api/analytics-simple');
     const analyticsService = new AnalyticsService();
 
     // Create measurement for athlete

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // outDir specified for IDE support, but shared code is actually bundled by esbuild in API package
+    "outDir": "../../dist/shared",
+    "rootDir": ".",
+    "types": ["node"],
+    "lib": ["ES2018"],
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["./**/*"],
+  "exclude": ["node_modules", "**/*.test.ts", "__tests__"]
+}

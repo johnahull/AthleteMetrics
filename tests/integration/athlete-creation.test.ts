@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { storage } from '../../server/storage';
+import { storage } from '../../packages/api/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
 describe.skip('Manual Athlete Creation Integration Tests', () => {

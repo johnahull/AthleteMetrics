@@ -23,6 +23,7 @@ coverage
 *.spec.js
 __tests__
 **/__tests__
+tests/
 
 # Development tools
 .vscode
