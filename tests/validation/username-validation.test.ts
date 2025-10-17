@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateUsername, getUsernameRequirementsText, RESERVED_USERNAMES } from '../../shared/username-validation';
+import { validateUsername, getUsernameRequirementsText, RESERVED_USERNAMES } from '@shared/username-validation';
 
 describe('Username Validation', () => {
   describe('validateUsername', () => {

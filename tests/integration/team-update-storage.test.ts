@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { storage } from '../../server/storage';
+import { storage } from '../../packages/api/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
 describe.skip('Team Update Storage Layer Integration Tests', () => {

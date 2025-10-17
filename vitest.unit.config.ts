@@ -11,13 +11,13 @@ export default mergeConfig(
     test: {
       include: [
         // Client-side tests (React components, hooks, utils)
-        'client/src/**/__tests__/**/*.{test,spec}.{ts,tsx}',
+        'packages/web/src/**/__tests__/**/*.{test,spec}.{ts,tsx}',
 
         // Shared utilities (no DB needed)
-        'shared/__tests__/**/*.{test,spec}.{ts,tsx}',
+        'packages/shared/__tests__/**/*.{test,spec}.{ts,tsx}',
 
         // Server tests that use mocks (no real DB)
-        'server/**/__tests__/**/*.{test,spec}.{ts,tsx}',
+        'packages/api/**/__tests__/**/*.{test,spec}.{ts,tsx}',
 
         // Specific test directories that don't need DB
         'tests/validation/**/*.{test,spec}.{ts,tsx}',

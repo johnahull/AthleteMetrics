@@ -6,15 +6,15 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { storage } from '../../server/storage';
+import { storage } from '../../packages/api/storage';
 
 // Mock vite module before importing registerRoutes
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
 
-import { registerRoutes } from '../../server/routes';
+import { registerRoutes } from '../../packages/api/routes';
 
 describe.skip('Invitation Integration Tests', () => {
   let app: Express;

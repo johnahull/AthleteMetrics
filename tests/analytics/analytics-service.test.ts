@@ -4,11 +4,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AnalyticsService } from '../../server/analytics';
+import { AnalyticsService } from '../../packages/api/analytics';
 import type { AnalyticsRequest } from '@shared/analytics-types';
 
 // Mock the database
-vi.mock('../../server/db', () => ({
+vi.mock('../../packages/api/db', () => ({
   db: {
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),

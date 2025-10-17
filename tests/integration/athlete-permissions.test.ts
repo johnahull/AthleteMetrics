@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateUsername } from '../../shared/username-validation';
+import { validateUsername } from '@shared/username-validation';
 
 describe('Athlete Permissions - Business Logic', () => {
   describe('Athlete Self-Access', () => {
