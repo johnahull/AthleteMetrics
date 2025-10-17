@@ -10,7 +10,7 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node -e \"console.log('cwd=',process.cwd());console.log('has script=',require('fs').existsSync('./scripts/run-migrations.js'));console.log('ls /app:');require('child_process').execSync('ls -la /app',{stdio:'inherit'});\" && node ./scripts/run-migrations.js",
+    "db:migrate": "node scripts/run-migrations.js",
     "db:validate": "node scripts/validate-migrations.js",
     "test": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest",
     "test:ui": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest --ui",
