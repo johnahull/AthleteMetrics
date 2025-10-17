@@ -1,0 +1,11 @@
+{
+  "name": "@athletemetrics/shared",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "./schema.ts",
+  "types": "./schema.ts",
+  "exports": {
+    "./*": "./*"
+  }
+}

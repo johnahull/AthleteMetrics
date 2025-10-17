@@ -45,9 +45,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './client/src'),
-      '@shared': path.resolve(__dirname, './shared'),
-      '@server': path.resolve(__dirname, './server'),
+      '@': path.resolve(__dirname, './packages/web/src'),
+      '@shared': path.resolve(__dirname, './packages/shared'),
+      '@server': path.resolve(__dirname, './packages/api'),
       // Mock redis and connect-redis as optional dependencies
       'redis': path.resolve(__dirname, './tests/mocks/redis-mock.ts'),
       'connect-redis': path.resolve(__dirname, './tests/mocks/connect-redis-mock.ts'),
