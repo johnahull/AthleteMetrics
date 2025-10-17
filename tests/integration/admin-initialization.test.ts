@@ -16,7 +16,7 @@ import { eq } from 'drizzle-orm';
 import type { User } from '@shared/schema';
 
 // Mock vite module to prevent build directory errors
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
@@ -630,7 +630,7 @@ describe('Admin User Initialization', () => {
       });
 
       // Spy on revokeAllSessions to verify it's NOT called
-      const { AuthSecurity } = await import('../../server/auth/security');
+      const { AuthSecurity } = await import('../../packages/api/auth/security');
       const revokeSpy = vi.spyOn(AuthSecurity, 'revokeAllSessions');
 
       // Call initialization with SAME password
@@ -711,7 +711,7 @@ describe('Admin User Initialization', () => {
       });
 
       // Spy on revokeAllSessions
-      const { AuthSecurity } = await import('../../server/auth/security');
+      const { AuthSecurity } = await import('../../packages/api/auth/security');
       const revokeSpy = vi.spyOn(AuthSecurity, 'revokeAllSessions');
 
       // Call initialization to restore privilege (NOT password change)
@@ -938,7 +938,7 @@ describe('Admin User Initialization', () => {
       // In production, this happens via the middleware on each request
       // Here we directly test the database update that the middleware would perform
       // Note: postgres-js uses SQL template strings, not .query() method
-      const { pgClient } = await import('../../server/db');
+      const { pgClient } = await import('../../packages/api/db');
       for (const sid of ['session-1', 'session-2', 'session-3']) {
         await pgClient`
           UPDATE session

@@ -9,7 +9,7 @@ import express, { type Express } from 'express';
 import { storage } from '../../packages/api/storage';
 
 // Mock vite module before importing registerRoutes
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));

@@ -23,7 +23,7 @@ import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 
 // Mock vite module before importing registerRoutes
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));

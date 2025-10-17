@@ -1148,7 +1148,7 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
   it('should include measurements from soft-deleted users in analytics queries', async () => {
     // Import AnalyticsService
-    const { AnalyticsService } = await import('../../server/analytics-simple');
+    const { AnalyticsService } = await import('../../packages/api/analytics-simple');
     const analyticsService = new AnalyticsService();
 
     // Create measurement for athlete

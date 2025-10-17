@@ -19,7 +19,7 @@ import { storage } from '../../packages/api/storage';
 import type { Organization, Team, User } from '@shared/schema';
 
 // Mock vite module before importing registerRoutes
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));

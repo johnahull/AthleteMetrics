@@ -511,7 +511,7 @@ describe('Critical Fix 6: Code Duplication - deletedAt Filter', () => {
     // by checking that the storage module exports a helper
 
     // Import the helper (will throw if not exported)
-    const { storage } = await import('../../server/storage');
+    const { storage } = await import('../../packages/api/storage');
 
     // Verify the internal helper exists by checking that methods work correctly
     // If the helper doesn't exist, the methods will fail

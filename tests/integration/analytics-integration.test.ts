@@ -20,7 +20,7 @@ import type { Express } from 'express';
 import type { AnalyticsRequest } from '@shared/analytics-types';
 
 // Mock vite module before importing registerRoutes to prevent build directory errors
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
