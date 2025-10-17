@@ -340,3 +340,99 @@ export function createCSVFromChunk(chunk: any[], headers: string[]): string {
   // Combine header and data rows
   return [headerRow, ...dataRows].join('\n');
 }
+
+/**
+ * Helper function to determine if a file needs batch processing
+ */
+export function needsBatchProcessing(rowCount: number, maxRowsPerBatch: number = 10000): boolean {
+  return rowCount > maxRowsPerBatch;
+}
+
+/**
+ * Helper function to calculate batch information
+ */
+export function getBatchInfo(rowCount: number, maxRowsPerBatch: number = 10000) {
+  if (rowCount <= maxRowsPerBatch) {
+    return {
+      needsBatching: false,
+      batchCount: 1,
+      rowsPerBatch: rowCount,
+      lastBatchSize: rowCount
+    };
+  }
+
+  const batchCount = Math.ceil(rowCount / maxRowsPerBatch);
+  const lastBatchSize = rowCount % maxRowsPerBatch || maxRowsPerBatch;
+
+  return {
+    needsBatching: true,
+    batchCount,
+    rowsPerBatch: maxRowsPerBatch,
+    lastBatchSize
+  };
+}
+
+/**
+ * Aggregate results from multiple batch imports
+ */
+export function aggregateBatchResults(batchResults: any[]) {
+  const aggregated = {
+    totalRows: 0,
+    errors: [] as any[],
+    warnings: [] as any[],
+    summary: {
+      created: 0,
+      updated: 0,
+      matched: 0,
+      skipped: 0
+    },
+    results: [] as any[],
+    createdTeams: [] as any[],
+    createdAthletes: [] as any[]
+  };
+
+  batchResults.forEach((result, batchIndex) => {
+    aggregated.totalRows += result.totalRows || 0;
+
+    // Aggregate errors with batch context
+    if (result.errors && result.errors.length > 0) {
+      result.errors.forEach((error: any) => {
+        aggregated.errors.push({
+          ...error,
+          batch: batchIndex + 1,
+          message: `[Batch ${batchIndex + 1}] ${error.message || error}`
+        });
+      });
+    }
+
+    // Aggregate warnings
+    if (result.warnings && result.warnings.length > 0) {
+      aggregated.warnings.push(...result.warnings);
+    }
+
+    // Aggregate summary counts
+    if (result.summary) {
+      aggregated.summary.created += result.summary.created || 0;
+      aggregated.summary.updated += result.summary.updated || 0;
+      aggregated.summary.matched += result.summary.matched || 0;
+      aggregated.summary.skipped += result.summary.skipped || 0;
+    }
+
+    // Aggregate results
+    if (result.results) {
+      aggregated.results.push(...result.results);
+    }
+
+    // Aggregate created teams
+    if (result.createdTeams) {
+      aggregated.createdTeams.push(...result.createdTeams);
+    }
+
+    // Aggregate created athletes
+    if (result.createdAthletes) {
+      aggregated.createdAthletes.push(...result.createdAthletes);
+    }
+  });
+
+  return aggregated;
+}
