@@ -85,6 +85,13 @@
       "when": 1758635809491,
       "tag": "0011_add_users_active_composite_index",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1760714400000,
+      "tag": "0012_fix_audit_logs_user_id_nullable",
+      "breakpoints": true
     }
   ]
 }
