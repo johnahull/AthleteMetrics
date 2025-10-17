@@ -16,7 +16,13 @@
     "test:ui": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest --ui",
     "test:run": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run",
     "test:unit": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.unit.config.ts",
-    "test:integration": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts"
+    "test:integration": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts",
+    "test:staging": "playwright test --config=playwright.staging.config.ts",
+    "test:staging:validate": "playwright test tests/e2e/validate-staging.spec.ts --config=playwright.staging.config.ts",
+    "deploy:testing": "node scripts/validate-testing-env.js && railway up --environment testing",
+    "logs:testing": "railway logs --environment testing",
+    "shell:testing": "railway run --environment testing bash",
+    "vars:testing": "railway variables --environment testing"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -109,6 +115,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@playwright/test": "^1.56.1",
     "@replit/vite-plugin-cartographer": "^0.3.2",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
     "@tailwindcss/typography": "^0.5.15",
