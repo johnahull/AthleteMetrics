@@ -1166,6 +1166,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           },
           label: (context) => {
             const rawData = context.raw as any;
+            if (context.parsed.x === null || context.parsed.y === null) return '';
+
             // Get metric from rawData first, fallback to statistics keys
             const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
             const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
@@ -1186,10 +1188,13 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           },
           afterLabel: (context) => {
             const rawData = context.raw as any;
+            if (context.parsed.x === null || context.parsed.y === null) return [];
+
             // Get metric from rawData first, fallback to statistics keys
             const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
             const stats = statistics?.[metric];
             const result = [];
+            const yValue = context.parsed.y; // Capture for use in nested functions
 
             // Add team and group info for individual athlete points
             if (rawData && rawData.athleteName) {
@@ -1206,7 +1211,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   .filter(d => d.metric === metric)
                   .map(d => d.value)
                   .sort((a, b) => a - b);
-                const rank = allValues.filter(v => v < context.parsed.y).length;
+                const rank = allValues.filter(v => v < yValue).length;
 
                 // For "lower is better" metrics, invert percentile so high percentile = better performance
                 const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
