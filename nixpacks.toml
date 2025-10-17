@@ -5,7 +5,12 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+  "npm run build",
+  "echo 'Verifying deployment files...'",
+  "ls -la scripts/ || echo 'WARNING: scripts/ not found'",
+  "ls -la migrations/ || echo 'WARNING: migrations/ not found'"
+]
 
 [start]
 cmd = "npm run start"
