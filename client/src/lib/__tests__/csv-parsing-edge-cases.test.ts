@@ -44,11 +44,16 @@ describe('CSV Parsing Edge Cases', () => {
       expect(result[0].formula).toBe("'+1234");
     });
 
-    it('should sanitize values starting with minus sign', () => {
-      const csv = 'name,formula\nJohn,-1234';
-      const result = parseCSV(csv);
+    it('should sanitize values starting with minus sign (except negative numbers)', () => {
+      // Test that negative numbers are allowed
+      const csvNegativeNumber = 'name,value\nJohn,-1234';
+      const resultNumber = parseCSV(csvNegativeNumber);
+      expect(resultNumber[0].value).toBe('-1234');
 
-      expect(result[0].formula).toBe("'-1234");
+      // Test that minus followed by non-numeric is sanitized
+      const csvFormula = 'name,formula\nJohn,-SUM(A1)';
+      const resultFormula = parseCSV(csvFormula);
+      expect(resultFormula[0].formula).toBe("'-SUM(A1)");
     });
 
     it('should sanitize values starting with at sign', () => {

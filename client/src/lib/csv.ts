@@ -1,3 +1,40 @@
+import Papa from 'papaparse';
+
+// Constants for batch processing
+export const MAX_ROWS_PER_BATCH = 10000;
+export const MAX_SAFE_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Type definitions for batch processing
+export interface BatchResult {
+  totalRows: number;
+  errors: ImportError[];
+  warnings: ImportWarning[];
+  summary: {
+    created: number;
+    updated: number;
+    matched: number;
+    skipped: number;
+  };
+  results?: any[];
+  createdTeams?: any[];
+  createdAthletes?: any[];
+  failed?: boolean;
+  batchNumber?: number;
+}
+
+export interface ImportError {
+  row?: number;
+  field?: string;
+  message: string;
+  batch?: number;
+}
+
+export interface ImportWarning {
+  row?: number;
+  message: string;
+  batch?: number;
+}
+
 export function downloadCSV(csvContent: string, filename: string) {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -16,83 +53,62 @@ export function downloadCSV(csvContent: string, filename: string) {
 }
 
 /**
- * Parse CSV text into array of objects
- *
- * ⚠️ WARNING: This is a simplified CSV parser with known limitations:
- * - Does NOT handle commas within quoted fields correctly
- * - Does NOT handle escaped quotes within quoted fields
- * - Does NOT handle multi-line values within quoted fields
- * - Uses naive split(',') which breaks on properly quoted CSV values
- *
- * RECOMMENDATION: Replace with PapaParse library for production use:
- * - npm install papaparse @types/papaparse
- * - import Papa from 'papaparse'
- * - Papa.parse(csvText, { header: true, skipEmptyLines: true })
- *
- * This implementation includes basic formula injection prevention but
- * should be replaced with a robust CSV parser for security and reliability.
- *
- * @param csvText - Raw CSV text to parse
- * @returns Array of objects with header keys
- */
-export function parseCSV(csvText: string): any[] {
-  const lines = csvText.split('\n').filter(line => line.trim());
-  if (lines.length === 0) return [];
-
-  const headers = lines[0].split(',').map(header => header.trim());
-  const data = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(value => value.trim());
-    const row: any = {};
-
-    headers.forEach((header, index) => {
-      const value = values[index] || '';
-      // Sanitize value to prevent formula injection
-      row[header] = sanitizeCSVInput(value);
-    });
-
-    data.push(row);
-  }
-
-  return data;
-}
-
-/**
- * Sanitize CSV input to prevent formula injection attacks
- * @param value - The input value to sanitize
- * @returns Sanitized value safe for processing
- */
-function sanitizeCSVInput(value: string): string {
-  if (!value) return '';
-
-  // Prevent CSV formula injection by prefixing dangerous characters with a single quote
-  // Dangerous characters: =, +, -, @, tab, carriage return
-  if (/^[=+\-@\t\r]/.test(value)) {
-    return `'${value}`;
-  }
-
-  return value;
-}
-
-/**
  * Sanitize a CSV cell value to prevent formula injection attacks
+ * This function handles both input and output sanitization.
+ *
  * @param value - The cell value to sanitize
- * @returns Sanitized value safe for CSV export
+ * @returns Sanitized value safe for CSV processing
  */
-function sanitizeCSVCell(value: any): string {
+export function sanitizeCSVCell(value: any): string {
   if (value === null || value === undefined) return '';
 
   const strValue = String(value);
 
   // Prevent CSV formula injection by prefixing dangerous characters with a single quote
   // Dangerous characters: =, +, -, @, tab, carriage return
+  // Exception: Allow negative numbers (e.g., -10, -3.14)
   if (/^[=+\-@\t\r]/.test(strValue)) {
+    // Allow negative numbers: starts with - and is followed by digits
+    if (/^-\d+\.?\d*$/.test(strValue)) {
+      return strValue;
+    }
     return `'${strValue}`;
   }
 
   return strValue;
 }
+
+/**
+ * Parse CSV text into array of objects using PapaParse
+ *
+ * Uses PapaParse for robust CSV parsing that correctly handles:
+ * - Commas within quoted fields
+ * - Escaped quotes within quoted fields
+ * - Multi-line values within quoted fields
+ * - Various CSV dialects and edge cases
+ *
+ * All values are sanitized to prevent formula injection attacks.
+ *
+ * @param csvText - Raw CSV text to parse
+ * @returns Array of objects with header keys
+ */
+export function parseCSV(csvText: string): any[] {
+  if (!csvText || !csvText.trim()) return [];
+
+  const result = Papa.parse(csvText, {
+    header: true,
+    skipEmptyLines: true,
+    transform: sanitizeCSVCell,
+    transformHeader: (header: string) => header.trim()
+  });
+
+  if (result.errors && result.errors.length > 0) {
+    console.warn('CSV parsing warnings:', result.errors);
+  }
+
+  return result.data as any[];
+}
+
 
 export function arrayToCSV(data: any[], headers?: string[]): string {
   if (data.length === 0) return '';
@@ -383,14 +399,14 @@ export function createCSVFromChunk(chunk: any[], headers: string[]): string {
 /**
  * Helper function to determine if a file needs batch processing
  */
-export function needsBatchProcessing(rowCount: number, maxRowsPerBatch: number = 10000): boolean {
+export function needsBatchProcessing(rowCount: number, maxRowsPerBatch: number = MAX_ROWS_PER_BATCH): boolean {
   return rowCount > maxRowsPerBatch;
 }
 
 /**
  * Helper function to calculate batch information
  */
-export function getBatchInfo(rowCount: number, maxRowsPerBatch: number = 10000) {
+export function getBatchInfo(rowCount: number, maxRowsPerBatch: number = MAX_ROWS_PER_BATCH) {
   if (rowCount <= maxRowsPerBatch) {
     return {
       needsBatching: false,
@@ -414,11 +430,11 @@ export function getBatchInfo(rowCount: number, maxRowsPerBatch: number = 10000) 
 /**
  * Aggregate results from multiple batch imports
  */
-export function aggregateBatchResults(batchResults: any[]) {
-  const aggregated = {
+export function aggregateBatchResults(batchResults: BatchResult[]): BatchResult {
+  const aggregated: BatchResult = {
     totalRows: 0,
-    errors: [] as any[],
-    warnings: [] as any[],
+    errors: [] as ImportError[],
+    warnings: [] as ImportWarning[],
     summary: {
       created: 0,
       updated: 0,

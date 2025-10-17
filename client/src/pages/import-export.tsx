@@ -14,7 +14,9 @@ import {
   createCSVFromChunk,
   needsBatchProcessing,
   getBatchInfo,
-  aggregateBatchResults
+  aggregateBatchResults,
+  MAX_ROWS_PER_BATCH,
+  MAX_SAFE_FILE_SIZE
 } from "@/lib/csv";
 import { PhotoUpload } from "@/components/photo-upload";
 import { ColumnMappingDialog } from "@/components/import/ColumnMappingDialog";
@@ -73,7 +75,6 @@ export default function ImportExport() {
   const [showBatchSplitDialog, setShowBatchSplitDialog] = useState(false);
   const [largeParsedFile, setLargeParsedFile] = useState<{ file: File; data: any[]; headers: string[] } | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; rowsProcessed: number } | null>(null);
-  const [batchImportIds, setBatchImportIds] = useState<string[]>([]); // Track created records for potential rollback
   const { toast } = useToast();
   const { user, userOrganizations, organizationContext } = useAuth();
 
@@ -561,7 +562,6 @@ export default function ImportExport() {
 
   // Process a large file that exceeds 10k rows by splitting into batches
   const processLargeFile = async (file: File, data: any[], headers: string[]) => {
-    const MAX_ROWS_PER_BATCH = 10000;
     const batchInfo = getBatchInfo(data.length, MAX_ROWS_PER_BATCH);
 
     setBatchProgress({ current: 0, total: batchInfo.batchCount, rowsProcessed: 0 });
@@ -708,6 +708,15 @@ export default function ImportExport() {
 
     // If row count is available and exceeds 10k, parse and offer batch processing
     if (rowCount && needsBatchProcessing(rowCount)) {
+      // Check file size and warn if very large
+      if (uploadFile.size > MAX_SAFE_FILE_SIZE) {
+        toast({
+          title: "Large File Warning",
+          description: `This file is ${(uploadFile.size / 1024 / 1024).toFixed(1)}MB. Files over 50MB may cause browser slowdown.`,
+          variant: "default",
+        });
+      }
+
       // Parse the file to get the data
       const text = await uploadFile.text();
       const parsed = parseCSV(text);
@@ -1240,7 +1249,10 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
 
                   {/* Progress Indicator */}
                   {(processingProgress || batchProgress) && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg"
+                         role="status"
+                         aria-live="polite"
+                         aria-atomic="true">
                       <div className="flex items-center justify-between text-sm text-blue-800 mb-2">
                         <div className="flex-1">
                           <div className="font-medium">
