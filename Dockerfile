@@ -10,8 +10,11 @@ WORKDIR /app
 # Install dependencies for native modules
 RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev
 
-# Copy package files
+# Copy package files including workspace package.json files
 COPY package*.json ./
+COPY packages/api/package.json ./packages/api/
+COPY packages/web/package.json ./packages/web/
+COPY packages/shared/package.json ./packages/shared/
 
 # Install all dependencies (including devDependencies for build)
 RUN npm ci
