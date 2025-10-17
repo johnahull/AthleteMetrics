@@ -7,7 +7,7 @@
   "main": "./index.ts",
   "scripts": {
     "dev": "NODE_ENV=development tsx index.ts",
-    "build": "esbuild index.ts --platform=node --packages=external --bundle --format=esm --outdir=../../dist",
+    "build": "node build.js",
     "start": "node ../../dist/index.js"
   },
   "dependencies": {

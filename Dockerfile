@@ -52,8 +52,7 @@ COPY packages/shared/package.json ./packages/shared/
 RUN npm ci --only=production --workspace=@athletemetrics/api --workspace=@athletemetrics/shared
 
 # Copy built application from builder stage
-# Note: With npm workspaces, dist/index.js bundles all code including shared types
-# No need to copy packages/shared separately
+# Note: @shared code is now bundled into dist/index.js via esbuild alias
 COPY --from=builder /app/dist ./dist
 
 # Copy migrations and scripts (needed for db:migrate at startup)
