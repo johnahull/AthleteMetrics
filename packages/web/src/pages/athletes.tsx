@@ -15,6 +15,7 @@ import { InvitationModal } from "@/components/invitation-modal";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import type { Team } from "@shared/schema";
+import { PaginationControls } from "@/components/team-athletes/PaginationControls";
 
 export default function Athletes() {
   const { user, organizationContext, userOrganizations } = useAuth();
@@ -65,6 +66,8 @@ export default function Athletes() {
     search: "",
   });
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(25);
 
   // Debounce search to avoid excessive API calls
   const debouncedSearch = useDebounce(filters.search, 300);
@@ -81,6 +84,11 @@ export default function Athletes() {
       }));
     }
   }, [location]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.teamId, filters.birthYearFrom, filters.birthYearTo, debouncedSearch]);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -538,6 +546,12 @@ export default function Athletes() {
     }
   };
 
+  // Pagination calculations
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil((athletes?.length || 0) / itemsPerPage);
+  const startIndex = itemsPerPage === -1 ? 0 : (currentPage - 1) * itemsPerPage;
+  const endIndex = itemsPerPage === -1 ? (athletes?.length || 0) : startIndex + itemsPerPage;
+  const paginatedAthletes = athletes?.slice(startIndex, endIndex) || [];
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -785,9 +799,32 @@ export default function Athletes() {
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">All Athletes</h3>
-              <span className="text-sm text-gray-500" data-testid="athletes-count">
-                {athletes?.length || 0} athletes
-              </span>
+              <div className="flex items-center gap-3">
+                {athletes && athletes.length > 0 && (
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      const newValue = value === "-1" ? -1 : parseInt(value);
+                      setItemsPerPage(newValue);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-24 h-9" aria-label="Page size selector">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="-1">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <span className="text-sm text-gray-500" data-testid="athletes-count">
+                  {athletes?.length || 0} athletes
+                </span>
+              </div>
             </div>
           </div>
 
@@ -834,7 +871,7 @@ export default function Athletes() {
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
-                  {athletes?.map((athlete: any) => (
+                  {paginatedAthletes?.map((athlete: any) => (
                     <tr key={athlete.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <Checkbox
@@ -1018,6 +1055,15 @@ export default function Athletes() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {/* Pagination Controls */}
+          {athletes && athletes.length > 0 && totalPages > 1 && (
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           )}
         </CardContent>
       </Card>
