@@ -401,6 +401,7 @@ export default function Athletes() {
       birthYearTo: "",
       search: "",
     });
+    setCurrentPage(1); // Reset to page 1 when clearing filters
   };
 
   const refreshData = () => {
