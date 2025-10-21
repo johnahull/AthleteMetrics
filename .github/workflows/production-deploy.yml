@@ -205,6 +205,7 @@ jobs:
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_PRODUCTION_SERVICE_ID }}
           DEPLOYMENT_POLL_INTERVAL: 5
           DEPLOYMENT_TIMEOUT: 300
+        continue-on-error: true
 
       - name: Run health check
         id: health-check

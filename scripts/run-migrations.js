@@ -155,6 +155,7 @@ async function runMigrations() {
 
     // Use __dirname to resolve migrations folder relative to script location
     // This ensures it works regardless of where the script is executed from
+    // NOTE: We use 'migrations' not 'drizzle/migrations' because we maintain manual SQL migrations
     const migrationsFolder = path.join(__dirname, '..', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
@@ -201,7 +202,12 @@ async function runMigrations() {
 
     // If schema exists but tracking is missing or empty, initialize tracking table
     // This handles databases created via drizzle-kit push
-    if (schemaExists && (!trackingExists || trackingIsEmpty)) {
+    // IMPORTANT: Only initialize if tracking is completely empty - if it has migrations,
+    // continue to normal migration flow to apply any new migrations
+    if (schemaExists && trackingExists && !trackingIsEmpty) {
+      console.log('📋 Database has existing migration tracking - checking for new migrations...');
+      // Continue to normal migration flow below - drizzle will handle incremental migrations
+    } else if (schemaExists && (!trackingExists || trackingIsEmpty)) {
       console.log('⚠️  Database schema exists but migration tracking is missing');
       console.log('   This indicates the database was created via drizzle-kit push');
       console.log('   Initializing migration tracking table...');
