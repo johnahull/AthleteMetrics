@@ -2210,6 +2210,8 @@ export class DatabaseStorage implements IStorage {
     let teamId = measurement.teamId;
     let season = measurement.season;
     let teamContextAuto = true;
+    let teamNameSnapshot: string | null = null;
+    let organizationId: string | null = null;
 
     if (!teamId || teamId.trim() === "") {
       // Get athlete's active teams at measurement date
@@ -2220,6 +2222,14 @@ export class DatabaseStorage implements IStorage {
         teamId = activeTeams[0].teamId;
         season = activeTeams[0].season || undefined;
         teamContextAuto = true;
+
+        // Fetch team details for snapshot
+        const team = await this.getTeam(teamId);
+        if (team) {
+          teamNameSnapshot = team.name;
+          organizationId = team.organizationId;
+        }
+
         console.log(`Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})`);
       } else if (activeTeams.length > 1) {
         // Multiple teams - cannot auto-assign, will need manual selection
@@ -2231,8 +2241,13 @@ export class DatabaseStorage implements IStorage {
         teamContextAuto = false;
       }
     } else {
-      // Team was explicitly provided
+      // Team was explicitly provided - fetch team details for snapshot
       teamContextAuto = false;
+      const team = await this.getTeam(teamId);
+      if (team) {
+        teamNameSnapshot = team.name;
+        organizationId = team.organizationId;
+      }
     }
 
     // Get submitter info to determine if auto-verify
@@ -2263,6 +2278,8 @@ export class DatabaseStorage implements IStorage {
       isVerified: isCoach ? true : false,
       verifiedBy: isCoach ? submittedBy : undefined,
       teamId: teamId || null,
+      teamNameSnapshot: teamNameSnapshot || null,
+      organizationId: organizationId || null,
       season: season || null,
       teamContextAuto: teamContextAuto
     }).returning();
