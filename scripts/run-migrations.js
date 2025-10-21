@@ -155,6 +155,7 @@ async function runMigrations() {
 
     // Use __dirname to resolve migrations folder relative to script location
     // This ensures it works regardless of where the script is executed from
+    // NOTE: We use 'migrations' not 'drizzle/migrations' because we maintain manual SQL migrations
     const migrationsFolder = path.join(__dirname, '..', 'migrations');
     console.log(`📁 Migrations folder: ${migrationsFolder}`);
 
