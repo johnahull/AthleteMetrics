@@ -15,8 +15,8 @@ process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { storage } from '../../server/storage';
-import { OrganizationService } from '../../server/services/organization-service';
+import { storage } from '../../packages/api/storage';
+import { OrganizationService } from '../../packages/api/services/organization-service';
 import type { Organization, User, Team } from '@shared/schema';
 
 describe.skip('Organization Deletion and Deactivation', () => {

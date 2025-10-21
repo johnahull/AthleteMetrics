@@ -94,10 +94,16 @@ jobs:
             exit 1
           fi
           if [ ! -f "dist/index.js" ]; then
-            echo "Error: dist/index.js not found"
+            echo "Error: dist/index.js (API build) not found"
+            exit 1
+          fi
+          if [ ! -d "dist/public" ]; then
+            echo "Error: dist/public (frontend build) not found"
             exit 1
           fi
           echo "✅ Build verification successful"
+          echo "   - API: dist/index.js"
+          echo "   - Frontend: dist/public/"
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli

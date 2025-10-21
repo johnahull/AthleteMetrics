@@ -10,8 +10,11 @@ WORKDIR /app
 # Install dependencies for native modules
 RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev
 
-# Copy package files
+# Copy package files including workspace package.json files
 COPY package*.json ./
+COPY packages/api/package.json ./packages/api/
+COPY packages/web/package.json ./packages/web/
+COPY packages/shared/package.json ./packages/shared/
 
 # Install all dependencies (including devDependencies for build)
 RUN npm ci
@@ -38,17 +41,23 @@ RUN apk add --no-cache \
     tesseract-ocr \
     tesseract-ocr-data-eng
 
-# Copy package files
+# Copy package files including workspace package.json files
 COPY package*.json ./
+COPY packages/api/package.json ./packages/api/
+COPY packages/web/package.json ./packages/web/
+COPY packages/shared/package.json ./packages/shared/
 
-# Install only production dependencies
-RUN npm ci --only=production
+# Install only production dependencies for API and shared workspaces
+# Note: Web dependencies are not needed at runtime since frontend is pre-built
+RUN npm ci --only=production --workspace=@athletemetrics/api --workspace=@athletemetrics/shared
 
 # Copy built application from builder stage
+# Note: @shared code is now bundled into dist/index.js via esbuild alias
 COPY --from=builder /app/dist ./dist
 
-# Copy shared types (needed at runtime)
-COPY --from=builder /app/shared ./shared
+# Copy migrations and scripts (needed for db:migrate at startup)
+COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/scripts ./scripts
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
@@ -72,4 +81,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:5000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
 
 # Start the application
-CMD ["node", "dist/index.js"]
+# Run migrations before starting server (matches Railway nixpacks behavior)
+CMD ["sh", "-c", "npm run db:migrate && npm run start"]

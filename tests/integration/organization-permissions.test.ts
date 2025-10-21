@@ -21,7 +21,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { validateUsername } from '../../shared/username-validation';
+import { validateUsername } from '@shared/username-validation';
 
 describe('Organization Permissions and RBAC', () => {
 

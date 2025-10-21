@@ -142,26 +142,26 @@ async function createBackup() {
     console.log('Dumping database...');
 
     // Use pg_dump - either through Railway CLI (internal) or directly (public URL)
-    let dumpOutput;
-
+    // Stream output directly to file to avoid ENOBUFS errors on large databases
     if (PUBLIC_DATABASE_URL) {
       // Direct pg_dump with public URL (for GitHub Actions)
-      dumpOutput = runCommand(
-        `pg_dump "${databaseUrl}"`,
-        { silent: true }
+      // Pipe output directly to file to handle large databases
+      runCommand(
+        `pg_dump "${databaseUrl}" > "${backupFile}"`,
+        { shell: '/bin/bash' }
       );
     } else {
       // Use Railway CLI (for Railway environment with internal hostnames)
       // Railway CLI handles authentication automatically
-      dumpOutput = runCommand(
-        `railway run --service ${RAILWAY_SERVICE_ID} sh -c 'pg_dump "$DATABASE_URL"'`,
-        { silent: true }
+      runCommand(
+        `railway run --service ${RAILWAY_SERVICE_ID} sh -c 'pg_dump "$DATABASE_URL"' > "${backupFile}"`,
+        { shell: '/bin/bash' }
       );
     }
 
-    // Write output to backup file with restricted permissions (owner-only)
+    // Set restricted permissions after file is created (owner-only)
     // SECURITY: Mode 0o600 = rw------- (owner read/write, no group/other access)
-    fs.writeFileSync(backupFile, dumpOutput, { mode: 0o600 });
+    fs.chmodSync(backupFile, 0o600);
 
     // Validate file size first (before opening file descriptor)
     // This ensures we only open the file descriptor when necessary

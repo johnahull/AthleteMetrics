@@ -3,8 +3,8 @@
 // Run with: export $(cat .env | xargs) && npm run test:run -- tests/integration/critical-fixes.test.ts
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { db } from '../../server/db';
-import { storage } from '../../server/storage';
+import { db } from '../../packages/api/db';
+import { storage } from '../../packages/api/storage';
 import {
   users,
   organizations,
@@ -20,7 +20,7 @@ import {
   type User,
   type Organization,
   type Team,
-} from '../../shared/schema';
+} from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
 
 describe('Critical Fix 2: User-Team Soft Delete', () => {
@@ -511,7 +511,7 @@ describe('Critical Fix 6: Code Duplication - deletedAt Filter', () => {
     // by checking that the storage module exports a helper
 
     // Import the helper (will throw if not exported)
-    const { storage } = await import('../../server/storage');
+    const { storage } = await import('../../packages/api/storage');
 
     // Verify the internal helper exists by checking that methods work correctly
     // If the helper doesn't exist, the methods will fail

@@ -17,18 +17,18 @@ process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // Bypass rate limits for these 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
-import { db } from '../../server/db';
+import { db } from '../../packages/api/db';
 import { organizations, users, userOrganizations, teams, userTeams, measurements, auditLogs } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 
 // Mock vite module before importing registerRoutes
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
 
-import { registerRoutes } from '../../server/routes';
+import { registerRoutes } from '../../packages/api/routes';
 
 // Helper function for password hashing
 async function hashPassword(password: string): Promise<string> {
