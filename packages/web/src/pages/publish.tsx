@@ -216,8 +216,8 @@ export default function Publish() {
     }));
 
     return [...measurementsWithRank].sort((a: any, b: any) => {
-      let aValue: any;
-      let bValue: any;
+      let aValue: string | number;
+      let bValue: string | number;
 
       switch (sortColumn) {
         case 'rank':
@@ -672,6 +672,7 @@ export default function Publish() {
                       className="px-4 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('rank')}
                       data-testid="sort-header-rank"
+                      aria-sort={sortColumn === 'rank' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Rank
@@ -690,6 +691,7 @@ export default function Publish() {
                       className="px-4 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('athlete')}
                       data-testid="sort-header-athlete"
+                      aria-sort={sortColumn === 'athlete' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Athlete
@@ -708,6 +710,7 @@ export default function Publish() {
                       className="px-4 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('team')}
                       data-testid="sort-header-team"
+                      aria-sort={sortColumn === 'team' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Team(s)
@@ -726,6 +729,7 @@ export default function Publish() {
                       className="px-4 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('sport')}
                       data-testid="sort-header-sport"
+                      aria-sort={sortColumn === 'sport' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Sport
@@ -744,6 +748,7 @@ export default function Publish() {
                       className="px-4 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('value')}
                       data-testid="sort-header-value"
+                      aria-sort={sortColumn === 'value' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Value
@@ -762,6 +767,7 @@ export default function Publish() {
                       className="px-4 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('date')}
                       data-testid="sort-header-date"
+                      aria-sort={sortColumn === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Date

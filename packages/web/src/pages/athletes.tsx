@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -561,60 +561,62 @@ export default function Athletes() {
     }
   };
 
-  // Sort athletes before pagination
-  const sortedAthletes = [...(athletes || [])].sort((a: any, b: any) => {
-    if (!sortColumn) return 0;
+  // Sort athletes before pagination (memoized for performance)
+  const sortedAthletes = useMemo(() => {
+    return [...(athletes || [])].sort((a: any, b: any) => {
+      if (!sortColumn) return 0;
 
-    let aValue: any;
-    let bValue: any;
+      let aValue: string | number;
+      let bValue: string | number;
 
-    switch (sortColumn) {
-      case 'athlete':
-        aValue = a.fullName?.toLowerCase() || '';
-        bValue = b.fullName?.toLowerCase() || '';
-        break;
-      case 'team':
-        aValue = a.teams && a.teams.length > 0 ? a.teams[0].name.toLowerCase() : 'independent';
-        bValue = b.teams && b.teams.length > 0 ? b.teams[0].name.toLowerCase() : 'independent';
-        break;
-      case 'birthYear':
-        aValue = a.birthYear || 0;
-        bValue = b.birthYear || 0;
-        break;
-      case 'gender':
-        aValue = a.gender?.toLowerCase() || 'zzz';
-        bValue = b.gender?.toLowerCase() || 'zzz';
-        break;
-      case 'school':
-        aValue = a.school?.toLowerCase() || 'zzz';
-        bValue = b.school?.toLowerCase() || 'zzz';
-        break;
-      case 'sport':
-        aValue = a.sports && a.sports.length > 0 ? a.sports[0].toLowerCase() : 'zzz';
-        bValue = b.sports && b.sports.length > 0 ? b.sports[0].toLowerCase() : 'zzz';
-        break;
-      case 'status':
-        aValue = a.isActive ? 'active' : 'inactive';
-        bValue = b.isActive ? 'active' : 'inactive';
-        break;
-      default:
-        return 0;
-    }
+      switch (sortColumn) {
+        case 'athlete':
+          aValue = a.fullName?.toLowerCase() || '';
+          bValue = b.fullName?.toLowerCase() || '';
+          break;
+        case 'team':
+          aValue = a.teams && a.teams.length > 0 ? a.teams[0].name.toLowerCase() : 'independent';
+          bValue = b.teams && b.teams.length > 0 ? b.teams[0].name.toLowerCase() : 'independent';
+          break;
+        case 'birthYear':
+          aValue = a.birthYear || 0;
+          bValue = b.birthYear || 0;
+          break;
+        case 'gender':
+          aValue = a.gender?.toLowerCase() || 'zzz';
+          bValue = b.gender?.toLowerCase() || 'zzz';
+          break;
+        case 'school':
+          aValue = a.school?.toLowerCase() || 'zzz';
+          bValue = b.school?.toLowerCase() || 'zzz';
+          break;
+        case 'sport':
+          aValue = a.sports && a.sports.length > 0 ? a.sports[0].toLowerCase() : 'zzz';
+          bValue = b.sports && b.sports.length > 0 ? b.sports[0].toLowerCase() : 'zzz';
+          break;
+        case 'status':
+          aValue = a.isActive ? 'active' : 'inactive';
+          bValue = b.isActive ? 'active' : 'inactive';
+          break;
+        default:
+          return 0;
+      }
 
-    // Handle null/undefined values
-    if (aValue === null || aValue === undefined) return 1;
-    if (bValue === null || bValue === undefined) return -1;
+      // Handle null/undefined values
+      if (aValue === null || aValue === undefined) return 1;
+      if (bValue === null || bValue === undefined) return -1;
 
-    // Compare values
-    let comparison = 0;
-    if (typeof aValue === 'string' && typeof bValue === 'string') {
-      comparison = aValue.localeCompare(bValue);
-    } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-      comparison = aValue - bValue;
-    }
+      // Compare values
+      let comparison = 0;
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        comparison = aValue.localeCompare(bValue);
+      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+        comparison = aValue - bValue;
+      }
 
-    return sortDirection === 'asc' ? comparison : -comparison;
-  });
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [athletes, sortColumn, sortDirection]);
 
   // Pagination calculations (applied to sorted athletes)
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil((sortedAthletes?.length || 0) / itemsPerPage);
@@ -933,6 +935,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('athlete')}
                       data-testid="sort-header-athlete"
+                      aria-sort={sortColumn === 'athlete' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Athlete
@@ -951,6 +954,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('team')}
                       data-testid="sort-header-team"
+                      aria-sort={sortColumn === 'team' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Team
@@ -969,6 +973,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('birthYear')}
                       data-testid="sort-header-birthYear"
+                      aria-sort={sortColumn === 'birthYear' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Birth Year
@@ -987,6 +992,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('gender')}
                       data-testid="sort-header-gender"
+                      aria-sort={sortColumn === 'gender' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Gender
@@ -1005,6 +1011,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('school')}
                       data-testid="sort-header-school"
+                      aria-sort={sortColumn === 'school' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         School
@@ -1023,6 +1030,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('sport')}
                       data-testid="sort-header-sport"
+                      aria-sort={sortColumn === 'sport' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Sport
@@ -1041,6 +1049,7 @@ export default function Athletes() {
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('status')}
                       data-testid="sort-header-status"
+                      aria-sort={sortColumn === 'status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
                         Status
