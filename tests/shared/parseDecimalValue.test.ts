@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseDecimalValue } from '../../shared/analytics-utils';
+import { parseDecimalValue } from '@shared/analytics-utils';
 
 describe('parseDecimalValue', () => {
   describe('Valid inputs', () => {

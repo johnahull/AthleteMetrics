@@ -8,8 +8,10 @@ vite.config.ts.*
 # Environment variables
 .env
 .env.local
+.env.test
 .env.production
 .env.development
+.env.staging
 
 # Database
 *.db
@@ -50,3 +52,8 @@ update-*.ts
 
 # Database backups
 backups/
+
+# Playwright test artifacts
+test-results/
+playwright-report/
+screenshots/

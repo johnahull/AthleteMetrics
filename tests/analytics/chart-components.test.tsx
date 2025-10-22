@@ -7,7 +7,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Mock ChartContainer since it has complex dependencies
-vi.mock('../../client/src/components/charts/ChartContainer', () => ({
+vi.mock('../../packages/web/src/components/charts/ChartContainer', () => ({
   ChartContainer: ({ type, isLoading, data, title, onExport, onFullscreen }: any) => {
     if (isLoading) {
       return <div role="status">Loading...</div>;
@@ -25,8 +25,8 @@ vi.mock('../../client/src/components/charts/ChartContainer', () => ({
     );
   }
 }));
-import { ChartContainer } from '../../client/src/components/charts/ChartContainer';
-import { ErrorBoundary } from '../../client/src/components/ErrorBoundary';
+import { ChartContainer } from '../../packages/web/src/components/charts/ChartContainer';
+import { ErrorBoundary } from '../../packages/web/src/components/ErrorBoundary';
 import type { ChartDataPoint, ChartConfiguration } from '@shared/analytics-types';
 
 // Mock Chart.js

@@ -1,0 +1,1141 @@
+import { useState, useEffect } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import AthleteModal from "@/components/athlete-modal";
+import { InvitationModal } from "@/components/invitation-modal";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth";
+import type { Team } from "@shared/schema";
+import { PaginationControls } from "@/components/team-athletes/PaginationControls";
+
+export default function Athletes() {
+  const { user, organizationContext, userOrganizations } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  // Get user's primary role to check access
+  const { data: userOrganizationsData } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id && !user?.isSiteAdmin,
+  });
+
+  // Get effective organization ID - same pattern as dashboard and other pages
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
+
+  // Use session role as primary source, fallback to organization role, then 'athlete'
+  const primaryRole = user?.role || (Array.isArray(userOrganizationsData) && userOrganizationsData.length > 0 ? userOrganizationsData[0]?.role : 'athlete');
+  const isSiteAdmin = user?.isSiteAdmin || false;
+
+  // Redirect athletes away from this management page
+  useEffect(() => {
+    if (!isSiteAdmin && primaryRole === "athlete") {
+      const athleteId = user?.id;
+      setLocation(`/athletes/${athleteId}`);
+    }
+  }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
+
+  // Don't render management UI for athletes
+  if (!isSiteAdmin && primaryRole === "athlete") {
+    return null;
+  }
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [editingAthlete, setEditingAthlete] = useState(null);
+  const [filters, setFilters] = useState({
+    teamId: "all",
+    birthYearFrom: "",
+    birthYearTo: "",
+    search: "",
+  });
+  const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(25);
+
+  // Debounce search to avoid excessive API calls
+  const debouncedSearch = useDebounce(filters.search, 300);
+
+  // Check for URL parameters on load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const teamIdParam = urlParams.get('teamId');
+
+    if (teamIdParam) {
+      setFilters(prev => ({
+        ...prev,
+        teamId: teamIdParam
+      }));
+    }
+  }, [location]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.teamId, filters.birthYearFrom, filters.birthYearTo, debouncedSearch]);
+
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/teams", effectiveOrganizationId],
+    queryFn: async () => {
+      const url = effectiveOrganizationId 
+        ? `/api/teams?organizationId=${effectiveOrganizationId}`
+        : `/api/teams`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch teams');
+      return response.json();
+    }
+  });
+
+  // Get current user's organizations to fetch invitations
+  const { data: userOrgs = [] } = useQuery({
+    queryKey: ["/api/auth/me/organizations"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/me/organizations");
+      if (!response.ok) throw new Error('Failed to fetch organizations');
+      return response.json();
+    }
+  });
+
+  // Get athlete invitations for the current organization
+  const { data: athleteInvitations = [] } = useQuery({
+    queryKey: ["/api/invitations/athletes"],
+    enabled: !!userOrgs && userOrgs.length > 0,
+    queryFn: async () => {
+      const response = await fetch("/api/invitations/athletes");
+      if (!response.ok) throw new Error('Failed to fetch invitations');
+      return response.json();
+    }
+  });
+
+  const { data: athletes = [], isLoading } = useQuery({
+    queryKey: ["/api/athletes", { ...filters, search: debouncedSearch }, effectiveOrganizationId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.teamId && filters.teamId !== 'all') params.append('teamId', filters.teamId);
+      if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
+      if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+      if (debouncedSearch) params.append('search', debouncedSearch);
+
+      // Always include organization context for proper filtering
+      if (effectiveOrganizationId) {
+        params.append('organizationId', effectiveOrganizationId);
+      }
+
+      // Add cache-busting parameter to force fresh request
+      params.append('_t', Date.now().toString());
+
+      const response = await fetch(`/api/athletes?${params}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch athletes');
+      const data = await response.json();
+
+      // Debug: Log first athlete to see structure
+      if (data.length > 0) {
+        console.log('[FRONTEND DEBUG] First athlete from API:', {
+          id: data[0].id,
+          name: `${data[0].firstName} ${data[0].lastName}`,
+          emails: data[0].emails,
+          emailsType: typeof data[0].emails,
+          isArray: Array.isArray(data[0].emails),
+          allKeys: Object.keys(data[0]).sort()
+        });
+      }
+
+      return data;
+    },
+  });
+
+  const deleteAthleteMutation = useMutation({
+    mutationFn: async (athleteId: string) => {
+      return await apiRequest("DELETE", `/api/athletes/${athleteId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      // Invalidate invitations - endpoint filters by user's organizations
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      if (effectiveOrganizationId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/organizations/${effectiveOrganizationId}/profile`] });
+      }
+      toast({
+        title: "Success",
+        description: "Athlete deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteAthlete = async (athleteId: string, athleteName: string) => {
+    if (window.confirm(`Are you sure you want to delete "${athleteName}"? This action cannot be undone.`)) {
+      deleteAthleteMutation.mutate(athleteId);
+    }
+  };
+
+  // Toggle athlete active status mutation
+  const toggleAthleteStatusMutation = useMutation({
+    mutationFn: async ({ athleteId, isActive }: { athleteId: string; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/athletes/${athleteId}/status`, { isActive });
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      toast({
+        title: "Success",
+        description: isActive ? "Athlete activated successfully" : "Athlete deactivated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleToggleAthleteStatus = (athleteId: string, athleteName: string, currentStatus: boolean) => {
+    const action = currentStatus ? "deactivate" : "activate";
+    const confirmMessage = currentStatus
+      ? `Are you sure you want to deactivate "${athleteName}"? They will not be able to log in.`
+      : `Are you sure you want to reactivate "${athleteName}"?`;
+
+    if (window.confirm(confirmMessage)) {
+      toggleAthleteStatusMutation.mutate({ athleteId, isActive: !currentStatus });
+    }
+  };
+
+  // Remove athlete from team mutation
+  const removeAthleteFromTeamMutation = useMutation({
+    mutationFn: async ({ athleteId, teamId }: { athleteId: string; teamId: string }) => {
+      await apiRequest("DELETE", `/api/teams/${teamId}/athletes/${athleteId}`);
+    },
+    onSuccess: (_, { athleteId, teamId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+
+      // Find team name for better UX
+      const team = teams.find((t: any) => t.id === teamId);
+      toast({
+        title: "Success",
+        description: `Athlete removed from ${team?.name || 'team'} successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove athlete from team",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRemoveAthleteFromTeam = async (athleteId: string, athleteName: string, teamId: string) => {
+    const team = teams.find((t: any) => t.id === teamId);
+    const teamName = team?.name || 'this team';
+
+    if (window.confirm(`Are you sure you want to remove "${athleteName}" from ${teamName}?`)) {
+      removeAthleteFromTeamMutation.mutate({ athleteId, teamId });
+    }
+  };
+
+  // Create athlete invitation mutation (creates invitation and copies link to clipboard)
+  const sendAthleteInvitationMutation = useMutation({
+    mutationFn: async ({ athleteId, organizationId }: { athleteId: string; organizationId: string }) => {
+      const response = await apiRequest("POST", "/api/invitations", {
+        athleteId: athleteId,
+        role: "athlete",
+        organizationId,
+        teamIds: []
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+
+      // Copy the first invitation link to clipboard
+      if (data.inviteLinks && data.inviteLinks.length > 0) {
+        navigator.clipboard.writeText(data.inviteLinks[0]);
+
+        const emailCount = data.invitations?.length || 1;
+
+        toast({
+          title: "Success",
+          description: emailCount > 1
+            ? `${emailCount} invitations created. First invitation link copied to clipboard.`
+            : "Invitation link copied to clipboard",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Invitation created",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create athlete invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete invitation mutation
+  const deleteInvitationMutation = useMutation({
+    mutationFn: async ({ invitationId }: { invitationId: string }) => {
+      await apiRequest("DELETE", `/api/invitations/${invitationId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      toast({
+        title: "Success",
+        description: "Invitation deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Helper functions
+  const isInvitationExpired = (expiresAt: string) => {
+    return new Date() > new Date(expiresAt);
+  };
+
+  const formatExpirationDate = (expiresAt: string) => {
+    const expDate = new Date(expiresAt);
+    const now = new Date();
+    const diffTime = expDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return `Expired ${Math.abs(diffDays)} days ago`;
+    } else if (diffDays === 0) {
+      return 'Expires today';
+    } else {
+      return `Expires in ${diffDays} days`;
+    }
+  };
+
+  const handleSendAthleteInvitation = (athleteId: string) => {
+    console.log('[INVITE DEBUG] userOrgs:', userOrgs);
+    console.log('[INVITE DEBUG] effectiveOrganizationId:', effectiveOrganizationId);
+
+    if (!userOrgs || userOrgs.length === 0) {
+      toast({
+        title: "Error",
+        description: "No organization context found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Try multiple ways to get organization ID
+    const orgId = userOrgs[0]?.organization?.id || userOrgs[0]?.organizationId || effectiveOrganizationId;
+    console.log('[INVITE DEBUG] Resolved orgId:', orgId);
+
+    if (!orgId) {
+      toast({
+        title: "Error",
+        description: "Organization ID not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    sendAthleteInvitationMutation.mutate({ athleteId, organizationId: orgId });
+  };
+
+  const handleDeleteInvitation = (invitationId: string) => {
+    if (window.confirm('Are you sure you want to delete this invitation?')) {
+      deleteInvitationMutation.mutate({ invitationId });
+    }
+  };
+
+  const copyInviteLink = (token: string) => {
+    const inviteLink = `${window.location.origin}/accept-invitation?token=${token}`;
+    navigator.clipboard.writeText(inviteLink);
+    toast({
+      title: "Success",
+      description: "Invitation link copied to clipboard",
+    });
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      teamId: "all",
+      birthYearFrom: "",
+      birthYearTo: "",
+      search: "",
+    });
+    setCurrentPage(1); // Reset to page 1 when clearing filters
+  };
+
+  const refreshData = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+    toast({
+      title: "Success",
+      description: "Athletes list refreshed",
+    });
+  };
+
+  // Bulk action handlers
+  const toggleSelectAll = () => {
+    if (selectedAthletes.size === athletes.length) {
+      setSelectedAthletes(new Set());
+    } else {
+      setSelectedAthletes(new Set(athletes.map((a: any) => a.id)));
+    }
+  };
+
+  const toggleSelectAthlete = (athleteId: string) => {
+    const newSelection = new Set(selectedAthletes);
+    if (newSelection.has(athleteId)) {
+      newSelection.delete(athleteId);
+    } else {
+      newSelection.add(athleteId);
+    }
+    setSelectedAthletes(newSelection);
+  };
+
+  const clearSelection = () => {
+    setSelectedAthletes(new Set());
+  };
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (athleteIds: string[]) => {
+      return await apiRequest("POST", "/api/athletes/bulk-delete", { athleteIds });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      if (effectiveOrganizationId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/organizations/${effectiveOrganizationId}/profile`] });
+      }
+
+      const result = data as any;
+      const successCount = result.deleted || 0;
+      const failureCount = result.failed || 0;
+
+      toast({
+        title: "Bulk Delete Complete",
+        description: failureCount > 0
+          ? `${successCount} athlete(s) deleted successfully. ${failureCount} failed.`
+          : `${successCount} athlete(s) deleted successfully`,
+        variant: failureCount > 0 ? "destructive" : "default",
+      });
+
+      clearSelection();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk invite mutation
+  const bulkInviteMutation = useMutation({
+    mutationFn: async (athleteIds: string[]) => {
+      const orgId = userOrgs[0]?.organization?.id || userOrgs[0]?.organizationId || effectiveOrganizationId;
+      if (!orgId) throw new Error("Organization ID not found");
+
+      return await apiRequest("POST", "/api/athletes/bulk-invite", {
+        athleteIds,
+        organizationId: orgId
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
+
+      const result = data as any;
+      const successCount = result.invited || 0;
+      const skippedCount = result.skipped || 0;
+
+      toast({
+        title: "Bulk Invite Complete",
+        description: skippedCount > 0
+          ? `${successCount} invitation(s) created. ${skippedCount} skipped (no email).`
+          : `${successCount} invitation(s) created successfully`,
+      });
+
+      clearSelection();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleBulkDelete = () => {
+    const selectedAthletesArray = Array.from(selectedAthletes);
+    const athleteNames = athletes
+      .filter((a: any) => selectedAthletes.has(a.id))
+      .map((a: any) => a.fullName)
+      .slice(0, 5);
+
+    const namesList = athleteNames.length > 5
+      ? `${athleteNames.join(', ')} and ${selectedAthletes.size - 5} more`
+      : athleteNames.join(', ');
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedAthletes.size} athlete(s)?\n\n${namesList}\n\nThis action cannot be undone.`
+    );
+
+    if (confirmed) {
+      bulkDeleteMutation.mutate(selectedAthletesArray);
+    }
+  };
+
+  const handleBulkInvite = () => {
+    const selectedAthletesArray = Array.from(selectedAthletes);
+    const athletesWithEmail = athletes.filter((a: any) =>
+      selectedAthletes.has(a.id) && Array.isArray(a.emails) && a.emails.length > 0
+    );
+
+    const athletesWithoutEmail = selectedAthletes.size - athletesWithEmail.length;
+
+    let confirmMessage = `Create invitations for ${athletesWithEmail.length} athlete(s)?`;
+    if (athletesWithoutEmail > 0) {
+      confirmMessage += `\n\n${athletesWithoutEmail} athlete(s) will be skipped (no email address).`;
+    }
+
+    const confirmed = window.confirm(confirmMessage);
+
+    if (confirmed) {
+      bulkInviteMutation.mutate(selectedAthletesArray);
+    }
+  };
+
+  // Pagination calculations
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil((athletes?.length || 0) / itemsPerPage);
+  const startIndex = itemsPerPage === -1 ? 0 : (currentPage - 1) * itemsPerPage;
+  const endIndex = itemsPerPage === -1 ? (athletes?.length || 0) : startIndex + itemsPerPage;
+  const paginatedAthletes = athletes?.slice(startIndex, endIndex) || [];
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-64"></div>
+          <div className="h-32 bg-gray-200 rounded-xl"></div>
+          <div className="h-96 bg-gray-200 rounded-xl"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
+        <h1 className="text-2xl font-semibold text-gray-900">Athletes Management</h1>
+        <div className="flex space-x-3">
+          <Button 
+            variant="outline" 
+            onClick={refreshData}
+            data-testid="button-refresh-athletes"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+          <Button 
+            variant="outline" 
+            className="bg-gray-600 text-white hover:bg-gray-700"
+            onClick={() => setLocation('/import-export')}
+            data-testid="button-import-csv"
+          >
+            <FileUp className="h-4 w-4 mr-2" />
+            Import CSV
+          </Button>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary hover:bg-blue-700"
+            data-testid="button-add-athlete"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Athlete
+          </Button>
+          <Button
+            onClick={() => setShowInviteModal(true)}
+            variant="outline"
+            className="border-primary text-primary hover:bg-blue-50"
+            data-testid="button-invite-athlete"
+          >
+            <Mail className="h-4 w-4 mr-2" />
+            Invite Athlete
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <Card className="bg-white mb-6">
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Team</label>
+              <Select value={filters.teamId} onValueChange={(value) => setFilters(prev => ({ ...prev, teamId: value }))}>
+                <SelectTrigger data-testid="select-team-filter">
+                  <SelectValue placeholder="All Teams" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
+                  {teams?.filter((team: Team) => team.isArchived !== true).map((team: Team) => (
+                    <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year From</label>
+              <Select value={filters.birthYearFrom} onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearFrom: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year To</label>
+              <Select value={filters.birthYearTo} onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearTo: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Search athletes..."
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                  className="pl-10"
+                  data-testid="input-search-athletes"
+                />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              </div>
+            </div>
+          </div>
+
+          {(filters.teamId || filters.birthYearFrom || filters.birthYearTo || filters.search) && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-600">Applied filters:</span>
+                <div className="flex space-x-2">
+                  {filters.teamId && filters.teamId !== 'all' && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      Team: {filters.teamId === 'none' ? 'Independent Athletes' : teams?.find((t: any) => t.id === filters.teamId)?.name}
+                    </span>
+                  )}
+                  {filters.birthYearFrom && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      From: {filters.birthYearFrom}
+                    </span>
+                  )}
+                  {filters.birthYearTo && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      To: {filters.birthYearTo}
+                    </span>
+                  )}
+                  {filters.search && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      Search: {filters.search}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                onClick={clearFilters}
+                className="text-gray-600 hover:text-gray-800"
+                data-testid="button-clear-filters"
+              >
+                Clear all filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pending Athlete Invitations */}
+      {athleteInvitations && athleteInvitations.length > 0 && (
+        <Card className="bg-white mb-6">
+          <CardContent className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Pending Athlete Invitations ({athleteInvitations.length})
+            </h3>
+            <div className="space-y-3">
+              {athleteInvitations?.map((invitation: any) => {
+                const isExpired = isInvitationExpired(invitation.expiresAt);
+                return (
+                  <div 
+                    key={invitation.id} 
+                    className={`flex items-center justify-between p-4 rounded-lg border ${
+                      isExpired ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      {invitation.firstName && invitation.lastName ? (
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{invitation.firstName} {invitation.lastName}</p>
+                          <p className="text-gray-600 text-xs">{invitation.email}</p>
+                        </div>
+                      ) : (
+                        <p className="font-medium text-gray-900 text-sm">{invitation.email}</p>
+                      )}
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-600">
+                          Invited {new Date(invitation.createdAt).toLocaleDateString()}
+                        </p>
+                        <p className={`text-xs ${isExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                          {formatExpirationDate(invitation.expiresAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        Athlete {isExpired ? '(Expired)' : '(Pending)'}
+                      </Badge>
+                      <div className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-600' : 'text-amber-600'}`}>
+                        {isExpired ? (
+                          <>
+                            <AlertCircle className="h-3 w-3" />
+                            <span>Expired</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-3 w-3" />
+                            <span>Awaiting response</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyInviteLink(invitation.token)}
+                          title="Copy invitation link"
+                          data-testid={`button-copy-link-${invitation.id}`}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteInvitation(invitation.id)}
+                          title="Delete invitation"
+                          className="text-red-600 hover:text-red-700"
+                          data-testid={`button-delete-invitation-${invitation.id}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Athletes Table */}
+      <Card className="bg-white">
+        <CardContent className="p-0">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">All Athletes</h3>
+              <div className="flex items-center gap-3">
+                {athletes && athletes.length > 0 && (
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => {
+                      const newValue = value === "-1" ? -1 : parseInt(value);
+                      setItemsPerPage(newValue);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-24 h-9" aria-label="Page size selector">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                      <SelectItem value="-1">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <span className="text-sm text-gray-500" data-testid="athletes-count">
+                  {athletes?.length || 0} athletes
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {athletes?.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <UsersRound className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes found</h3>
+              <p className="text-gray-600 text-center mb-4">
+                {Object.values(filters).some((v: any) => v) ? 
+                  "Try adjusting your filters or add new athletes." :
+                  "Get started by adding your first athlete."
+                }
+              </p>
+              <Button 
+                onClick={() => setShowAddModal(true)}
+                data-testid="button-add-first-athlete"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Athlete
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-sm font-medium text-gray-500">
+                    <th className="px-6 py-3 w-12">
+                      <Checkbox
+                        checked={athletes.length > 0 && selectedAthletes.size === athletes.length}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all athletes"
+                        data-testid="checkbox-select-all"
+                      />
+                    </th>
+                    <th className="px-6 py-3">Athlete</th>
+                    <th className="px-6 py-3">Team</th>
+                    <th className="px-6 py-3">Birth Year</th>
+                    <th className="px-6 py-3">Gender</th>
+                    <th className="px-6 py-3">School</th>
+                    <th className="px-6 py-3">Sport</th>
+                    <th className="px-6 py-3">Status</th>
+                    <th className="px-6 py-3">Invitation</th>
+                    <th className="px-6 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-gray-100">
+                  {paginatedAthletes?.map((athlete: any) => (
+                    <tr key={athlete.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <Checkbox
+                          checked={selectedAthletes.has(athlete.id)}
+                          onCheckedChange={() => toggleSelectAthlete(athlete.id)}
+                          aria-label={`Select ${athlete.fullName}`}
+                          data-testid={`checkbox-athlete-${athlete.id}`}
+                        />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                            <span className="text-white font-medium text-sm">
+                              {athlete.firstName.charAt(0)}{athlete.lastName.charAt(0)}
+                            </span>
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => setLocation(`/athletes/${athlete.id}`)}
+                              className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                            >
+                              {athlete.fullName}
+                            </button>
+                            <p className="text-gray-500 text-xs">ID: #{athlete.id.slice(0, 8)}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {athlete.teams && athlete.teams.length > 0 
+                          ? athlete.teams.length > 1 
+                            ? `${athlete.teams[0].name} (+${athlete.teams.length - 1} more)`
+                            : athlete.teams[0].name
+                          : "Independent"
+                        }
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.birthYear}</td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.gender || "Not Specified"}</td>
+                      <td className="px-6 py-4 text-gray-600">{athlete.school || "N/A"}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {athlete.sports && athlete.sports.length > 0 
+                          ? athlete.sports.length > 1 
+                            ? `${athlete.sports[0]} (+${athlete.sports.length - 1} more)`
+                            : athlete.sports[0]
+                          : "N/A"
+                        }
+                      </td>
+                      <td className="px-6 py-4">
+                        {(athlete as any).isActive ? (
+                          <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-gray-500">
+                            Inactive
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {(() => {
+                          // Check if athlete has a pending invitation for any of their emails
+                          const emails = (athlete as any).emails;
+                          const hasInvitation = Array.isArray(emails) && emails.some((email: string) =>
+                            athleteInvitations?.some((inv: any) => inv.email === email)
+                          );
+
+                          if ((athlete as any).isActive) {
+                            return (
+                              <Badge variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                                Registered
+                              </Badge>
+                            );
+                          } else if (hasInvitation) {
+                            return (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                                Invited
+                              </Badge>
+                            );
+                          } else {
+                            return <span className="text-gray-400">—</span>;
+                          }
+                        })()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setLocation(`/athletes/${athlete.id}`)}
+                            data-testid={`button-view-athlete-${athlete.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingAthlete(athlete)}
+                            data-testid={`button-edit-athlete-${athlete.id}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          {/* Send/Resend Athlete Invitation Button - always visible with smart behavior */}
+                          {(() => {
+                            // Defensive email checking with better type safety
+                            const emails = (athlete as any).emails;
+                            const hasEmails = Array.isArray(emails) && emails.length > 0;
+
+                            // Debug logging (can be removed after issue is resolved)
+                            if (!hasEmails && typeof emails !== 'undefined') {
+                              console.warn(`Athlete ${athlete.id} has invalid emails:`, emails);
+                            }
+
+                            const hasInvitation = hasEmails && athleteInvitations?.some((inv: any) =>
+                              emails.includes(inv.email)
+                            );
+
+                            let title = "";
+                            let disabled = false;
+
+                            if (!hasEmails) {
+                              title = "No email address";
+                              disabled = true;
+                            } else if (hasInvitation) {
+                              title = `Create new invitation and copy link to clipboard`;
+                            } else {
+                              title = `Create invitation and copy link to clipboard`;
+                            }
+
+                            return (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSendAthleteInvitation(athlete.id)}
+                                className={disabled ? "text-gray-400" : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"}
+                                disabled={disabled || sendAthleteInvitationMutation.isPending}
+                                title={title}
+                                data-testid={`button-invite-athlete-${athlete.id}`}
+                              >
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            );
+                          })()}
+                          {/* Toggle Active/Inactive Status Button */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleAthleteStatus(athlete.id, athlete.fullName, (athlete as any).isActive)}
+                            className={(athlete as any).isActive ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-green-600 hover:text-green-700 hover:bg-green-50"}
+                            disabled={toggleAthleteStatusMutation.isPending}
+                            title={(athlete as any).isActive ? "Mark as inactive" : "Reactivate athlete"}
+                            data-testid={`button-toggle-status-${athlete.id}`}
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                          {/* Remove from Team Button - only show when viewing specific team */}
+                          {filters.teamId && filters.teamId !== 'all' && athlete.teams?.some((team: any) => team.id === filters.teamId) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveAthleteFromTeam(athlete.id, athlete.fullName, filters.teamId)}
+                              className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                              disabled={removeAthleteFromTeamMutation.isPending}
+                              title={`Remove from ${teams.find((t: any) => t.id === filters.teamId)?.name || 'team'}`}
+                              data-testid={`button-remove-from-team-${athlete.id}`}
+                            >
+                              <UserMinus className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteAthlete(athlete.id, athlete.fullName)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            data-testid={`button-delete-athlete-${athlete.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {athletes && athletes.length > 0 && totalPages > 1 && (
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modals */}
+      <AthleteModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        athlete={null}
+      />
+
+      <AthleteModal
+        isOpen={!!editingAthlete}
+        onClose={() => setEditingAthlete(null)}
+        athlete={editingAthlete}
+      />
+
+      {effectiveOrganizationId && (
+        <InvitationModal
+          open={showInviteModal}
+          onOpenChange={setShowInviteModal}
+          organizationId={effectiveOrganizationId}
+          role="athlete"
+        />
+      )}
+
+      {/* Floating Action Bar */}
+      {selectedAthletes.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-2xl px-6 py-4 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">
+              {selectedAthletes.size} athlete{selectedAthletes.size !== 1 ? 's' : ''} selected
+            </span>
+          </div>
+          <div className="h-6 w-px bg-gray-600"></div>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              className="text-white hover:bg-gray-800"
+              data-testid="button-clear-selection"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Clear
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBulkInvite}
+              disabled={bulkInviteMutation.isPending}
+              className="text-white hover:bg-blue-600 bg-blue-700"
+              data-testid="button-bulk-invite"
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Bulk Invite
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="text-white hover:bg-red-600 bg-red-700"
+              data-testid="button-bulk-delete"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Bulk Delete
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

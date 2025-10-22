@@ -10,20 +10,20 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@l
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
-import { db } from '../../server/db';
+import { db } from '../../packages/api/db';
 import { users, auditLogs } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import type { User } from '@shared/schema';
 
 // Mock vite module to prevent build directory errors
-vi.mock('../../server/vite.js', () => ({
+vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
   serveStatic: vi.fn()
 }));
 
 // Import storage and the actual function we're testing
-import { storage } from '../../server/storage';
-import { initializeDefaultUser } from '../../server/routes';
+import { storage } from '../../packages/api/storage';
+import { initializeDefaultUser } from '../../packages/api/routes';
 
 describe('Admin User Initialization', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -630,7 +630,7 @@ describe('Admin User Initialization', () => {
       });
 
       // Spy on revokeAllSessions to verify it's NOT called
-      const { AuthSecurity } = await import('../../server/auth/security');
+      const { AuthSecurity } = await import('../../packages/api/auth/security');
       const revokeSpy = vi.spyOn(AuthSecurity, 'revokeAllSessions');
 
       // Call initialization with SAME password
@@ -711,7 +711,7 @@ describe('Admin User Initialization', () => {
       });
 
       // Spy on revokeAllSessions
-      const { AuthSecurity } = await import('../../server/auth/security');
+      const { AuthSecurity } = await import('../../packages/api/auth/security');
       const revokeSpy = vi.spyOn(AuthSecurity, 'revokeAllSessions');
 
       // Call initialization to restore privilege (NOT password change)
@@ -938,7 +938,7 @@ describe('Admin User Initialization', () => {
       // In production, this happens via the middleware on each request
       // Here we directly test the database update that the middleware would perform
       // Note: postgres-js uses SQL template strings, not .query() method
-      const { pgClient } = await import('../../server/db');
+      const { pgClient } = await import('../../packages/api/db');
       for (const sid of ['session-1', 'session-2', 'session-3']) {
         await pgClient`
           UPDATE session

@@ -1,0 +1,23 @@
+# Nixpacks ignore file
+# Files and folders listed here will be EXCLUDED from the deployment
+# We want to INCLUDE scripts/ and migrations/, so we don't list them here
+
+# Development files to exclude
+.git/
+.github/
+*.md
+!README.md
+.vscode/
+.idea/
+
+# Test files
+**/__tests__/
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+coverage/
+
+# Environment files (Railway injects these)
+.env*
+!.env.example

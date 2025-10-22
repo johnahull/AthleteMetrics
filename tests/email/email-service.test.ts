@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EmailService } from '../../server/services/email-service';
+import { EmailService } from '../../packages/api/services/email-service';
 
 // Mock SendGrid
 vi.mock('@sendgrid/mail', () => ({

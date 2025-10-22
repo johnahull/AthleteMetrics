@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'happy-dom', // Switched from jsdom - 2-3x less memory usage
-    setupFiles: ['./vitest.setup.ts'],
+    setupFiles: ['./vitest.setup.ts'], // Unit tests don't need database validation
     hookTimeout: 30000, // Increase hook timeout to 30 seconds for cleanup operations
     testTimeout: 10000, // Reduce test timeout to 10 seconds (30s was too high, may mask slow tests)
 
@@ -45,9 +45,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './client/src'),
-      '@shared': path.resolve(__dirname, './shared'),
-      '@server': path.resolve(__dirname, './server'),
+      '@': path.resolve(__dirname, './packages/web/src'),
+      '@shared': path.resolve(__dirname, './packages/shared'),
+      '@server': path.resolve(__dirname, './packages/api'),
       // Mock redis and connect-redis as optional dependencies
       'redis': path.resolve(__dirname, './tests/mocks/redis-mock.ts'),
       'connect-redis': path.resolve(__dirname, './tests/mocks/connect-redis-mock.ts'),
