@@ -14,46 +14,52 @@ jobs:
     name: Test and Deploy to Staging
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: athletemetrics_test
+          POSTGRES_MAX_CONNECTIONS: 100
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
+      - name: Setup project
+        uses: ./.github/actions/setup
 
       - name: Run TypeScript type check
         run: npm run check
-        env:
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+
+      - name: Generate test credentials
+        run: |
+          TEST_PASS="$(openssl rand -base64 12)Aa1!"
+          echo "ADMIN_PASSWORD=${TEST_PASS}" >> "$GITHUB_ENV"
+          echo "✅ Generated secure test credentials"
 
       - name: Setup test database schema
         run: npm run db:push
         env:
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-
-      - name: Run session table migration for tests
-        run: |
-          echo "Running session table migration on test database..."
-          psql "$DATABASE_URL" -f scripts/migrate-session-table.sql
-          echo "✅ Session table migration completed"
-        env:
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          SESSION_SECRET: ${{ secrets.STAGING_SESSION_SECRET }}
-          ADMIN_USER: ${{ secrets.STAGING_ADMIN_USER }}
-          ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.STAGING_ADMIN_PASSWORD }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          SESSION_SECRET: test-secret-key-for-ci
+          ADMIN_USER: admin
+          ADMIN_EMAIL: admin@test.com
+          ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
 
       - name: Build application
         run: npm run build
@@ -63,26 +69,111 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Run database migrations on staging
-        run: railway run --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} npm run db:push
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      - name: Run session table migration on staging (idempotent)
+      - name: Install PostgreSQL 17 client tools
         run: |
-          echo "Running session table migration on staging database..."
-          psql "$STAGING_DATABASE_URL" -f scripts/migrate-session-table.sql
-          echo "✅ Session table migration completed"
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+
+          # Verify GPG key fingerprint with exact matching to prevent partial match attacks
+          FINGERPRINT=$(sudo gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/postgresql.gpg --fingerprint ACCC4CF8 2>/dev/null | grep -A1 "pub" | tail -n1 | tr -d ' ')
+          EXPECTED="B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+          if [ "$FINGERPRINT" != "$EXPECTED" ]; then
+            echo "❌ PostgreSQL GPG key fingerprint verification failed"
+            echo "Expected: $EXPECTED"
+            echo "Got: $FINGERPRINT"
+            exit 1
+          fi
+          echo "✅ PostgreSQL GPG key fingerprint verified"
+
+          # Make keyring immutable to prevent TOCTOU race condition
+          # This prevents modification between verification and usage
+          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
+
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          # Update alternatives to use PostgreSQL 17 by default
+          sudo update-alternatives --install /usr/bin/pg_dump pg_dump /usr/lib/postgresql/17/bin/pg_dump 100
+          sudo update-alternatives --install /usr/bin/pg_restore pg_restore /usr/lib/postgresql/17/bin/pg_restore 100
+          # Verify version
+          pg_dump --version
+
+      - name: Backup staging database
+        run: node scripts/backup-database.js
         env:
-          STAGING_DATABASE_URL: ${{ secrets.STAGING_PUBLIC_DATABASE_URL }}
+          USE_RAILWAY_BACKUPS: false
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
+          PUBLIC_DATABASE_URL: ${{ secrets.RAILWAY_STAGING_PUBLIC_DATABASE_URL }}
+          BACKUP_RETENTION_DAYS: 7
+
+      # NOTE: Backup artifacts are NOT uploaded to GitHub Actions for security reasons.
+      # Staging backups may contain production-like data and should not be stored in GitHub.
+      # Access backups via Railway CLI: railway run --service <SERVICE_ID> ls backups/
+      # See docs/database-migration-rollback.md for backup access procedures
+
+      - name: Validate database migrations
+        run: |
+          echo "🔍 Validating migrations for safety..."
+          npm run db:validate
+          echo "✅ Migration validation passed"
+
+      - name: Run database migrations
+        timeout-minutes: 30
+        id: migrate
+        run: |
+          echo "🔄 Running database migrations BEFORE deployment..."
+          echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          npm run db:migrate
+          echo "✅ Migrations completed successfully"
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_STAGING_PUBLIC_DATABASE_URL }}
+
+      - name: Handle migration failure
+        if: failure() && steps.migrate.outcome == 'failure'
+        run: |
+          echo "❌ Migration failed - deployment BLOCKED"
+          echo ""
+          echo "⚠️  Manual intervention required:"
+          echo "1. Check Railway logs for migration errors"
+          echo "2. Restore database from backup if needed"
+          echo "3. Review migration files for issues"
+          echo ""
+          echo "See docs/database-migration-rollback.md for detailed procedures"
+          exit 1
 
       - name: Deploy to Railway Staging
-        run: railway up --service ${{ secrets.RAILWAY_STAGING_SERVICE_ID }} --detach
+        if: steps.migrate.outcome == 'success'
+        run: |
+          echo "🚀 Deploying to Railway Staging..."
+
+          # Deploy with retry logic for transient failures
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
+
+            if railway up --service "${{ secrets.RAILWAY_STAGING_SERVICE_ID }}" --detach; then
+              echo "✅ Deployment initiated successfully"
+              exit 0
+            else
+              EXIT_CODE=$?
+              echo "❌ Deployment attempt $ATTEMPT failed with exit code $EXIT_CODE"
+
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                WAIT_TIME=$((ATTEMPT * 10))
+                echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
+                sleep $WAIT_TIME
+              fi
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ All deployment attempts failed"
+          exit 1
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      - name: Wait for deployment
-        run: sleep 120
 
       - name: Run health check
         run: node scripts/health-check.js

@@ -1,0 +1,2922 @@
+import {
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
+  type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
+  insertUserSchema
+} from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+
+/**
+ * Helper function to create a WHERE condition that excludes soft-deleted users.
+ * This prevents code duplication of `sql`${users.deletedAt} IS NULL`` across multiple methods.
+ *
+ * Usage: .where(and(eq(users.id, id), whereUserNotDeleted()))
+ */
+function whereUserNotDeleted(): SQL {
+  return sql`${users.deletedAt} IS NULL`;
+}
+
+export interface IStorage {
+  // Authentication & Users
+  authenticateUser(username: string, password: string): Promise<User | null>;
+  authenticateUserByEmail(email: string, password: string): Promise<User | null>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  getUsers(): Promise<User[]>;
+  getUser(id: string): Promise<User | undefined>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
+  hardDeleteUser(id: string): Promise<void>;
+  getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
+  getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
+
+  // Organizations
+  getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  createOrganization(organization: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
+  deleteOrganization(id: string): Promise<void>;
+  deactivateOrganization(id: string): Promise<void>;
+  reactivateOrganization(id: string): Promise<void>;
+  getOrganizationDependencyCounts(id: string): Promise<{ users: number; teams: number; measurements: number }>;
+  getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]>;
+  getOrganizationProfile(organizationId: string): Promise<Organization & {
+    coaches: Array<{ user: User, role: string }>,
+    athletes: (User & { teams: (Team & { organization: Organization })[] })[],
+    invitations: Invitation[]
+  } | null>;
+  getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[] })[]>;
+
+  // Teams
+  getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]>;
+  getTeam(id: string): Promise<(Team & { organization: Organization }) | undefined>;
+  createTeam(team: InsertTeam): Promise<Team>;
+  updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team>;
+  deleteTeam(id: string): Promise<void>;
+  archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team>;
+  unarchiveTeam(id: string): Promise<Team>;
+  updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any>;
+
+  // User Management
+  addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
+  addUserToTeam(userId: string, teamId: string): Promise<UserTeam>;
+  removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin?: boolean): Promise<void>;
+  removeUserFromTeam(userId: string, teamId: string): Promise<void>;
+
+  // Optimized queries
+  getUsersWithTeamMembershipsByOrganization(organizationId: string, filters?: {
+    search?: string;
+    role?: string;
+    excludeTeam?: string;
+    season?: string;
+  }): Promise<any[]>;
+
+  // Invitations
+  createInvitation(data: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    organizationId: string;
+    teamIds?: string[];
+    role: string;
+    invitedBy: string;
+    playerId?: string;
+    expiresAt: Date;
+  }): Promise<Invitation>;
+  getInvitation(token: string): Promise<Invitation | undefined>;
+  getInvitationById(id: string): Promise<Invitation | undefined>;
+  getInvitationByToken(token: string): Promise<Invitation | undefined>;
+  updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
+  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
+
+  // Email Verification
+  createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
+  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  getEmailVerificationToken(token: string): Promise<any>;
+
+  // Athletes (users with athlete role)
+  getAthletes(filters?: {
+    teamId?: string;
+    organizationId?: string;
+    birthYearFrom?: number;
+    birthYearTo?: number;
+    search?: string;
+    gender?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
+  getAthlete(id: string): Promise<User | undefined>;
+  createAthlete(athlete: Partial<InsertUser>): Promise<User>;
+  updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
+  deleteAthlete(id: string): Promise<void>;
+
+  // Measurements
+  getMeasurements(filters?: {
+    userId?: string;
+    teamIds?: string[];
+    organizationId?: string;
+    metric?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    birthYearFrom?: number;
+    birthYearTo?: number;
+    ageFrom?: number;
+    ageTo?: number;
+    search?: string;
+    sport?: string;
+    includeUnverified?: boolean;
+  }): Promise<(Measurement & {
+    user: User;
+    submittedBy: User;
+    verifiedBy?: User;
+  })[]>;
+  getMeasurement(id: string): Promise<Measurement | undefined>;
+  createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement>;
+  updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
+  deleteMeasurement(id: string): Promise<void>;
+  verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
+
+  // Analytics
+  getUserStats(userId: string): Promise<{
+    bestFly10?: number;
+    bestVertical?: number;
+    measurementCount: number;
+  }>;
+  getTeamStats(organizationId?: string): Promise<Array<{
+    teamId: string;
+    teamName: string;
+    organizationName: string;
+    athleteCount: number;
+    bestFly10?: number;
+    bestVertical?: number;
+    latestTest?: string;
+  }>>;
+  getDashboardStats(organizationId?: string): Promise<{
+    totalAthletes: number;
+    activeAthletes: number;
+    totalTeams: number;
+    bestFLY10_TIMELast30Days?: { value: number; userName: string };
+    bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
+    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_5105Last30Days?: { value: number; userName: string };
+    bestT_TESTLast30Days?: { value: number; userName: string };
+    bestDASH_40YDLast30Days?: { value: number; userName: string };
+    bestRSILast30Days?: { value: number; userName: string };
+  }>;
+
+  // Enhanced Authentication Methods
+  findUserById(userId: string): Promise<User | null>;
+  resetLoginAttempts(userId: string): Promise<void>;
+  incrementLoginAttempts(userId: string, attempts: number): Promise<void>;
+  lockAccount(userId: string, lockUntil: Date): Promise<void>;
+  updateLastLogin(userId: string): Promise<void>;
+  createLoginSession(session: any): Promise<void>;
+  findLoginSession(token: string): Promise<any>;
+  updateSessionActivity(sessionId: string): Promise<void>;
+  revokeLoginSession(token: string): Promise<void>;
+  revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number>;
+  updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
+  createSecurityEvent(event: any): Promise<void>;
+  getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
+  getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]>;
+  getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]>;
+  getRecentPasswordResets(email: string, timeWindow: number): Promise<any[]>;
+  createPasswordResetToken(token: any): Promise<void>;
+  findPasswordResetToken(token: string): Promise<any>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
+  updatePasswordChangedAt(userId: string): Promise<void>;
+  createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
+  getEmailVerificationToken(token: string): Promise<any>;
+  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  getUserRole(userId: string, organizationId: string): Promise<string | null>;
+  getUserRoles(userId: string, organizationId?: string): Promise<string[]>;
+  updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
+  getUsersByOrganization(organizationId: string): Promise<any[]>;
+  getUserActivityStats(userId: string, organizationId: string): Promise<any>;
+  getOrganizationInvitations(organizationId: string): Promise<Invitation[]>;
+
+  // Audit Logging
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]>;
+}
+
+export class DatabaseStorage implements IStorage {
+  // Authentication & Users
+  async authenticateUser(username: string, password: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
+    if (!user) return null;
+
+    const isValid = await bcrypt.compare(password, user.password);
+    return isValid ? user : null;
+  }
+
+  async authenticateUserByEmail(email: string, password: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(
+      and(
+        arrayContains(users.emails, [email]),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
+    if (!user) return null;
+
+    const isValid = await bcrypt.compare(password, user.password);
+    return isValid ? user : null;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    // Use PostgreSQL array search with ANY operator
+    const [user] = await db.select().from(users).where(
+      and(
+        sql`${email} = ANY(${users.emails})`,
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.username, username),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
+    return user || undefined;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    // For invited users, password might be empty - use a placeholder
+    const password = user.password || "INVITATION_PENDING";
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Calculate fullName and birthYear from provided data
+    const fullName = `${user.firstName} ${user.lastName}`;
+    const birthYear = user.birthDate ? new Date(user.birthDate).getFullYear() : undefined;
+
+    // Ensure emails array is properly set
+    const emails = user.emails || [`${user.username || 'user'}@temp.local`];
+
+    // List of actual database columns in users table (excluding id, createdAt, fullName, birthYear which are computed/defaults)
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    // Filter to only include valid database columns and non-undefined values
+    const cleanedUser: any = {};
+    Object.keys(user).forEach(key => {
+      const value = (user as any)[key];
+      if (value !== undefined && validUserColumns.includes(key)) {
+        cleanedUser[key] = value;
+      }
+    });
+
+    // Build the final insert object with required fields
+    const insertData: any = {
+      ...cleanedUser,
+      emails, // Always override with sanitized emails
+      password: hashedPassword, // Always override with hashed password
+      fullName, // Always set computed fullName
+      ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
+    };
+
+    // Final safety filter to remove any undefined values
+    const finalData: any = {};
+    Object.keys(insertData).forEach(key => {
+      if (insertData[key] !== undefined) {
+        finalData[key] = insertData[key];
+      }
+    });
+
+    const [newUser] = await db.insert(users).values(finalData).returning();
+    return newUser;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users)
+      .where(whereUserNotDeleted()) // Exclude soft-deleted users
+      .orderBy(asc(users.lastName), asc(users.firstName));
+  }
+
+  async getSiteAdminUsers(): Promise<User[]> {
+    return await db.select().from(users)
+      .where(and(
+        eq(users.isSiteAdmin, true),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      ))
+      .orderBy(asc(users.lastName), asc(users.firstName));
+  }
+
+  async getInvitations(): Promise<Invitation[]> {
+    return await db.select().from(invitations).orderBy(asc(invitations.createdAt));
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, id),
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    );
+    return user || undefined;
+  }
+
+  async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+    // List of valid database columns that can be updated
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    const updateData: any = {};
+
+    // Only include defined fields that are actual database columns
+    Object.keys(user).forEach(key => {
+      const value = (user as any)[key];
+      if (value !== undefined && validUserColumns.includes(key)) {
+        updateData[key] = value;
+      }
+    });
+
+    if (user.password) {
+      updateData.password = await bcrypt.hash(user.password, 10);
+    }
+
+    // Update computed fields if relevant data changed
+    if (user.firstName || user.lastName) {
+      const currentUser = await this.getUser(id);
+      if (currentUser) {
+        const firstName = user.firstName || currentUser.firstName;
+        const lastName = user.lastName || currentUser.lastName;
+        updateData.fullName = `${firstName} ${lastName}`;
+      }
+    }
+
+    if (user.birthDate) {
+      updateData.birthYear = new Date(user.birthDate).getFullYear();
+    }
+
+    const [updatedUser] = await db.update(users)
+      .set(updateData)
+      .where(eq(users.id, id))
+      .returning();
+    return updatedUser;
+  }
+
+  /**
+   * Soft deletes a user and handles associated data in an atomic transaction.
+   *
+   * SOFT DELETE: User record is marked as deleted but preserved
+   * - Sets deletedAt timestamp on user record
+   * - User account becomes inaccessible but data integrity is maintained
+   * - User can be queried with whereUserNotDeleted() to exclude soft-deleted users
+   *
+   * SOFT DELETIONS (preserved with isActive=false):
+   * - User-team relationships (soft deleted for audit trail - set isActive=false and leftAt timestamp)
+   *
+   * HARD DELETIONS (fully removed):
+   * - Sessions (security requirement - explicit revocation)
+   * - Email verification tokens (no longer needed)
+   * - Athlete profiles (personal metadata)
+   *
+   * PRESERVED DATA (nullified foreign keys):
+   * - User record (soft deleted with deletedAt timestamp)
+   * - User-organization relationships (kept to preserve measurement organization context)
+   * - Measurements (NEVER TOUCHED - immutable snapshots in time)
+   *   - userId, submittedBy, verifiedBy remain as historical references
+   * - Audit logs (compliance requirement - immutable audit trail, userId set to NULL)
+   * - Invitations (preserve invitation history, foreign keys set to NULL)
+   *   - invitedBy set to NULL (preserve invitation record)
+   *   - playerId set to NULL (preserve invitation record)
+   *   - acceptedBy already handled (set to NULL)
+   *   - cancelledBy already handled (set to NULL)
+   */
+  async deleteUser(id: string): Promise<void> {
+    // Use a transaction to ensure all deletions happen atomically
+    await db.transaction(async (tx: any) => {
+      // Set SERIALIZABLE isolation level to prevent race conditions
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
+      // SOFT DELETE user-team relationships instead of hard delete
+      // This preserves historical team membership for audit trail
+      await tx.update(userTeams)
+        .set({
+          isActive: false,
+          leftAt: new Date()
+        })
+        .where(eq(userTeams.userId, id));
+
+      // PRESERVE user-organization relationships (for measurement context)
+      // This enables analytics queries to filter measurements by organization
+      // even after user deletion:
+      //   measurements → userId → userOrganizations → organizationId
+      // Alternative path also works: measurements → teamId → teams.organizationId
+      // We keep userOrganizations to support both query patterns
+      // Note: userOrganizations are NOT deleted
+
+      // ✅ MEASUREMENTS ARE NEVER TOUCHED - they are immutable snapshots in time
+      // userId, submittedBy, and verifiedBy remain as historical references
+      // even though the user no longer exists
+
+      // PRESERVE INVITATION HISTORY: Set foreign keys to NULL instead of deleting
+      // This maintains a complete audit trail of all invitation activity
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: sql`NULL` })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: sql`NULL` })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Update invitations created BY this user (preserve invitation history)
+      await tx.update(invitations)
+        .set({ invitedBy: sql`NULL` })
+        .where(eq(invitations.invitedBy, id));
+
+      // Update invitations FOR this user (as athlete/playerId) (preserve invitation history)
+      await tx.update(invitations)
+        .set({ playerId: sql`NULL` })
+        .where(eq(invitations.playerId, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: sql`NULL` })
+        .where(eq(auditLogs.userId, id));
+
+      // SOFT DELETE: Mark user as deleted and inactive instead of removing the record
+      await tx.update(users)
+        .set({
+          deletedAt: new Date(),
+          isActive: false
+        })
+        .where(eq(users.id, id));
+    });
+  }
+
+  /**
+   * GDPR COMPLIANCE: Permanently delete all user data from the database.
+   *
+   * This method is ONLY for GDPR "right to erasure" requests or legal compliance.
+   * Use deleteUser() for normal account deletion (soft delete).
+   *
+   * WARNING: This is irreversible and will:
+   * - Permanently delete user record
+   * - Delete all user-organization relationships
+   * - Delete all user-team relationships
+   * - Delete all invitations sent by/for/accepted by/cancelled by this user
+   * - Delete all athlete profiles
+   * - Delete all email verification tokens
+   * - Delete all sessions
+   * - Set audit logs userId to NULL (preserve compliance trail)
+   * - Set measurement foreign keys to NULL (preserve statistical data)
+   *
+   * IMPORTANT: This does NOT delete measurements themselves (they remain for statistical purposes)
+   * but removes the ability to identify the user in those measurements.
+   */
+  async hardDeleteUser(id: string): Promise<void> {
+    await db.transaction(async (tx: any) => {
+      // Set SERIALIZABLE isolation level to prevent race conditions
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+
+      const { sessions } = await import('@shared/schema');
+
+      // Delete all sessions
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
+      // Delete user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
+
+      // Delete user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete all invitations related to this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+      await tx.delete(invitations).where(eq(invitations.acceptedBy, id));
+      await tx.delete(invitations).where(eq(invitations.cancelledBy, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      await tx.update(auditLogs)
+        .set({ userId: sql`NULL` })
+        .where(eq(auditLogs.userId, id));
+
+      // HARD DELETE: Permanently remove user record
+      await tx.delete(users).where(eq(users.id, id));
+    });
+  }
+
+  async getUserOrganizations(userId: string): Promise<any[]> {
+    const result: any = await db.select()
+      .from(userOrganizations)
+      .innerJoin(organizations, eq(userOrganizations.organizationId, organizations.id))
+      .where(eq(userOrganizations.userId, userId))
+      .orderBy(asc(organizations.name)); // Ensure consistent ordering
+
+    return result.map(({ user_organizations, organizations }: any) => ({
+      ...user_organizations,
+      organization: organizations
+    }));
+  }
+
+  async getUserRole(userId: string, organizationId: string): Promise<string | null> {
+    // Get role from specific organization
+    const [result] = await db.select({ role: userOrganizations.role })
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+    return result?.role || null;
+  }
+
+  async getUserRoles(userId: string, organizationId?: string): Promise<string[]> {
+    // Check if user is site admin first
+    const user = await this.getUser(userId);
+    if (user?.isSiteAdmin === true) {
+      return ["site_admin"];
+    }
+
+    if (organizationId) {
+      // Get EXACTLY ONE role for user in specific organization
+      const result = await db.select({ role: userOrganizations.role })
+        .from(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ))
+        .limit(1); // Enforce single role
+
+      const roles = result.length > 0 ? [result[0].role] : [];
+      console.log(`User roles query: found ${result.length} records`);
+      return roles;
+    } else {
+      // Get all organization roles for the user (one per organization maximum)
+      const orgRoles = await db.select({
+        role: userOrganizations.role,
+        organizationId: userOrganizations.organizationId
+      })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.userId, userId));
+
+      // Ensure only one role per organization by grouping and taking first
+      const uniqueRoles = new Map();
+      orgRoles.forEach((r: {role: string | null, organizationId: string}) => {
+        if (!uniqueRoles.has(r.organizationId)) {
+          uniqueRoles.set(r.organizationId, r.role);
+        }
+      });
+
+      return Array.from(uniqueRoles.values());
+    }
+  }
+
+  async getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]> {
+    const result = await db.select()
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(userTeams.userId, userId));
+
+    const mappedResult = result.map(({ user_teams, teams: team, organizations }: { user_teams: UserTeam, teams: Team, organizations: Organization }) => ({
+      ...user_teams,
+      team: { ...team, organization: organizations }
+    }));
+
+    if (result.length > 0) {
+      console.log(`User teams query: found ${result.length} team(s)`);
+    }
+
+    return mappedResult;
+  }
+
+  // Organizations
+  async getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]> {
+    const query = db.select().from(organizations);
+
+    // By default, exclude inactive organizations
+    if (!filters?.includeInactive) {
+      return query.where(eq(organizations.isActive, true)).orderBy(asc(organizations.name));
+    }
+
+    return query.orderBy(asc(organizations.name));
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org || undefined;
+  }
+
+  async createOrganization(organization: InsertOrganization): Promise<Organization> {
+    const [newOrg] = await db.insert(organizations).values(organization).returning();
+    return newOrg;
+  }
+
+  async updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization> {
+    const [updated] = await db.update(organizations).set(organization).where(eq(organizations.id, id)).returning();
+    return updated;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    // Use transaction with row-level locking to prevent race conditions
+    await db.transaction(async (tx: any) => {
+      // 1. Lock the organization row to prevent concurrent modifications
+      const org = await tx.select()
+        .from(organizations)
+        .where(eq(organizations.id, id))
+        .for('update'); // Row-level lock
+
+      if (!org || org.length === 0) {
+        throw new Error("Organization not found");
+      }
+
+      // 2. Re-check dependencies inside transaction (TOCTOU protection)
+      const usersResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, id));
+      const usersCount = Number(usersResult[0]?.count || 0);
+
+      const teamsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(teams)
+        .where(eq(teams.organizationId, id));
+      const teamsCount = Number(teamsResult[0]?.count || 0);
+
+      const measurementsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(measurements)
+        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+        .where(eq(userOrganizations.organizationId, id));
+      const measurementsCount = Number(measurementsResult[0]?.count || 0);
+
+      if (usersCount > 0 || teamsCount > 0 || measurementsCount > 0) {
+        const errors = [];
+        if (usersCount > 0) errors.push(`${usersCount} users`);
+        if (teamsCount > 0) errors.push(`${teamsCount} teams`);
+        if (measurementsCount > 0) errors.push(`${measurementsCount} measurements`);
+        throw new Error(`Cannot delete organization with active dependencies: ${errors.join(', ')}`);
+      }
+
+      // 3. Delete organization atomically
+      await tx.delete(organizations).where(eq(organizations.id, id));
+    });
+  }
+
+  async deactivateOrganization(id: string): Promise<void> {
+    await db.update(organizations)
+      .set({ isActive: false, deletedAt: new Date() })
+      .where(eq(organizations.id, id));
+  }
+
+  async reactivateOrganization(id: string): Promise<void> {
+    await db.update(organizations)
+      .set({ isActive: true, deletedAt: null })
+      .where(eq(organizations.id, id));
+  }
+
+  async getOrganizationDependencyCounts(id: string): Promise<{ users: number; teams: number; measurements: number }> {
+    // Execute all counts in a single transaction to prevent race conditions
+    // This ensures atomic snapshot of dependency counts
+    return await db.transaction(async (tx) => {
+      // Count users in organization
+      const usersResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, id));
+      const usersCount = Number(usersResult[0]?.count || 0);
+
+      // Count teams in organization
+      const teamsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(teams)
+        .where(eq(teams.organizationId, id));
+      const teamsCount = Number(teamsResult[0]?.count || 0);
+
+      // Count measurements for users in this organization
+      const measurementsResult = await tx.select({ count: sql<number>`count(*)` })
+        .from(measurements)
+        .innerJoin(userOrganizations, eq(measurements.userId, userOrganizations.userId))
+        .where(eq(userOrganizations.organizationId, id));
+      const measurementsCount = Number(measurementsResult[0]?.count || 0);
+
+      return {
+        users: usersCount,
+        teams: teamsCount,
+        measurements: measurementsCount,
+      };
+    });
+  }
+
+  async getOrganizationUsers(organizationId: string): Promise<(UserOrganization & { user: User })[]> {
+    const result = await db.select()
+      .from(userOrganizations)
+      .innerJoin(users, eq(userOrganizations.userId, users.id))
+      .where(eq(userOrganizations.organizationId, organizationId));
+
+    return result.map(({ user_organizations, users: user }: { user_organizations: UserOrganization, users: User }) => ({
+      ...user_organizations,
+      user
+    }));
+  }
+
+  async getOrganizationProfile(organizationId: string): Promise<Organization & {
+    coaches: Array<{ user: User, role: string }>,
+    athletes: (User & { teams: (Team & { organization: Organization })[] })[],
+    invitations: Invitation[]
+  } | null> {
+    const [organization] = await db.select().from(organizations).where(eq(organizations.id, organizationId));
+    if (!organization) return null;
+
+    // Get users with their single role (each user has only one role per organization)
+    const allUsers = await this.getOrganizationUsers(organizationId);
+
+    // Map users to include their single role
+    const userRoleMap = new Map<string, { user: User, role: string }>();
+
+    for (const userOrg of allUsers) {
+      const userId = userOrg.user.id;
+      // Each user should only have one role per organization
+      if (!userRoleMap.has(userId)) {
+        userRoleMap.set(userId, {
+          user: userOrg.user,
+          role: userOrg.role
+        });
+      }
+    }
+
+    // Filter coaches (users with coach or org_admin roles, excluding pure athletes)
+    const coaches = Array.from(userRoleMap.values()).filter(
+      userWithRole => userWithRole.role === 'coach' || userWithRole.role === 'org_admin'
+    );
+
+    // Get athletes via organization filter
+    const athletes = await this.getAthletes({ organizationId });
+
+    // Get pending invitations for this organization
+    let organizationInvitations: Invitation[] = [];
+    try {
+      organizationInvitations = await db.select()
+        .from(invitations)
+        .where(and(
+          eq(invitations.organizationId, organizationId),
+          eq(invitations.isUsed, false),
+          gte(invitations.expiresAt, new Date())
+        ));
+    } catch (error) {
+      console.error("Error fetching organization invitations:", error);
+      organizationInvitations = [];
+    }
+
+    return {
+      ...organization,
+      coaches,
+      athletes: athletes as any,
+      invitations: organizationInvitations
+    };
+  }
+
+  async getOrganizationsWithUsers(): Promise<(Organization & { users: (UserOrganization & { user: User })[], invitations: Invitation[] })[]> {
+    const organizations = await this.getOrganizations();
+
+    const orgsWithUsers = await Promise.all(
+      organizations.map(async (org) => {
+        try {
+          const users = await this.getOrganizationUsers(org.id);
+          const invitations = await this.getOrganizationInvitations(org.id);
+          return {
+            ...org,
+            users,
+            invitations
+          };
+        } catch (error) {
+          console.error(`Error processing organization ${org.id}:`, error);
+          return {
+            ...org,
+            users: [],
+            invitations: []
+          };
+        }
+      })
+    );
+
+    return orgsWithUsers;
+  }
+
+  async getOrganizationsWithUsersForUser(userId: string): Promise<(Organization & { users: (UserOrganization & { user: User })[], invitations: Invitation[] })[]> {
+    // Get organizations where the user is a member
+    const userOrgs = await db.select()
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, userId));
+
+    const orgIds = userOrgs.map((uo: UserOrganization) => uo.organizationId);
+
+    if (orgIds.length === 0) {
+      return [];
+    }
+
+    // Get organizations data
+    const orgsData = await db.select()
+      .from(organizations)
+      .where(inArray(organizations.id, orgIds));
+
+    const orgsWithUsers = await Promise.all(
+      orgsData.map(async (org: Organization) => {
+        const users = await this.getOrganizationUsers(org.id);
+        const invitations = await this.getOrganizationInvitations(org.id);
+        return {
+          ...org,
+          users,
+          invitations
+        };
+      })
+    );
+
+    return orgsWithUsers;
+  }
+
+  async getOrganizationInvitations(organizationId: string): Promise<Invitation[]> {
+    try {
+      const result = await db.select()
+        .from(invitations)
+        .where(eq(invitations.organizationId, organizationId))
+        .orderBy(desc(invitations.createdAt));
+
+      return result;
+    } catch (error) {
+      console.error("Error in getOrganizationInvitations:", error);
+      return [];
+    }
+  }
+
+  async updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation> {
+    const [updated] = await db.update(invitations).set(invitation as any).where(eq(invitations.id, id)).returning();
+    return updated;
+  }
+
+  async deleteInvitation(invitationId: string): Promise<void> {
+    await db.delete(invitations)
+      .where(eq(invitations.id, invitationId));
+  }
+
+  async getInvitationById(invitationId: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.id, invitationId));
+    return invitation || undefined;
+  }
+
+  // Teams
+  async getTeams(organizationId?: string): Promise<(Team & { organization: Organization })[]> {
+    let query = db.select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .orderBy(asc(teams.name));
+
+    // Build conditions array to exclude archived teams
+    const conditions = [];
+
+    if (organizationId) {
+      conditions.push(eq(teams.organizationId, organizationId));
+    }
+
+    // Always exclude archived teams
+    conditions.push(ne(teams.isArchived, true));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    const result: any[] = await query;
+    return result.map(({ teams: team, organizations: org }) => ({
+      ...team,
+      organization: org
+    }));
+  }
+
+  async getTeam(id: string): Promise<(Team & { organization: Organization }) | undefined> {
+    const result: any[] = await db.select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(teams.id, id));
+
+    if (result.length === 0) return undefined;
+
+    const { teams: team, organizations: org } = result[0];
+    return { ...team, organization: org };
+  }
+
+  async createTeam(team: InsertTeam): Promise<Team> {
+    const [newTeam] = await db.insert(teams).values({
+      name: team.name,
+      organizationId: team.organizationId!,
+      level: team.level || null,
+      notes: team.notes || null
+    }).returning();
+    return newTeam;
+  }
+
+  async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team> {
+    // Defense in depth - ALWAYS strip organizationId at storage layer
+    const { organizationId, ...safeTeamData } = team;
+
+    if (Object.keys(safeTeamData).length === 0) {
+      throw new Error("No valid fields to update");
+    }
+
+    // Trim whitespace from name if provided
+    const normalizedData = {
+      ...safeTeamData,
+      ...(safeTeamData.name && { name: safeTeamData.name.trim() })
+    };
+
+    const [updated] = await db.update(teams)
+      .set(normalizedData)
+      .where(eq(teams.id, id))
+      .returning();
+
+    if (!updated) throw new Error("Team not found");
+    return updated;
+  }
+
+  async deleteTeam(id: string): Promise<void> {
+    // Delete all team memberships first
+    await db.delete(userTeams).where(eq(userTeams.teamId, id));
+    
+    // Now delete the team
+    await db.delete(teams).where(eq(teams.id, id));
+  }
+
+  /**
+   * Archives a team and marks all current team memberships as inactive
+   * @param id Team ID to archive
+   * @param archiveDate Date when the team was archived (affects measurement context)
+   * @param season Final season designation for the team (e.g., "2024-Fall Soccer")
+   * @returns Promise<Team> The archived team object
+   * @throws Error if team not found or archive operation fails
+   */
+  async archiveTeam(id: string, archiveDate: Date, season: string): Promise<Team> {
+    // Use transaction to ensure atomicity of archive operations
+    return await db.transaction(async (tx: any) => {
+      const [archived] = await tx.update(teams)
+        .set({
+          isArchived: true,
+          archivedAt: archiveDate,
+          season: season
+        })
+        .where(eq(teams.id, id))
+        .returning();
+
+      // Mark all current team memberships as inactive
+      await tx.update(userTeams)
+        .set({
+          isActive: false,
+          leftAt: archiveDate,
+          season: season
+        })
+        .where(and(
+          eq(userTeams.teamId, id),
+          eq(userTeams.isActive, true)
+        ));
+      
+      return archived;
+    });
+  }
+
+  /**
+   * Unarchives a team by setting isArchived to false and clearing archivedAt
+   * Note: This does NOT automatically reactivate team memberships - 
+   * users must be explicitly re-added to prevent old measurements from 
+   * affecting current analytics
+   * @param id Team ID to unarchive
+   * @returns Promise<Team> The unarchived team object
+   * @throws Error if team not found or unarchive operation fails
+   */
+  async unarchiveTeam(id: string): Promise<Team> {
+    const [unarchived] = await db.update(teams)
+      .set({
+        isArchived: false,
+        archivedAt: null
+      })
+      .where(eq(teams.id, id))
+      .returning();
+    
+    // Note: We don't automatically reactivate team memberships when unarchiving
+    // This is intentional - users should be explicitly re-added to teams
+    // to prevent accidentally including old measurements in current analytics
+    
+    return unarchived;
+  }
+
+  async updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any> {
+    const [updated] = await db.update(userTeams)
+      .set({
+        leftAt: membershipData.leftAt,
+        season: membershipData.season,
+        isActive: membershipData.leftAt ? false : true
+      })
+      .where(and(
+        eq(userTeams.teamId, teamId),
+        eq(userTeams.userId, userId)
+      ))
+      .returning();
+    
+    return updated;
+  }
+
+  // User Management
+  async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
+    // Validate that role is organization-specific only
+    if (!['org_admin', 'coach', 'athlete'].includes(role)) {
+      throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
+    }
+
+    // First remove any existing roles for this user in this organization
+    await db.delete(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, userId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+
+    // Then insert the new single role
+    const [userOrg] = await db.insert(userOrganizations).values({
+      userId,
+      organizationId,
+      role
+    }).returning();
+
+    return userOrg;
+  }
+
+  async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
+    try {
+      // Check if user has an active membership in this team
+      const existingActiveAssignment = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, true)
+        ));
+
+      if (existingActiveAssignment.length > 0) {
+        console.log('User already has active assignment to team');
+        return existingActiveAssignment[0];
+      }
+
+      // Check if user has an inactive membership that can be reactivated
+      const existingInactiveAssignment = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, false)
+        ));
+
+      if (existingInactiveAssignment.length > 0) {
+        // Reactivate the membership
+        const [reactivated] = await db.update(userTeams)
+          .set({
+            isActive: true,
+            leftAt: null,
+            joinedAt: new Date() // New join date
+          })
+          .where(eq(userTeams.id, existingInactiveAssignment[0].id))
+          .returning();
+        
+        console.log('User membership reactivated');
+        return reactivated;
+      }
+
+      // Create new membership
+      const [userTeam] = await db.insert(userTeams).values({
+        userId,
+        teamId,
+        joinedAt: new Date(),
+        isActive: true
+      }).returning();
+
+      console.log('User added to team successfully');
+      return userTeam;
+    } catch (error) {
+      console.error(`Error adding user ${userId} to team ${teamId}:`, error);
+      throw error;
+    }
+  }
+
+  async removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin: boolean = false): Promise<void> {
+    if (!validateLastAdmin) {
+      // Simple deletion without admin validation
+      await db.delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return;
+    }
+
+    // Transaction with admin count validation to prevent race conditions (TOCTOU protection)
+    await db.transaction(async (tx: any) => {
+      // 1. Lock organization row to prevent concurrent admin removals
+      await tx.select()
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .for('update');
+
+      // 2. Get current admin count atomically within transaction
+      const orgUsers = await tx.select()
+        .from(userOrganizations)
+        .where(eq(userOrganizations.organizationId, organizationId));
+
+      const adminCount = orgUsers.filter((u: any) => u.role === 'org_admin').length;
+
+      if (adminCount <= 1) {
+        throw new Error("Cannot remove the last organization administrator");
+      }
+
+      // 3. Delete user from organization atomically
+      await tx.delete(userOrganizations)
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+    });
+  }
+
+  async updateUserOrganizationRole(userId: string, organizationId: string, role: string): Promise<void> {
+    // Validate that role is organization-specific only
+    if (!['org_admin', 'coach', 'athlete'].includes(role)) {
+      throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
+    }
+
+    // Use addUserToOrganization to ensure single role per organization
+    await this.addUserToOrganization(userId, organizationId, role);
+  }
+
+  // Validation function to ensure single role constraint
+  async validateUserRoleConstraint(userId: string): Promise<{ valid: boolean; violations: string[] }> {
+    const violations: string[] = [];
+
+    // Get all user-organization relationships
+    const userOrgRelations = await db.select()
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, userId));
+
+    // Group by organization and check for multiple roles
+    const orgRoleMap = new Map<string, string[]>();
+
+    for (const relation of userOrgRelations) {
+      if (!orgRoleMap.has(relation.organizationId)) {
+        orgRoleMap.set(relation.organizationId, []);
+      }
+      orgRoleMap.get(relation.organizationId)!.push(relation.role);
+    }
+
+    // Check for violations
+    for (const [orgId, roles] of Array.from(orgRoleMap.entries())) {
+      if (roles.length > 1) {
+        const org = await this.getOrganization(orgId);
+        violations.push(`User has ${roles.length} roles in organization "${org?.name || orgId}": ${roles.join(', ')}`);
+      }
+    }
+
+    return {
+      valid: violations.length === 0,
+      violations
+    };
+  }
+
+  async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
+    // Mark membership as inactive instead of deleting (temporal approach)
+    await db.update(userTeams)
+      .set({
+        isActive: false,
+        leftAt: new Date()
+      })
+      .where(and(
+        eq(userTeams.userId, userId),
+        eq(userTeams.teamId, teamId),
+        eq(userTeams.isActive, true)
+      ));
+  }
+
+  // Invitations
+  async createInvitation(data: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    organizationId: string;
+    teamIds?: string[];
+    role: string;
+    invitedBy: string;
+    playerId?: string;
+    expiresAt: Date;
+  }): Promise<Invitation> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
+
+    const [invitation] = await db.insert(invitations).values({
+      email: data.email,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      organizationId: data.organizationId,
+      teamIds: data.teamIds || [],
+      role: data.role,
+      invitedBy: data.invitedBy,
+      playerId: data.playerId, // Store athlete ID consistently
+      token,
+      expiresAt,
+    }).returning();
+    return invitation;
+  }
+
+
+
+  async getInvitation(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(and(
+        eq(invitations.token, token),
+        eq(invitations.isUsed, false),
+        gte(invitations.expiresAt, new Date())
+      ));
+    return invitation || undefined;
+  }
+
+  async getInvitationByToken(token: string): Promise<Invitation | undefined> {
+    const [invitation] = await db.select().from(invitations)
+      .where(eq(invitations.token, token));
+    return invitation || undefined;
+  }
+
+  async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
+    // Use database transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx: any) => {
+      // Lock the invitation row with SELECT FOR UPDATE
+      // This prevents concurrent acceptance attempts
+      const [invitation] = await tx.select()
+        .from(invitations)
+        .where(and(
+          eq(invitations.token, token),
+          eq(invitations.isUsed, false),
+          gte(invitations.expiresAt, new Date())
+        ))
+        .for('update');
+
+      if (!invitation) {
+        throw new Error("Invalid or expired invitation");
+      }
+
+      let user;
+
+      // Check if invitation is linked to an existing athlete (playerId)
+      if (invitation.playerId) {
+        console.log("Invitation linked to existing athlete:", invitation.playerId);
+
+        // Get the existing athlete/user
+        const existingUser = await this.getUser(invitation.playerId);
+
+        if (!existingUser) {
+          throw new Error("Linked athlete not found");
+        }
+
+        // Update the existing user with credentials
+        // Note: updateUser will hash the password, so pass the plain password
+        user = await this.updateUser(invitation.playerId, {
+          username: userInfo.username,
+          password: userInfo.password,
+          isActive: true
+        });
+
+        console.log("Updated existing athlete with credentials:", user.id);
+      } else {
+        // Create a new user - for non-athlete invitations or new athletes
+        // Note: role is also stored in user_organizations for organization-specific roles
+        const createUserData = {
+          username: userInfo.username,
+          emails: [invitation.email],
+          password: userInfo.password,
+          firstName: userInfo.firstName,
+          lastName: userInfo.lastName,
+          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+        };
+
+        console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+
+        // Validate user data against schema before creating user
+        try {
+          insertUserSchema.parse(createUserData);
+        } catch (error) {
+          console.error("User data validation failed:", error);
+          throw error;
+        }
+
+        try {
+          user = await this.createUser(createUserData);
+          console.log("User created successfully:", user.id);
+        } catch (error) {
+          console.error("Error creating user:", error);
+          throw error;
+        }
+      }
+
+      // Add user to organization with the invitation role (this will remove any existing roles first)
+      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+
+      // Add user to teams if specified
+      if (invitation.teamIds && invitation.teamIds.length > 0) {
+        for (const teamId of invitation.teamIds) {
+          try {
+            await this.addUserToTeam(user.id, teamId);
+          } catch (error) {
+            // May already be in team - that's okay
+            console.log("User may already be in team:", error);
+          }
+        }
+      }
+
+      // Mark the invitation as used and accepted (using transaction connection)
+      await tx.update(invitations)
+        .set({
+          isUsed: true,
+          status: 'accepted',
+          acceptedAt: new Date(),
+          acceptedBy: user.id
+        })
+        .where(eq(invitations.token, token));
+
+      return { user };
+    });
+  }
+
+  // Email Verification
+  async createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }> {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await db.insert(emailVerificationTokens).values({
+      userId,
+      email,
+      token,
+      expiresAt
+    });
+
+    return { token, expiresAt };
+  }
+
+  async verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }> {
+    // Use transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx: any) => {
+      // Lock the row for update to prevent concurrent verification attempts
+      const [verificationToken] = await tx.select()
+        .from(emailVerificationTokens)
+        .where(and(
+          eq(emailVerificationTokens.token, token),
+          eq(emailVerificationTokens.isUsed, false),
+          gte(emailVerificationTokens.expiresAt, new Date())
+        ))
+        .for('update'); // Row-level lock
+
+      if (!verificationToken) {
+        return { success: false };
+      }
+
+      // Mark token as used (within same transaction)
+      await tx.update(emailVerificationTokens)
+        .set({ isUsed: true })
+        .where(eq(emailVerificationTokens.token, token));
+
+      // Mark user's email as verified (within same transaction)
+      await tx.update(users)
+        .set({ isEmailVerified: true })
+        .where(eq(users.id, verificationToken.userId));
+
+      return {
+        success: true,
+        userId: verificationToken.userId,
+        email: verificationToken.email
+      };
+    });
+  }
+
+  async getEmailVerificationToken(token: string): Promise<typeof emailVerificationTokens.$inferSelect | undefined> {
+    const [verificationToken] = await db.select()
+      .from(emailVerificationTokens)
+      .where(and(
+        eq(emailVerificationTokens.token, token),
+        eq(emailVerificationTokens.isUsed, false),
+        gte(emailVerificationTokens.expiresAt, new Date())
+      ));
+
+    return verificationToken || undefined;
+  }
+
+  // Athletes (users with athlete role) - consolidated from legacy getPlayers
+
+  async getAthletes(filters?: {
+    teamId?: string;
+    organizationId?: string;
+    birthYearFrom?: number;
+    birthYearTo?: number;
+    search?: string;
+    gender?: string;
+  }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]> {
+    // For "none" team filter, get athletes not assigned to any team within the organization
+    if (filters?.teamId === 'none') {
+      const conditions = [eq(userOrganizations.role, 'athlete')];
+
+      // Organization filter is required for "none" team filter to work properly
+      if (filters?.organizationId) {
+        conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
+      } else {
+        // If no organization specified, return empty array since we need org context
+        return [];
+      }
+
+      if (filters?.search) {
+        conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
+      }
+
+      if (filters?.birthYearFrom && filters?.birthYearTo) {
+        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      } else if (filters?.birthYearFrom) {
+        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+      } else if (filters?.birthYearTo) {
+        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      }
+
+      if (filters?.gender && filters.gender !== "all") {
+        conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+      }
+
+      const result = await db
+        .select({
+          users: users
+        })
+        .from(users)
+        .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .where(and(
+          ...conditions,
+          sql`${users.id} NOT IN (SELECT ${userTeams.userId} FROM ${userTeams} WHERE ${userTeams.userId} IS NOT NULL)`
+        ))
+        .orderBy(asc(users.lastName), asc(users.firstName));
+
+      // For "none" team filter, athletes should have empty teams array
+      return result.map((row: { users: User }) => ({
+        ...row.users,
+        teams: []
+      }));
+    }
+
+    // For regular queries, get athletes with their team information
+    const conditions = [eq(userOrganizations.role, 'athlete')];
+
+    if (filters?.birthYearFrom && filters?.birthYearTo) {
+      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+    } else if (filters?.birthYearFrom) {
+      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+    } else if (filters?.birthYearTo) {
+      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+    }
+
+    if (filters?.search) {
+      conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
+    }
+
+    if (filters?.organizationId) {
+      conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
+    }
+
+    // Get athletes first with optimized batched query approach
+    // IMPORTANT: Explicitly select user fields to ensure array fields (emails, phoneNumbers, sports) are properly serialized
+    const athleteQuery = db
+      .select({
+        users: users
+      })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...conditions))
+      .orderBy(asc(users.lastName), asc(users.firstName));
+
+    const athleteResults = await athleteQuery;
+    const athletes = athleteResults.map((row: { users: User }) => row.users);
+
+    // Debug logging to verify database returns emails
+    if (athletes.length > 0) {
+      const sampleUser = athletes[0];
+      console.log('\n========================================');
+      console.log('[STORAGE DEBUG] Sample user from DB query:');
+      console.log('ID:', sampleUser.id);
+      console.log('Name:', sampleUser.firstName, sampleUser.lastName);
+      console.log('Has emails?:', !!sampleUser.emails);
+      console.log('Emails type:', Array.isArray(sampleUser.emails) ? 'array' : typeof sampleUser.emails);
+      console.log('Emails length:', Array.isArray(sampleUser.emails) ? sampleUser.emails.length : 'N/A');
+      console.log('Emails value:', sampleUser.emails);
+      console.log('Phone numbers:', sampleUser.phoneNumbers);
+      console.log('Sports:', sampleUser.sports);
+      console.log('All user keys:', Object.keys(sampleUser).sort());
+      console.log('========================================\n');
+    }
+
+    // If no athletes found, return empty array
+    if (athletes.length === 0) {
+      return [];
+    }
+
+    // Batch fetch all teams for all athletes in a single query
+    // Filter for active team memberships and non-archived teams
+    const athleteIds = athletes.map((a: User) => a.id);
+    const userTeamsResults = await db
+      .select()
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(and(
+        inArray(userTeams.userId, athleteIds),
+        eq(userTeams.isActive, true),
+        or(isNull(userTeams.leftAt), gte(userTeams.leftAt, new Date())),
+        eq(teams.isArchived, false)
+      ));
+
+    // Build a map of user ID to teams array
+    const userTeamsMap = new Map<string, (Team & { organization: Organization })[]>();
+
+    // Initialize empty arrays for all athletes
+    athletes.forEach((athlete: User) => {
+      userTeamsMap.set(athlete.id, []);
+    });
+
+    // Populate the map with team data
+    userTeamsResults.forEach((row: { user_teams: UserTeam, teams: Team, organizations: Organization }) => {
+      const userId = row.user_teams.userId;
+      const team = {
+        ...row.teams,
+        organization: row.organizations
+      };
+
+      if (!userTeamsMap.has(userId)) {
+        userTeamsMap.set(userId, []);
+      }
+      userTeamsMap.get(userId)!.push(team);
+    });
+
+    // Create final result with teams attached
+    const athletesWithTeams = athletes.map((athlete: User) => ({
+      ...athlete,
+      teams: userTeamsMap.get(athlete.id) || []
+    }));
+
+    const result = athletesWithTeams;
+
+    // Apply team filter
+    if (filters?.teamId && filters.teamId !== 'none') {
+      return result.filter((athlete: User & { teams: (Team & { organization: Organization })[] }) =>
+        athlete.teams.some((team: Team) => team.id === filters.teamId)
+      );
+    }
+
+    return result;
+  }
+
+  // Legacy methods for backward compatibility - delegate to athlete methods
+
+  async getAthlete(id: string): Promise<(User & { teams: (Team & { organization: Organization })[] }) | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      )
+    );
+    if (!user) return undefined;
+
+    const userTeams = await this.getUserTeams(user.id);
+
+    // Transform user to athlete format for backward compatibility
+    const athlete = {
+      ...user,
+      fullName: `${user.firstName} ${user.lastName}`,
+      birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0,
+      teams: userTeams.map(ut => ut.team)
+    };
+
+    return athlete;
+  }
+
+  async createAthlete(athlete: Partial<InsertUser>): Promise<User> {
+    // Generate a placeholder username that will be replaced when they accept the invitation
+    // Use email prefix if available, otherwise use name-based username
+    let username: string;
+    if (athlete.emails && athlete.emails.length > 0 && athlete.emails[0]) {
+      // Use email prefix as username placeholder (e.g., "john.doe" from "john.doe@email.com")
+      const emailPrefix = athlete.emails[0].split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      username = `${emailPrefix}_pending_${Date.now().toString().slice(-6)}`;
+    } else {
+      // Fallback to name-based username
+      const namePart = `${athlete.firstName}${athlete.lastName}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+      username = `${namePart}_pending_${Date.now().toString().slice(-6)}`;
+    }
+
+    // Use primary email or generate one
+    const emails = (athlete.emails && athlete.emails.length > 0) ? athlete.emails : [`${username}@temp.local`];
+
+    // Build insert object explicitly, omitting undefined fields entirely
+    const insertValues: any = {
+      username, // This will be replaced when the athlete accepts their invitation
+      emails, // Ensure emails array is always provided
+      firstName: athlete.firstName!,
+      lastName: athlete.lastName!,
+      fullName: `${athlete.firstName} ${athlete.lastName}`,
+      password: "INVITATION_PENDING", // Will be set when they accept invitation
+      isActive: false, // Set to false until they complete registration
+      isSiteAdmin: false, // Explicitly set to false
+      mfaEnabled: false, // Explicitly set to false
+      isEmailVerified: false, // Explicitly set to false
+      requiresPasswordChange: false // Explicitly set to false
+    };
+
+    // Only add optional fields if they have values
+    if (athlete.birthDate) {
+      insertValues.birthDate = athlete.birthDate;
+      insertValues.birthYear = new Date(athlete.birthDate).getFullYear();
+    }
+    if (athlete.graduationYear) insertValues.graduationYear = athlete.graduationYear;
+    if (athlete.school) insertValues.school = athlete.school;
+    if (athlete.sports) insertValues.sports = athlete.sports;
+    if (athlete.phoneNumbers) insertValues.phoneNumbers = athlete.phoneNumbers;
+    if (athlete.height) insertValues.height = athlete.height;
+    if (athlete.weight) insertValues.weight = athlete.weight;
+    if (athlete.gender) insertValues.gender = athlete.gender;
+    if (athlete.positions) insertValues.positions = athlete.positions;
+
+    const [newUser] = await db.insert(users).values(insertValues).returning();
+
+    // Determine organization for athlete association
+    let organizationId: string | undefined = (athlete as any).organizationId;
+
+    // Add to teams if specified and determine organization from first team if not already set
+    if (athlete.teamIds && athlete.teamIds.length > 0) {
+      for (const teamId of athlete.teamIds) {
+        try {
+          await this.addUserToTeam(newUser.id, teamId);
+          console.log('Athlete added to team successfully');
+        } catch (error) {
+          console.error(`Failed to add athlete ${newUser.id} to team ${teamId}:`, error);
+        }
+
+        // Get the organization from the first team if not already specified
+        if (!organizationId) {
+          const team = await this.getTeam(teamId);
+          if (team) {
+            organizationId = team.organization.id;
+          }
+        }
+      }
+    }
+
+    // Associate athlete with organization (required for proper listing)
+    if (organizationId) {
+      await this.addUserToOrganization(newUser.id, organizationId, "athlete");
+    } else {
+      console.warn(`Created athlete ${newUser.id} without organization association`);
+    }
+
+    // Transform to athlete format for return
+    const athleteResult = {
+      ...newUser,
+      fullName: `${newUser.firstName} ${newUser.lastName}`,
+      birthYear: newUser.birthDate ? new Date(newUser.birthDate).getFullYear() : 0,
+      emails: newUser.emails,
+      teams: []
+    };
+
+    return athleteResult;
+  }
+
+  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
+    // List of valid database columns that can be updated
+    const validUserColumns = [
+      'username', 'emails', 'password', 'firstName', 'lastName',
+      'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
+      'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
+      'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+    ];
+
+    // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors
+    const updateData: any = {};
+    Object.keys(athlete).forEach(key => {
+      const value = (athlete as any)[key];
+      if (value !== undefined && validUserColumns.includes(key)) {
+        updateData[key] = value;
+      }
+    });
+
+    // Update full name if first or last name changed
+    let finalFirstName: string | undefined;
+    let finalLastName: string | undefined;
+
+    if (athlete.firstName || athlete.lastName) {
+      const existing = await this.getAthlete(id);
+      if (existing) {
+        finalFirstName = athlete.firstName || existing.firstName;
+        finalLastName = athlete.lastName || existing.lastName;
+        updateData.fullName = `${finalFirstName} ${finalLastName}`;
+      }
+    }
+
+    // Calculate birth year if birthDate changed
+    if (athlete.birthDate) {
+      updateData.birthYear = new Date(athlete.birthDate).getFullYear();
+    }
+
+    const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+
+    // Update teams if specified
+    if (athlete.teamIds !== undefined) {
+      await this.setAthleteTeams(id, athlete.teamIds);
+    }
+
+    // Update any existing user records if name changed
+    if ((athlete.firstName || athlete.lastName) && finalFirstName && finalLastName) {
+      // Update the user record directly by ID
+      try {
+        await db.update(users)
+          .set({
+            firstName: finalFirstName,
+            lastName: finalLastName,
+            fullName: `${finalFirstName} ${finalLastName}`
+          })
+          .where(eq(users.id, id));
+      } catch (error) {
+        // Log but don't fail if user update fails
+        console.log('Could not update user record:', (error as Error).message);
+      }
+    }
+
+    return updated;
+  }
+
+  async deleteAthlete(id: string): Promise<void> {
+    // Use a transaction to ensure all deletions happen atomically
+    await db.transaction(async (tx: any) => {
+      // Revoke all active sessions for security (explicit revocation)
+      // Note: Schema has onDelete: 'set null', but explicit deletion is more secure
+      const { sessions } = await import('@shared/schema');
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+
+      // Delete email verification tokens
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, id));
+
+      // Delete athlete profiles
+      await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
+      // Delete all user-team relationships
+      await tx.delete(userTeams).where(eq(userTeams.userId, id));
+
+      // Delete all user-organization relationships
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+
+      // Delete measurements where user is subject OR submitter
+      // Note: submittedBy is NOT NULL, so we must delete rather than set to null
+      // This covers both self-submitted measurements and measurements submitted by this user for others
+      await tx.delete(measurements).where(
+        or(
+          eq(measurements.userId, id),
+          eq(measurements.submittedBy, id)
+        )
+      );
+
+      // Update measurements verified by this user (verifiedBy is nullable)
+      await tx.update(measurements)
+        .set({ verifiedBy: null as any })
+        .where(eq(measurements.verifiedBy, id));
+
+      // Update invitations where this user accepted/cancelled them (keep invitation history)
+      await tx.update(invitations)
+        .set({ acceptedBy: null as any })
+        .where(eq(invitations.acceptedBy, id));
+
+      await tx.update(invitations)
+        .set({ cancelledBy: null as any })
+        .where(eq(invitations.cancelledBy, id));
+
+      // Delete invitations created BY this user
+      await tx.delete(invitations).where(eq(invitations.invitedBy, id));
+
+      // Delete invitations FOR this user (as athlete/playerId)
+      await tx.delete(invitations).where(eq(invitations.playerId, id));
+
+      // Preserve audit logs for compliance (set userId to null)
+      // Schema has onDelete: 'set null' - audit trail must be immutable
+      await tx.update(auditLogs)
+        .set({ userId: null as any })
+        .where(eq(auditLogs.userId, id));
+
+      // Finally, delete the user record
+      await tx.delete(users).where(eq(users.id, id));
+    });
+  }
+
+  async getAthleteByNameAndBirthYear(firstName: string, lastName: string, birthYear: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users)
+      .where(and(
+        eq(users.firstName, firstName),
+        eq(users.lastName, lastName),
+        sql`EXTRACT(YEAR FROM ${users.birthDate}) = ${birthYear}`,
+        isNull(users.deletedAt)
+      ));
+
+    if (!user) return undefined;
+
+    return {
+      ...user,
+      fullName: `${user.firstName} ${user.lastName}`,
+      birthYear: user.birthDate ? new Date(user.birthDate).getFullYear() : 0
+    } as any;
+  }
+
+  // Athlete Teams (now using userTeams)
+  async getAthleteTeams(athleteId: string): Promise<(Team & { organization: Organization })[]> {
+    const result = await db.select()
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(userTeams.userId, athleteId));
+
+    return result.map(({ teams: team, organizations }: { teams: Team, organizations: Organization }) => ({
+      ...team,
+      organization: organizations
+    }));
+  }
+
+  async addAthleteToTeam(athleteId: string, teamId: string): Promise<UserTeam> {
+    return await this.addUserToTeam(athleteId, teamId);
+  }
+
+  async removeAthleteFromTeam(athleteId: string, teamId: string): Promise<void> {
+    return await this.removeUserFromTeam(athleteId, teamId);
+  }
+
+  async setAthleteTeams(athleteId: string, teamIds: string[]): Promise<void> {
+    // Remove existing teams
+    await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
+
+    // Add new teams
+    if (teamIds.length > 0) {
+      await db.insert(userTeams).values(
+        teamIds.map(teamId => ({ userId: athleteId, teamId }))
+      );
+    }
+  }
+
+  // Measurements
+  async getMeasurements(filters?: {
+    userId?: string;
+    athleteId?: string;
+    teamIds?: string[];
+    organizationId?: string;
+    metric?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    birthYearFrom?: number;
+    birthYearTo?: number;
+    ageFrom?: number;
+    ageTo?: number;
+    search?: string;
+    sport?: string;
+    gender?: string;
+    position?: string;
+    includeUnverified?: boolean;
+  }): Promise<any[]> {
+    // First, query measurements with user data (no team joins yet)
+    const query = db.select({
+      // Measurement fields
+      id: measurements.id,
+      userId: measurements.userId,
+      submittedBy: measurements.submittedBy,
+      verifiedBy: measurements.verifiedBy,
+      isVerified: measurements.isVerified,
+      date: measurements.date,
+      age: measurements.age,
+      metric: measurements.metric,
+      value: measurements.value,
+      units: measurements.units,
+      flyInDistance: measurements.flyInDistance,
+      notes: measurements.notes,
+      createdAt: measurements.createdAt,
+      // User data WITHOUT teams for now
+      user: sql<any>`jsonb_build_object(
+        'id', ${users.id},
+        'firstName', ${users.firstName},
+        'lastName', ${users.lastName},
+        'fullName', ${users.fullName},
+        'birthYear', ${users.birthYear},
+        'sports', ${users.sports},
+        'gender', ${users.gender},
+        'positions', ${users.positions}
+      )`,
+      // Submitter and verifier info
+      submitterInfo: sql<any>`submitter_info.first_name || ' ' || submitter_info.last_name`,
+      verifierInfo: sql<any>`verifier_info.first_name || ' ' || verifier_info.last_name`
+    })
+    .from(measurements)
+    .leftJoin(users, eq(measurements.userId, users.id))
+    .leftJoin(sql`${users} AS submitter_info`, sql`${measurements.submittedBy} = submitter_info.id`)
+    .leftJoin(sql`${users} AS verifier_info`, sql`${measurements.verifiedBy} = verifier_info.id`);
+
+    const conditions = [];
+    if (filters?.userId || filters?.athleteId) {
+      const targetUserId = filters.userId || filters.athleteId;
+      if (targetUserId) {
+        conditions.push(eq(measurements.userId, targetUserId));
+      }
+    }
+    if (filters?.metric) {
+      conditions.push(eq(measurements.metric, filters.metric));
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(measurements.date, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(measurements.date, filters.dateTo));
+    }
+    if (filters?.birthYearFrom) {
+      conditions.push(gte(users.birthYear, filters.birthYearFrom));
+    }
+    if (filters?.birthYearTo) {
+      conditions.push(lte(users.birthYear, filters.birthYearTo));
+    }
+    if (filters?.search) {
+      conditions.push(sql`${users.fullName} ILIKE ${'%' + filters.search + '%'}`);
+    }
+    if (filters?.ageFrom) {
+      conditions.push(gte(measurements.age, filters.ageFrom));
+    }
+    if (filters?.ageTo) {
+      conditions.push(lte(measurements.age, filters.ageTo));
+    }
+    if (!filters?.includeUnverified) {
+      conditions.push(eq(measurements.isVerified, true));
+    }
+    
+    // Team filtering - filter by athlete's CURRENT team membership (not historical)
+    // This matches the display logic which shows current teams
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      conditions.push(
+        exists(
+          db.select({ id: userTeams.id })
+            .from(userTeams)
+            .where(and(
+              eq(userTeams.userId, users.id),
+              inArray(userTeams.teamId, filters.teamIds),
+              eq(userTeams.isActive, true),
+              or(
+                isNull(userTeams.leftAt),
+                gte(userTeams.leftAt, new Date())
+              )
+            ))
+        )
+      );
+    }
+    
+    // Organization filtering - filter by user's organization membership, not team organization
+    // Use EXISTS subquery to prevent duplicates from multiple org memberships
+    if (filters?.organizationId) {
+      conditions.push(exists(
+        db.select({ id: userOrganizations.id })
+          .from(userOrganizations)
+          .where(and(
+            eq(userOrganizations.userId, users.id),
+            eq(userOrganizations.organizationId, filters.organizationId)
+          ))
+      ));
+    }
+
+    let finalQuery = query;
+    if (conditions.length > 0) {
+      finalQuery = query.where(and(...conditions)) as any;
+    }
+
+    const result = await finalQuery
+      .orderBy(desc(measurements.date), desc(measurements.createdAt));
+
+    // If no measurements found, return empty array
+    if (result.length === 0) {
+      return [];
+    }
+
+    // Step 2: Batch fetch teams for each measurement based on the measurement date
+    // Build a map of (userId, measurementDate) -> teams
+    const userDatePairs = result.map((m: any) => ({
+      userId: m.userId,
+      date: m.date
+    }));
+
+    // Get unique user IDs
+    const uniqueUserIds = [...new Set(result.map((m: any) => m.userId as string).filter(Boolean))] as string[];
+
+    // Fetch all team memberships for these users
+    type TeamMembership = {
+      userId: string;
+      teamId: string;
+      teamName: string;
+      joinedAt: Date;
+      leftAt: Date | null;
+      organizationId: string;
+      organizationName: string;
+    };
+
+    // Only query for teams if we have user IDs
+    let allUserTeams: TeamMembership[] = [];
+    if (uniqueUserIds.length > 0) {
+      allUserTeams = await db
+        .select({
+          userId: userTeams.userId,
+          teamId: teams.id,
+          teamName: teams.name,
+          joinedAt: userTeams.joinedAt,
+          leftAt: userTeams.leftAt,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .where(and(
+          inArray(userTeams.userId, uniqueUserIds),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        ));
+    }
+
+    // Build a map of userId -> array of team memberships
+    const userTeamsMap = new Map<string, typeof allUserTeams>();
+    allUserTeams.forEach((ut: typeof allUserTeams[0]) => {
+      if (!userTeamsMap.has(ut.userId)) {
+        userTeamsMap.set(ut.userId, []);
+      }
+      userTeamsMap.get(ut.userId)!.push(ut);
+    });
+
+    // Attach teams to each measurement based on temporal logic
+    const measurementsWithTeams = result.map((measurement: any) => {
+      const measurementDate = new Date(measurement.date);
+      const userMemberships = userTeamsMap.get(measurement.userId) || [];
+
+      // Show currently active teams (not filtered by measurement date)
+      // This ensures athletes show with their current team affiliations
+      const activeTeamsAtDate = userMemberships.filter((membership: typeof allUserTeams[0]) => {
+        // Only filter out if they've explicitly left the team
+        const leftDate = membership.leftAt ? new Date(membership.leftAt) : null;
+        const now = new Date();
+        
+        return (!leftDate || leftDate >= now);
+      });
+
+      // Build teams array
+      const teams = activeTeamsAtDate.map((membership: typeof allUserTeams[0]) => ({
+        id: membership.teamId,
+        name: membership.teamName,
+        organization: {
+          id: membership.organizationId,
+          name: membership.organizationName,
+        },
+      }));
+
+      return {
+        ...measurement,
+        user: {
+          ...measurement.user,
+          teams,
+        },
+      };
+    });
+
+    // Apply remaining filters (team/org filtering now done in query for better performance)
+    let filteredMeasurements = measurementsWithTeams;
+
+    // Filter by sport if specified
+    if (filters?.sport && filters.sport !== "all") {
+      filteredMeasurements = filteredMeasurements.filter((measurement: any) =>
+        measurement.user.sports?.includes(filters.sport!)
+      );
+    }
+
+    // Filter by gender if specified
+    if (filters?.gender && filters.gender !== "all") {
+      filteredMeasurements = filteredMeasurements.filter((measurement: any) =>
+        measurement.user.gender === filters.gender
+      );
+    }
+
+    // Filter by position if specified
+    if (filters?.position && filters.position !== "all") {
+      filteredMeasurements = filteredMeasurements.filter((measurement: any) =>
+        measurement.user.positions?.includes(filters.position!)
+      );
+    }
+
+    return filteredMeasurements;
+  }
+
+  async getMeasurement(id: string): Promise<Measurement | undefined> {
+    const [measurement] = await db.select().from(measurements).where(eq(measurements.id, id));
+    return measurement || undefined;
+  }
+
+  async getAthleteActiveTeamsAtDate(userId: string, measurementDate: Date): Promise<Array<{
+    teamId: string;
+    teamName: string;
+    season: string | null;
+    organizationId: string;
+    organizationName: string;
+  }>> {
+    const activeTeams = await db.select({
+      teamId: teams.id,
+      teamName: teams.name,
+      season: teams.season,
+      organizationId: teams.organizationId,
+      organizationName: organizations.name,
+    })
+    .from(userTeams)
+    .innerJoin(teams, eq(userTeams.teamId, teams.id))
+    .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+    .where(and(
+      eq(userTeams.userId, userId),
+      lte(userTeams.joinedAt, measurementDate),
+      or(
+        isNull(userTeams.leftAt),
+        gte(userTeams.leftAt, measurementDate)
+      ),
+      eq(userTeams.isActive, true),
+      eq(teams.isArchived, false) // Only include non-archived teams
+    ));
+
+    return activeTeams;
+  }
+
+  async createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement> {
+    // Calculate age and units based on metric
+    const user = await this.getUser(measurement.userId);
+    if (!user) throw new Error("User not found");
+
+    const measurementDate = new Date(measurement.date);
+    let age = measurementDate.getFullYear() - (user.birthYear || 0);
+
+    // Use birthDate for more precise age calculation if available
+    if (user.birthDate) {
+      const birthDate = new Date(user.birthDate);
+      const birthdayThisYear = new Date(measurementDate.getFullYear(), birthDate.getMonth(), birthDate.getDate());
+      if (measurementDate < birthdayThisYear) {
+        age -= 1;
+      }
+    }
+
+    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+                  measurement.metric === "RSI" ? "ratio" : "in";
+
+    // Auto-populate team context if not explicitly provided
+    let teamId = measurement.teamId;
+    let season = measurement.season;
+    let teamContextAuto = true;
+
+    if (!teamId || teamId.trim() === "") {
+      // Get athlete's active teams at measurement date
+      const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
+
+      if (activeTeams.length === 1) {
+        // Single team - auto-assign
+        teamId = activeTeams[0].teamId;
+        season = activeTeams[0].season || undefined;
+        teamContextAuto = true;
+        console.log(`Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})`);
+      } else if (activeTeams.length > 1) {
+        // Multiple teams - cannot auto-assign, will need manual selection
+        console.log(`Athlete is on ${activeTeams.length} teams - team context not auto-assigned`);
+        teamContextAuto = false;
+      } else {
+        // No active teams - measurement without team context
+        console.log('Athlete has no active teams - measurement created without team context');
+        teamContextAuto = false;
+      }
+    } else {
+      // Team was explicitly provided
+      teamContextAuto = false;
+    }
+
+    // Get submitter info to determine if auto-verify
+    const [submitter] = await db.select().from(users).where(
+      and(
+        eq(users.id, submittedBy),
+        isNull(users.deletedAt)
+      )
+    );
+
+    // Check if submitter is site admin or has coach/org_admin role in any organization
+    let isCoach = submitter?.isSiteAdmin === true;
+    if (!isCoach && submitter) {
+      const submitterRoles = await this.getUserRoles(submitter.id);
+      isCoach = submitterRoles.includes("coach") || submitterRoles.includes("org_admin");
+    }
+
+    const [newMeasurement] = await db.insert(measurements).values({
+      userId: measurement.userId,
+      submittedBy: submittedBy,
+      date: measurement.date,
+      metric: measurement.metric,
+      value: measurement.value.toString(),
+      notes: measurement.notes,
+      flyInDistance: measurement.flyInDistance?.toString(),
+      age,
+      units,
+      isVerified: isCoach ? true : false,
+      verifiedBy: isCoach ? submittedBy : undefined,
+      teamId: teamId || null,
+      season: season || null,
+      teamContextAuto: teamContextAuto
+    }).returning();
+
+    return newMeasurement;
+  }
+
+  async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
+    const updateData: any = {};
+    if (measurement.userId) updateData.userId = measurement.userId;
+    // submittedBy cannot be updated after creation
+    if (measurement.date) updateData.date = measurement.date;
+    if (measurement.metric) updateData.metric = measurement.metric;
+    if (measurement.value !== undefined) updateData.value = measurement.value.toString();
+    if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+    if (measurement.flyInDistance !== undefined) updateData.flyInDistance = measurement.flyInDistance?.toString();
+
+    const [updated] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMeasurement(id: string): Promise<void> {
+    await db.delete(measurements).where(eq(measurements.id, id));
+  }
+
+  async verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement> {
+    const [updated] = await db.update(measurements)
+      .set({
+        isVerified: true,
+        verifiedBy
+      })
+      .where(eq(measurements.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Analytics
+  async getUserStats(userId: string): Promise<{
+    bestFly10?: number;
+    bestVertical?: number;
+    measurementCount: number;
+  }> {
+    return this.getAthleteStats(userId);
+  }
+
+  async getAthleteStats(userId: string): Promise<{
+    bestFly10?: number;
+    bestVertical?: number;
+    measurementCount: number;
+  }> {
+    const measurements = await this.getMeasurements({ userId, includeUnverified: false });
+
+    const fly10Times = measurements
+      .filter(m => m.metric === "FLY10_TIME")
+      .map(m => parseFloat(m.value));
+    const verticalJumps = measurements
+      .filter(m => m.metric === "VERTICAL_JUMP")
+      .map(m => parseFloat(m.value));
+
+    return {
+      bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
+      bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
+      measurementCount: measurements.length
+    };
+  }
+
+  async getTeamStats(organizationId?: string): Promise<Array<{
+    teamId: string;
+    teamName: string;
+    organizationName: string;
+    athleteCount: number;
+    bestFly10?: number;
+    bestVertical?: number;
+    latestTest?: string;
+  }>> {
+    // Always require organization context for team stats to prevent cross-org data leakage
+    if (!organizationId) {
+      return [];
+    }
+
+    const teams = await this.getTeams(organizationId);
+
+    const teamStats = await Promise.all(
+      teams.map(async (team) => {
+        // Ensure athletes are filtered by organization as well
+        const athletes = await this.getAthletes({ teamId: team.id, organizationId: team.organizationId });
+        const measurements = await this.getMeasurements({ 
+          teamIds: [team.id], 
+          organizationId: team.organizationId,
+          includeUnverified: false 
+        });
+
+        const fly10Times = measurements
+          .filter(m => m.metric === "FLY10_TIME")
+          .map(m => parseFloat(m.value));
+        const verticalJumps = measurements
+          .filter(m => m.metric === "VERTICAL_JUMP")
+          .map(m => parseFloat(m.value));
+
+        const latestMeasurement = measurements[0]; // Already ordered by date desc
+
+        return {
+          teamId: team.id,
+          teamName: team.name,
+          organizationName: team.organization.name,
+          athleteCount: athletes.length,
+          bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
+          bestVertical: verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
+          latestTest: latestMeasurement ? latestMeasurement.date : undefined
+        };
+      })
+    );
+
+    return teamStats;
+  }
+
+  async getDashboardStats(organizationId?: string): Promise<{
+    totalAthletes: number;
+    activeAthletes: number;
+    totalTeams: number;
+    bestFLY10_TIMELast30Days?: { value: number; userName: string };
+    bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
+    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_5105Last30Days?: { value: number; userName: string };
+    bestT_TESTLast30Days?: { value: number; userName: string };
+    bestDASH_40YDLast30Days?: { value: number; userName: string };
+    bestRSILast30Days?: { value: number; userName: string };
+  }> {
+    const athletes = await this.getAthletes({ organizationId });
+    const teams = await this.getTeams(organizationId);
+
+    // Count athletes in the organization
+    const totalAthletes = athletes.length;
+
+    // Active athletes are those with active user accounts (not just invitation pending)
+    const activeAthletes = athletes.filter(athlete =>
+      athlete.isActive === true && athlete.password !== "INVITATION_PENDING"
+    ).length;
+
+    // Get measurements from last 30 days instead of just today
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    const recentMeasurements = await this.getMeasurements({
+      dateFrom: thirtyDaysAgo,
+      dateTo: today,
+      organizationId,
+      includeUnverified: false
+    });
+
+    // Define all available metrics and whether lower is better
+    const metrics = [
+      { key: 'FLY10_TIME', lowerIsBetter: true },
+      { key: 'VERTICAL_JUMP', lowerIsBetter: false },
+      { key: 'AGILITY_505', lowerIsBetter: true },
+      { key: 'AGILITY_5105', lowerIsBetter: true },
+      { key: 'T_TEST', lowerIsBetter: true },
+      { key: 'DASH_40YD', lowerIsBetter: true },
+      { key: 'RSI', lowerIsBetter: false }
+    ];
+
+    // Count only active (non-archived) teams
+    const activeTeams = teams.filter(team => team.isArchived !== true);
+
+    // Calculate best for each metric
+    const bestMetrics: any = {
+      totalAthletes,
+      activeAthletes,
+      totalTeams: activeTeams.length
+    };
+
+    metrics.forEach(({ key, lowerIsBetter }) => {
+      const metricMeasurements = recentMeasurements
+        .filter(m => m.metric === key)
+        .map(m => ({ value: parseFloat(m.value), userName: m.user.fullName }));
+
+      if (metricMeasurements.length > 0) {
+        const bestResult = lowerIsBetter 
+          ? metricMeasurements.reduce((best, current) => current.value < best.value ? current : best)
+          : metricMeasurements.reduce((best, current) => current.value > best.value ? current : best);
+        
+        bestMetrics[`best${key}Last30Days`] = bestResult;
+      }
+    });
+
+    return bestMetrics;
+  }
+
+  // Enhanced Authentication Methods Implementation
+  async findUserById(userId: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.id, userId),
+        isNull(users.deletedAt)
+      )
+    );
+    return user || null;
+  }
+
+  async resetLoginAttempts(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ loginAttempts: 0, lockedUntil: null })
+      .where(eq(users.id, userId));
+  }
+
+  async incrementLoginAttempts(userId: string, attempts: number): Promise<void> {
+    await db.update(users)
+      .set({ loginAttempts: attempts })
+      .where(eq(users.id, userId));
+  }
+
+  async lockAccount(userId: string, lockUntil: Date): Promise<void> {
+    await db.update(users)
+      .set({ lockedUntil: lockUntil })
+      .where(eq(users.id, userId));
+  }
+
+  async updateLastLogin(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
+  // Simplified implementations - these would need proper schema tables
+  async createLoginSession(session: any): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Creating login session:', session.userId);
+  }
+
+  async findLoginSession(token: string): Promise<any> {
+    // Would need loginSessions table implementation
+    return null;
+  }
+
+  async updateSessionActivity(sessionId: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Updating session activity:', sessionId);
+  }
+
+  async revokeLoginSession(token: string): Promise<void> {
+    // Would need loginSessions table implementation
+    console.log('Revoking login session:', token);
+  }
+
+  async revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean; tx?: any }): Promise<number> {
+    // Revoke all sessions for a user by deleting them from the session store
+    // Sessions are stored with userId in a dedicated column (not JSONB)
+    const { sessions } = await import('@shared/schema');
+    const { eq } = await import('drizzle-orm');
+    // SECURITY: Default to fail-secure (throwOnError = true)
+    // Critical operations like password changes MUST ensure session revocation succeeds
+    const throwOnError = options?.throwOnError ?? true;
+    const dbConnection = options?.tx || db; // Use transaction if provided, otherwise use global db
+
+    try {
+      // Delete all sessions using the native userId column (10-100x faster than JSONB extraction)
+      // Foreign key uses SET NULL on user deletion to require explicit session revocation with audit logging
+      const result = await dbConnection.delete(sessions).where(
+        eq(sessions.userId, userId)
+      ).returning({ sid: sessions.sid });
+
+      const count = result.length;
+      console.log(`Revoked ${count} session(s) for user: ${userId}`);
+      return count;
+    } catch (error) {
+      console.error('SECURITY: Failed to revoke user sessions:', error);
+
+      // Create audit log for failed session revocation
+      // IMPORTANT: Use separate transaction for failure audit logs to ensure they persist
+      // even when the parent transaction rolls back
+      try {
+        // Always use separate transaction for failure logs to ensure persistence
+        const { auditLogs } = await import('@shared/schema');
+        await db.insert(auditLogs).values({
+          userId,
+          action: 'session_revocation_failed',
+          resourceType: 'user',
+          resourceId: userId,
+          details: JSON.stringify({
+            error: String(error),
+            securityContext: throwOnError ? 'password_sync' : 'general',
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: '127.0.0.1',
+          userAgent: 'System',
+        });
+      } catch (auditError) {
+        // If audit logging fails, just log to console
+        console.error('Failed to create audit log for session revocation failure:', auditError);
+      }
+
+      // For critical security operations (password changes), session revocation MUST succeed
+      if (throwOnError) {
+        // Schedule compensating transaction to clean up zombie sessions
+        // This runs outside the main transaction to handle edge cases where
+        // transaction rollback leaves orphaned sessions (e.g., network failures)
+        this.scheduleZombieSessionCleanup(userId);
+        throw new Error(`Failed to revoke sessions for user ${userId}: ${error}`);
+      }
+
+      // For non-critical operations, session revocation is best-effort
+      return 0;
+    }
+  }
+
+  async updateUserBackupCodes(userId: string, codes: string[]): Promise<void> {
+    await db.update(users)
+      .set({ backupCodes: codes })
+      .where(eq(users.id, userId));
+  }
+
+  async createSecurityEvent(event: any): Promise<void> {
+    // Would need securityEvents table implementation
+    console.log('Creating security event:', event.eventType);
+  }
+
+  async getUserSecurityEvents(userId: string, limit: number): Promise<any[]> {
+    // Would need securityEvents table implementation
+    return [];
+  }
+
+  async getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]> {
+    // Would need securityEvents table implementation
+    return [];
+  }
+
+  async getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]> {
+    // Would need emailChanges table implementation
+    return [];
+  }
+
+  async getRecentPasswordResets(email: string, timeWindow: number): Promise<any[]> {
+    // Would need passwordResets table implementation
+    return [];
+  }
+
+  async createPasswordResetToken(token: any): Promise<void> {
+    // Would need passwordResetTokens table implementation
+    console.log('Creating password reset token for user:', token.userId);
+  }
+
+  async findPasswordResetToken(token: string): Promise<any> {
+    // Would need passwordResetTokens table implementation
+    return null;
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    // Would need passwordResetTokens table implementation
+    console.log('Marking password reset token as used:', token);
+  }
+
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {
+    await db.update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, userId));
+  }
+
+  async updatePasswordChangedAt(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ lastLoginAt: new Date() }) // Using lastLoginAt as placeholder
+      .where(eq(users.id, userId));
+  }
+
+  async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
+    try {
+      await db.update(userOrganizations)
+        .set({ role })
+        .where(and(
+          eq(userOrganizations.userId, userId),
+          eq(userOrganizations.organizationId, organizationId)
+        ));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getUsersByOrganization(organizationId: string): Promise<any[]> {
+    const result = await db.select({
+      id: users.id,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      emails: users.emails,
+      role: userOrganizations.role
+    })
+    .from(users)
+    .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+    .where(eq(userOrganizations.organizationId, organizationId));
+
+    return result;
+  }
+
+  async getUserActivityStats(userId: string, organizationId: string): Promise<any> {
+    // Would need proper activity tracking
+    return {
+      measurementsCreated: 0,
+      teamsManaged: 0
+    };
+  }
+
+  /**
+   * Optimized method to fetch users with team memberships in a single query to avoid N+1 problem
+   * This replaces the individual getUserTeams calls for each user
+   */
+  async getUsersWithTeamMembershipsByOrganization(organizationId: string, filters?: {
+    search?: string;
+    role?: string;
+    excludeTeam?: string;
+    season?: string;
+  }): Promise<any[]> {
+    console.log('Using optimized getUsersWithTeamMembershipsByOrganization query');
+
+    // Build WHERE conditions for user filtering
+    const userConditions = [eq(userOrganizations.organizationId, organizationId)];
+
+    if (filters?.role) {
+      userConditions.push(eq(userOrganizations.role, filters.role));
+    }
+
+    if (filters?.search) {
+      const searchLower = `%${filters.search.toLowerCase()}%`;
+      userConditions.push(
+        or(
+          sql`LOWER(${users.firstName}) LIKE ${searchLower}`,
+          sql`LOWER(${users.lastName}) LIKE ${searchLower}`,
+          sql`LOWER(${users.firstName} || ' ' || ${users.lastName}) LIKE ${searchLower}`
+        )!
+      );
+    }
+
+    // Step 1: Get all users in the organization
+    const usersQuery = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        fullName: users.fullName,
+        emails: users.emails,
+        birthDate: users.birthDate,
+        birthYear: users.birthYear,
+        graduationYear: users.graduationYear,
+        school: users.school,
+        phoneNumbers: users.phoneNumbers,
+        sports: users.sports,
+        positions: users.positions,
+        height: users.height,
+        weight: users.weight,
+        gender: users.gender,
+        role: userOrganizations.role,
+        createdAt: users.createdAt
+      })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(...userConditions))
+      .orderBy(asc(users.lastName), asc(users.firstName));
+
+    if (usersQuery.length === 0) {
+      return [];
+    }
+
+    const userIds = usersQuery.map((user: any) => user.id);
+
+    // Step 2: Get all team memberships for these users in a single query
+    const teamMembershipConditions = [
+      inArray(userTeams.userId, userIds),
+      eq(userTeams.isActive, true),
+      eq(teams.isArchived, false)
+    ];
+
+    if (filters?.excludeTeam) {
+      teamMembershipConditions.push(ne(teams.id, filters.excludeTeam));
+    }
+
+    if (filters?.season) {
+      teamMembershipConditions.push(eq(userTeams.season, filters.season));
+    }
+
+    const teamMemberships = await db
+      .select({
+        userId: userTeams.userId,
+        teamId: userTeams.teamId,
+        teamName: teams.name,
+        isActive: userTeams.isActive,
+        season: userTeams.season,
+        joinedAt: userTeams.joinedAt,
+        leftAt: userTeams.leftAt
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(and(...teamMembershipConditions));
+
+    // Step 3: Group team memberships by user ID for efficient lookup
+    const membershipsByUser = new Map<string, any[]>();
+    teamMemberships.forEach((membership: any) => {
+      if (!membershipsByUser.has(membership.userId)) {
+        membershipsByUser.set(membership.userId, []);
+      }
+      membershipsByUser.get(membership.userId)!.push({
+        teamId: membership.teamId,
+        teamName: membership.teamName,
+        isActive: membership.isActive,
+        season: membership.season,
+        joinedAt: membership.joinedAt,
+        leftAt: membership.leftAt
+      });
+    });
+
+    // Step 4: Combine users with their team memberships
+    const result = usersQuery.map((user: any) => ({
+      ...user,
+      teamMemberships: membershipsByUser.get(user.id) || []
+    }));
+
+    // Apply post-query filters if needed
+    let filteredResult = result;
+
+    if (filters?.excludeTeam) {
+      filteredResult = result.filter((user: any) => {
+        // Exclude users who are active members of the excluded team
+        const isOnExcludedTeam = user.teamMemberships.some((membership: any) =>
+          membership.teamId === filters.excludeTeam && membership.isActive === true
+        );
+        return !isOnExcludedTeam;
+      });
+    }
+
+    if (filters?.season) {
+      filteredResult = filteredResult.filter((user: any) => {
+        // If no team memberships, include the user
+        if (!user.teamMemberships || user.teamMemberships.length === 0) {
+          return true;
+        }
+        // Check if user has any membership in the specified season
+        return user.teamMemberships.some((membership: any) =>
+          membership.season === filters.season || !membership.season
+        );
+      });
+    }
+
+    console.log(`Optimized query returned ${filteredResult.length} users with team memberships`);
+    return filteredResult;
+  }
+
+  // Audit Logging
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [auditLog] = await db.insert(auditLogs).values(log).returning();
+    return auditLog;
+  }
+
+  async getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]> {
+    const limit = filters?.limit || 100;
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(auditLogs.userId, filters.userId));
+    }
+
+    if (filters?.action) {
+      conditions.push(eq(auditLogs.action, filters.action));
+    }
+
+    const query = db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+
+    if (conditions.length > 0) {
+      return await query.where(and(...conditions));
+    }
+
+    return await query;
+  }
+
+  /**
+   * Schedule a compensating transaction to clean up zombie sessions
+   * This provides defense-in-depth for the rare case where:
+   * 1. Session revocation fails during a password change transaction
+   * 2. Transaction rollback succeeds BUT sessions weren't actually deleted
+   *    (e.g., network partition, database failover, etc.)
+   * 3. User sessions remain active despite failed password change
+   *
+   * The cleanup runs asynchronously to avoid blocking the main transaction failure path.
+   * Uses exponential backoff (5s, 15s, 45s) to handle transient failures.
+   */
+  private scheduleZombieSessionCleanup(userId: string): void {
+    const attemptCleanup = async (attempt: number = 1): Promise<void> => {
+      const maxAttempts = 3;
+      const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s
+
+      try {
+        // Wait before attempting cleanup (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, backoffDelays[attempt - 1]));
+
+        console.log(`SECURITY: Attempting zombie session cleanup for user ${userId} (attempt ${attempt}/${maxAttempts})`);
+
+        // Attempt to revoke sessions outside transaction context
+        const revokedCount = await this.revokeAllUserSessions(userId, { throwOnError: false });
+
+        if (revokedCount > 0) {
+          console.warn(`SECURITY: Cleaned up ${revokedCount} zombie session(s) for user ${userId}`);
+
+          // Create audit log for successful cleanup
+          await this.createAuditLog({
+            userId,
+            action: 'zombie_sessions_cleaned',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              revokedCount,
+              attempt,
+              timestamp: new Date().toISOString(),
+              reason: 'Compensating cleanup after failed session revocation'
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          });
+        } else {
+          console.log(`SECURITY: No zombie sessions found for user ${userId} on attempt ${attempt}`);
+        }
+      } catch (error) {
+        console.error(`SECURITY: Zombie session cleanup attempt ${attempt} failed for user ${userId}:`, error);
+
+        // Retry with exponential backoff if not at max attempts
+        if (attempt < maxAttempts) {
+          console.log(`SECURITY: Scheduling retry ${attempt + 1}/${maxAttempts} for zombie session cleanup`);
+          attemptCleanup(attempt + 1);
+        } else {
+          console.error(`SECURITY CRITICAL: Failed to clean up zombie sessions after ${maxAttempts} attempts for user ${userId}`);
+
+          // Final failure audit log (best effort - don't await)
+          this.createAuditLog({
+            userId,
+            action: 'zombie_cleanup_failed',
+            resourceType: 'user',
+            resourceId: userId,
+            details: JSON.stringify({
+              attempts: maxAttempts,
+              lastError: String(error),
+              timestamp: new Date().toISOString(),
+              recommendation: 'Manual session cleanup required'
+            }),
+            ipAddress: '127.0.0.1',
+            userAgent: 'System',
+          }).catch(err => console.error('Failed to log zombie cleanup failure:', err));
+        }
+      }
+    };
+
+    // Start async cleanup (non-blocking)
+    attemptCleanup(1);
+  }
+
+}
+
+export const storage = new DatabaseStorage();

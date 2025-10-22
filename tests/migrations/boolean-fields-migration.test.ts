@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db } from '../../server/db';
+import { db } from '../../packages/api/db';
 import { users, teams, userTeams, measurements, invitations } from '@shared/schema';
 import { sql } from 'drizzle-orm';
 

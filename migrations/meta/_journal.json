@@ -8,6 +8,90 @@
       "when": 1758635809480,
       "tag": "0000_secret_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1758635809481,
+      "tag": "0001_add_team_uniqueness_constraint",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1758635809482,
+      "tag": "0002_add_organization_is_active_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1758635809483,
+      "tag": "0003_add_audit_logs_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1758635809484,
+      "tag": "0004_remove_measurement_fk_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1758635809485,
+      "tag": "0005_add_user_soft_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1758635809486,
+      "tag": "0006_add_measurements_user_id_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1758635809487,
+      "tag": "0007_add_comprehensive_measurement_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1758635809488,
+      "tag": "0008_add_missing_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1758635809489,
+      "tag": "0009_add_users_id_not_deleted_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1758635809490,
+      "tag": "0010_make_invitation_fks_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1758635809491,
+      "tag": "0011_add_users_active_composite_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1760714400000,
+      "tag": "0012_fix_audit_logs_user_id_nullable",
+      "breakpoints": true
     }
   ]
 }

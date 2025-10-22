@@ -23,14 +23,14 @@ describe('Database Cleanup', () => {
 
   describe('closeDatabase function', () => {
     it('should successfully close database connection', async () => {
-      const { closeDatabase } = await import('../../server/db');
+      const { closeDatabase } = await import('../../packages/api/db');
 
       // Should not throw
       await expect(closeDatabase()).resolves.not.toThrow();
     });
 
     it('should be idempotent (safe to call multiple times)', async () => {
-      const { closeDatabase } = await import('../../server/db');
+      const { closeDatabase } = await import('../../packages/api/db');
 
       // First close
       await closeDatabase();
@@ -43,20 +43,20 @@ describe('Database Cleanup', () => {
     });
 
     it('should export closeDatabase function from db module', async () => {
-      const dbModule = await import('../../server/db');
+      const dbModule = await import('../../packages/api/db');
 
       expect(dbModule).toHaveProperty('closeDatabase');
       expect(typeof dbModule.closeDatabase).toBe('function');
     });
 
     it('should not export raw client (encapsulation)', async () => {
-      const dbModule = await import('../../server/db');
+      const dbModule = await import('../../packages/api/db');
 
       expect(dbModule).not.toHaveProperty('client');
     });
 
     it('should export db for application use', async () => {
-      const dbModule = await import('../../server/db');
+      const dbModule = await import('../../packages/api/db');
 
       expect(dbModule).toHaveProperty('db');
       expect(dbModule.db).toBeDefined();
@@ -65,7 +65,7 @@ describe('Database Cleanup', () => {
 
   describe('Module encapsulation', () => {
     it('should prevent direct client access', async () => {
-      const dbModule = await import('../../server/db');
+      const dbModule = await import('../../packages/api/db');
       const moduleKeys = Object.keys(dbModule);
 
       // Should only export db and closeDatabase
@@ -75,7 +75,7 @@ describe('Database Cleanup', () => {
     });
 
     it('should force use of cleanup function', async () => {
-      const { db, closeDatabase } = await import('../../server/db');
+      const { db, closeDatabase } = await import('../../packages/api/db');
 
       // db should exist
       expect(db).toBeDefined();
@@ -92,10 +92,10 @@ describe('Database Cleanup', () => {
 
   describe('Connection pool cleanup', () => {
     it('should close all connections in pool', async () => {
-      const { closeDatabase } = await import('../../server/db');
+      const { closeDatabase } = await import('../../packages/api/db');
 
       // Open connection by importing db
-      const { db } = await import('../../server/db');
+      const { db } = await import('../../packages/api/db');
 
       // Verify db exists
       expect(db).toBeDefined();
@@ -108,7 +108,7 @@ describe('Database Cleanup', () => {
       // This test verifies that if the underlying postgres client throws
       // during cleanup, it doesn't crash the application
 
-      const { closeDatabase } = await import('../../server/db');
+      const { closeDatabase } = await import('../../packages/api/db');
 
       // Even if already closed or error occurs, should not throw
       try {
@@ -123,7 +123,7 @@ describe('Database Cleanup', () => {
 
   describe('Integration with test cleanup', () => {
     it('should be usable in afterAll hooks', async () => {
-      const { closeDatabase } = await import('../../server/db');
+      const { closeDatabase } = await import('../../packages/api/db');
 
       // Simulate test cleanup
       const cleanup = async () => {
@@ -135,14 +135,14 @@ describe('Database Cleanup', () => {
 
     it('should allow test isolation with re-imports', async () => {
       // Import and close
-      const firstImport = await import('../../server/db');
+      const firstImport = await import('../../packages/api/db');
       await firstImport.closeDatabase();
 
       // Reset modules
       vi.resetModules();
 
       // Re-import should work
-      const secondImport = await import('../../server/db');
+      const secondImport = await import('../../packages/api/db');
       expect(secondImport.db).toBeDefined();
       expect(secondImport.closeDatabase).toBeDefined();
 

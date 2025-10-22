@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { log } from '../../server/utils/logger';
+import { log } from '../../packages/api/utils/logger';
 
 /**
  * Tests for logger utility
