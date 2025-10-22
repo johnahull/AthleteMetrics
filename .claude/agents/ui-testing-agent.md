@@ -717,8 +717,7 @@ console.log('API calls made:', networkRequests);
 ## Integration Points
 
 **Works with:**
-- `test-driven-feature-agent` - E2E tests in TDD workflow
-- `testing-qa-agent` - Comprehensive test coverage
+- `test-driven-feature-agent` - E2E tests in TDD workflow, comprehensive test coverage
 - `visual-design-review-agent` - Visual regression detection
 - `ui-development-agent` - Live testing during development
 
