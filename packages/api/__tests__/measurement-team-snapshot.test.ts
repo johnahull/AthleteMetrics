@@ -18,23 +18,17 @@
  * IMPORTANT: This test requires a PostgreSQL database.
  * Before running, ensure DATABASE_URL environment variable is set.
  * For CI/CD, this is automatically configured.
- * For local testing, use .env file or set environment variable directly.
+ * For local testing, environment variables are set in vitest.setup.ts.
  */
-
-// Load environment variables before imports
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/athlete_performance_test';
-process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
-process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin123456789!';
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { db } from '../db';
 import { organizations, teams, users, userTeams, measurements, userOrganizations } from '@shared/schema';
-import { Storage } from '../storage';
+import { DatabaseStorage } from '../storage';
 import { eq } from 'drizzle-orm';
 
 describe('Measurement Team Snapshot Feature', () => {
-  let storage: Storage;
+  let storage: DatabaseStorage;
   let testOrgId: string;
   let testTeam1Id: string;
   let testTeam2Id: string;
@@ -42,7 +36,7 @@ describe('Measurement Team Snapshot Feature', () => {
   let testCoachId: string;
 
   beforeEach(async () => {
-    storage = new Storage(db);
+    storage = new DatabaseStorage(db);
 
     // Create test organization
     const [org] = await db.insert(organizations).values({

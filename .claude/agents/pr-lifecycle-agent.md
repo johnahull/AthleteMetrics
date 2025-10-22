@@ -141,7 +141,7 @@ while (iteration < MAX_ITERATIONS) {
 - For complex issues, invoke specialized agents:
   - Security issues → `security-authentication-agent`
   - Performance issues → `performance-optimization-agent`
-  - Test issues → `testing-qa-agent`
+  - Test issues → `test-driven-feature-agent`
 
 **Iteration 3+: Contextual Fixes**
 - Read broader codebase context
