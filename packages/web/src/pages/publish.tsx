@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Download, RotateCcw, Trash2, AlertTriangle } from "lucide-react";
+import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import jsPDF from "jspdf";
@@ -36,6 +36,8 @@ export default function Publish() {
   const [showView, setShowView] = useState<"best_by_athlete" | "best_by_measurement" | "all">("best_by_athlete");
   const [itemsPerPage, setItemsPerPage] = useState<number>(25);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -123,10 +125,10 @@ export default function Publish() {
     },
   });
 
-  // Reset to page 1 when filters or view changes
+  // Reset to page 1 when filters, view, or sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, showView]);
+  }, [filters, showView, sortColumn, sortDirection]);
 
   // PERFORMANCE: Memoize expensive calculation to prevent recomputation on every render
   // Get each athlete's best performance for the selected metric
@@ -186,9 +188,90 @@ export default function Publish() {
     });
   }, [measurements, filters.metric]);
 
-  const sortedMeasurements = showView === "best_by_athlete"
+  // Sort handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column - set to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Get base measurements based on view
+  const baseMeasurements = showView === "best_by_athlete"
     ? bestMeasurements
     : allMeasurementsSorted;
+
+  // Apply user sorting on top of base measurements
+  const sortedMeasurements = useMemo(() => {
+    if (!sortColumn || !baseMeasurements) return baseMeasurements;
+
+    // Add original rank to each measurement for sorting
+    const measurementsWithRank = baseMeasurements.map((m: any, index: number) => ({
+      ...m,
+      originalRank: index + 1,
+    }));
+
+    return [...measurementsWithRank].sort((a: any, b: any) => {
+      let aValue: string | number;
+      let bValue: string | number;
+
+      switch (sortColumn) {
+        case 'rank':
+          // Use original rank for sorting
+          aValue = a.originalRank;
+          bValue = b.originalRank;
+          break;
+        case 'athlete':
+          aValue = a.user.fullName?.toLowerCase() || '';
+          bValue = b.user.fullName?.toLowerCase() || '';
+          break;
+        case 'team':
+          aValue = a.user.teams && a.user.teams.length > 0
+            ? a.user.teams[0].name.toLowerCase()
+            : 'independent athlete';
+          bValue = b.user.teams && b.user.teams.length > 0
+            ? b.user.teams[0].name.toLowerCase()
+            : 'independent athlete';
+          break;
+        case 'sport':
+          aValue = a.user.sports && a.user.sports.length > 0
+            ? a.user.sports[0].toLowerCase()
+            : 'zzz'; // N/A goes to end
+          bValue = b.user.sports && b.user.sports.length > 0
+            ? b.user.sports[0].toLowerCase()
+            : 'zzz';
+          break;
+        case 'value':
+          aValue = parseFloat(a.value) || 0;
+          bValue = parseFloat(b.value) || 0;
+          break;
+        case 'date':
+          aValue = new Date(a.date).getTime();
+          bValue = new Date(b.date).getTime();
+          break;
+        default:
+          return 0;
+      }
+
+      // Handle null/undefined values
+      if (aValue === null || aValue === undefined) return 1;
+      if (bValue === null || bValue === undefined) return -1;
+
+      // Compare values
+      let comparison = 0;
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        comparison = aValue.localeCompare(bValue);
+      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+        comparison = aValue - bValue;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [baseMeasurements, sortColumn, sortDirection]);
 
   // Pagination logic
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(sortedMeasurements.length / itemsPerPage);
@@ -585,17 +668,126 @@ export default function Publish() {
                         aria-label="Select all measurements"
                       />
                     </th>
-                    <th className="px-4 py-3">Rank</th>
-                    <th className="px-4 py-3">Athlete</th>
-                    <th className="px-4 py-3">Team(s)</th>
-                    <th className="px-4 py-3">Sport</th>
-                    <th className="px-4 py-3">Value</th>
-                    <th className="px-4 py-3">Date</th>
+                    <th
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('rank')}
+                      data-testid="sort-header-rank"
+                      aria-sort={sortColumn === 'rank' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-2">
+                        Rank
+                        {sortColumn === 'rank' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('athlete')}
+                      data-testid="sort-header-athlete"
+                      aria-sort={sortColumn === 'athlete' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-2">
+                        Athlete
+                        {sortColumn === 'athlete' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('team')}
+                      data-testid="sort-header-team"
+                      aria-sort={sortColumn === 'team' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-2">
+                        Team(s)
+                        {sortColumn === 'team' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('sport')}
+                      data-testid="sort-header-sport"
+                      aria-sort={sortColumn === 'sport' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-2">
+                        Sport
+                        {sortColumn === 'sport' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('value')}
+                      data-testid="sort-header-value"
+                      aria-sort={sortColumn === 'value' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-2">
+                        Value
+                        {sortColumn === 'value' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('date')}
+                      data-testid="sort-header-date"
+                      aria-sort={sortColumn === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="flex items-center gap-2">
+                        Date
+                        {sortColumn === 'date' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100">
                   {paginatedMeasurements.map((measurement: any, index: number) => {
-                    const rank = startIndex + index + 1;
+                    // Use original rank if available, otherwise calculate from position
+                    const rank = measurement.originalRank || (startIndex + index + 1);
                     return (
                       <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
                         <td className="px-4 py-3">

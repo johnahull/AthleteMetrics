@@ -30,8 +30,8 @@ When ENABLED:
 **Keywords:** `pull request`, `PR review`, `code review`, `merge`, `@claude fix`, `@claude merge`
 
 #### Test-Driven Feature Agent (`test-driven-feature-agent`) 🤖
-**Auto-invoke:** Test-first/TDD feature implementation, complex features, autonomous workflows
-**Keywords:** `implement feature`, `TDD`, `test-first`, `implement with tests`, `feature implementation`
+**Auto-invoke:** Test-first/TDD feature implementation, unit/integration tests, test coverage, mocking, autonomous workflows
+**Keywords:** `implement feature`, `TDD`, `test-first`, `implement with tests`, `unit test`, `integration test`, `test coverage`, `mock`
 
 #### Database Schema Agent (`database-schema-agent`) 🔵
 **Auto-invoke:** `packages/shared/schema.ts` changes, migrations, Drizzle ORM, table/column modifications
@@ -61,17 +61,13 @@ When ENABLED:
 **Auto-invoke:** `packages/api/routes/` files, REST API design, middleware, endpoint organization
 **Keywords:** `routes`, `api`, `endpoint`, `express`, `middleware`, `request`, `response`, `REST`
 
-#### UI Component Library Agent (`ui-component-library-agent`) 🔷
-**Auto-invoke:** shadcn/ui components, Tailwind CSS, design system, accessibility, responsive design
-**Keywords:** `shadcn`, `tailwind`, `ui component`, `styling`, `accessibility`, `responsive`, `a11y`
+#### UI Development Agent (`ui-development-agent`) 🎯
+**Auto-invoke:** Building UI components with live visual feedback, shadcn/ui, Tailwind CSS, design system, accessibility, responsive design
+**Keywords:** `build component`, `create ui`, `visual feedback`, `develop component`, `shadcn`, `tailwind`, `ui component`, `styling`, `a11y`
 
 #### Performance Optimization Agent (`performance-optimization-agent`) 🟨
 **Auto-invoke:** React Query optimization, database performance, render optimization, bundle size
 **Keywords:** `performance`, `optimization`, `slow`, `cache`, `query optimization`, `bundle size`
-
-#### Testing & QA Agent (`testing-qa-agent`) 🧪
-**Auto-invoke:** Unit/integration tests, test coverage, mocking, regression testing, TDD
-**Keywords:** `write test`, `test coverage`, `unit test`, `integration test`, `mock`, `vitest`, `jest`
 
 #### Notification & Communication Agent (`notification-communication-agent`) 🩷
 **Auto-invoke:** Email notifications, user invitations, password reset, alerts, templates
@@ -85,14 +81,6 @@ When ENABLED:
 **Auto-invoke:** UI/UX review, WCAG accessibility, responsive design verification, design consistency
 **Keywords:** `design review`, `accessibility`, `wcag`, `responsive`, `ui review`, `visual qa`, `a11y audit`
 
-#### UI Development Agent (`ui-development-agent`) 🎯
-**Auto-invoke:** Building UI components with live visual feedback, Playwright verification, responsive testing
-**Keywords:** `build component`, `create ui`, `visual feedback`, `develop component`, `ui development`
-
-#### Code Quality & Linting Agent (`code-quality-linting-agent`) 🧹
-**Auto-invoke:** ESLint/Prettier setup, TypeScript strict mode, pre-commit hooks, code formatting
-**Keywords:** `eslint`, `prettier`, `code style`, `formatting`, `lint`, `husky`, `pre-commit`, `code standards`
-
 #### Feature Flag & Settings Agent (`feature-flag-settings-agent`) 🎛️
 **Auto-invoke:** Feature flags, org/team settings pages, A/B testing, rollout strategies, settings inheritance
 **Keywords:** `feature flag`, `feature toggle`, `a/b testing`, `rollout`, `org settings`, `feature configuration`
@@ -101,9 +89,9 @@ When ENABLED:
 **Auto-invoke:** npm audit, security vulnerabilities, dependency updates, breaking changes, package conflicts
 **Keywords:** `npm`, `dependencies`, `package.json`, `npm audit`, `security vulnerability`, `npm update`
 
-#### Deployment & Release Agent (`deployment-release-agent`) 🚀
-**Auto-invoke:** GitHub releases, Railway deployments, deployment scripts, rollback, environment variables
-**Keywords:** `release`, `deploy`, `railway`, `production`, `staging`, `rollback`, `environment variables`
+#### DevOps & Infrastructure Agent (`devops-infrastructure-agent`) 🚀
+**Auto-invoke:** GitHub Actions workflows, CI/CD pipelines, GitHub releases, Railway deployments, repo settings, branch protection
+**Keywords:** `github actions`, `workflow`, `ci/cd`, `pipeline`, `release`, `deploy`, `railway`, `production`, `staging`, `rollback`, `github issue`, `github project`, `branch protection`
 
 #### Multi-Tenant Profiles Agent (`multi-tenant-profiles-agent`) 🏢
 **Auto-invoke:** Org type profiles (College/HS/Club), white-labeling, tenant isolation, org-specific workflows
@@ -112,18 +100,6 @@ When ENABLED:
 #### Custom Metric Config Agent (`custom-metric-config-agent`) 📊
 **Auto-invoke:** Dynamic metric definitions, custom test builders, sport-specific measurements, validation rules
 **Keywords:** `custom metric`, `test configuration`, `validation rules`, `sport-specific`, `metric builder`
-
-#### Monitoring & Observability Agent (`monitoring-observability-agent`) 📈
-**Auto-invoke:** Sentry, APM integration, log aggregation, uptime monitoring, alerting, dashboards
-**Keywords:** `monitoring`, `observability`, `sentry`, `error tracking`, `apm`, `logging`, `alerting`, `grafana`
-
-#### CI/CD Pipeline Agent (`ci-cd-pipeline-agent`) ⚙️
-**Auto-invoke:** GitHub Actions workflows, pipeline optimization, caching, matrix builds, workflow debugging
-**Keywords:** `github actions`, `workflow`, `ci/cd`, `pipeline`, `.github/workflows`, `ci cache`, `matrix build`
-
-#### GitHub Operations Agent (`github-operations-agent`) 🐙
-**Auto-invoke:** GitHub issues, Projects boards, repo settings, branch protection, GitHub API automation
-**Keywords:** `github issue`, `github project`, `branch protection`, `repo settings`, `github api`, `issue labels`
 
 ### Agent Usage Rules
 
@@ -136,7 +112,7 @@ When ENABLED:
 
 | Task Type | Agent(s) |
 |-----------|----------|
-| TDD/test-first implementation | `test-driven-feature-agent` |
+| TDD/test-first implementation, unit/integration tests | `test-driven-feature-agent` |
 | `packages/shared/schema.ts` changes, migrations | `database-schema-agent` |
 | Charts in `packages/web/src/components/charts/` | `analytics-visualization-agent` |
 | `packages/api/auth/` files, permissions, RBAC | `security-authentication-agent` |
@@ -144,22 +120,16 @@ When ENABLED:
 | CSV import/export, bulk operations | `data-import-export-agent` |
 | Forms, React Hook Form, Zod validation | `form-validation-agent` |
 | `packages/api/routes/`, API endpoints | `api-route-architecture-agent` |
-| shadcn/ui, Tailwind, design system | `ui-component-library-agent` |
-| Performance issues, caching | `performance-optimization-agent` |
-| Unit/integration tests, coverage | `testing-qa-agent` |
+| UI component development, shadcn/ui, Tailwind | `ui-development-agent` |
+| Performance issues, caching, query optimization | `performance-optimization-agent` |
 | Email notifications, invitations | `notification-communication-agent` |
-| E2E testing, user flows | `ui-testing-agent` |
-| Design review, WCAG compliance | `visual-design-review-agent` |
-| UI component development | `ui-development-agent` |
-| ESLint/Prettier setup, pre-commit hooks | `code-quality-linting-agent` |
-| Feature flags, org settings | `feature-flag-settings-agent` |
-| npm audit, security vulnerabilities | `dependency-management-agent` |
-| Releases, Railway deployments | `deployment-release-agent` |
-| Org types, white-labeling | `multi-tenant-profiles-agent` |
-| Custom metrics, sport-specific tests | `custom-metric-config-agent` |
-| Sentry, APM, monitoring dashboards | `monitoring-observability-agent` |
-| GitHub Actions workflows | `ci-cd-pipeline-agent` |
-| GitHub issues, repo settings | `github-operations-agent` |
+| E2E testing, user flows, Playwright | `ui-testing-agent` |
+| Design review, WCAG compliance, UI/UX audit | `visual-design-review-agent` |
+| Feature flags, org settings, A/B testing | `feature-flag-settings-agent` |
+| npm audit, security vulnerabilities, dependency updates | `dependency-management-agent` |
+| CI/CD, GitHub Actions, releases, Railway deployments, repo settings | `devops-infrastructure-agent` |
+| Org types, white-labeling, tenant isolation | `multi-tenant-profiles-agent` |
+| Custom metrics, sport-specific tests, metric builder | `custom-metric-config-agent` |
 
 ## Development Commands
 
