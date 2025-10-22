@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -68,6 +68,8 @@ export default function Athletes() {
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(25);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Debounce search to avoid excessive API calls
   const debouncedSearch = useDebounce(filters.search, 300);
@@ -85,10 +87,10 @@ export default function Athletes() {
     }
   }, [location]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.teamId, filters.birthYearFrom, filters.birthYearTo, debouncedSearch]);
+  }, [filters.teamId, filters.birthYearFrom, filters.birthYearTo, debouncedSearch, sortColumn, sortDirection]);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -547,11 +549,78 @@ export default function Athletes() {
     }
   };
 
-  // Pagination calculations
-  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil((athletes?.length || 0) / itemsPerPage);
+  // Sort handler
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column - set to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort athletes before pagination
+  const sortedAthletes = [...(athletes || [])].sort((a: any, b: any) => {
+    if (!sortColumn) return 0;
+
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortColumn) {
+      case 'athlete':
+        aValue = a.fullName?.toLowerCase() || '';
+        bValue = b.fullName?.toLowerCase() || '';
+        break;
+      case 'team':
+        aValue = a.teams && a.teams.length > 0 ? a.teams[0].name.toLowerCase() : 'independent';
+        bValue = b.teams && b.teams.length > 0 ? b.teams[0].name.toLowerCase() : 'independent';
+        break;
+      case 'birthYear':
+        aValue = a.birthYear || 0;
+        bValue = b.birthYear || 0;
+        break;
+      case 'gender':
+        aValue = a.gender?.toLowerCase() || 'zzz';
+        bValue = b.gender?.toLowerCase() || 'zzz';
+        break;
+      case 'school':
+        aValue = a.school?.toLowerCase() || 'zzz';
+        bValue = b.school?.toLowerCase() || 'zzz';
+        break;
+      case 'sport':
+        aValue = a.sports && a.sports.length > 0 ? a.sports[0].toLowerCase() : 'zzz';
+        bValue = b.sports && b.sports.length > 0 ? b.sports[0].toLowerCase() : 'zzz';
+        break;
+      case 'status':
+        aValue = a.isActive ? 'active' : 'inactive';
+        bValue = b.isActive ? 'active' : 'inactive';
+        break;
+      default:
+        return 0;
+    }
+
+    // Handle null/undefined values
+    if (aValue === null || aValue === undefined) return 1;
+    if (bValue === null || bValue === undefined) return -1;
+
+    // Compare values
+    let comparison = 0;
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      comparison = aValue.localeCompare(bValue);
+    } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+      comparison = aValue - bValue;
+    }
+
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  // Pagination calculations (applied to sorted athletes)
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil((sortedAthletes?.length || 0) / itemsPerPage);
   const startIndex = itemsPerPage === -1 ? 0 : (currentPage - 1) * itemsPerPage;
-  const endIndex = itemsPerPage === -1 ? (athletes?.length || 0) : startIndex + itemsPerPage;
-  const paginatedAthletes = athletes?.slice(startIndex, endIndex) || [];
+  const endIndex = itemsPerPage === -1 ? (sortedAthletes?.length || 0) : startIndex + itemsPerPage;
+  const paginatedAthletes = sortedAthletes?.slice(startIndex, endIndex) || [];
 
   if (isLoading) {
     return (
@@ -860,13 +929,132 @@ export default function Athletes() {
                         data-testid="checkbox-select-all"
                       />
                     </th>
-                    <th className="px-6 py-3">Athlete</th>
-                    <th className="px-6 py-3">Team</th>
-                    <th className="px-6 py-3">Birth Year</th>
-                    <th className="px-6 py-3">Gender</th>
-                    <th className="px-6 py-3">School</th>
-                    <th className="px-6 py-3">Sport</th>
-                    <th className="px-6 py-3">Status</th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('athlete')}
+                      data-testid="sort-header-athlete"
+                    >
+                      <div className="flex items-center gap-2">
+                        Athlete
+                        {sortColumn === 'athlete' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('team')}
+                      data-testid="sort-header-team"
+                    >
+                      <div className="flex items-center gap-2">
+                        Team
+                        {sortColumn === 'team' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('birthYear')}
+                      data-testid="sort-header-birthYear"
+                    >
+                      <div className="flex items-center gap-2">
+                        Birth Year
+                        {sortColumn === 'birthYear' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('gender')}
+                      data-testid="sort-header-gender"
+                    >
+                      <div className="flex items-center gap-2">
+                        Gender
+                        {sortColumn === 'gender' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('school')}
+                      data-testid="sort-header-school"
+                    >
+                      <div className="flex items-center gap-2">
+                        School
+                        {sortColumn === 'school' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('sport')}
+                      data-testid="sort-header-sport"
+                    >
+                      <div className="flex items-center gap-2">
+                        Sport
+                        {sortColumn === 'sport' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-6 py-3 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('status')}
+                      data-testid="sort-header-status"
+                    >
+                      <div className="flex items-center gap-2">
+                        Status
+                        {sortColumn === 'status' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4" data-testid="icon-sort-desc" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="h-4 w-4" data-testid="icon-sort-unsorted" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-6 py-3">Invitation</th>
                     <th className="px-6 py-3">Actions</th>
                   </tr>
