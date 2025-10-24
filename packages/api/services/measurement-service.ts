@@ -333,7 +333,7 @@ export class MeasurementService {
     }
 
     // Pagination parameters with safety limits to prevent memory exhaustion
-    const limit = Math.min(filters?.limit || 1000, 1000); // Default 1000, max 1000
+    const limit = Math.min(filters?.limit || 1000, 20000); // Default 1000, max 20000 for chart data
     const offset = Math.min(filters?.offset || 0, 10000); // Cap offset at 10k to prevent expensive scans
 
     // Build WHERE clause

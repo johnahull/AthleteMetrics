@@ -59,7 +59,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
           break;
       }
 
-      const url = `/api/measurements?organizationId=${organizationId}&dateFrom=${dateFrom}`;
+      const url = `/api/measurements?organizationId=${organizationId}&dateFrom=${dateFrom}&limit=20000`;
       const response = await fetch(url, {
         credentials: 'include'
       });
