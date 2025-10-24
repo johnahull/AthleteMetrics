@@ -160,7 +160,7 @@ export function registerTeamRoutes(app: Express) {
       const updateSchema = insertTeamSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
-      const updatedTeam = await teamService.updateTeam(teamId, validatedData, existingTeam.organization.id);
+      const updatedTeam = await teamService.updateTeam(teamId, validatedData);
       res.json(updatedTeam);
     } catch (error) {
       console.error("Update team error:", error);
@@ -243,7 +243,7 @@ export function registerTeamRoutes(app: Express) {
       }
 
       const archiveDate = archivedAt ? new Date(archivedAt) : new Date();
-      const archivedTeam = await teamService.archiveTeam(teamId, archiveDate, season, existingTeam.organization.id);
+      const archivedTeam = await teamService.archiveTeam(teamId, archiveDate, season);
 
       res.json(archivedTeam);
     } catch (error) {

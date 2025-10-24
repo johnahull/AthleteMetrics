@@ -12,7 +12,7 @@ import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for measurement endpoints
