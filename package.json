@@ -16,6 +16,7 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/run-migrations.js",
+    "db:migrate:backfill-org": "tsx scripts/migrations/backfill-measurement-organization-id.js",
     "db:validate": "node scripts/validate-migrations.js",
     "test": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest",
     "test:ui": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest --ui",
