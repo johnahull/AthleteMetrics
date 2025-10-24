@@ -5,7 +5,7 @@
 
 import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, type User } from '@shared/schema';
-import { eq, and, gte, lte, ne, desc, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
 
 interface AthleteStats {
   bestFly10?: number;
@@ -267,7 +267,15 @@ export class AnalyticsService {
     let measurementsWithUsers: Array<{ metric: string; value: string; userId: string; userName: string }>;
     if (organizationId) {
       // Get measurements for athletes in the organization
-      const orgAthleteIds = athletes.map((a) => a.id);
+      // Re-fetch athlete IDs since we only have counts above
+      const athleteIds = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(eq(teams.organizationId, organizationId))
+        .groupBy(userTeams.userId);
+
+      const orgAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
       if (orgAthleteIds.length > 0) {
         measurementsWithUsers = await db
           .select({
