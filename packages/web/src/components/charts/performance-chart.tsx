@@ -71,17 +71,17 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
   });
 
   // Process data for weekly trends
-  const processWeeklyData = (measurements: any[]) => {
+  const processWeeklyData = (measurements: any[], timeRange: string) => {
     if (!measurements || measurements.length === 0) return { labels: [], datasets: [] };
 
     // Group by week and find best performances
     const weeklyData = new Map();
-    
+
     measurements.forEach(measurement => {
       const date = new Date(measurement.date);
       const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
       const weekKey = weekStart.toISOString().split('T')[0];
-      
+
       if (!weeklyData.has(weekKey)) {
         weeklyData.set(weekKey, {
           date: weekStart,
@@ -89,10 +89,10 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
           bestVertical: null,
         });
       }
-      
+
       const week = weeklyData.get(weekKey);
       const value = parseFloat(measurement.value);
-      
+
       if (measurement.metric === "FLY10_TIME") {
         if (!week.bestFly10 || value < week.bestFly10) {
           week.bestFly10 = value;
@@ -105,9 +105,18 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
     });
 
     // Sort by date and prepare chart data
-    const sortedWeeks = Array.from(weeklyData.values())
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .slice(-8); // Last 8 weeks
+    let sortedWeeks = Array.from(weeklyData.values())
+      .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // Limit weeks based on time range
+    if (timeRange === "last8weeks") {
+      sortedWeeks = sortedWeeks.slice(-8);
+    } else if (timeRange === "last30days") {
+      sortedWeeks = sortedWeeks.slice(-5); // ~4-5 weeks
+    } else if (timeRange === "last90days") {
+      sortedWeeks = sortedWeeks.slice(-13); // ~13 weeks
+    }
+    // For "thisyear", show all weeks (no slice)
 
     const labels = sortedWeeks.map(week => 
       week.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -139,7 +148,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
     };
   };
 
-  const chartData = processWeeklyData((measurements as any[]) || []);
+  const chartData = processWeeklyData((measurements as any[]) || [], timeRange);
 
   const options = {
     responsive: true,
