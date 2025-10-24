@@ -167,7 +167,7 @@ export class MeasurementService {
       if (activeTeams.length === 1) {
         // Single team - auto-assign
         teamId = activeTeams[0].teamId;
-        season = activeTeams[0].season ?? null; // Use null consistently for database writes
+        season = activeTeams[0].season ?? undefined;
         teamContextAuto = true;
 
         console.log(
@@ -202,7 +202,7 @@ export class MeasurementService {
       if (team) {
         teamNameSnapshot = team.teams.name;
         organizationId = team.teams.organizationId;
-        season = season ?? team.teams.season ?? null; // Use null consistently for database writes
+        season = season ?? team.teams.season ?? undefined;
       }
     }
 
