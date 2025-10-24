@@ -12,16 +12,17 @@ describe('TeamService', () => {
   beforeEach(async () => {
     teamService = new TeamService();
 
-    // Create test organization
+    // Create test organization with unique name to avoid race conditions
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const [org] = await db.insert(organizations).values({
-      name: `Test Org ${Date.now()}`,
+      name: `Test Org ${uniqueSuffix}`,
       description: 'Test organization for team service tests',
     }).returning();
     testOrgId = org.id;
 
     // Create test user
     const [user] = await db.insert(users).values({
-      username: `testuser${Date.now()}`,
+      username: `testuser${uniqueSuffix}`,
       emails: ['test@example.com'],
       password: 'hashedpassword',
       firstName: 'Test',

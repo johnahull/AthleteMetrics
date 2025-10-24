@@ -14,9 +14,10 @@ describe('MeasurementService', () => {
   beforeEach(async () => {
     measurementService = new MeasurementService();
 
-    // Create test organization
+    // Create test organization with unique name to avoid race conditions
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const [org] = await db.insert(organizations).values({
-      name: `Test Org ${Date.now()}`,
+      name: `Test Org ${uniqueSuffix}`,
       description: 'Test organization for measurement tests',
     }).returning();
     testOrgId = org.id;
@@ -31,7 +32,7 @@ describe('MeasurementService', () => {
 
     // Create test athlete
     const [athlete] = await db.insert(users).values({
-      username: `athlete${Date.now()}`,
+      username: `athlete${uniqueSuffix}`,
       emails: ['athlete@test.com'],
       password: 'hashedpassword',
       firstName: 'Test',
@@ -44,7 +45,7 @@ describe('MeasurementService', () => {
 
     // Create test submitter (coach)
     const [submitter] = await db.insert(users).values({
-      username: `coach${Date.now()}`,
+      username: `coach${uniqueSuffix}`,
       emails: ['coach@test.com'],
       password: 'hashedpassword',
       firstName: 'Test',

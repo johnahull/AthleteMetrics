@@ -15,9 +15,10 @@ describe('AnalyticsService', () => {
   beforeEach(async () => {
     analyticsService = new AnalyticsService();
 
-    // Create test organization
+    // Create test organization with unique name to avoid race conditions
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const [org] = await db.insert(organizations).values({
-      name: `Test Org ${Date.now()}`,
+      name: `Test Org ${uniqueSuffix}`,
       description: 'Test organization for analytics tests',
     }).returning();
     testOrgId = org.id;
@@ -32,7 +33,7 @@ describe('AnalyticsService', () => {
 
     // Create test athletes
     const [athlete1] = await db.insert(users).values({
-      username: `athlete1${Date.now()}`,
+      username: `athlete1${uniqueSuffix}`,
       emails: ['athlete1@test.com'],
       password: 'hashedpassword',
       firstName: 'John',
@@ -45,7 +46,7 @@ describe('AnalyticsService', () => {
     testUserId1 = athlete1.id;
 
     const [athlete2] = await db.insert(users).values({
-      username: `athlete2${Date.now()}`,
+      username: `athlete2${uniqueSuffix}`,
       emails: ['athlete2@test.com'],
       password: 'hashedpassword',
       firstName: 'Jane',
@@ -59,7 +60,7 @@ describe('AnalyticsService', () => {
 
     // Create test submitter
     const [submitter] = await db.insert(users).values({
-      username: `coach${Date.now()}`,
+      username: `coach${uniqueSuffix}`,
       emails: ['coach@test.com'],
       password: 'hashedpassword',
       firstName: 'Coach',
