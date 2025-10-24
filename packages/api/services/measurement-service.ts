@@ -278,38 +278,89 @@ export class MeasurementService {
   /**
    * Update measurement fields
    * Note: submittedBy cannot be updated after creation
+   * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
    * @param id Measurement ID
    * @param measurement Partial measurement data
    * @returns Updated measurement
+   * @throws Error if measurement not found or transaction fails
    */
   async updateMeasurement(
     id: string,
     measurement: Partial<InsertMeasurement>
   ): Promise<Measurement> {
-    const updateData: Partial<typeof measurements.$inferInsert> = {};
+    // Wrap in transaction to prevent race conditions during concurrent updates
+    // Race condition scenario: Two users update same measurement simultaneously
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock the row with FOR UPDATE to prevent concurrent modifications
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(eq(measurements.id, id))
+          .for('update');
 
-    if (measurement.userId) updateData.userId = measurement.userId;
-    // submittedBy cannot be updated after creation (intentionally excluded)
-    if (measurement.date) updateData.date = measurement.date;
-    if (measurement.metric) updateData.metric = measurement.metric;
-    if (measurement.value !== undefined)
-      updateData.value = String(measurement.value);
-    if (measurement.notes !== undefined) updateData.notes = measurement.notes;
-    if (measurement.flyInDistance !== undefined)
-      updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
+        if (!existing) {
+          throw new Error('Measurement not found');
+        }
 
-    // Check if there are any valid fields to update
-    if (Object.keys(updateData).length === 0) {
-      throw new Error('No valid fields to update');
+        const updateData: Partial<typeof measurements.$inferInsert> = {};
+
+        if (measurement.userId) updateData.userId = measurement.userId;
+        // submittedBy cannot be updated after creation (intentionally excluded)
+        if (measurement.date) updateData.date = measurement.date;
+        if (measurement.metric) {
+          updateData.metric = measurement.metric;
+
+          // CRITICAL: Recalculate units when metric changes
+          // Different metrics use different units (seconds, inches, ratio)
+          const newUnits =
+            measurement.metric === 'FLY10_TIME' ||
+            measurement.metric === 'T_TEST' ||
+            measurement.metric === 'DASH_40YD' ||
+            measurement.metric === 'AGILITY_505' ||
+            measurement.metric === 'AGILITY_5105'
+              ? 's'
+              : measurement.metric === 'RSI'
+              ? 'ratio'
+              : 'in';
+
+          updateData.units = newUnits;
+        }
+        if (measurement.value !== undefined)
+          updateData.value = String(measurement.value);
+        if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+        if (measurement.flyInDistance !== undefined)
+          updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
+
+        // Check if there are any valid fields to update
+        if (Object.keys(updateData).length === 0) {
+          throw new Error('No valid fields to update');
+        }
+
+        const [updated] = await tx
+          .update(measurements)
+          .set(updateData)
+          .where(eq(measurements.id, id))
+          .returning();
+
+        return updated;
+      });
+    } catch (error) {
+      // Preserve error specificity
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        throw new Error(`Failed to update measurement: ${error.message}`);
+      }
+      throw new Error(`Failed to update measurement due to unexpected error: ${String(error)}`);
     }
-
-    const [updated] = await db
-      .update(measurements)
-      .set(updateData)
-      .where(eq(measurements.id, id))
-      .returning();
-
-    return updated;
   }
 
   /**

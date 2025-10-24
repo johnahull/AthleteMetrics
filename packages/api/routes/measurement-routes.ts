@@ -261,6 +261,12 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - athletes can only update their own measurements" });
       }
 
+      // SECURITY: Athletes cannot modify measurements submitted by coaches
+      // Prevents athletes from changing coach-submitted data (e.g., official testing results)
+      if (user.role === 'athlete' && existingMeasurement.submittedBy !== user.id) {
+        return res.status(403).json({ message: "Athletes cannot modify coach-submitted measurements" });
+      }
+
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
       }
