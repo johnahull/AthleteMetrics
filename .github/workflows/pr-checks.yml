@@ -40,7 +40,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: athlete_performance_test
+          POSTGRES_DB: athletemetrics_test
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -60,7 +60,7 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athlete_performance_test
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athletemetrics_test
 
       - name: Run unit tests
         run: npm run test:unit
@@ -68,7 +68,13 @@ jobs:
           NODE_ENV: test
           NODE_OPTIONS: --max-old-space-size=4096
           SESSION_SECRET: test-secret-key-for-ci
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athlete_performance_test
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athletemetrics_test
+
+      - name: Cleanup test database
+        if: always()
+        run: ./scripts/ci-test-cleanup.sh
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athletemetrics_test
 
   integration-tests:
     name: Integration Tests
@@ -119,6 +125,12 @@ jobs:
           ADMIN_USER: admin
           ADMIN_EMAIL: admin@test.com
           ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+
+      - name: Cleanup test database
+        if: always()
+        run: ./scripts/ci-test-cleanup.sh
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
 
   build:
     name: Build Verification
