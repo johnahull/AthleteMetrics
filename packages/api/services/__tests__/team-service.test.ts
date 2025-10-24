@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { TeamService } from '../team-service';
 import { db } from '../../db';
 import { teams, organizations, userTeams, users } from '@shared/schema';
@@ -8,6 +8,14 @@ describe('TeamService', () => {
   let teamService: TeamService;
   let testOrgId: string;
   let testUserId: string;
+
+  beforeAll(async () => {
+    // Safety check: prevent running tests against production database
+    const dbUrl = process.env.DATABASE_URL || '';
+    if (!dbUrl.includes('test') && !dbUrl.includes('localhost')) {
+      throw new Error('DATABASE_URL must include "test" or "localhost" for safety. Running tests against production is forbidden.');
+    }
+  });
 
   beforeEach(async () => {
     teamService = new TeamService();

@@ -313,9 +313,6 @@ export class AnalyticsService {
       { key: 'RSI', lowerIsBetter: false },
     ] as const;
 
-    // Validate metric keys to prevent SQL injection
-    const validMetricKeys = new Set(VALID_METRICS.map(m => m.key));
-
     // Calculate best for each metric using SQL aggregation (much faster than JavaScript reduce)
     const bestMetrics: Record<string, any> = {
       totalAthletes,
@@ -323,50 +320,60 @@ export class AnalyticsService {
       totalTeams,
     };
 
-    // Use database-level aggregation (MIN/MAX) instead of application-level reduce
-    // This is 10-100x faster for large datasets
-    for (const { key, lowerIsBetter } of VALID_METRICS) {
-      // Additional validation: ensure metric key is in our allowed set
-      if (!validMetricKeys.has(key)) {
-        continue; // Skip invalid metrics silently (should never happen with const array)
-      }
-      // SECURITY: Use parameterized queries for metric key (defense in depth)
-      // Cast to NUMERIC for proper min/max, then to FLOAT to ensure JS number type
-      // PostgreSQL NUMERIC returns string, FLOAT returns number
-      const aggregateFunc = lowerIsBetter
-        ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))::float`
-        : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))::float`;
-
-      const bestQuery = db
-        .select({
-          bestValue: aggregateFunc,
-          userName: users.fullName,
-        })
-        .from(measurements)
-        .innerJoin(users, eq(measurements.userId, users.id))
-        .where(
-          and(
-            ...measurementConditions,
-            // Use parameterized value instead of template literal (prevents SQL injection)
-            eq(measurements.metric, sql.raw(`?::text`, [key])),
-            ...(organizationId && cachedAthleteIds && cachedAthleteIds.length > 0
-              ? [inArray(measurements.userId, cachedAthleteIds)]
-              : [])
-          )
+    // Optimized: Single query for all metrics using CASE WHEN
+    // This eliminates N+1 query pattern (7 queries -> 1 query)
+    const metricBests = await db
+      .select({
+        metric: measurements.metric,
+        userId: users.id,
+        userName: users.fullName,
+        bestValue: sql<number>`
+          CASE
+            WHEN ${measurements.metric} IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            THEN MIN(CAST(${measurements.value} AS NUMERIC))::float
+            ELSE MAX(CAST(${measurements.value} AS NUMERIC))::float
+          END
+        `,
+      })
+      .from(measurements)
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .where(
+        and(
+          ...measurementConditions,
+          inArray(measurements.metric, VALID_METRICS.map(m => m.key)),
+          ...(organizationId && cachedAthleteIds && cachedAthleteIds.length > 0
+            ? [inArray(measurements.userId, cachedAthleteIds)]
+            : [])
         )
-        .groupBy(users.id, users.fullName)
-        .orderBy(lowerIsBetter ? sql`MIN(CAST(${measurements.value} AS NUMERIC))::float ASC` : sql`MAX(CAST(${measurements.value} AS NUMERIC))::float DESC`)
-        .limit(1);
+      )
+      .groupBy(measurements.metric, users.id, users.fullName);
 
-      const [bestResult] = await bestQuery;
+    // Post-process: find best for each metric
+    const metricMap = new Map<string, { lowerIsBetter: boolean }>();
+    VALID_METRICS.forEach(m => metricMap.set(m.key, { lowerIsBetter: m.lowerIsBetter }));
 
-      if (bestResult && bestResult.bestValue !== null) {
-        bestMetrics[`best${key}Last30Days`] = {
-          value: bestResult.bestValue, // Already a number due to ::float cast
-          userName: bestResult.userName,
-        };
+    const bestByMetric = new Map<string, { value: number; userName: string }>();
+
+    metricBests.forEach(result => {
+      const metricInfo = metricMap.get(result.metric);
+      if (!metricInfo) return;
+
+      const existing = bestByMetric.get(result.metric);
+      const isBetter = !existing ||
+        (metricInfo.lowerIsBetter ? result.bestValue < existing.value : result.bestValue > existing.value);
+
+      if (isBetter) {
+        bestByMetric.set(result.metric, {
+          value: result.bestValue,
+          userName: result.userName,
+        });
       }
-    }
+    });
+
+    // Populate results
+    bestByMetric.forEach((best, metric) => {
+      bestMetrics[`best${metric}Last30Days`] = best;
+    });
 
     return bestMetrics as DashboardStats;
   }

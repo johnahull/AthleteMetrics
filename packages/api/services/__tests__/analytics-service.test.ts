@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { AnalyticsService } from '../analytics-service';
 import { db } from '../../db';
 import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
@@ -11,6 +11,14 @@ describe('AnalyticsService', () => {
   let testUserId1: string;
   let testUserId2: string;
   let testSubmitterId: string;
+
+  beforeAll(async () => {
+    // Safety check: prevent running tests against production database
+    const dbUrl = process.env.DATABASE_URL || '';
+    if (!dbUrl.includes('test') && !dbUrl.includes('localhost')) {
+      throw new Error('DATABASE_URL must include "test" or "localhost" for safety. Running tests against production is forbidden.');
+    }
+  });
 
   beforeEach(async () => {
     analyticsService = new AnalyticsService();

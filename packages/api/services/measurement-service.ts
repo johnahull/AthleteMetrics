@@ -247,15 +247,31 @@ export class MeasurementService {
       return newMeasurement;
       });
     } catch (error) {
-      // Handle race conditions and transaction failures
+      // Preserve error specificity - don't wrap validation errors
       if (error instanceof Error) {
-        if (error.message.includes('User not found')) {
-          throw error; // Re-throw user validation errors
+        // Re-throw validation errors without modification
+        if (error.message.includes('User not found') ||
+            error.message.includes('Team not found') ||
+            error.message.includes('not found')) {
+          throw error;
         }
-        // Race condition or database constraint violation
+        // Database constraint violations - preserve original message
+        if (error.message.includes('constraint') ||
+            error.message.includes('foreign key') ||
+            error.message.includes('unique')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        // Generic database error - preserve original message for debugging
         throw new Error(`Failed to create measurement: ${error.message}`);
       }
-      throw new Error('Failed to create measurement due to unexpected error');
+      // Unknown error type - wrap with context
+      throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
     }
   }
 
@@ -428,6 +444,12 @@ export class MeasurementService {
     // Enrich with team data
     const uniqueUserIds = [...new Set(results.map((r: any) => r.userId))];
     let measurementsWithTeams = results;
+
+    // Safety check: prevent memory exhaustion from large user sets
+    // This should never happen with pagination, but defensive programming is good practice
+    if (uniqueUserIds.length > 10000) {
+      console.warn(`getMeasurements: Large user set detected (${uniqueUserIds.length} users). Consider reducing page size.`);
+    }
 
     if (uniqueUserIds.length > 0) {
       // Query user teams
