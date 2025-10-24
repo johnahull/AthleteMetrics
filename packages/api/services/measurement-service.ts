@@ -167,7 +167,7 @@ export class MeasurementService {
       if (activeTeams.length === 1) {
         // Single team - auto-assign
         teamId = activeTeams[0].teamId;
-        season = activeTeams[0].season ?? undefined;
+        season = activeTeams[0].season ?? null; // Use null consistently for database writes
         teamContextAuto = true;
 
         console.log(
@@ -202,7 +202,7 @@ export class MeasurementService {
       if (team) {
         teamNameSnapshot = team.teams.name;
         organizationId = team.teams.organizationId;
-        season = season ?? team.teams.season ?? undefined;
+        season = season ?? team.teams.season ?? null; // Use null consistently for database writes
       }
     }
 
@@ -332,9 +332,9 @@ export class MeasurementService {
       conditions.push(eq(measurements.isVerified, true));
     }
 
-    // Pagination parameters with safety limits
-    const limit = Math.min(filters?.limit || 1000, 10000); // Default 1000, max 10000
-    const offset = Math.min(filters?.offset || 0, 100000); // Cap offset to prevent sequential scans
+    // Pagination parameters with safety limits to prevent memory exhaustion
+    const limit = Math.min(filters?.limit || 1000, 1000); // Default 1000, max 1000
+    const offset = Math.min(filters?.offset || 0, 10000); // Cap offset at 10k to prevent expensive scans
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

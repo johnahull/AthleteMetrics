@@ -252,67 +252,71 @@ export class TeamService {
    * @returns User team membership
    */
   async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
-    try {
-      // Check if user has an active membership in this team
-      const existingActiveAssignment = await db
-        .select()
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.userId, userId),
-            eq(userTeams.teamId, teamId),
-            eq(userTeams.isActive, true)
+    // Use transaction with row-level locking to prevent race conditions
+    return await db.transaction(async (tx) => {
+      try {
+        // Check if user has an active membership in this team (with row-level lock)
+        const existingActiveAssignment = await tx
+          .select()
+          .from(userTeams)
+          .where(
+            and(
+              eq(userTeams.userId, userId),
+              eq(userTeams.teamId, teamId),
+              eq(userTeams.isActive, true)
+            )
           )
-        );
+          .for('update'); // Row-level lock prevents concurrent modifications
 
-      if (existingActiveAssignment.length > 0) {
-        console.log('User already has active assignment to team');
-        return existingActiveAssignment[0];
-      }
+        if (existingActiveAssignment.length > 0) {
+          console.log('User already has active assignment to team');
+          return existingActiveAssignment[0];
+        }
 
-      // Check if user has an inactive membership that can be reactivated
-      const existingInactiveAssignment = await db
-        .select()
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.userId, userId),
-            eq(userTeams.teamId, teamId),
-            eq(userTeams.isActive, false)
-          )
-        );
+        // Check if user has an inactive membership that can be reactivated
+        const existingInactiveAssignment = await tx
+          .select()
+          .from(userTeams)
+          .where(
+            and(
+              eq(userTeams.userId, userId),
+              eq(userTeams.teamId, teamId),
+              eq(userTeams.isActive, false)
+            )
+          );
 
-      if (existingInactiveAssignment.length > 0) {
-        // Reactivate the membership
-        const [reactivated] = await db
-          .update(userTeams)
-          .set({
+        if (existingInactiveAssignment.length > 0) {
+          // Reactivate the membership
+          const [reactivated] = await tx
+            .update(userTeams)
+            .set({
+              isActive: true,
+              leftAt: null,
+              joinedAt: new Date(), // Update join date for new active period
+            })
+            .where(eq(userTeams.id, existingInactiveAssignment[0].id))
+            .returning();
+
+          console.log('Reactivated inactive team membership');
+          return reactivated;
+        }
+
+        // No existing membership - create new one
+        const [newAssignment] = await tx
+          .insert(userTeams)
+          .values({
+            userId,
+            teamId,
             isActive: true,
-            leftAt: null,
-            joinedAt: new Date(), // Update join date for new active period
           })
-          .where(eq(userTeams.id, existingInactiveAssignment[0].id))
           .returning();
 
-        console.log('Reactivated inactive team membership');
-        return reactivated;
+        return newAssignment;
+      } catch (error) {
+        console.error('Error adding user to team:', error);
+        throw error;
       }
-
-      // No existing membership - create new one
-      const [newAssignment] = await db
-        .insert(userTeams)
-        .values({
-          userId,
-          teamId,
-          isActive: true,
-        })
-        .returning();
-
-      return newAssignment;
-    } catch (error) {
-      console.error('Error adding user to team:', error);
-      throw error;
-    }
+    });
   }
 
   /**
