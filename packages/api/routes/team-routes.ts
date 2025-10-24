@@ -12,6 +12,7 @@ import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { ZodError } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
+import { RoleManager } from "../auth/role-manager";
 
 // Rate limiting for team endpoints
 const teamLimiter = rateLimit({
@@ -102,7 +103,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Create team (org admins and coaches)
    */
-  app.post("/api/teams", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams", teamMutationLimiter, requireAuth, RoleManager.requirePermission('CREATE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -132,7 +133,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Update team (org admins and coaches)
    */
-  app.put("/api/teams/:id", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.put("/api/teams/:id", teamMutationLimiter, requireAuth, RoleManager.requirePermission('MANAGE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -171,7 +172,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Delete team (org admins only)
    */
-  app.delete("/api/teams/:id", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/teams/:id", teamMutationLimiter, requireAuth, RoleManager.requirePermission('DELETE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -216,7 +217,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Archive team (org admins and coaches)
    */
-  app.post("/api/teams/:id/archive", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/archive", teamMutationLimiter, requireAuth, RoleManager.requirePermission('MANAGE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -251,7 +252,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Unarchive team (org admins and coaches)
    */
-  app.post("/api/teams/:id/unarchive", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/unarchive", teamMutationLimiter, requireAuth, RoleManager.requirePermission('MANAGE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -283,7 +284,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Add user to team (org admins and coaches)
    */
-  app.post("/api/teams/:id/members", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.post("/api/teams/:id/members", teamMutationLimiter, requireAuth, RoleManager.requirePermission('MANAGE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -339,7 +340,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Remove user from team (org admins and coaches)
    */
-  app.delete("/api/teams/:id/members/:userId", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.delete("/api/teams/:id/members/:userId", teamMutationLimiter, requireAuth, RoleManager.requirePermission('MANAGE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -372,7 +373,7 @@ export function registerTeamRoutes(app: Express) {
   /**
    * Update team membership (org admins and coaches)
    */
-  app.patch("/api/teams/:id/members/:userId", teamMutationLimiter, requireAuth, async (req, res) => {
+  app.patch("/api/teams/:id/members/:userId", teamMutationLimiter, requireAuth, RoleManager.requirePermission('MANAGE_TEAM'), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {

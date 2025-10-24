@@ -189,6 +189,7 @@ export class AnalyticsService {
     // Get athlete counts using database-level filtering (more efficient than application-level)
     let totalAthletes: number;
     let activeAthletes: number;
+    let cachedAthleteIds: string[] | undefined; // Cache athlete IDs to avoid duplicate query
 
     if (organizationId) {
       // Get athlete IDs through team membership
@@ -200,6 +201,7 @@ export class AnalyticsService {
         .groupBy(userTeams.userId);
 
       const uniqueAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
+      cachedAthleteIds = uniqueAthleteIds; // Cache for reuse in measurement query
 
       if (uniqueAthleteIds.length > 0) {
         // Execute both counts in parallel using database filtering
@@ -266,17 +268,8 @@ export class AnalyticsService {
     // Use JOIN to get user names in a single query (fixes N+1 query issue)
     let measurementsWithUsers: Array<{ metric: string; value: string; userId: string; userName: string }>;
     if (organizationId) {
-      // Get measurements for athletes in the organization
-      // Re-fetch athlete IDs since we only have counts above
-      const athleteIds = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId))
-        .groupBy(userTeams.userId);
-
-      const orgAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
-      if (orgAthleteIds.length > 0) {
+      // Reuse cached athlete IDs from earlier query (prevents duplicate database query)
+      if (cachedAthleteIds && cachedAthleteIds.length > 0) {
         measurementsWithUsers = await db
           .select({
             metric: measurements.metric,

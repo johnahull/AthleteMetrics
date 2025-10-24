@@ -2,6 +2,8 @@
 -- Purpose: Track organization context and team name at time of measurement for historical accuracy
 -- Context: These are historical references WITHOUT foreign key constraints to preserve data integrity
 
+BEGIN;
+
 -- Add organization_id column (historical reference to organization at time of measurement)
 ALTER TABLE measurements
 ADD COLUMN IF NOT EXISTS organization_id VARCHAR;
@@ -19,12 +21,15 @@ COMMENT ON COLUMN measurements.team_name_snapshot IS
 
 -- Backfill organization_id from team relationships for existing measurements
 -- This ensures historical data maintains organization context
+-- Wrapped in transaction to ensure atomic operation and prevent partial updates
 UPDATE measurements m
 SET organization_id = t.organization_id,
     team_name_snapshot = t.name
 FROM teams t
 WHERE m.team_id = t.id
   AND m.organization_id IS NULL;
+
+COMMIT;
 
 -- Note: Measurements without team_id will have NULL organization_id
 -- This is acceptable as they represent measurements without team context
