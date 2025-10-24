@@ -189,7 +189,11 @@ export function registerMeasurementRoutes(app: Express) {
           .select({ organizationId: teams.organizationId })
           .from(userTeams)
           .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .where(eq(userTeams.userId, validatedData.userId));
+          .where(and(
+            eq(userTeams.userId, validatedData.userId),
+            eq(userTeams.isActive, true),      // SECURITY: Only current team memberships
+            eq(teams.isArchived, false)        // SECURITY: Only active teams
+          ));
 
         if (targetUserTeams.length === 0) {
           return res.status(404).json({ message: "User not found or not on any team" });
@@ -249,6 +253,13 @@ export function registerMeasurementRoutes(app: Express) {
       const existingMeasurement = await measurementService.getMeasurement(measurementId);
       if (!existingMeasurement) {
         return res.status(404).json({ message: "Measurement not found" });
+      }
+
+      // SECURITY: Athletes cannot modify verified measurements (only coaches/admins can)
+      if (user.role === 'athlete' && existingMeasurement.isVerified) {
+        return res.status(403).json({
+          message: "Cannot modify verified measurements. Contact your coach to make changes."
+        });
       }
 
       // Permission check: submitter, org admins/coaches in same org, or site admins can update
@@ -311,6 +322,13 @@ export function registerMeasurementRoutes(app: Express) {
       const existingMeasurement = await measurementService.getMeasurement(measurementId);
       if (!existingMeasurement) {
         return res.status(404).json({ message: "Measurement not found" });
+      }
+
+      // SECURITY: Athletes cannot delete verified measurements (only coaches/admins can)
+      if (user.role === 'athlete' && existingMeasurement.isVerified) {
+        return res.status(403).json({
+          message: "Cannot delete verified measurements. Contact your coach to make changes."
+        });
       }
 
       // Permission check: submitter, org admins/coaches in same org, or site admins can delete

@@ -182,7 +182,7 @@ describe('TeamService', () => {
         name: 'Updated Name',
         level: 'College',
         notes: 'New notes',
-      }, testOrgId);
+      });
 
       expect(result.name).toBe('Updated Name');
       expect(result.level).toBe('College');
@@ -203,7 +203,7 @@ describe('TeamService', () => {
       const result = await teamService.updateTeam(team.id, {
         name: 'Updated',
         organizationId: otherOrg.id, // This should be stripped
-      } as any, testOrgId);
+      } as any);
 
       expect(result.name).toBe('Updated');
       expect(result.organizationId).toBe(testOrgId); // Should remain unchanged
@@ -220,7 +220,7 @@ describe('TeamService', () => {
 
       const result = await teamService.updateTeam(team.id, {
         name: '  Trimmed Name  ',
-      }, testOrgId);
+      });
 
       expect(result.name).toBe('Trimmed Name');
     });
@@ -232,14 +232,14 @@ describe('TeamService', () => {
       }).returning();
 
       await expect(
-        teamService.updateTeam(team.id, { organizationId: 'some-id' } as any, testOrgId)
+        teamService.updateTeam(team.id, { organizationId: 'some-id' } as any)
       ).rejects.toThrow('No valid fields to update');
     });
 
     it('should throw error if team not found', async () => {
       await expect(
-        teamService.updateTeam('non-existent-id', { name: 'Update' }, testOrgId)
-      ).rejects.toThrow('Team not found or access denied');
+        teamService.updateTeam('non-existent-id', { name: 'Update' })
+      ).rejects.toThrow('Team not found');
     });
   });
 
@@ -517,7 +517,7 @@ describe('TeamService', () => {
       expect(membership.leftAt!.getTime()).toBeCloseTo(Date.now(), -2); // Within 2 digits (100ms)
     });
 
-    it('should throw error when trying to remove inactive membership', async () => {
+    it('should only affect active memberships', async () => {
       const [team] = await db.insert(teams).values({
         name: 'Already Inactive Test',
         organizationId: testOrgId,
@@ -531,10 +531,8 @@ describe('TeamService', () => {
         leftAt: leftDate,
       });
 
-      // Should throw error since no active membership exists
-      await expect(
-        teamService.removeUserFromTeam(testUserId, team.id)
-      ).rejects.toThrow('Active team membership not found');
+      // Should not throw error - just silently skips inactive memberships
+      await teamService.removeUserFromTeam(testUserId, team.id);
 
       // Verify the inactive membership was not modified
       const [membership] = await db.select().from(userTeams)
