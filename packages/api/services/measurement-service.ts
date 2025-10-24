@@ -240,7 +240,7 @@ export class MeasurementService {
     id: string,
     measurement: Partial<InsertMeasurement>
   ): Promise<Measurement> {
-    const updateData: any = {};
+    const updateData: Partial<typeof measurements.$inferInsert> = {};
 
     if (measurement.userId) updateData.userId = measurement.userId;
     // submittedBy cannot be updated after creation (intentionally excluded)
@@ -298,7 +298,7 @@ export class MeasurementService {
    * @param filters Measurement filters
    * @returns Array of measurements
    */
-  async getMeasurements(filters?: MeasurementFilters): Promise<any[]> {
+  async getMeasurements(filters?: MeasurementFilters): Promise<Measurement[]> {
     // Build query conditions
     const conditions = [];
 
@@ -312,6 +312,10 @@ export class MeasurementService {
 
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));
+    }
+
+    if (filters?.organizationId) {
+      conditions.push(eq(measurements.organizationId, filters.organizationId));
     }
 
     if (filters?.dateFrom) {
@@ -330,7 +334,7 @@ export class MeasurementService {
     let query = db.select().from(measurements);
 
     if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
+      query = query.where(and(...conditions));
     }
 
     const results = await query;

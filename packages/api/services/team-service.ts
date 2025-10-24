@@ -42,10 +42,10 @@ export class TeamService {
     conditions.push(ne(teams.isArchived, true));
 
     if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
+      query = query.where(and(...conditions));
     }
 
-    const result: any[] = await query;
+    const result = await query;
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
       organization: org,
@@ -60,7 +60,7 @@ export class TeamService {
   async getTeam(
     id: string
   ): Promise<(Team & { organization: Organization }) | undefined> {
-    const result: any[] = await db
+    const result = await db
       .select()
       .from(teams)
       .innerJoin(organizations, eq(teams.organizationId, organizations.id))
@@ -148,7 +148,7 @@ export class TeamService {
     archiveDate: Date,
     season: string
   ): Promise<Team> {
-    return await db.transaction(async (tx: any) => {
+    return await db.transaction(async (tx) => {
       const [archived] = await tx
         .update(teams)
         .set({

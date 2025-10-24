@@ -7,9 +7,11 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { TeamService } from "../services/team-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import { insertTeamSchema } from "@shared/schema";
+import { insertTeamSchema, measurements } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { ZodError } from "zod";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
 
 // Rate limiting for team endpoints
 const teamLimiter = rateLimit({
@@ -187,6 +189,19 @@ export function registerTeamRoutes(app: Express) {
       // Permission check: non-admin users can only delete their organization's teams
       if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+      }
+
+      // Check if team has measurements - prevent deletion if it does
+      const teamMeasurements = await db
+        .select()
+        .from(measurements)
+        .where(eq(measurements.teamId, teamId))
+        .limit(1);
+
+      if (teamMeasurements.length > 0) {
+        return res.status(400).json({
+          message: "Cannot delete team with existing measurements. Archive the team instead to preserve data integrity."
+        });
       }
 
       await teamService.deleteTeam(teamId);
