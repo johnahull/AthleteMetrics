@@ -365,29 +365,105 @@ export class MeasurementService {
 
   /**
    * Delete a measurement
+   * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
    * @param id Measurement ID
+   * @throws Error if measurement not found or transaction fails
    */
   async deleteMeasurement(id: string): Promise<void> {
-    await db.delete(measurements).where(eq(measurements.id, id));
+    // Wrap in transaction to prevent race conditions during concurrent operations
+    // Race condition scenario: User deletes measurement while another user verifies/updates it
+    try {
+      await db.transaction(async (tx) => {
+        // Lock the row with FOR UPDATE to prevent concurrent modifications
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(eq(measurements.id, id))
+          .for('update');
+
+        if (!existing) {
+          throw new Error('Measurement not found');
+        }
+
+        // Delete the measurement
+        await tx.delete(measurements).where(eq(measurements.id, id));
+      });
+    } catch (error) {
+      // Preserve error specificity
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        throw new Error(`Failed to delete measurement: ${error.message}`);
+      }
+      throw new Error(`Failed to delete measurement due to unexpected error: ${String(error)}`);
+    }
   }
 
   /**
    * Mark measurement as verified
+   * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
+   * Idempotent operation - can be called multiple times safely
    * @param id Measurement ID
    * @param verifiedBy User ID of verifier
    * @returns Updated measurement
+   * @throws Error if measurement not found or transaction fails
    */
   async verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement> {
-    const [updated] = await db
-      .update(measurements)
-      .set({
-        isVerified: true,
-        verifiedBy,
-      })
-      .where(eq(measurements.id, id))
-      .returning();
+    // Wrap in transaction to prevent race conditions during concurrent verifications
+    // Race condition scenario: Two admins verify same measurement simultaneously, overwriting audit trail
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock the row with FOR UPDATE to prevent concurrent modifications
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(eq(measurements.id, id))
+          .for('update');
 
-    return updated;
+        if (!existing) {
+          throw new Error('Measurement not found');
+        }
+
+        // Idempotency check: if already verified by this user, return existing record
+        if (existing.isVerified && existing.verifiedBy === verifiedBy) {
+          return existing;
+        }
+
+        // Update verification status
+        const [updated] = await tx
+          .update(measurements)
+          .set({
+            isVerified: true,
+            verifiedBy,
+          })
+          .where(eq(measurements.id, id))
+          .returning();
+
+        return updated;
+      });
+    } catch (error) {
+      // Preserve error specificity
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        throw new Error(`Failed to verify measurement: ${error.message}`);
+      }
+      throw new Error(`Failed to verify measurement due to unexpected error: ${String(error)}`);
+    }
   }
 
   /**
