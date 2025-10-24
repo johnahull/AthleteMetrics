@@ -1,14 +1,13 @@
 -- Migration: Add performance indexes to measurements table
--- Purpose: Optimize queries for organization-scoped access, team filtering, and analytics
+-- Purpose: Optimize queries for organization-scoped access and analytics
 -- Note: Uses CONCURRENTLY to avoid table locking in production
 
 -- Index for organization-scoped queries (primary filter for multi-tenant access)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_organization_id
   ON measurements(organization_id);
 
--- Index for team-based queries (common in analytics and reporting)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_team_id
-  ON measurements(team_id);
+-- Note: idx_measurements_team_id already exists from migration 0007 as a partial index
+-- (WHERE team_id IS NOT NULL). We keep the partial index as it's more space-efficient.
 
 -- Composite index for user metrics queries (analytics, personal bests)
 -- Covers: WHERE user_id = ? AND metric = ? ORDER BY date DESC

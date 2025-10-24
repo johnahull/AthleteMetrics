@@ -183,6 +183,24 @@ export function registerMeasurementRoutes(app: Express) {
             message: "Cannot create measurements for users in different organizations"
           });
         }
+
+        // SECURITY: If teamId provided, verify it belongs to the user's organization
+        if (validatedData.teamId) {
+          const [team] = await db
+            .select({ organizationId: teams.organizationId })
+            .from(teams)
+            .where(eq(teams.id, validatedData.teamId));
+
+          if (!team) {
+            return res.status(404).json({ message: "Team not found" });
+          }
+
+          if (team.organizationId !== user.primaryOrganizationId) {
+            return res.status(403).json({
+              message: "Cannot assign measurements to teams in different organizations"
+            });
+          }
+        }
       }
 
       const measurement = await measurementService.createMeasurement(validatedData, user.id);
