@@ -110,6 +110,7 @@ export class MeasurementService {
    * @param measurement Measurement data
    * @param submittedBy User ID of submitter
    * @returns Created measurement
+   * @throws Error if user not found, team not found, or transaction fails
    */
   async createMeasurement(
     measurement: InsertMeasurement,
@@ -117,7 +118,8 @@ export class MeasurementService {
   ): Promise<Measurement> {
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
-    return await db.transaction(async (tx) => {
+    try {
+      return await db.transaction(async (tx) => {
       // Get user info for age calculation
       const [user] = await tx
         .select()
@@ -187,23 +189,16 @@ export class MeasurementService {
         if (activeTeams.length === 1) {
           // Single team - auto-assign
           teamId = activeTeams[0].teamId;
-          season = activeTeams[0].season ?? undefined;
+          // Use null instead of undefined for consistency with database NULL type
+          season = activeTeams[0].season ?? null;
           teamContextAuto = true;
-
-          console.log(
-            `Auto-assigned measurement to team: ${activeTeams[0].teamName} (${
-              season || 'no season'
-            })`
-          );
+          // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
         } else if (activeTeams.length > 1) {
           // Multiple teams - cannot auto-assign
-          console.log(
-            `Athlete is on ${activeTeams.length} teams - team context not auto-assigned`
-          );
+          // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
           teamContextAuto = false;
         } else {
-          // No active teams
-          console.log('No active teams - measurement without team context');
+          // No active teams - measurement without team context
           teamContextAuto = false;
         }
       } else {
@@ -212,7 +207,7 @@ export class MeasurementService {
       }
 
       // If teamId is set (either auto-assigned or explicitly provided), fetch team details for snapshot
-      if (teamId && !teamNameSnapshot) {
+      if (teamId && teamId.trim() !== '') {
         const [team] = await tx
           .select()
           .from(teams)
@@ -222,7 +217,8 @@ export class MeasurementService {
         if (team) {
           teamNameSnapshot = team.teams.name;
           organizationId = team.teams.organizationId;
-          season = season ?? team.teams.season ?? undefined;
+          // Use null instead of undefined for consistency with database NULL type
+          season = season ?? team.teams.season ?? null;
         }
       }
 
@@ -249,7 +245,18 @@ export class MeasurementService {
         .returning();
 
       return newMeasurement;
-    });
+      });
+    } catch (error) {
+      // Handle race conditions and transaction failures
+      if (error instanceof Error) {
+        if (error.message.includes('User not found')) {
+          throw error; // Re-throw user validation errors
+        }
+        // Race condition or database constraint violation
+        throw new Error(`Failed to create measurement: ${error.message}`);
+      }
+      throw new Error('Failed to create measurement due to unexpected error');
+    }
   }
 
   /**

@@ -150,11 +150,13 @@ export class TeamService {
   ): Promise<Team> {
     try {
       return await db.transaction(async (tx) => {
-        // First check if team exists and get its current state
+        // First check if team exists and get its current state with row-level lock
+        // FOR UPDATE prevents race conditions from concurrent archive operations
         const [existingTeam] = await tx
           .select()
           .from(teams)
-          .where(eq(teams.id, id));
+          .where(eq(teams.id, id))
+          .for('update');
 
         if (!existingTeam) {
           throw new Error(`Team with id ${id} not found`);
@@ -269,7 +271,7 @@ export class TeamService {
           .for('update'); // Row-level lock prevents concurrent modifications
 
         if (existingActiveAssignment.length > 0) {
-          console.log('User already has active assignment to team');
+          // User already has active assignment to team
           return existingActiveAssignment[0];
         }
 
@@ -297,7 +299,7 @@ export class TeamService {
             .where(eq(userTeams.id, existingInactiveAssignment[0].id))
             .returning();
 
-          console.log('Reactivated inactive team membership');
+          // Reactivated inactive team membership
           return reactivated;
         }
 

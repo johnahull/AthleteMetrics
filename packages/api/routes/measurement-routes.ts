@@ -82,20 +82,20 @@ export function registerMeasurementRoutes(app: Express) {
       // Validate query parameters
       const validatedParams = measurementQuerySchema.parse(req.query);
 
-      // Build filters from validated query parameters
+      // Build filters from validated query parameters with proper type safety
       const filters: MeasurementFilters = {
-        userId: validatedParams.userId,
-        athleteId: validatedParams.athleteId,
-        metric: validatedParams.metric,
-        dateFrom: validatedParams.dateFrom,
-        dateTo: validatedParams.dateTo,
+        ...(validatedParams.userId && { userId: validatedParams.userId }),
+        ...(validatedParams.athleteId && { athleteId: validatedParams.athleteId }),
+        ...(validatedParams.metric && { metric: validatedParams.metric }),
+        ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
+        ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
         includeUnverified: validatedParams.includeUnverified === 'true',
-        birthYearFrom: validatedParams.birthYearFrom,
-        birthYearTo: validatedParams.birthYearTo,
-        ageFrom: validatedParams.ageFrom,
-        ageTo: validatedParams.ageTo,
-        limit: validatedParams.limit,
-        offset: validatedParams.offset,
+        ...(validatedParams.birthYearFrom !== undefined && { birthYearFrom: validatedParams.birthYearFrom }),
+        ...(validatedParams.birthYearTo !== undefined && { birthYearTo: validatedParams.birthYearTo }),
+        ...(validatedParams.ageFrom !== undefined && { ageFrom: validatedParams.ageFrom }),
+        ...(validatedParams.ageTo !== undefined && { ageTo: validatedParams.ageTo }),
+        ...(validatedParams.limit !== undefined && { limit: validatedParams.limit }),
+        ...(validatedParams.offset !== undefined && { offset: validatedParams.offset }),
       };
 
       // Organization-based filtering

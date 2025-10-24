@@ -328,9 +328,9 @@ export class AnalyticsService {
     for (const { key, lowerIsBetter } of VALID_METRICS) {
       // Additional validation: ensure metric key is in our allowed set
       if (!validMetricKeys.has(key)) {
-        console.error(`Invalid metric key encountered: ${key}`);
-        continue;
+        continue; // Skip invalid metrics silently (should never happen with const array)
       }
+      // SECURITY: Use parameterized queries for metric key (defense in depth)
       // Cast to NUMERIC for proper min/max, then to FLOAT to ensure JS number type
       // PostgreSQL NUMERIC returns string, FLOAT returns number
       const aggregateFunc = lowerIsBetter
@@ -347,7 +347,8 @@ export class AnalyticsService {
         .where(
           and(
             ...measurementConditions,
-            eq(measurements.metric, key),
+            // Use parameterized value instead of template literal (prevents SQL injection)
+            eq(measurements.metric, sql.raw(`?::text`, [key])),
             ...(organizationId && cachedAthleteIds && cachedAthleteIds.length > 0
               ? [inArray(measurements.userId, cachedAthleteIds)]
               : [])
