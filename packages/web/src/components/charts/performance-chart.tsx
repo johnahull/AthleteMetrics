@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Line } from "react-chartjs-2";
@@ -28,15 +29,37 @@ interface PerformanceChartProps {
 }
 
 export default function PerformanceChart({ organizationId }: PerformanceChartProps) {
+  const [timeRange, setTimeRange] = useState("last8weeks");
+
   const { data: measurements, isError, error } = useQuery({
-    queryKey: ["/api/measurements", organizationId],
+    queryKey: ["/api/measurements", organizationId, timeRange],
     enabled: !!organizationId, // Only run query if organizationId is provided
     queryFn: async () => {
       if (!organizationId) {
         throw new Error("Organization ID is required to fetch performance data");
       }
 
-      const url = `/api/measurements?organizationId=${organizationId}`;
+      // Calculate date range based on timeRange
+      const now = new Date();
+      let dateFrom = "";
+
+      switch (timeRange) {
+        case "last30days":
+          dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case "last90days":
+          dateFrom = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case "thisyear":
+          dateFrom = new Date(now.getFullYear(), 0, 1).toISOString();
+          break;
+        case "last8weeks":
+        default:
+          dateFrom = new Date(now.getTime() - 8 * 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+      }
+
+      const url = `/api/measurements?organizationId=${organizationId}&dateFrom=${dateFrom}`;
       const response = await fetch(url, {
         credentials: 'include'
       });
@@ -180,7 +203,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Performance Trends</h3>
-          <Select defaultValue="last8weeks">
+          <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -188,6 +211,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
               <SelectItem value="last8weeks">Last 8 Weeks</SelectItem>
               <SelectItem value="last30days">Last 30 Days</SelectItem>
               <SelectItem value="last90days">Last 90 Days</SelectItem>
+              <SelectItem value="thisyear">This Year</SelectItem>
             </SelectContent>
           </Select>
         </div>
