@@ -396,7 +396,7 @@ describe('TeamService', () => {
       );
 
       expect(result.isActive).toBe(true);
-      expect(result.leftAt).toBeUndefined();
+      expect(result.leftAt).toBeNull(); // Database stores NULL not undefined
     });
   });
 
@@ -451,7 +451,7 @@ describe('TeamService', () => {
       expect(result.leftAt).toBeNull();
     });
 
-    it('should create new membership if only historical exists', async () => {
+    it('should reactivate historical membership (preserves temporal record)', async () => {
       const [team] = await db.insert(teams).values({
         name: 'Historical Test',
         organizationId: testOrgId,
@@ -466,8 +466,10 @@ describe('TeamService', () => {
 
       const result = await teamService.addUserToTeam(testUserId, team.id);
 
-      expect(result.id).not.toBe(historical.id);
+      // Should reactivate the same record to preserve temporal history
+      expect(result.id).toBe(historical.id);
       expect(result.isActive).toBe(true);
+      expect(result.leftAt).toBeNull();
     });
   });
 

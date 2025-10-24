@@ -213,7 +213,7 @@ export class TeamService {
     const [updated] = await db
       .update(userTeams)
       .set({
-        leftAt: membershipData.leftAt,
+        leftAt: membershipData.leftAt ?? null,
         season: membershipData.season,
         isActive: membershipData.leftAt ? false : true,
       })
