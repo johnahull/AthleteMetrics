@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, type User } from '@shared/schema';
 import { eq, and, gte, lte, ne, desc, inArray } from 'drizzle-orm';
 
 interface AthleteStats {
@@ -167,7 +167,7 @@ export class AnalyticsService {
   async getDashboardStats(organizationId?: string): Promise<DashboardStats> {
     // Get all athletes in the organization
     // Athletes are linked to organizations through teams
-    let athletes;
+    let athletes: User[];
     if (organizationId) {
       // Get athletes through team membership
       const athleteIds = await db
@@ -223,7 +223,7 @@ export class AnalyticsService {
     ];
 
     // Filter by organization through team membership
-    let recentMeasurements;
+    let recentMeasurements: Array<{ metric: string; value: string; userId: string }>;
     if (organizationId) {
       // Get measurements for athletes in the organization
       const orgAthleteIds = athletes.map((a) => a.id);
