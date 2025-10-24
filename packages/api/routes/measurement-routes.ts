@@ -255,6 +255,12 @@ export function registerMeasurementRoutes(app: Express) {
         (user.role === 'org_admin' || user.role === 'coach') &&
         existingMeasurement.organizationId === user.primaryOrganizationId;
 
+      // SECURITY: Athletes can only update their own measurements
+      // Prevents IDOR vulnerability where Athlete A updates Athlete B's measurement
+      if (user.role === 'athlete' && existingMeasurement.userId !== user.id) {
+        return res.status(403).json({ message: "Access denied - athletes can only update their own measurements" });
+      }
+
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
       }

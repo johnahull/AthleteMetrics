@@ -106,6 +106,7 @@ export class MeasurementService {
 
   /**
    * Create a new measurement with auto-calculated fields
+   * IMPORTANT: Wrapped in transaction to prevent race conditions
    * @param measurement Measurement data
    * @param submittedBy User ID of submitter
    * @returns Created measurement
@@ -114,121 +115,141 @@ export class MeasurementService {
     measurement: InsertMeasurement,
     submittedBy: string
   ): Promise<Measurement> {
-    // Get user info for age calculation
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, measurement.userId));
-
-    if (!user) throw new Error('User not found');
-
-    const measurementDate = new Date(measurement.date);
-    let age = measurementDate.getFullYear() - (user.birthYear || 0);
-
-    // Use birthDate for more precise age calculation if available
-    if (user.birthDate) {
-      const birthDate = new Date(user.birthDate);
-      const birthdayThisYear = new Date(
-        measurementDate.getFullYear(),
-        birthDate.getMonth(),
-        birthDate.getDate()
-      );
-      if (measurementDate < birthdayThisYear) {
-        age -= 1;
-      }
-    }
-
-    // Auto-calculate units based on metric
-    const units =
-      measurement.metric === 'FLY10_TIME' ||
-      measurement.metric === 'T_TEST' ||
-      measurement.metric === 'DASH_40YD' ||
-      measurement.metric === 'AGILITY_505' ||
-      measurement.metric === 'AGILITY_5105'
-        ? 's'
-        : measurement.metric === 'RSI'
-        ? 'ratio'
-        : 'in';
-
-    // Auto-populate team context if not explicitly provided
-    let teamId = measurement.teamId;
-    let season = measurement.season;
-    let teamContextAuto = true;
-    let teamNameSnapshot: string | null = null;
-    let organizationId: string | null = null;
-
-    if (!teamId || teamId.trim() === '') {
-      // Get athlete's active teams at measurement date
-      const activeTeams = await this.getAthleteActiveTeamsAtDate(
-        measurement.userId,
-        measurementDate
-      );
-
-      if (activeTeams.length === 1) {
-        // Single team - auto-assign
-        teamId = activeTeams[0].teamId;
-        season = activeTeams[0].season ?? undefined;
-        teamContextAuto = true;
-
-        console.log(
-          `Auto-assigned measurement to team: ${activeTeams[0].teamName} (${
-            season || 'no season'
-          })`
-        );
-      } else if (activeTeams.length > 1) {
-        // Multiple teams - cannot auto-assign
-        console.log(
-          `Athlete is on ${activeTeams.length} teams - team context not auto-assigned`
-        );
-        teamContextAuto = false;
-      } else {
-        // No active teams
-        console.log('No active teams - measurement without team context');
-        teamContextAuto = false;
-      }
-    } else {
-      // teamId was explicitly provided
-      teamContextAuto = false;
-    }
-
-    // If teamId is set (either auto-assigned or explicitly provided), fetch team details for snapshot
-    if (teamId && !teamNameSnapshot) {
-      const [team] = await db
+    // Wrap entire operation in transaction to prevent race conditions
+    // Race condition scenario: User joins/leaves team between active teams query and measurement insert
+    return await db.transaction(async (tx) => {
+      // Get user info for age calculation
+      const [user] = await tx
         .select()
-        .from(teams)
-        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-        .where(eq(teams.id, teamId));
+        .from(users)
+        .where(eq(users.id, measurement.userId));
 
-      if (team) {
-        teamNameSnapshot = team.teams.name;
-        organizationId = team.teams.organizationId;
-        season = season ?? team.teams.season ?? undefined;
+      if (!user) throw new Error('User not found');
+
+      const measurementDate = new Date(measurement.date);
+      let age = measurementDate.getFullYear() - (user.birthYear || 0);
+
+      // Use birthDate for more precise age calculation if available
+      if (user.birthDate) {
+        const birthDate = new Date(user.birthDate);
+        const birthdayThisYear = new Date(
+          measurementDate.getFullYear(),
+          birthDate.getMonth(),
+          birthDate.getDate()
+        );
+        if (measurementDate < birthdayThisYear) {
+          age -= 1;
+        }
       }
-    }
 
-    // Create measurement
-    const [newMeasurement] = await db
-      .insert(measurements)
-      .values({
-        userId: measurement.userId,
-        submittedBy,
-        date: measurementDate.toISOString(),
-        metric: measurement.metric,
-        value: String(measurement.value),
-        units,
-        age,
-        notes: measurement.notes || null,
-        flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
-        teamId: teamId || null,
-        season: season || null,
-        teamContextAuto,
-        teamNameSnapshot,
-        organizationId: organizationId || null,
-        isVerified: false,
-      })
-      .returning();
+      // Auto-calculate units based on metric
+      const units =
+        measurement.metric === 'FLY10_TIME' ||
+        measurement.metric === 'T_TEST' ||
+        measurement.metric === 'DASH_40YD' ||
+        measurement.metric === 'AGILITY_505' ||
+        measurement.metric === 'AGILITY_5105'
+          ? 's'
+          : measurement.metric === 'RSI'
+          ? 'ratio'
+          : 'in';
 
-    return newMeasurement;
+      // Auto-populate team context if not explicitly provided
+      let teamId = measurement.teamId;
+      let season = measurement.season;
+      let teamContextAuto = true;
+      let teamNameSnapshot: string | null = null;
+      let organizationId: string | null = null;
+
+      if (!teamId || teamId.trim() === '') {
+        // Get athlete's active teams at measurement date (within transaction)
+        const activeTeams = await tx
+          .select({
+            teamId: teams.id,
+            teamName: teams.name,
+            season: teams.season,
+            organizationId: teams.organizationId,
+            organizationName: organizations.name,
+          })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .where(
+            and(
+              eq(userTeams.userId, measurement.userId),
+              lte(userTeams.joinedAt, measurementDate),
+              or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+              eq(userTeams.isActive, true),
+              eq(teams.isArchived, false)
+            )
+          );
+
+        if (activeTeams.length === 1) {
+          // Single team - auto-assign
+          teamId = activeTeams[0].teamId;
+          season = activeTeams[0].season ?? undefined;
+          teamContextAuto = true;
+
+          console.log(
+            `Auto-assigned measurement to team: ${activeTeams[0].teamName} (${
+              season || 'no season'
+            })`
+          );
+        } else if (activeTeams.length > 1) {
+          // Multiple teams - cannot auto-assign
+          console.log(
+            `Athlete is on ${activeTeams.length} teams - team context not auto-assigned`
+          );
+          teamContextAuto = false;
+        } else {
+          // No active teams
+          console.log('No active teams - measurement without team context');
+          teamContextAuto = false;
+        }
+      } else {
+        // teamId was explicitly provided
+        teamContextAuto = false;
+      }
+
+      // If teamId is set (either auto-assigned or explicitly provided), fetch team details for snapshot
+      if (teamId && !teamNameSnapshot) {
+        const [team] = await tx
+          .select()
+          .from(teams)
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .where(eq(teams.id, teamId));
+
+        if (team) {
+          teamNameSnapshot = team.teams.name;
+          organizationId = team.teams.organizationId;
+          season = season ?? team.teams.season ?? undefined;
+        }
+      }
+
+      // Create measurement
+      const [newMeasurement] = await tx
+        .insert(measurements)
+        .values({
+          userId: measurement.userId,
+          submittedBy,
+          date: measurementDate.toISOString(),
+          metric: measurement.metric,
+          value: String(measurement.value),
+          units,
+          age,
+          notes: measurement.notes || null,
+          flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
+          teamId: teamId || null,
+          season: season || null,
+          teamContextAuto,
+          teamNameSnapshot,
+          organizationId: organizationId || null,
+          isVerified: false,
+        })
+        .returning();
+
+      return newMeasurement;
+    });
   }
 
   /**
