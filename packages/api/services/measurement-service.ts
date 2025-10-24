@@ -234,13 +234,17 @@ export class MeasurementService {
   /**
    * Update measurement fields
    * Note: submittedBy cannot be updated after creation
+   * Defense-in-depth: Requires organizationId parameter to prevent cross-org updates
    * @param id Measurement ID
    * @param measurement Partial measurement data
+   * @param organizationId Organization ID for authorization check
    * @returns Updated measurement
+   * @throws Error if no valid fields, measurement not found, or access denied
    */
   async updateMeasurement(
     id: string,
-    measurement: Partial<InsertMeasurement>
+    measurement: Partial<InsertMeasurement>,
+    organizationId: string
   ): Promise<Measurement> {
     const updateData: Partial<typeof measurements.$inferInsert> = {};
 
@@ -259,21 +263,34 @@ export class MeasurementService {
       throw new Error('No valid fields to update');
     }
 
+    // Defense-in-depth: Include organizationId in WHERE clause to prevent cross-org updates
     const [updated] = await db
       .update(measurements)
       .set(updateData)
-      .where(eq(measurements.id, id))
+      .where(and(eq(measurements.id, id), eq(measurements.organizationId, organizationId)))
       .returning();
 
+    if (!updated) throw new Error('Measurement not found or access denied');
     return updated;
   }
 
   /**
    * Delete a measurement
+   * Defense-in-depth: Requires organizationId parameter to prevent cross-org deletions
    * @param id Measurement ID
+   * @param organizationId Organization ID for authorization check
+   * @throws Error if measurement not found or access denied
    */
-  async deleteMeasurement(id: string): Promise<void> {
-    await db.delete(measurements).where(eq(measurements.id, id));
+  async deleteMeasurement(id: string, organizationId: string): Promise<void> {
+    // Defense-in-depth: Include organizationId in WHERE clause to prevent cross-org deletions
+    const result = await db
+      .delete(measurements)
+      .where(and(eq(measurements.id, id), eq(measurements.organizationId, organizationId)))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error('Measurement not found or access denied');
+    }
   }
 
   /**

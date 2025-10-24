@@ -174,7 +174,7 @@ describe('TeamService', () => {
         name: 'Updated Name',
         level: 'College',
         notes: 'New notes',
-      });
+      }, testOrgId);
 
       expect(result.name).toBe('Updated Name');
       expect(result.level).toBe('College');
@@ -195,7 +195,7 @@ describe('TeamService', () => {
       const result = await teamService.updateTeam(team.id, {
         name: 'Updated',
         organizationId: otherOrg.id, // This should be stripped
-      } as any);
+      } as any, testOrgId);
 
       expect(result.name).toBe('Updated');
       expect(result.organizationId).toBe(testOrgId); // Should remain unchanged
@@ -212,7 +212,7 @@ describe('TeamService', () => {
 
       const result = await teamService.updateTeam(team.id, {
         name: '  Trimmed Name  ',
-      });
+      }, testOrgId);
 
       expect(result.name).toBe('Trimmed Name');
     });
@@ -224,14 +224,14 @@ describe('TeamService', () => {
       }).returning();
 
       await expect(
-        teamService.updateTeam(team.id, { organizationId: 'some-id' } as any)
+        teamService.updateTeam(team.id, { organizationId: 'some-id' } as any, testOrgId)
       ).rejects.toThrow('No valid fields to update');
     });
 
     it('should throw error if team not found', async () => {
       await expect(
-        teamService.updateTeam('non-existent-id', { name: 'Update' })
-      ).rejects.toThrow('Team not found');
+        teamService.updateTeam('non-existent-id', { name: 'Update' }, testOrgId)
+      ).rejects.toThrow('Team not found or access denied');
     });
   });
 
@@ -278,7 +278,7 @@ describe('TeamService', () => {
       const archiveDate = new Date('2024-12-31');
       const season = '2024-Fall';
 
-      const result = await teamService.archiveTeam(team.id, archiveDate, season);
+      const result = await teamService.archiveTeam(team.id, archiveDate, season, testOrgId);
 
       expect(result.isArchived).toBe(true);
       expect(result.archivedAt).toEqual(archiveDate);
@@ -310,7 +310,7 @@ describe('TeamService', () => {
       });
 
       const archiveDate = new Date('2024-12-31');
-      await teamService.archiveTeam(team.id, archiveDate, '2024-Fall');
+      await teamService.archiveTeam(team.id, archiveDate, '2024-Fall', testOrgId);
 
       // Verify inactive membership unchanged
       const [membership] = await db.select().from(userTeams)
@@ -509,7 +509,7 @@ describe('TeamService', () => {
       expect(membership.leftAt!.getTime()).toBeCloseTo(Date.now(), -2); // Within 2 digits (100ms)
     });
 
-    it('should only affect active memberships', async () => {
+    it('should throw error when trying to remove inactive membership', async () => {
       const [team] = await db.insert(teams).values({
         name: 'Already Inactive Test',
         organizationId: testOrgId,
@@ -523,8 +523,12 @@ describe('TeamService', () => {
         leftAt: leftDate,
       });
 
-      await teamService.removeUserFromTeam(testUserId, team.id);
+      // Should throw error since no active membership exists
+      await expect(
+        teamService.removeUserFromTeam(testUserId, team.id)
+      ).rejects.toThrow('Active team membership not found');
 
+      // Verify the inactive membership was not modified
       const [membership] = await db.select().from(userTeams)
         .where(eq(userTeams.teamId, team.id));
 

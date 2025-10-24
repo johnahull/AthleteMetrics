@@ -84,6 +84,7 @@ describe('MeasurementService', () => {
         value: '1.45',
         units: 's',
         age: 24,
+        organizationId: testOrgId,
       }).returning();
 
       const result = await measurementService.getMeasurement(measurement.id);
@@ -282,12 +283,13 @@ describe('MeasurementService', () => {
         units: 's',
         age: 24,
         notes: 'Original notes',
+        organizationId: testOrgId,
       }).returning();
 
       const result = await measurementService.updateMeasurement(measurement.id, {
         value: '1.40',
         notes: 'Updated notes',
-      });
+      }, testOrgId);
 
       expect(result.value).toBe('1.400'); // Database returns with precision
       expect(result.notes).toBe('Updated notes');
@@ -303,13 +305,14 @@ describe('MeasurementService', () => {
         value: '1.45',
         units: 's',
         age: 24,
+        organizationId: testOrgId,
       }).returning();
 
       // Attempting to update only submittedBy should throw because it's not a valid field
       await expect(
         measurementService.updateMeasurement(measurement.id, {
           submittedBy: 'different-user',
-        } as any)
+        } as any, testOrgId)
       ).rejects.toThrow('No valid fields to update');
     });
 
@@ -323,13 +326,41 @@ describe('MeasurementService', () => {
         units: 's',
         age: 24,
         notes: 'Original notes',
+        organizationId: testOrgId,
       }).returning();
 
       const result = await measurementService.updateMeasurement(measurement.id, {
         notes: null,
-      });
+      }, testOrgId);
 
       expect(result.notes).toBeNull();
+    });
+
+    it('should prevent updating submittedBy to maintain audit trail', async () => {
+      // Create a measurement with coach as submitter
+      const [measurement] = await db.insert(measurements).values({
+        userId: testUserId,
+        submittedBy: testSubmitterId, // Original submitter (coach)
+        date: new Date('2024-01-15').toISOString(),
+        metric: 'FLY10_TIME',
+        value: '1.45',
+        units: 's',
+        age: 24,
+        organizationId: testOrgId,
+      }).returning();
+
+      // Attempt to update the measurement with a different submittedBy value
+      // This should be silently ignored since submittedBy is excluded from updateData
+      const result = await measurementService.updateMeasurement(measurement.id, {
+        value: '1.40',
+        notes: 'Updated notes',
+        submittedBy: 'attacker-id', // This should be ignored
+      } as any, testOrgId);
+
+      // Verify submittedBy was NOT changed (audit trail preserved)
+      expect(result.submittedBy).toBe(testSubmitterId); // Still the original submitter
+      expect(result.value).toBe('1.400'); // But other fields were updated
+      expect(result.notes).toBe('Updated notes');
     });
   });
 
@@ -343,9 +374,10 @@ describe('MeasurementService', () => {
         value: '1.45',
         units: 's',
         age: 24,
+        organizationId: testOrgId,
       }).returning();
 
-      await measurementService.deleteMeasurement(measurement.id);
+      await measurementService.deleteMeasurement(measurement.id, testOrgId);
 
       const result = await db.select().from(measurements)
         .where(eq(measurements.id, measurement.id));
@@ -365,6 +397,7 @@ describe('MeasurementService', () => {
         units: 's',
         age: 24,
         isVerified: false,
+        organizationId: testOrgId,
       }).returning();
 
       const result = await measurementService.verifyMeasurement(
@@ -485,6 +518,7 @@ describe('MeasurementService', () => {
           units: 's',
           age: 24,
           isVerified: true,
+          organizationId: testOrgId,
         },
         {
           userId: testUserId,
@@ -495,6 +529,7 @@ describe('MeasurementService', () => {
           units: 'in',
           age: 24,
           isVerified: false,
+          organizationId: testOrgId,
         },
       ]);
     });
