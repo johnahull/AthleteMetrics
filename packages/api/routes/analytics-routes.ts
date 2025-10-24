@@ -51,7 +51,8 @@ export function registerAnalyticsRoutes(app: Express) {
       const userId = req.params.userId;
 
       // Permission check: athletes can only view their own stats
-      if (user.role === 'athlete' && user.athleteId !== userId) {
+      // Note: For athletes, user.id IS their athleteId (they are the same)
+      if (user.role === 'athlete' && user.id !== userId) {
         return res.status(403).json({ message: "Athletes can only view their own statistics" });
       }
 
@@ -168,7 +169,8 @@ export function registerAnalyticsRoutes(app: Express) {
       const userId = req.params.userId;
 
       // Permission check: athletes can only view their own stats
-      if (user.role === 'athlete' && user.athleteId !== userId) {
+      // Note: For athletes, user.id IS their athleteId (they are the same)
+      if (user.role === 'athlete' && user.id !== userId) {
         return res.status(403).json({ message: "Athletes can only view their own statistics" });
       }
 

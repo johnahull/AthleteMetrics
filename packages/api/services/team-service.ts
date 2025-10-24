@@ -148,30 +148,40 @@ export class TeamService {
     archiveDate: Date,
     season: string
   ): Promise<Team> {
-    return await db.transaction(async (tx) => {
-      // Idempotency check: only archive if not already archived (prevents race conditions)
-      const [archived] = await tx
-        .update(teams)
-        .set({
-          isArchived: true,
-          archivedAt: archiveDate,
-          season: season,
-        })
-        .where(and(eq(teams.id, id), ne(teams.isArchived, true)))
-        .returning();
+    try {
+      return await db.transaction(async (tx) => {
+        // Idempotency check: only archive if not already archived (prevents race conditions)
+        const [archived] = await tx
+          .update(teams)
+          .set({
+            isArchived: true,
+            archivedAt: archiveDate,
+            season: season,
+          })
+          .where(and(eq(teams.id, id), ne(teams.isArchived, true)))
+          .returning();
 
-      // Mark all current team memberships as inactive
-      await tx
-        .update(userTeams)
-        .set({
-          isActive: false,
-          leftAt: archiveDate,
-          season: season,
-        })
-        .where(and(eq(userTeams.teamId, id), eq(userTeams.isActive, true)));
+        // If no rows returned, team was already archived or doesn't exist
+        if (!archived) {
+          throw new Error(`Team with id ${id} not found or already archived`);
+        }
 
-      return archived;
-    });
+        // Mark all current team memberships as inactive
+        await tx
+          .update(userTeams)
+          .set({
+            isActive: false,
+            leftAt: archiveDate,
+            season: season,
+          })
+          .where(and(eq(userTeams.teamId, id), eq(userTeams.isActive, true)));
+
+        return archived;
+      });
+    } catch (error) {
+      console.error('Archive team transaction failed:', error);
+      throw new Error(`Failed to archive team: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**

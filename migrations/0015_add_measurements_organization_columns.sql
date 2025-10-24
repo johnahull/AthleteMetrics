@@ -22,6 +22,22 @@ COMMENT ON COLUMN measurements.team_name_snapshot IS
 -- Backfill organization_id from team relationships for existing measurements
 -- This ensures historical data maintains organization context
 -- Wrapped in transaction to ensure atomic operation and prevent partial updates
+--
+-- PERFORMANCE NOTE: This single UPDATE is suitable for datasets < 10,000 measurements
+-- For larger datasets (10k+ rows), consider batching this update to avoid long table locks
+-- Example batched approach (if needed):
+--   DO $$
+--   DECLARE rows_updated INTEGER := 1;
+--   BEGIN
+--     WHILE rows_updated > 0 LOOP
+--       UPDATE measurements m SET organization_id = t.organization_id, team_name_snapshot = t.name
+--       FROM teams t WHERE m.ctid IN (
+--         SELECT m2.ctid FROM measurements m2 WHERE m2.team_id = t.id AND m2.organization_id IS NULL LIMIT 1000
+--       );
+--       GET DIAGNOSTICS rows_updated = ROW_COUNT;
+--       COMMIT;
+--     END LOOP;
+--   END $$;
 UPDATE measurements m
 SET organization_id = t.organization_id,
     team_name_snapshot = t.name

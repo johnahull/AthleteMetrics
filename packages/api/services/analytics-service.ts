@@ -330,9 +330,11 @@ export class AnalyticsService {
         console.error(`Invalid metric key encountered: ${key}`);
         continue;
       }
+      // Cast to NUMERIC for proper min/max, then to FLOAT to ensure JS number type
+      // PostgreSQL NUMERIC returns string, FLOAT returns number
       const aggregateFunc = lowerIsBetter
-        ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))`
-        : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))`;
+        ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))::float`
+        : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))::float`;
 
       const bestQuery = db
         .select({
@@ -351,16 +353,14 @@ export class AnalyticsService {
           )
         )
         .groupBy(users.id, users.fullName)
-        .orderBy(lowerIsBetter ? sql`MIN(CAST(${measurements.value} AS NUMERIC)) ASC` : sql`MAX(CAST(${measurements.value} AS NUMERIC)) DESC`)
+        .orderBy(lowerIsBetter ? sql`MIN(CAST(${measurements.value} AS NUMERIC))::float ASC` : sql`MAX(CAST(${measurements.value} AS NUMERIC))::float DESC`)
         .limit(1);
 
       const [bestResult] = await bestQuery;
 
       if (bestResult && bestResult.bestValue !== null) {
         bestMetrics[`best${key}Last30Days`] = {
-          value: typeof bestResult.bestValue === 'string'
-            ? parseFloat(bestResult.bestValue)
-            : bestResult.bestValue,
+          value: bestResult.bestValue, // Already a number due to ::float cast
           userName: bestResult.userName,
         };
       }
