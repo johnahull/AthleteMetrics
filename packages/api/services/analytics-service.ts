@@ -158,10 +158,10 @@ export class AnalyticsService {
           .filter((m) => m.metric === 'VERTICAL_JUMP')
           .map((m) => parseFloat(m.value));
 
-        // Get latest measurement date
+        // Get latest measurement date (first element since ordered DESC by date)
         const latestMeasurement =
           teamMeasurements.length > 0
-            ? teamMeasurements[teamMeasurements.length - 1]
+            ? teamMeasurements[0]
             : undefined;
 
         return {
@@ -282,7 +282,7 @@ export class AnalyticsService {
           .where(
             and(
               ...measurementConditions,
-              inArray(measurements.userId, orgAthleteIds)
+              inArray(measurements.userId, cachedAthleteIds)
             )
           );
       } else {

@@ -222,11 +222,11 @@ export class MeasurementService {
         submittedBy,
         date: measurementDate.toISOString(),
         metric: measurement.metric,
-        value: measurement.value.toString(),
+        value: String(measurement.value),
         units,
         age,
         notes: measurement.notes || null,
-        flyInDistance: measurement.flyInDistance?.toString() || null,
+        flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
         teamId: teamId || null,
         season: season || null,
         teamContextAuto,
@@ -257,10 +257,10 @@ export class MeasurementService {
     if (measurement.date) updateData.date = measurement.date;
     if (measurement.metric) updateData.metric = measurement.metric;
     if (measurement.value !== undefined)
-      updateData.value = measurement.value.toString();
+      updateData.value = String(measurement.value);
     if (measurement.notes !== undefined) updateData.notes = measurement.notes;
     if (measurement.flyInDistance !== undefined)
-      updateData.flyInDistance = measurement.flyInDistance?.toString();
+      updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
 
     // Check if there are any valid fields to update
     if (Object.keys(updateData).length === 0) {
