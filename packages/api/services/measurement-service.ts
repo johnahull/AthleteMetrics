@@ -170,18 +170,6 @@ export class MeasurementService {
         season = activeTeams[0].season || undefined;
         teamContextAuto = true;
 
-        // Fetch team details for snapshot
-        const [team] = await db
-          .select()
-          .from(teams)
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-          .where(eq(teams.id, teamId));
-
-        if (team) {
-          teamNameSnapshot = team.teams.name;
-          organizationId = team.teams.organizationId;
-        }
-
         console.log(
           `Auto-assigned measurement to team: ${activeTeams[0].teamName} (${
             season || 'no season'
@@ -198,12 +186,13 @@ export class MeasurementService {
         console.log('No active teams - measurement without team context');
         teamContextAuto = false;
       }
+    } else {
+      // teamId was explicitly provided
+      teamContextAuto = false;
     }
 
-    // If teamId was explicitly provided or auto-assigned, fetch team details for snapshot
-    // (consolidate duplicate queries)
+    // If teamId is set (either auto-assigned or explicitly provided), fetch team details for snapshot
     if (teamId && !teamNameSnapshot) {
-      teamContextAuto = false;
       const [team] = await db
         .select()
         .from(teams)

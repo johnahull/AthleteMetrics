@@ -150,7 +150,21 @@ export class TeamService {
   ): Promise<Team> {
     try {
       return await db.transaction(async (tx) => {
-        // Idempotency check: only archive if not already archived (prevents race conditions)
+        // First check if team exists and get its current state
+        const [existingTeam] = await tx
+          .select()
+          .from(teams)
+          .where(eq(teams.id, id));
+
+        if (!existingTeam) {
+          throw new Error(`Team with id ${id} not found`);
+        }
+
+        if (existingTeam.isArchived) {
+          throw new Error(`Team with id ${id} is already archived`);
+        }
+
+        // Archive the team
         const [archived] = await tx
           .update(teams)
           .set({
@@ -158,13 +172,8 @@ export class TeamService {
             archivedAt: archiveDate,
             season: season,
           })
-          .where(and(eq(teams.id, id), ne(teams.isArchived, true)))
+          .where(eq(teams.id, id))
           .returning();
-
-        // If no rows returned, team was already archived or doesn't exist
-        if (!archived) {
-          throw new Error(`Team with id ${id} not found or already archived`);
-        }
 
         // Mark all current team memberships as inactive
         await tx

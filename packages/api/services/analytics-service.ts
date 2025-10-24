@@ -83,11 +83,12 @@ export class AnalyticsService {
    * Get statistics for all teams in an organization
    * @param organizationId Optional organization ID (required for security)
    * @returns Array of team statistics
+   * @throws Error if organizationId is not provided
    */
   async getTeamStats(organizationId?: string): Promise<TeamStats[]> {
     // Security: Always require organization context to prevent cross-org data leakage
     if (!organizationId) {
-      return [];
+      throw new Error('organizationId is required for team statistics');
     }
 
     // Get all non-archived teams for the organization
