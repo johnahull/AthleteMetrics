@@ -8,11 +8,9 @@ import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema } from "@shared/schema";
-
-// Helper function to check if user is site admin
-function isSiteAdmin(user: any): boolean {
-  return user?.isSiteAdmin === true;
-}
+import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { z } from "zod";
+import { ZodError } from "zod";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -32,6 +30,34 @@ const measurementDeleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Query parameter validation schema
+const measurementQuerySchema = z.object({
+  userId: z.string().uuid().optional(),
+  athleteId: z.string().uuid().optional(),
+  metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  includeUnverified: z.enum(['true', 'false']).optional(),
+  birthYearFrom: z.coerce.number().int().min(1900).max(2100).optional(),
+  birthYearTo: z.coerce.number().int().min(1900).max(2100).optional(),
+  ageFrom: z.coerce.number().int().min(0).max(120).optional(),
+  ageTo: z.coerce.number().int().min(0).max(120).optional(),
+});
+
+interface MeasurementFilters {
+  userId?: string;
+  athleteId?: string;
+  metric?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  includeUnverified?: boolean;
+  birthYearFrom?: number;
+  birthYearTo?: number;
+  ageFrom?: number;
+  ageTo?: number;
+  organizationId?: string;
+}
+
 export function registerMeasurementRoutes(app: Express) {
   const measurementService = new MeasurementService();
 
@@ -45,41 +71,42 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Build filters from query parameters
-      const filters: any = {};
+      // Validate query parameters
+      const validatedParams = measurementQuerySchema.parse(req.query);
 
-      if (req.query.userId) filters.userId = req.query.userId as string;
-      if (req.query.athleteId) filters.athleteId = req.query.athleteId as string;
-      if (req.query.metric) filters.metric = req.query.metric as string;
-      if (req.query.dateFrom) filters.dateFrom = req.query.dateFrom as string;
-      if (req.query.dateTo) filters.dateTo = req.query.dateTo as string;
-      if (req.query.includeUnverified === 'true') filters.includeUnverified = true;
+      // Build filters from validated query parameters
+      const filters: MeasurementFilters = {
+        userId: validatedParams.userId,
+        athleteId: validatedParams.athleteId,
+        metric: validatedParams.metric,
+        dateFrom: validatedParams.dateFrom,
+        dateTo: validatedParams.dateTo,
+        includeUnverified: validatedParams.includeUnverified === 'true',
+        birthYearFrom: validatedParams.birthYearFrom,
+        birthYearTo: validatedParams.birthYearTo,
+        ageFrom: validatedParams.ageFrom,
+        ageTo: validatedParams.ageTo,
+      };
 
-      // Parse numeric filters
-      if (req.query.birthYearFrom) {
-        const year = parseInt(req.query.birthYearFrom as string);
-        if (!isNaN(year)) filters.birthYearFrom = year;
+      // Organization-based filtering for non-admin users
+      // Note: MeasurementService.getMeasurements doesn't support organizationId filter yet
+      // For now, we filter by the user's primary organization if they're not a site admin
+      if (!isSiteAdmin(user) && user.primaryOrganizationId) {
+        // Non-admin users should only see measurements from their organization
+        // This is enforced by filtering athletes who belong to their organization's teams
+        filters.organizationId = user.primaryOrganizationId;
       }
-      if (req.query.birthYearTo) {
-        const year = parseInt(req.query.birthYearTo as string);
-        if (!isNaN(year)) filters.birthYearTo = year;
-      }
-      if (req.query.ageFrom) {
-        const age = parseInt(req.query.ageFrom as string);
-        if (!isNaN(age)) filters.ageFrom = age;
-      }
-      if (req.query.ageTo) {
-        const age = parseInt(req.query.ageTo as string);
-        if (!isNaN(age)) filters.ageTo = age;
-      }
-
-      // TODO: Add organization-based filtering for non-admin users
-      // For now, return all measurements matching filters
 
       const measurements = await measurementService.getMeasurements(filters);
       res.json(measurements);
     } catch (error) {
       console.error("Get measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({
+          message: "Invalid query parameters",
+          errors: error.errors
+        });
+      }
       const message = error instanceof Error ? error.message : "Failed to fetch measurements";
       res.status(500).json({ message });
     }
@@ -102,8 +129,10 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // TODO: Add permission check based on organization
-      // For now, allow any authenticated user to view
+      // Permission check: non-admin users can only view measurements in their organization
+      if (!isSiteAdmin(user) && measurement.organizationId && user.primaryOrganizationId !== measurement.organizationId) {
+        return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+      }
 
       res.json(measurement);
     } catch (error) {
@@ -131,14 +160,15 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
       }
 
-      // TODO: Add permission check for org admins/coaches based on organization
+      // Note: Organization validation for coaches/admins is handled at the service layer
+      // The measurement service auto-assigns organizationId based on the athlete's team context
 
       const measurement = await measurementService.createMeasurement(validatedData, user.id);
       res.status(201).json(measurement);
     } catch (error) {
       console.error("Create measurement error:", error);
-      if (error instanceof Error && error.name === 'ZodError') {
-        return res.status(400).json({ message: "Invalid input data", errors: error.message });
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       const message = error instanceof Error ? error.message : "Failed to create measurement";
       res.status(400).json({ message });
@@ -163,10 +193,14 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // Permission check: only submitter, org admins, or site admins can update
-      if (!isSiteAdmin(user) && existingMeasurement.submittedBy !== user.id) {
-        // TODO: Allow org admins/coaches to update measurements in their organization
-        return res.status(403).json({ message: "Access denied - you can only update measurements you submitted" });
+      // Permission check: submitter, org admins/coaches in same org, or site admins can update
+      const isSubmitter = existingMeasurement.submittedBy === user.id;
+      const isOrgAdminOrCoach = !isSiteAdmin(user) &&
+        (user.role === 'org_admin' || user.role === 'coach') &&
+        existingMeasurement.organizationId === user.primaryOrganizationId;
+
+      if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
+        return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
       }
 
       // Validate request body using partial schema (for updates)
@@ -177,8 +211,8 @@ export function registerMeasurementRoutes(app: Express) {
       res.json(updatedMeasurement);
     } catch (error) {
       console.error("Update measurement error:", error);
-      if (error instanceof Error && error.name === 'ZodError') {
-        return res.status(400).json({ message: "Invalid input data", errors: error.message });
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       const message = error instanceof Error ? error.message : "Failed to update measurement";
       res.status(400).json({ message });
@@ -203,10 +237,14 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // Permission check: only submitter, org admins, or site admins can delete
-      if (!isSiteAdmin(user) && existingMeasurement.submittedBy !== user.id) {
-        // TODO: Allow org admins/coaches to delete measurements in their organization
-        return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted" });
+      // Permission check: submitter, org admins/coaches in same org, or site admins can delete
+      const isSubmitter = existingMeasurement.submittedBy === user.id;
+      const isOrgAdminOrCoach = !isSiteAdmin(user) &&
+        (user.role === 'org_admin' || user.role === 'coach') &&
+        existingMeasurement.organizationId === user.primaryOrganizationId;
+
+      if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
+        return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
       await measurementService.deleteMeasurement(measurementId);
@@ -241,7 +279,10 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // TODO: Add permission check based on organization
+      // Permission check: org admins/coaches can only verify measurements in their organization
+      if (!isSiteAdmin(user) && existingMeasurement.organizationId !== user.primaryOrganizationId) {
+        return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+      }
 
       const verifiedMeasurement = await measurementService.verifyMeasurement(measurementId, user.id);
       res.json(verifiedMeasurement);

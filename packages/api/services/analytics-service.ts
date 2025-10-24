@@ -223,18 +223,21 @@ export class AnalyticsService {
     ];
 
     // Filter by organization through team membership
-    let recentMeasurements: Array<{ metric: string; value: string; userId: string }>;
+    // Use JOIN to get user names in a single query (fixes N+1 query issue)
+    let measurementsWithUsers: Array<{ metric: string; value: string; userId: string; userName: string }>;
     if (organizationId) {
       // Get measurements for athletes in the organization
       const orgAthleteIds = athletes.map((a) => a.id);
       if (orgAthleteIds.length > 0) {
-        recentMeasurements = await db
+        measurementsWithUsers = await db
           .select({
             metric: measurements.metric,
             value: measurements.value,
             userId: measurements.userId,
+            userName: users.fullName,
           })
           .from(measurements)
+          .innerJoin(users, eq(measurements.userId, users.id))
           .where(
             and(
               ...measurementConditions,
@@ -242,32 +245,20 @@ export class AnalyticsService {
             )
           );
       } else {
-        recentMeasurements = [];
+        measurementsWithUsers = [];
       }
     } else {
-      recentMeasurements = await db
+      measurementsWithUsers = await db
         .select({
           metric: measurements.metric,
           value: measurements.value,
           userId: measurements.userId,
+          userName: users.fullName,
         })
         .from(measurements)
+        .innerJoin(users, eq(measurements.userId, users.id))
         .where(and(...measurementConditions));
     }
-
-    // Get user names for measurements
-    const measurementsWithUsers = await Promise.all(
-      recentMeasurements.map(async (m) => {
-        const [user] = await db
-          .select({ fullName: users.fullName })
-          .from(users)
-          .where(eq(users.id, m.userId));
-        return {
-          ...m,
-          userName: user?.fullName || 'Unknown',
-        };
-      })
-    );
 
     // Define metrics and whether lower is better
     const metrics = [
@@ -281,7 +272,7 @@ export class AnalyticsService {
     ];
 
     // Calculate best for each metric
-    const bestMetrics: any = {
+    const bestMetrics: DashboardStats = {
       totalAthletes,
       activeAthletes,
       totalTeams,

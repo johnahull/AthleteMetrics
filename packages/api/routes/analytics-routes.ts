@@ -7,11 +7,10 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AnalyticsService } from "../services/analytics-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-
-// Helper function to check if user is site admin
-function isSiteAdmin(user: any): boolean {
-  return user?.isSiteAdmin === true;
-}
+import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { db } from "../db";
+import { users, userTeams, teams } from "@shared/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 // Rate limiting for analytics endpoints
 // Analytics queries can be expensive, so we use stricter limits
@@ -55,7 +54,25 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes can only view their own statistics" });
       }
 
-      // TODO: Add permission check for org admins/coaches based on organization
+      // Permission check: org admins/coaches can only view athletes in their organization
+      if (!isSiteAdmin(user) && user.role !== 'athlete' && user.primaryOrganizationId) {
+        // Check if athlete belongs to a team in the user's organization
+        const athleteTeams = await db
+          .select({ organizationId: teams.organizationId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(
+            and(
+              eq(userTeams.userId, userId),
+              eq(userTeams.isActive, true)
+            )
+          );
+
+        const isInOrganization = athleteTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        if (!isInOrganization) {
+          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+        }
+      }
 
       const stats = await analyticsService.getAthleteStats(userId);
       res.json(stats);
@@ -154,7 +171,25 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes can only view their own statistics" });
       }
 
-      // TODO: Add permission check for org admins/coaches based on organization
+      // Permission check: org admins/coaches can only view athletes in their organization
+      if (!isSiteAdmin(user) && user.role !== 'athlete' && user.primaryOrganizationId) {
+        // Check if athlete belongs to a team in the user's organization
+        const athleteTeams = await db
+          .select({ organizationId: teams.organizationId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(
+            and(
+              eq(userTeams.userId, userId),
+              eq(userTeams.isActive, true)
+            )
+          );
+
+        const isInOrganization = athleteTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        if (!isInOrganization) {
+          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+        }
+      }
 
       const stats = await analyticsService.getUserStats(userId);
       res.json(stats);

@@ -8,11 +8,8 @@ import rateLimit from "express-rate-limit";
 import { TeamService } from "../services/team-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertTeamSchema } from "@shared/schema";
-
-// Helper function to check if user is site admin
-function isSiteAdmin(user: any): boolean {
-  return user?.isSiteAdmin === true;
-}
+import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { ZodError } from "zod";
 
 // Rate limiting for team endpoints
 const teamLimiter = rateLimit({
@@ -122,8 +119,8 @@ export function registerTeamRoutes(app: Express) {
       res.status(201).json(team);
     } catch (error) {
       console.error("Create team error:", error);
-      if (error instanceof Error && error.name === 'ZodError') {
-        return res.status(400).json({ message: "Invalid input data", errors: error.message });
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       const message = error instanceof Error ? error.message : "Failed to create team";
       res.status(400).json({ message });
@@ -161,8 +158,8 @@ export function registerTeamRoutes(app: Express) {
       res.json(updatedTeam);
     } catch (error) {
       console.error("Update team error:", error);
-      if (error instanceof Error && error.name === 'ZodError') {
-        return res.status(400).json({ message: "Invalid input data", errors: error.message });
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       const message = error instanceof Error ? error.message : "Failed to update team";
       res.status(400).json({ message });
