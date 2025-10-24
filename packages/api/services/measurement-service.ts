@@ -1,418 +1,694 @@
 /**
- * Measurement management service with enhanced athlete matching
+ * MeasurementService - Handles all measurement-related business logic
+ * Refactored to use direct database access instead of storage layer
+ * This reduces coupling and improves modularity
  */
 
-import { BaseService } from "./base-service";
-import { insertMeasurementSchema } from "@shared/schema";
-import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
-import { reviewQueue } from "../review-queue";
-import type { Measurement, InsertMeasurement } from "@shared/schema";
+import {
+  measurements,
+  teams,
+  organizations,
+  users,
+  userTeams,
+  type Measurement,
+  type InsertMeasurement,
+  type Team,
+  type Organization,
+} from '@shared/schema';
+import { db } from '../db';
+import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
+import { PAGINATION } from '../constants/pagination';
 
 export interface MeasurementFilters {
+  userId?: string;
   athleteId?: string;
-  metric?: string;
-  startDate?: string;
-  endDate?: string;
+  teamIds?: string[];
   organizationId?: string;
-  teamId?: string;
-  isVerified?: string;
-}
-
-export interface MeasurementImportData {
-  firstName: string;
-  lastName: string;
-  teamName?: string;
-  date: string;
-  metric: string;
-  value: string;
-  units?: string;
-  age?: string;
-  notes?: string;
+  metric?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  birthYearFrom?: number;
+  birthYearTo?: number;
+  ageFrom?: number;
+  ageTo?: number;
+  search?: string;
+  sport?: string;
   gender?: string;
+  position?: string;
+  includeUnverified?: boolean;
+  limit?: number;
+  offset?: number;
 }
 
-export class MeasurementService extends BaseService {
+export interface PaginatedMeasurements {
+  measurements: Measurement[];
+  total: number;
+  hasMore: boolean;
+  limit: number;
+  offset: number;
+}
+
+export class MeasurementService {
   /**
-   * Get measurements with filtering and organization access validation
+   * Get a single measurement by ID
+   * @param id Measurement ID
+   * @returns Measurement or undefined
    */
-  async getMeasurements(
-    filters: MeasurementFilters, 
-    requestingUserId: string
-  ): Promise<Measurement[]> {
-    try {
-      // Get user's accessible organizations
-      const userOrgs = await this.getUserOrganizations(requestingUserId);
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      
-      // Site admins can see all measurements
-      if (requestingUser?.isSiteAdmin === true) {
-        return await this.storage.getMeasurements(filters);
-      }
-
-      // Filter by user's organizations if not specified
-      if (!filters.organizationId) {
-        const accessibleOrgIds = userOrgs.map(org => org.organizationId);
-        // For now, use the first accessible organization if multiple exist
-        return await this.storage.getMeasurements({
-          ...filters,
-          organizationId: accessibleOrgIds[0]
-        });
-      }
-
-      // Validate organization access
-      const hasAccess = await this.validateOrganizationAccess(
-        requestingUserId, 
-        filters.organizationId
-      );
-      
-      if (!hasAccess) {
-        throw new Error("Unauthorized: Access denied to this organization's measurements");
-      }
-
-      return await this.storage.getMeasurements(filters);
-    } catch (error) {
-      this.handleError(error, "MeasurementService.getMeasurements");
-    }
+  async getMeasurement(id: string): Promise<Measurement | undefined> {
+    const [measurement] = await db
+      .select()
+      .from(measurements)
+      .where(eq(measurements.id, id));
+    return measurement || undefined;
   }
 
   /**
-   * Create a single measurement
+   * Get athlete's active teams at a specific date
+   * Used for auto-assigning team context to measurements
+   * @param userId Athlete user ID
+   * @param measurementDate Date of measurement
+   * @returns Array of active teams
+   */
+  async getAthleteActiveTeamsAtDate(
+    userId: string,
+    measurementDate: Date
+  ): Promise<
+    Array<{
+      teamId: string;
+      teamName: string;
+      season: string | null;
+      organizationId: string;
+      organizationName: string;
+    }>
+  > {
+    const activeTeams = await db
+      .select({
+        teamId: teams.id,
+        teamName: teams.name,
+        season: teams.season,
+        organizationId: teams.organizationId,
+        organizationName: organizations.name,
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(
+        and(
+          eq(userTeams.userId, userId),
+          lte(userTeams.joinedAt, measurementDate),
+          or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false) // Only include non-archived teams
+        )
+      );
+
+    return activeTeams;
+  }
+
+  /**
+   * Create a new measurement with auto-calculated fields
+   * IMPORTANT: Wrapped in transaction to prevent race conditions
+   * @param measurement Measurement data
+   * @param submittedBy User ID of submitter
+   * @returns Created measurement
+   * @throws Error if user not found, team not found, or transaction fails
    */
   async createMeasurement(
-    measurementData: InsertMeasurement, 
-    requestingUserId: string
+    measurement: InsertMeasurement,
+    submittedBy: string
   ): Promise<Measurement> {
+    // Wrap entire operation in transaction to prevent race conditions
+    // Race condition scenario: User joins/leaves team between active teams query and measurement insert
     try {
-      // Validate input
-      const validatedData = insertMeasurementSchema.parse(measurementData);
+      return await db.transaction(async (tx) => {
+      // Get user info for age calculation
+      const [user] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, measurement.userId));
 
-      // Validate athlete access
-      const athlete = await this.storage.getUser(validatedData.userId);
-      if (!athlete) {
-        throw new Error("Athlete not found");
+      if (!user) throw new Error('User not found');
+
+      const measurementDate = new Date(measurement.date);
+      let age = measurementDate.getFullYear() - (user.birthYear || 0);
+
+      // Use birthDate for more precise age calculation if available
+      if (user.birthDate) {
+        const birthDate = new Date(user.birthDate);
+        const birthdayThisYear = new Date(
+          measurementDate.getFullYear(),
+          birthDate.getMonth(),
+          birthDate.getDate()
+        );
+        if (measurementDate < birthdayThisYear) {
+          age -= 1;
+        }
       }
 
-      // Check organization access for the athlete
-      const athleteOrgs = await this.getUserOrganizations(validatedData.userId);
-      const requestingUserOrgs = await this.getUserOrganizations(requestingUserId);
-      
-      const hasSharedOrg = athleteOrgs.some(athleteOrg =>
-        requestingUserOrgs.some(userOrg => userOrg.organizationId === athleteOrg.organizationId)
-      );
+      // Auto-calculate units based on metric
+      const units =
+        measurement.metric === 'FLY10_TIME' ||
+        measurement.metric === 'T_TEST' ||
+        measurement.metric === 'DASH_40YD' ||
+        measurement.metric === 'AGILITY_505' ||
+        measurement.metric === 'AGILITY_5105'
+          ? 's'
+          : measurement.metric === 'RSI'
+          ? 'ratio'
+          : 'in';
 
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== true) {
-        throw new Error("Unauthorized: Cannot create measurements for athletes outside your organizations");
+      // Auto-populate team context if not explicitly provided
+      let teamId = measurement.teamId;
+      let season = measurement.season;
+      let teamContextAuto = true;
+      let teamNameSnapshot: string | null = null;
+      let organizationId: string | null = null;
+
+      if (!teamId || teamId.trim() === '') {
+        // Get athlete's active teams at measurement date (within transaction)
+        // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
+        // See: migrations/0018_add_org_query_composite_indexes.sql
+        const activeTeams = await tx
+          .select({
+            teamId: teams.id,
+            teamName: teams.name,
+            season: teams.season,
+            organizationId: teams.organizationId,
+            organizationName: organizations.name,
+          })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .where(
+            and(
+              eq(userTeams.userId, measurement.userId),
+              lte(userTeams.joinedAt, measurementDate),
+              or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+              eq(userTeams.isActive, true),
+              eq(teams.isArchived, false)
+            )
+          )
+          .for('update'); // Prevent race condition with row-level lock
+
+        if (activeTeams.length === 1) {
+          // Single team - auto-assign
+          teamId = activeTeams[0].teamId;
+          // Use undefined for optional fields per TypeScript schema
+          season = activeTeams[0].season ?? undefined;
+          teamContextAuto = true;
+          // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
+        } else if (activeTeams.length > 1) {
+          // Multiple teams - cannot auto-assign
+          // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+          teamContextAuto = false;
+        } else {
+          // No active teams - measurement without team context
+          teamContextAuto = false;
+        }
+      } else {
+        // teamId was explicitly provided
+        teamContextAuto = false;
       }
 
-      return await this.storage.createMeasurement(validatedData, requestingUserId);
+      // If teamId is set (either auto-assigned or explicitly provided), fetch team details for snapshot
+      if (teamId && teamId.trim() !== '') {
+        const [team] = await tx
+          .select()
+          .from(teams)
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .where(eq(teams.id, teamId));
+
+        if (team) {
+          teamNameSnapshot = team.teams.name;
+          organizationId = team.teams.organizationId;
+          // Use undefined for optional fields per TypeScript schema
+          season = season ?? team.teams.season ?? undefined;
+        }
+      }
+
+      // Create measurement
+      const [newMeasurement] = await tx
+        .insert(measurements)
+        .values({
+          userId: measurement.userId,
+          submittedBy,
+          date: measurementDate.toISOString(),
+          metric: measurement.metric,
+          value: String(measurement.value),
+          units,
+          age,
+          notes: measurement.notes || null,
+          flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
+          teamId: teamId || null,
+          season: season || null,
+          teamContextAuto,
+          teamNameSnapshot,
+          organizationId: organizationId || null,
+          isVerified: false,
+        })
+        .returning();
+
+      return newMeasurement;
+      });
     } catch (error) {
-      this.handleError(error, "MeasurementService.createMeasurement");
+      // Preserve error specificity - don't wrap validation errors
+      if (error instanceof Error) {
+        // Re-throw validation errors without modification
+        if (error.message.includes('User not found') ||
+            error.message.includes('Team not found') ||
+            error.message.includes('not found')) {
+          throw error;
+        }
+        // Database constraint violations - preserve original message
+        if (error.message.includes('constraint') ||
+            error.message.includes('foreign key') ||
+            error.message.includes('unique')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        // Generic database error - preserve original message for debugging
+        throw new Error(`Failed to create measurement: ${error.message}`);
+      }
+      // Unknown error type - wrap with context
+      throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
     }
   }
 
   /**
-   * Import measurements with enhanced athlete matching
-   */
-  async importMeasurements(
-    measurementsData: MeasurementImportData[],
-    requestingUserId: string
-  ): Promise<{
-    results: any[];
-    errors: any[];
-    warnings: string[];
-    summary: {
-      successful: number;
-      failed: number;
-      warnings: number;
-      pendingReview: number;
-    };
-  }> {
-    try {
-      const results: any[] = [];
-      const errors: any[] = [];
-      const warnings: string[] = [];
-
-      for (let i = 0; i < measurementsData.length; i++) {
-        const row = measurementsData[i];
-        const rowNum = i + 2; // Account for header row
-
-        try {
-          const { firstName, lastName, teamName, date, age, metric, value, units, notes, gender } = row;
-
-          // Validate required fields
-          if (!firstName || !lastName || !teamName || !date || !metric || !value) {
-            errors.push({ 
-              row: rowNum, 
-              error: "First name, last name, team name, date, metric, and value are required" 
-            });
-            continue;
-          }
-
-          // Get organization context for filtering
-          let organizationId: string | undefined;
-          const currentUser = await this.storage.getUser(requestingUserId);
-          
-          if (teamName) {
-            // Try to find the team to get organization context
-            const teams = await this.storage.getTeams();
-            const team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
-            organizationId = team?.organization?.id;
-          }
-          
-          if (!organizationId) {
-            // Fallback to current user's primary organization
-            const userOrgs = await this.getUserOrganizations(requestingUserId);
-            organizationId = userOrgs[0]?.organizationId;
-          }
-
-          // Use enhanced athlete matching system
-          const athletes = await this.storage.getAthletes({
-            search: `${firstName} ${lastName}`,
-            organizationId: organizationId
-          });
-
-          // Build matching criteria
-          const matchingCriteria: MatchingCriteria = {
-            firstName,
-            lastName,
-            teamName
-          };
-
-          // Find best match using advanced matching algorithm
-          const matchResult: MatchResult = findBestAthleteMatch(matchingCriteria, athletes);
-
-          let matchedAthlete;
-          if (matchResult.type === 'none') {
-            // No suitable match found
-            let errorMsg = `No matching athlete found for ${firstName} ${lastName}`;
-            if (teamName) {
-              errorMsg += ` in team "${teamName}"`;
-            }
-            
-            // Suggest alternatives if available
-            if (matchResult.alternatives && matchResult.alternatives.length > 0) {
-              const suggestions = matchResult.alternatives
-                .slice(0, 2)
-                .map(alt => `${alt.firstName} ${alt.lastName} (${alt.matchReason})`)
-                .join(', ');
-              errorMsg += `. Similar athletes found: ${suggestions}`;
-            }
-            
-            errors.push({ row: rowNum, error: errorMsg });
-            continue;
-          }
-
-          // Handle review queue for low-confidence matches
-          if (matchResult.requiresManualReview || matchResult.confidence < 75) {
-            // Add to review queue instead of processing immediately
-            const reviewItem = reviewQueue.addItem({
-              type: 'measurement',
-              originalData: row,
-              matchingCriteria,
-              suggestedMatch: matchResult.candidate ? {
-                id: matchResult.candidate.id,
-                firstName: matchResult.candidate.firstName,
-                lastName: matchResult.candidate.lastName,
-                confidence: matchResult.confidence,
-                reason: matchResult.candidate.matchReason
-              } : undefined,
-              alternatives: matchResult.alternatives?.map(alt => ({
-                id: alt.id,
-                firstName: alt.firstName,
-                lastName: alt.lastName,
-                confidence: alt.matchScore,
-                reason: alt.matchReason
-              })),
-              createdBy: requestingUserId
-            });
-
-            results.push({
-              action: 'pending_review',
-              reviewItem: {
-                id: reviewItem.id,
-                reason: `Low confidence match (${matchResult.confidence}%) requires manual review`
-              }
-            });
-            continue;
-          }
-
-          matchedAthlete = matchResult.candidate;
-
-          if (!matchedAthlete) {
-            errors.push({ row: rowNum, error: `No valid athlete match found for ${firstName} ${lastName}` });
-            continue;
-          }
-
-          // Add warning for medium-confidence matches that were auto-approved
-          if (matchResult.confidence < 90) {
-            const warningMsg = `${firstName} ${lastName} matched to ${matchedAthlete.firstName} ${matchedAthlete.lastName} ` +
-              `(confidence: ${matchResult.confidence}%, reason: ${matchedAthlete.matchReason})`;
-            warnings.push(warningMsg);
-          }
-
-          // Validate metric type
-          const validMetrics = ["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI"];
-          if (!validMetrics.includes(metric)) {
-            errors.push({ row: rowNum, error: `Invalid metric "${metric}". Must be one of: ${validMetrics.join(', ')}` });
-            continue;
-          }
-
-          const measurementData = {
-            userId: matchedAthlete.id,
-            date,
-            age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
-            metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI",
-            value: parseFloat(value),
-            units: units || (metric === 'FLY10_TIME' ? 's' : metric === 'VERTICAL_JUMP' ? 'in' : ''),
-            notes: notes || undefined,
-            isVerified: "false"
-          };
-
-          const measurement = await this.storage.createMeasurement(measurementData, requestingUserId);
-
-          results.push({
-            action: 'created',
-            measurement: {
-              id: measurement.id,
-              athlete: `${matchedAthlete.firstName} ${matchedAthlete.lastName}`,
-              metric: measurement.metric,
-              value: measurement.value,
-              date: measurement.date
-            }
-          });
-        } catch (error) {
-          console.error('Error processing measurement row:', error);
-          errors.push({ 
-            row: rowNum, 
-            error: error instanceof Error ? error.message : 'Unknown error' 
-          });
-        }
-      }
-
-      const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
-
-      return {
-        results,
-        errors,
-        warnings,
-        summary: {
-          successful: results.filter(r => r.action === 'created').length,
-          failed: errors.length,
-          warnings: warnings.length,
-          pendingReview: pendingReviewCount
-        }
-      };
-    } catch (error) {
-      this.handleError(error, "MeasurementService.importMeasurements");
-    }
-  }
-
-  /**
-   * Update measurement
+   * Update measurement fields
+   * Note: submittedBy cannot be updated after creation
+   * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
+   * @param id Measurement ID
+   * @param measurement Partial measurement data
+   * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
+   * @returns Updated measurement
+   * @throws Error if measurement not found, org mismatch, or transaction fails
    */
   async updateMeasurement(
-    measurementId: string,
-    updateData: Partial<InsertMeasurement>,
-    requestingUserId: string
+    id: string,
+    measurement: Partial<InsertMeasurement>,
+    expectedOrganizationId?: string
   ): Promise<Measurement> {
+    // Wrap in transaction to prevent race conditions during concurrent updates
+    // Race condition scenario: Two users update same measurement simultaneously
     try {
-      // Get existing measurement
-      const existingMeasurement = await this.storage.getMeasurement(measurementId);
-      if (!existingMeasurement) {
-        throw new Error("Measurement not found");
-      }
+      return await db.transaction(async (tx) => {
+        // Lock the row with FOR UPDATE to prevent concurrent modifications
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(eq(measurements.id, id))
+          .for('update');
 
-      // Validate athlete access
-      const athlete = await this.storage.getUser(existingMeasurement.userId);
-      if (!athlete) {
-        throw new Error("Athlete not found");
-      }
+        if (!existing) {
+          throw new Error('Measurement not found');
+        }
 
-      // Check organization access
-      const athleteOrgs = await this.getUserOrganizations(existingMeasurement.userId);
-      const requestingUserOrgs = await this.getUserOrganizations(requestingUserId);
-      
-      const hasSharedOrg = athleteOrgs.some(athleteOrg =>
-        requestingUserOrgs.some(userOrg => userOrg.organizationId === athleteOrg.organizationId)
-      );
+        // Defense-in-depth: Verify organizationId if provided (IDOR prevention)
+        // This provides service-layer validation even if route-layer checks are bypassed
+        if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - measurement belongs to different organization');
+        }
 
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== true) {
-        throw new Error("Unauthorized: Cannot update measurements for athletes outside your organizations");
-      }
+        const updateData: Partial<typeof measurements.$inferInsert> = {};
 
-      return await this.storage.updateMeasurement(measurementId, updateData);
+        if (measurement.userId) updateData.userId = measurement.userId;
+        // submittedBy cannot be updated after creation (intentionally excluded)
+        if (measurement.date) updateData.date = measurement.date;
+        if (measurement.metric) {
+          updateData.metric = measurement.metric;
+
+          // CRITICAL: Recalculate units when metric changes
+          // Different metrics use different units (seconds, inches, ratio)
+          const newUnits =
+            measurement.metric === 'FLY10_TIME' ||
+            measurement.metric === 'T_TEST' ||
+            measurement.metric === 'DASH_40YD' ||
+            measurement.metric === 'AGILITY_505' ||
+            measurement.metric === 'AGILITY_5105'
+              ? 's'
+              : measurement.metric === 'RSI'
+              ? 'ratio'
+              : 'in';
+
+          updateData.units = newUnits;
+        }
+        if (measurement.value !== undefined)
+          updateData.value = String(measurement.value);
+        if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+        if (measurement.flyInDistance !== undefined)
+          updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
+
+        // Check if there are any valid fields to update
+        if (Object.keys(updateData).length === 0) {
+          throw new Error('No valid fields to update');
+        }
+
+        const [updated] = await tx
+          .update(measurements)
+          .set(updateData)
+          .where(eq(measurements.id, id))
+          .returning();
+
+        return updated;
+      });
     } catch (error) {
-      this.handleError(error, "MeasurementService.updateMeasurement");
+      // Preserve error specificity
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        throw new Error(`Failed to update measurement: ${error.message}`);
+      }
+      throw new Error(`Failed to update measurement due to unexpected error: ${String(error)}`);
     }
   }
 
   /**
-   * Delete measurement
+   * Delete a measurement
+   * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
+   * @param id Measurement ID
+   * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
+   * @throws Error if measurement not found, org mismatch, or transaction fails
    */
-  async deleteMeasurement(measurementId: string, requestingUserId: string): Promise<void> {
+  async deleteMeasurement(id: string, expectedOrganizationId?: string): Promise<void> {
+    // Wrap in transaction to prevent race conditions during concurrent operations
+    // Race condition scenario: User deletes measurement while another user verifies/updates it
     try {
-      // Get existing measurement
-      const existingMeasurement = await this.storage.getMeasurement(measurementId);
-      if (!existingMeasurement) {
-        throw new Error("Measurement not found");
-      }
+      await db.transaction(async (tx) => {
+        // Lock the row with FOR UPDATE to prevent concurrent modifications
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(eq(measurements.id, id))
+          .for('update');
 
-      // Validate athlete access
-      const athleteOrgs = await this.getUserOrganizations(existingMeasurement.userId);
-      const requestingUserOrgs = await this.getUserOrganizations(requestingUserId);
-      
-      const hasSharedOrg = athleteOrgs.some(athleteOrg =>
-        requestingUserOrgs.some(userOrg => userOrg.organizationId === athleteOrg.organizationId)
-      );
+        if (!existing) {
+          throw new Error('Measurement not found');
+        }
 
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!hasSharedOrg && requestingUser?.isSiteAdmin !== true) {
-        throw new Error("Unauthorized: Cannot delete measurements for athletes outside your organizations");
-      }
+        // Defense-in-depth: Verify organizationId if provided (IDOR prevention)
+        // This provides service-layer validation even if route-layer checks are bypassed
+        if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - measurement belongs to different organization');
+        }
 
-      await this.storage.deleteMeasurement(measurementId);
+        // Delete the measurement
+        await tx.delete(measurements).where(eq(measurements.id, id));
+      });
     } catch (error) {
-      this.handleError(error, "MeasurementService.deleteMeasurement");
+      // Preserve error specificity
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        throw new Error(`Failed to delete measurement: ${error.message}`);
+      }
+      throw new Error(`Failed to delete measurement due to unexpected error: ${String(error)}`);
     }
   }
 
   /**
-   * Verify measurement
+   * Mark measurement as verified
+   * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
+   * Idempotent operation - can be called multiple times safely
+   *
+   * Defense-in-depth: When expectedOrganizationId provided, validates organization
+   * ownership to prevent IDOR attacks even if route-level checks are bypassed.
+   *
+   * @param id Measurement ID
+   * @param verifiedBy User ID of verifier
+   * @param expectedOrganizationId Optional organization ID for IDOR protection
+   * @returns Updated measurement
+   * @throws Error if measurement not found, org mismatch, or transaction fails
    */
   async verifyMeasurement(
-    measurementId: string,
-    requestingUserId: string
+    id: string,
+    verifiedBy: string,
+    expectedOrganizationId?: string
   ): Promise<Measurement> {
+    // Wrap in transaction to prevent race conditions during concurrent verifications
+    // Race condition scenario: Two admins verify same measurement simultaneously, overwriting audit trail
     try {
-      // Get existing measurement
-      const existingMeasurement = await this.storage.getMeasurement(measurementId);
-      if (!existingMeasurement) {
-        throw new Error("Measurement not found");
-      }
+      return await db.transaction(async (tx) => {
+        // Lock the row with FOR UPDATE to prevent concurrent modifications
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(eq(measurements.id, id))
+          .for('update');
 
-      // Only coaches and admins can verify measurements
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      if (!requestingUser) {
-        throw new Error("User not found");
-      }
+        if (!existing) {
+          throw new Error('Measurement not found');
+        }
 
-      // Get user's organization roles to check permissions
-      const userOrgs = await this.getUserOrganizations(requestingUserId);
-      const hasCoachOrAdminRole = userOrgs.some(org => 
-        org.role === 'coach' || org.role === 'org_admin'
-      );
+        // Defense-in-depth: Verify organization ownership at service layer
+        // This prevents IDOR attacks even if route-level checks are bypassed
+        if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - measurement belongs to different organization');
+        }
 
-      const canVerify = requestingUser.isSiteAdmin === true || hasCoachOrAdminRole;
+        // Idempotency check: if already verified by this user, return existing record
+        if (existing.isVerified && existing.verifiedBy === verifiedBy) {
+          return existing;
+        }
 
-      if (!canVerify) {
-        throw new Error("Unauthorized: Only coaches and administrators can verify measurements");
-      }
+        // Update verification status
+        const [updated] = await tx
+          .update(measurements)
+          .set({
+            isVerified: true,
+            verifiedBy,
+          })
+          .where(eq(measurements.id, id))
+          .returning();
 
-      return await this.storage.verifyMeasurement(measurementId, requestingUserId);
+        return updated;
+      });
     } catch (error) {
-      this.handleError(error, "MeasurementService.verifyMeasurement");
+      // Preserve error specificity
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          throw error;
+        }
+        // Transaction rollback or deadlock - preserve details
+        if (error.message.includes('deadlock') ||
+            error.message.includes('serialization') ||
+            error.message.includes('rollback')) {
+          throw error;
+        }
+        throw new Error(`Failed to verify measurement: ${error.message}`);
+      }
+      throw new Error(`Failed to verify measurement due to unexpected error: ${String(error)}`);
     }
+  }
+
+  /**
+   * Get measurements with filters and pagination
+   * @param filters Measurement filters including pagination options
+   * @param allowCrossOrganization Whether to allow queries without organizationId (site admin only)
+   * @returns Paginated measurements with metadata
+   * @throws Error if organizationId not provided and allowCrossOrganization is false
+   */
+  async getMeasurements(
+    filters?: MeasurementFilters,
+    allowCrossOrganization: boolean = false
+  ): Promise<PaginatedMeasurements> {
+    // Defense-in-depth: Enforce organizationId requirement for non-site-admin contexts
+    // This prevents accidental data leakage if route-layer authorization is bypassed
+    if (!filters?.organizationId && !allowCrossOrganization) {
+      throw new Error('organizationId is required for organization-scoped queries');
+    }
+
+    // Build query conditions
+    const conditions = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(measurements.userId, filters.userId));
+    }
+
+    if (filters?.athleteId) {
+      conditions.push(eq(measurements.userId, filters.athleteId));
+    }
+
+    if (filters?.metric) {
+      conditions.push(eq(measurements.metric, filters.metric));
+    }
+
+    if (filters?.organizationId) {
+      conditions.push(eq(measurements.organizationId, filters.organizationId));
+    }
+
+    if (filters?.dateFrom) {
+      conditions.push(gte(measurements.date, new Date(filters.dateFrom).toISOString()));
+    }
+
+    if (filters?.dateTo) {
+      conditions.push(lte(measurements.date, new Date(filters.dateTo).toISOString()));
+    }
+
+    if (!filters?.includeUnverified) {
+      conditions.push(eq(measurements.isVerified, true));
+    }
+
+    // Pagination parameters with safety limits to prevent memory exhaustion
+    const limit = Math.min(filters?.limit || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
+    const offset = Math.min(filters?.offset || 0, PAGINATION.MAX_OFFSET);
+
+    // Build WHERE clause
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Execute query with pagination and count in parallel
+    const [results, countResult] = await Promise.all([
+      db.select({
+        // Measurement fields
+        id: measurements.id,
+        userId: measurements.userId,
+        submittedBy: measurements.submittedBy,
+        verifiedBy: measurements.verifiedBy,
+        isVerified: measurements.isVerified,
+        date: measurements.date,
+        age: measurements.age,
+        metric: measurements.metric,
+        value: measurements.value,
+        units: measurements.units,
+        flyInDistance: measurements.flyInDistance,
+        notes: measurements.notes,
+        teamId: measurements.teamId,
+        teamNameSnapshot: measurements.teamNameSnapshot,
+        organizationId: measurements.organizationId,
+        season: measurements.season,
+        teamContextAuto: measurements.teamContextAuto,
+        createdAt: measurements.createdAt,
+        // User data
+        user: sql<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          fullName: string;
+          birthYear: number | null;
+          birthDate: string | null;
+          sports: string[] | null;
+          gender: string | null;
+          positions: string[] | null;
+        }>`jsonb_build_object(
+          'id', ${users.id},
+          'firstName', ${users.firstName},
+          'lastName', ${users.lastName},
+          'fullName', ${users.fullName},
+          'birthYear', ${users.birthYear},
+          'birthDate', ${users.birthDate},
+          'sports', ${users.sports},
+          'gender', ${users.gender},
+          'positions', ${users.positions}
+        )`,
+      })
+        .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .where(whereClause)
+        .orderBy(desc(measurements.date))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(measurements)
+        .where(whereClause)
+    ]);
+
+    const total = countResult[0]?.count || 0;
+
+    // Enrich with team data
+    const uniqueUserIds = [...new Set(results.map((r: any) => r.userId))];
+    let measurementsWithTeams = results;
+
+    // Safety check: prevent memory exhaustion from large user sets
+    // This should never happen with pagination, but defensive programming is good practice
+    if (uniqueUserIds.length > 10000) {
+      console.warn(`getMeasurements: Large user set detected (${uniqueUserIds.length} users). Consider reducing page size.`);
+    }
+
+    if (uniqueUserIds.length > 0) {
+      // Query user teams
+      const allUserTeams = await db
+        .select({
+          userId: userTeams.userId,
+          teamId: teams.id,
+          teamName: teams.name,
+          joinedAt: userTeams.joinedAt,
+          leftAt: userTeams.leftAt,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .where(and(
+          inArray(userTeams.userId, uniqueUserIds),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        ));
+
+      // Build map of userId -> teams
+      const userTeamsMap = new Map<string, typeof allUserTeams>();
+      allUserTeams.forEach((ut) => {
+        if (!userTeamsMap.has(ut.userId)) {
+          userTeamsMap.set(ut.userId, []);
+        }
+        userTeamsMap.get(ut.userId)!.push(ut);
+      });
+
+      // Attach teams to measurements
+      measurementsWithTeams = results.map((measurement: any) => {
+        const userMemberships = userTeamsMap.get(measurement.userId) || [];
+
+        // Show currently active teams
+        const activeTeams = userMemberships.filter((membership) => {
+          const leftDate = membership.leftAt ? new Date(membership.leftAt) : null;
+          const now = new Date();
+          return (!leftDate || leftDate >= now);
+        });
+
+        const teams = activeTeams.map((membership) => ({
+          id: membership.teamId,
+          name: membership.teamName,
+          organization: {
+            id: membership.organizationId,
+            name: membership.organizationName,
+          },
+        }));
+
+        return {
+          ...measurement,
+          user: {
+            ...measurement.user,
+            teams,
+          },
+        };
+      });
+    }
+
+    return {
+      measurements: measurementsWithTeams,
+      total,
+      hasMore: offset + results.length < total,
+      limit,
+      offset,
+    };
   }
 }

@@ -5,6 +5,7 @@
 import { eq, and, inArray, gte, lte, sql, exists } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, userOrganizations, teams, userTeams } from "@shared/schema";
+import { PAGINATION } from "./constants/pagination";
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -517,7 +518,7 @@ export class AnalyticsService {
         .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
-        .limit(10000); // Increased limit with proper safeguards
+        .limit(PAGINATION.ANALYTICS_LIMIT);
 
       // Database query completed, processing results
       

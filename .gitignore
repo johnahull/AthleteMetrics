@@ -57,3 +57,8 @@ backups/
 test-results/
 playwright-report/
 screenshots/
+
+# Editor swap files
+*.swp
+*.swo
+*~

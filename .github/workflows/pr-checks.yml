@@ -34,6 +34,22 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: athlete_performance_test
+          POSTGRES_MAX_CONNECTIONS: 100
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -41,12 +57,18 @@ jobs:
       - name: Setup project
         uses: ./.github/actions/setup
 
+      - name: Run database migrations
+        run: npm run db:push
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athlete_performance_test
+
       - name: Run unit tests
         run: npm run test:unit
         env:
           NODE_ENV: test
           NODE_OPTIONS: --max-old-space-size=4096
           SESSION_SECRET: test-secret-key-for-ci
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athlete_performance_test
 
   integration-tests:
     name: Integration Tests

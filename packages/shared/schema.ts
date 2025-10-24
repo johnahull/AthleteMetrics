@@ -489,7 +489,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   teamContextAuto: true, // Managed by system
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
-  date: z.string().min(1, "Date is required"),
+  date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
@@ -568,6 +568,18 @@ export const MetricType = {
   TOP_SPEED: "TOP_SPEED",
 } as const;
 
+// Valid metrics for analytics with optimization hints
+// Defines which metrics should be minimized (lower is better) vs maximized (higher is better)
+export const VALID_METRICS = [
+  { key: 'FLY10_TIME', lowerIsBetter: true },
+  { key: 'VERTICAL_JUMP', lowerIsBetter: false },
+  { key: 'AGILITY_505', lowerIsBetter: true },
+  { key: 'AGILITY_5105', lowerIsBetter: true },
+  { key: 'T_TEST', lowerIsBetter: true },
+  { key: 'DASH_40YD', lowerIsBetter: true },
+  { key: 'RSI', lowerIsBetter: false },
+] as const;
+
 export const TeamLevel = {
   CLUB: "Club",
   HS: "HS",
@@ -593,6 +605,13 @@ export const UserRole = {
   COACH: "coach",
   ATHLETE: "athlete",
 } as const;
+
+/**
+ * Sentinel value for user passwords that are pending invitation acceptance
+ * Users with this password value have not yet completed registration
+ * @constant
+ */
+export const INVITATION_PENDING_PASSWORD = 'INVITATION_PENDING';
 
 export const OrganizationRole = {
   ORG_ADMIN: "org_admin",

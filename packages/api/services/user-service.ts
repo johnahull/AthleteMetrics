@@ -4,7 +4,7 @@
 
 import bcrypt from "bcrypt";
 import { BaseService } from "./base-service";
-import { insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema } from "@shared/schema";
+import { insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, INVITATION_PENDING_PASSWORD } from "@shared/schema";
 import type { User, InsertUser } from "@shared/schema";
 import { z } from "zod";
 
@@ -49,7 +49,7 @@ export class UserService extends BaseService {
       }
 
       // Hash password if provided
-      if (validatedData.password && validatedData.password !== "INVITATION_PENDING") {
+      if (validatedData.password && validatedData.password !== INVITATION_PENDING_PASSWORD) {
         validatedData.password = await bcrypt.hash(validatedData.password, 10);
       }
 
@@ -142,7 +142,7 @@ export class UserService extends BaseService {
       }
 
       // Verify current password (skip for invitation pending)
-      if (user.password !== "INVITATION_PENDING") {
+      if (user.password !== INVITATION_PENDING_PASSWORD) {
         const isValidPassword = await bcrypt.compare(currentPassword, user.password);
         if (!isValidPassword) {
           throw new Error("Current password is incorrect");
