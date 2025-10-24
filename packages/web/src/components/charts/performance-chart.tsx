@@ -29,7 +29,7 @@ interface PerformanceChartProps {
 }
 
 export default function PerformanceChart({ organizationId }: PerformanceChartProps) {
-  const [timeRange, setTimeRange] = useState("last8weeks");
+  const [timeRange, setTimeRange] = useState("thisyear");
 
   const { data: measurements, isError, error } = useQuery({
     queryKey: ["/api/measurements", organizationId, timeRange],
