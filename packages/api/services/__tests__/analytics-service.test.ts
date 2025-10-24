@@ -234,9 +234,8 @@ describe('AnalyticsService', () => {
       expect(result[0].latestTest).toBeDefined();
     });
 
-    it('should return empty array when no organizationId provided', async () => {
-      const result = await analyticsService.getTeamStats();
-      expect(result).toEqual([]);
+    it('should throw error when no organizationId provided', async () => {
+      await expect(analyticsService.getTeamStats()).rejects.toThrow('organizationId is required for team statistics');
     });
 
     it('should exclude archived teams', async () => {
