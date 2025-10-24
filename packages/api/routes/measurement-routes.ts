@@ -114,8 +114,9 @@ export function registerMeasurementRoutes(app: Express) {
         filters.organizationId = user.primaryOrganizationId;
       }
 
-      const measurements = await measurementService.getMeasurements(filters);
-      res.json(measurements);
+      const result = await measurementService.getMeasurements(filters);
+      // Return just the measurements array for backwards compatibility
+      res.json(result.measurements);
     } catch (error) {
       console.error("Get measurements error:", error);
       if (error instanceof ZodError) {
