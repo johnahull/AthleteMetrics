@@ -46,7 +46,7 @@ const measurementQuerySchema = z.object({
   birthYearTo: z.coerce.number().int().min(1900).max(2100).optional(),
   ageFrom: z.coerce.number().int().min(0).max(120).optional(),
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
-  limit: z.coerce.number().int().min(1).max(10000).optional(),
+  limit: z.coerce.number().int().min(1).max(20000).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
 
