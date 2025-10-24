@@ -48,14 +48,17 @@ export const RATE_LIMITS = {
    * Analytics queries (computationally expensive)
    * @default 50 requests per 15-minute window (configurable via ANALYTICS_RATE_LIMIT env var)
    */
-  ANALYTICS: parseInt(process.env.ANALYTICS_RATE_LIMIT || '50', 10),
+  ANALYTICS: (() => {
+    const parsed = parseInt(process.env.ANALYTICS_RATE_LIMIT || '50', 10);
+    return parsed > 0 ? parsed : 50;
+  })(),
 } as const;
 
 /**
  * Rate limit window duration in milliseconds
  * @default 900000 (15 minutes, configurable via ANALYTICS_RATE_WINDOW_MS env var)
  */
-export const RATE_LIMIT_WINDOW_MS = parseInt(
-  process.env.ANALYTICS_RATE_WINDOW_MS || '900000',
-  10
-);
+export const RATE_LIMIT_WINDOW_MS = (() => {
+  const parsed = parseInt(process.env.ANALYTICS_RATE_WINDOW_MS || '900000', 10);
+  return parsed > 0 ? parsed : 900000;
+})();
