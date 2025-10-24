@@ -67,7 +67,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Get teams error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch teams";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -97,7 +98,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Get team error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch team";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -211,7 +213,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Delete team error:", error);
       const message = error instanceof Error ? error.message : "Failed to delete team";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -246,7 +249,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Archive team error:", error);
       const message = error instanceof Error ? error.message : "Failed to archive team";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -278,7 +282,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Unarchive team error:", error);
       const message = error instanceof Error ? error.message : "Failed to unarchive team";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -367,7 +372,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Remove team member error:", error);
       const message = error instanceof Error ? error.message : "Failed to remove member from team";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -424,7 +430,8 @@ export function registerTeamRoutes(app: Express) {
     } catch (error) {
       console.error("Update team membership error:", error);
       const message = error instanceof Error ? error.message : "Failed to update team membership";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 }

@@ -126,7 +126,8 @@ export function registerMeasurementRoutes(app: Express) {
         });
       }
       const message = error instanceof Error ? error.message : "Failed to fetch measurements";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -156,7 +157,8 @@ export function registerMeasurementRoutes(app: Express) {
     } catch (error) {
       console.error("Get measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch measurement";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -306,7 +308,8 @@ export function registerMeasurementRoutes(app: Express) {
     } catch (error) {
       console.error("Delete measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to delete measurement";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 
@@ -343,7 +346,8 @@ export function registerMeasurementRoutes(app: Express) {
     } catch (error) {
       console.error("Verify measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to verify measurement";
-      res.status(500).json({ message });
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
     }
   });
 }

@@ -362,7 +362,17 @@ export class MeasurementService {
         teamContextAuto: measurements.teamContextAuto,
         createdAt: measurements.createdAt,
         // User data
-        user: sql<any>`jsonb_build_object(
+        user: sql<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          fullName: string;
+          birthYear: number | null;
+          birthDate: string | null;
+          sports: string[] | null;
+          gender: string | null;
+          positions: string[] | null;
+        }>`jsonb_build_object(
           'id', ${users.id},
           'firstName', ${users.firstName},
           'lastName', ${users.lastName},

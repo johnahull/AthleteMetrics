@@ -49,7 +49,12 @@ export const RATE_LIMITS = {
    * @default 50 requests per 15-minute window (configurable via ANALYTICS_RATE_LIMIT env var)
    */
   ANALYTICS: (() => {
-    const parsed = parseInt(process.env.ANALYTICS_RATE_LIMIT || '50', 10);
+    const envValue = process.env.ANALYTICS_RATE_LIMIT;
+    const parsed = parseInt(envValue || '50', 10);
+    if (envValue && (isNaN(parsed) || parsed <= 0)) {
+      console.warn(`Invalid ANALYTICS_RATE_LIMIT environment variable: "${envValue}". Using default value of 50.`);
+      return 50;
+    }
     return parsed > 0 ? parsed : 50;
   })(),
 } as const;
@@ -59,6 +64,11 @@ export const RATE_LIMITS = {
  * @default 900000 (15 minutes, configurable via ANALYTICS_RATE_WINDOW_MS env var)
  */
 export const RATE_LIMIT_WINDOW_MS = (() => {
-  const parsed = parseInt(process.env.ANALYTICS_RATE_WINDOW_MS || '900000', 10);
+  const envValue = process.env.ANALYTICS_RATE_WINDOW_MS;
+  const parsed = parseInt(envValue || '900000', 10);
+  if (envValue && (isNaN(parsed) || parsed <= 0)) {
+    console.warn(`Invalid ANALYTICS_RATE_WINDOW_MS environment variable: "${envValue}". Using default value of 900000ms (15 minutes).`);
+    return 900000;
+  }
   return parsed > 0 ? parsed : 900000;
 })();
