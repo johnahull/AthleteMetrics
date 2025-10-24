@@ -34,10 +34,17 @@ describe('TeamService', () => {
 
   afterEach(async () => {
     // Cleanup: delete test data in reverse dependency order
-    if (testOrgId) {
+    // Add null checks to handle test failures during setup
+    if (testUserId) {
       await db.delete(userTeams).where(eq(userTeams.userId, testUserId));
+    }
+    if (testOrgId) {
       await db.delete(teams).where(eq(teams.organizationId, testOrgId));
+    }
+    if (testUserId) {
       await db.delete(users).where(eq(users.id, testUserId));
+    }
+    if (testOrgId) {
       await db.delete(organizations).where(eq(organizations.id, testOrgId));
     }
   });

@@ -345,7 +345,7 @@ export class MeasurementService {
 
     // Pagination parameters with safety limits
     const limit = Math.min(filters?.limit || 1000, 10000); // Default 1000, max 10000
-    const offset = filters?.offset || 0;
+    const offset = Math.min(filters?.offset || 0, 100000); // Cap offset to prevent sequential scans
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

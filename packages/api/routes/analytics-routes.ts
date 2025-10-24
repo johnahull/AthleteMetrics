@@ -11,12 +11,13 @@ import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { db } from "../db";
 import { users, userTeams, teams } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for analytics endpoints
 // Analytics queries can be expensive, so we use stricter limits
 const analyticsLimiter = rateLimit({
-  windowMs: parseInt(process.env.ANALYTICS_RATE_WINDOW_MS || '900000'), // 15 minutes default
-  limit: parseInt(process.env.ANALYTICS_RATE_LIMIT || '50'), // 50 requests per window default
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.ANALYTICS,
   message: {
     message: process.env.ANALYTICS_RATE_LIMIT_MESSAGE || "Too many analytics requests, please try again later."
   },

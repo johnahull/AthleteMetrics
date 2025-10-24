@@ -301,8 +301,8 @@ export class AnalyticsService {
         .where(and(...measurementConditions));
     }
 
-    // Define metrics and whether lower is better
-    const metrics = [
+    // Define valid metrics and whether lower is better
+    const VALID_METRICS = [
       { key: 'FLY10_TIME', lowerIsBetter: true },
       { key: 'VERTICAL_JUMP', lowerIsBetter: false },
       { key: 'AGILITY_505', lowerIsBetter: true },
@@ -310,7 +310,10 @@ export class AnalyticsService {
       { key: 'T_TEST', lowerIsBetter: true },
       { key: 'DASH_40YD', lowerIsBetter: true },
       { key: 'RSI', lowerIsBetter: false },
-    ];
+    ] as const;
+
+    // Validate metric keys to prevent SQL injection
+    const validMetricKeys = new Set(VALID_METRICS.map(m => m.key));
 
     // Calculate best for each metric using SQL aggregation (much faster than JavaScript reduce)
     const bestMetrics: Record<string, any> = {
@@ -321,7 +324,12 @@ export class AnalyticsService {
 
     // Use database-level aggregation (MIN/MAX) instead of application-level reduce
     // This is 10-100x faster for large datasets
-    for (const { key, lowerIsBetter } of metrics) {
+    for (const { key, lowerIsBetter } of VALID_METRICS) {
+      // Additional validation: ensure metric key is in our allowed set
+      if (!validMetricKeys.has(key)) {
+        console.error(`Invalid metric key encountered: ${key}`);
+        continue;
+      }
       const aggregateFunc = lowerIsBetter
         ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))`
         : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))`;

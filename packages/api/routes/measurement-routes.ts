@@ -13,11 +13,12 @@ import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 200, // Higher limit for measurements (more frequent operations)
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.HIGH_VOLUME,
   message: { message: "Too many measurement requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
@@ -25,8 +26,8 @@ const measurementLimiter = rateLimit({
 
 // Stricter rate limiting for delete operations
 const measurementDeleteLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 30, // Limit each IP to 30 delete requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.DELETE,
   message: { message: "Too many deletion attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,

@@ -121,14 +121,17 @@ export class TeamService {
 
   /**
    * Delete a team and all associated memberships
+   * Uses transaction to ensure atomicity
    * @param id Team ID
    */
   async deleteTeam(id: string): Promise<void> {
-    // Delete all team memberships first
-    await db.delete(userTeams).where(eq(userTeams.teamId, id));
+    await db.transaction(async (tx) => {
+      // Delete all team memberships first
+      await tx.delete(userTeams).where(eq(userTeams.teamId, id));
 
-    // Now delete the team
-    await db.delete(teams).where(eq(teams.id, id));
+      // Now delete the team
+      await tx.delete(teams).where(eq(teams.id, id));
+    });
   }
 
   /**

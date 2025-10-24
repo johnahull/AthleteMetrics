@@ -13,11 +13,12 @@ import { ZodError } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
 import { RoleManager } from "../auth/role-manager";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for team endpoints
 const teamLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100, // Limit each IP to 100 team requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.STANDARD,
   message: { message: "Too many team requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
@@ -25,8 +26,8 @@ const teamLimiter = rateLimit({
 
 // Stricter rate limiting for delete/archive operations
 const teamMutationLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 20, // Limit each IP to 20 mutation requests per windowMs
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.MUTATION,
   message: { message: "Too many team modification attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
