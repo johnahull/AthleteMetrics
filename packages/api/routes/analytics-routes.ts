@@ -25,7 +25,10 @@ const analyticsLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Bypass rate limiting for site admins if BYPASS_ANALYTICS_RATE_LIMIT is set and not in production
-    if (process.env.NODE_ENV === 'production') {
+    // Check both NODE_ENV and RAILWAY_ENVIRONMENT for stronger production detection
+    const isProduction = process.env.NODE_ENV === 'production' ||
+                         process.env.RAILWAY_ENVIRONMENT === 'production';
+    if (isProduction) {
       return false; // Never bypass in production
     }
     if (process.env.BYPASS_ANALYTICS_RATE_LIMIT === 'true') {

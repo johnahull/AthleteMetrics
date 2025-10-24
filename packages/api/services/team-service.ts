@@ -89,17 +89,15 @@ export class TeamService {
 
   /**
    * Update team details
-   * Security: Strips organizationId from update data to prevent unauthorized transfers
-   * Defense-in-depth: Requires organizationId parameter to prevent cross-org updates
+   * Security: Strips organizationId to prevent unauthorized transfers
    * @param id Team ID
    * @param team Partial team data to update
-   * @param organizationId Organization ID for authorization check
    * @returns Updated team
-   * @throws Error if no valid fields, team not found, or access denied
+   * @throws Error if no valid fields or team not found
    */
-  async updateTeam(id: string, team: Partial<InsertTeam>, organizationId: string): Promise<Team> {
+  async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team> {
     // Defense in depth - ALWAYS strip organizationId at service layer
-    const { organizationId: _, ...safeTeamData } = team;
+    const { organizationId, ...safeTeamData } = team;
 
     if (Object.keys(safeTeamData).length === 0) {
       throw new Error('No valid fields to update');
@@ -111,14 +109,13 @@ export class TeamService {
       ...(safeTeamData.name && { name: safeTeamData.name.trim() }),
     };
 
-    // Defense-in-depth: Include organizationId in WHERE clause to prevent cross-org updates
     const [updated] = await db
       .update(teams)
       .set(normalizedData)
-      .where(and(eq(teams.id, id), eq(teams.organizationId, organizationId)))
+      .where(eq(teams.id, id))
       .returning();
 
-    if (!updated) throw new Error('Team not found or access denied');
+    if (!updated) throw new Error('Team not found');
     return updated;
   }
 
@@ -140,30 +137,29 @@ export class TeamService {
   /**
    * Archives a team and marks all current team memberships as inactive
    * Uses transaction to ensure atomicity
-   * Defense-in-depth: Requires organizationId parameter to prevent cross-org operations
    * @param id Team ID to archive
    * @param archiveDate Date when the team was archived (affects measurement context)
    * @param season Final season designation for the team (e.g., "2024-Fall Soccer")
-   * @param organizationId Organization ID for authorization check
    * @returns The archived team object
-   * @throws Error if team not found, access denied, or archive operation fails
+   * @throws Error if team not found or archive operation fails
    */
   async archiveTeam(
     id: string,
     archiveDate: Date,
-    season: string,
-    organizationId: string
+    season: string
   ): Promise<Team> {
     try {
       return await db.transaction(async (tx) => {
-        // First check if team exists and get its current state (with org validation)
+        // First check if team exists and get its current state with row-level lock
+        // FOR UPDATE prevents race conditions from concurrent archive operations
         const [existingTeam] = await tx
           .select()
           .from(teams)
-          .where(and(eq(teams.id, id), eq(teams.organizationId, organizationId)));
+          .where(eq(teams.id, id))
+          .for('update');
 
         if (!existingTeam) {
-          throw new Error(`Team with id ${id} not found or access denied`);
+          throw new Error(`Team with id ${id} not found`);
         }
 
         if (existingTeam.isArchived) {
@@ -206,36 +202,22 @@ export class TeamService {
    * including old measurements in current analytics
    * @param id Team ID
    * @returns Unarchived team
-   * @throws Error if team not found
    */
   async unarchiveTeam(id: string): Promise<Team> {
-    return await db.transaction(async (tx) => {
-      // Check if team exists with row-level lock
-      const [existingTeam] = await tx
-        .select()
-        .from(teams)
-        .where(eq(teams.id, id))
-        .for('update');
+    const [unarchived] = await db
+      .update(teams)
+      .set({
+        isArchived: false,
+        archivedAt: null,
+      })
+      .where(eq(teams.id, id))
+      .returning();
 
-      if (!existingTeam) {
-        throw new Error(`Team with id ${id} not found`);
-      }
+    // Note: We don't automatically reactivate team memberships when unarchiving
+    // This is intentional - users should be explicitly re-added to teams
+    // to prevent accidentally including old measurements in current analytics
 
-      const [unarchived] = await tx
-        .update(teams)
-        .set({
-          isArchived: false,
-          archivedAt: null,
-        })
-        .where(eq(teams.id, id))
-        .returning();
-
-      // Note: We don't automatically reactivate team memberships when unarchiving
-      // This is intentional - users should be explicitly re-added to teams
-      // to prevent accidentally including old measurements in current analytics
-
-      return unarchived;
-    });
+    return unarchived;
   }
 
   /**
@@ -244,37 +226,23 @@ export class TeamService {
    * @param userId User ID
    * @param membershipData Membership updates (leftAt, season)
    * @returns Updated membership
-   * @throws Error if membership not found
    */
   async updateTeamMembership(
     teamId: string,
     userId: string,
     membershipData: { leftAt?: Date; season?: string }
   ): Promise<UserTeam> {
-    return await db.transaction(async (tx) => {
-      // Check if membership exists with row-level lock
-      const [existing] = await tx
-        .select()
-        .from(userTeams)
-        .where(and(eq(userTeams.teamId, teamId), eq(userTeams.userId, userId)))
-        .for('update');
+    const [updated] = await db
+      .update(userTeams)
+      .set({
+        leftAt: membershipData.leftAt ?? null,
+        season: membershipData.season,
+        isActive: membershipData.leftAt ? false : true,
+      })
+      .where(and(eq(userTeams.teamId, teamId), eq(userTeams.userId, userId)))
+      .returning();
 
-      if (!existing) {
-        throw new Error('Team membership not found');
-      }
-
-      const [updated] = await tx
-        .update(userTeams)
-        .set({
-          leftAt: membershipData.leftAt ?? null,
-          season: membershipData.season,
-          isActive: membershipData.leftAt ? false : true,
-        })
-        .where(and(eq(userTeams.teamId, teamId), eq(userTeams.userId, userId)))
-        .returning();
-
-      return updated;
-    });
+    return updated;
   }
 
   /**
@@ -303,7 +271,7 @@ export class TeamService {
           .for('update'); // Row-level lock prevents concurrent modifications
 
         if (existingActiveAssignment.length > 0) {
-          console.log('User already has active assignment to team');
+          // User already has active assignment to team
           return existingActiveAssignment[0];
         }
 
@@ -317,8 +285,7 @@ export class TeamService {
               eq(userTeams.teamId, teamId),
               eq(userTeams.isActive, false)
             )
-          )
-          .for('update'); // Prevent race condition with row-level lock
+          );
 
         if (existingInactiveAssignment.length > 0) {
           // Reactivate the membership
@@ -332,7 +299,7 @@ export class TeamService {
             .where(eq(userTeams.id, existingInactiveAssignment[0].id))
             .returning();
 
-          console.log('Reactivated inactive team membership');
+          // Reactivated inactive team membership
           return reactivated;
         }
 
@@ -359,35 +326,21 @@ export class TeamService {
    * Uses temporal pattern - doesn't delete, preserves history
    * @param userId User ID
    * @param teamId Team ID
-   * @throws Error if no active membership found
    */
   async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      // Check if active membership exists with row-level lock
-      const [existing] = await tx
-        .select()
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.userId, userId),
-            eq(userTeams.teamId, teamId),
-            eq(userTeams.isActive, true)
-          )
+    // Mark membership as inactive instead of deleting (temporal approach)
+    await db
+      .update(userTeams)
+      .set({
+        isActive: false,
+        leftAt: new Date(),
+      })
+      .where(
+        and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, true)
         )
-        .for('update');
-
-      if (!existing) {
-        throw new Error('Active team membership not found');
-      }
-
-      // Mark membership as inactive instead of deleting (temporal approach)
-      await tx
-        .update(userTeams)
-        .set({
-          isActive: false,
-          leftAt: new Date(),
-        })
-        .where(eq(userTeams.id, existing.id));
-    });
+      );
   }
 }

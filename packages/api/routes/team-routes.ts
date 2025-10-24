@@ -367,6 +367,25 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
+      // SECURITY: Verify userId belongs to same organization (prevent IDOR vulnerability)
+      if (!isSiteAdmin(user)) {
+        const targetUserOrgs = await db
+          .select({ organizationId: userOrganizations.organizationId })
+          .from(userOrganizations)
+          .where(eq(userOrganizations.userId, userId));
+
+        if (targetUserOrgs.length === 0) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        const targetUserOrgIds = targetUserOrgs.map(org => org.organizationId);
+        if (!targetUserOrgIds.includes(existingTeam.organization.id)) {
+          return res.status(403).json({
+            message: "Cannot remove users from different organizations from your team"
+          });
+        }
+      }
+
       await teamService.removeUserFromTeam(userId, teamId);
       res.json({ message: "Member removed from team successfully" });
     } catch (error) {

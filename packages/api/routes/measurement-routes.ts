@@ -82,20 +82,20 @@ export function registerMeasurementRoutes(app: Express) {
       // Validate query parameters
       const validatedParams = measurementQuerySchema.parse(req.query);
 
-      // Build filters from validated query parameters
+      // Build filters from validated query parameters with proper type safety
       const filters: MeasurementFilters = {
-        userId: validatedParams.userId,
-        athleteId: validatedParams.athleteId,
-        metric: validatedParams.metric,
-        dateFrom: validatedParams.dateFrom,
-        dateTo: validatedParams.dateTo,
+        ...(validatedParams.userId && { userId: validatedParams.userId }),
+        ...(validatedParams.athleteId && { athleteId: validatedParams.athleteId }),
+        ...(validatedParams.metric && { metric: validatedParams.metric }),
+        ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
+        ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
         includeUnverified: validatedParams.includeUnverified === 'true',
-        birthYearFrom: validatedParams.birthYearFrom,
-        birthYearTo: validatedParams.birthYearTo,
-        ageFrom: validatedParams.ageFrom,
-        ageTo: validatedParams.ageTo,
-        limit: validatedParams.limit,
-        offset: validatedParams.offset,
+        ...(validatedParams.birthYearFrom !== undefined && { birthYearFrom: validatedParams.birthYearFrom }),
+        ...(validatedParams.birthYearTo !== undefined && { birthYearTo: validatedParams.birthYearTo }),
+        ...(validatedParams.ageFrom !== undefined && { ageFrom: validatedParams.ageFrom }),
+        ...(validatedParams.ageTo !== undefined && { ageTo: validatedParams.ageTo }),
+        ...(validatedParams.limit !== undefined && { limit: validatedParams.limit }),
+        ...(validatedParams.offset !== undefined && { offset: validatedParams.offset }),
       };
 
       // Organization-based filtering
@@ -114,7 +114,9 @@ export function registerMeasurementRoutes(app: Express) {
         filters.organizationId = user.primaryOrganizationId;
       }
 
-      const result = await measurementService.getMeasurements(filters);
+      // Site admins can query across organizations, non-admins cannot
+      const allowCrossOrganization = isSiteAdmin(user);
+      const result = await measurementService.getMeasurements(filters, allowCrossOrganization);
       // Return just the measurements array for backwards compatibility
       res.json(result.measurements);
     } catch (error) {
@@ -187,11 +189,7 @@ export function registerMeasurementRoutes(app: Express) {
           .select({ organizationId: teams.organizationId })
           .from(userTeams)
           .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .where(and(
-            eq(userTeams.userId, validatedData.userId),
-            eq(userTeams.isActive, true),      // Only current team memberships
-            eq(teams.isArchived, false)        // Only active teams
-          ));
+          .where(eq(userTeams.userId, validatedData.userId));
 
         if (targetUserTeams.length === 0) {
           return res.status(404).json({ message: "User not found or not on any team" });
@@ -253,18 +251,23 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // SECURITY: Athletes cannot modify verified measurements (only coaches/admins can)
-      if (user.role === 'athlete' && existingMeasurement.isVerified) {
-        return res.status(403).json({
-          message: "Cannot modify verified measurements. Contact your coach to make changes."
-        });
-      }
-
       // Permission check: submitter, org admins/coaches in same org, or site admins can update
       const isSubmitter = existingMeasurement.submittedBy === user.id;
       const isOrgAdminOrCoach = !isSiteAdmin(user) &&
         (user.role === 'org_admin' || user.role === 'coach') &&
         existingMeasurement.organizationId === user.primaryOrganizationId;
+
+      // SECURITY: Athletes can only update their own measurements
+      // Prevents IDOR vulnerability where Athlete A updates Athlete B's measurement
+      if (user.role === 'athlete' && existingMeasurement.userId !== user.id) {
+        return res.status(403).json({ message: "Access denied - athletes can only update their own measurements" });
+      }
+
+      // SECURITY: Athletes cannot modify measurements submitted by coaches
+      // Prevents athletes from changing coach-submitted data (e.g., official testing results)
+      if (user.role === 'athlete' && existingMeasurement.submittedBy !== user.id) {
+        return res.status(403).json({ message: "Athletes cannot modify coach-submitted measurements" });
+      }
 
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
@@ -274,10 +277,12 @@ export function registerMeasurementRoutes(app: Express) {
       const updateSchema = insertMeasurementSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
+      // Pass organizationId for defense-in-depth validation (non-site-admins only)
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
       const updatedMeasurement = await measurementService.updateMeasurement(
         measurementId,
         validatedData,
-        existingMeasurement.organizationId!
+        expectedOrganizationId
       );
       res.json(updatedMeasurement);
     } catch (error) {
@@ -308,13 +313,6 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // SECURITY: Athletes cannot delete verified measurements (only coaches/admins can)
-      if (user.role === 'athlete' && existingMeasurement.isVerified) {
-        return res.status(403).json({
-          message: "Cannot delete verified measurements. Contact your coach to make changes."
-        });
-      }
-
       // Permission check: submitter, org admins/coaches in same org, or site admins can delete
       const isSubmitter = existingMeasurement.submittedBy === user.id;
       const isOrgAdminOrCoach = !isSiteAdmin(user) &&
@@ -325,7 +323,9 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
-      await measurementService.deleteMeasurement(measurementId, existingMeasurement.organizationId!);
+      // Pass organizationId for defense-in-depth validation (non-site-admins only)
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
       res.json({ message: "Measurement deleted successfully" });
     } catch (error) {
       console.error("Delete measurement error:", error);

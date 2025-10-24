@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { MeasurementService } from '../measurement-service';
 import { db } from '../../db';
 import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
@@ -10,6 +10,14 @@ describe('MeasurementService', () => {
   let testTeamId: string;
   let testUserId: string;
   let testSubmitterId: string;
+
+  beforeAll(async () => {
+    // Safety check: prevent running tests against production database
+    const dbUrl = process.env.DATABASE_URL || '';
+    if (!dbUrl.includes('test') && !dbUrl.includes('localhost')) {
+      throw new Error('DATABASE_URL must include "test" or "localhost" for safety. Running tests against production is forbidden.');
+    }
+  });
 
   beforeEach(async () => {
     measurementService = new MeasurementService();
@@ -538,7 +546,7 @@ describe('MeasurementService', () => {
       const result = await measurementService.getMeasurements({
         userId: testUserId,
         includeUnverified: true, // Include both verified and unverified
-      });
+      }, true); // Allow cross-organization (site admin context)
 
       expect(result.measurements.length).toBeGreaterThanOrEqual(2);
       expect(result.measurements.every(m => m.userId === testUserId)).toBe(true);
@@ -548,7 +556,7 @@ describe('MeasurementService', () => {
       const result = await measurementService.getMeasurements({
         userId: testUserId,
         metric: 'FLY10_TIME',
-      });
+      }, true); // Allow cross-organization (site admin context)
 
       expect(result.measurements.length).toBeGreaterThanOrEqual(1);
       expect(result.measurements.every(m => m.metric === 'FLY10_TIME')).toBe(true);
@@ -558,7 +566,7 @@ describe('MeasurementService', () => {
       const result = await measurementService.getMeasurements({
         userId: testUserId,
         includeUnverified: false,
-      });
+      }, true); // Allow cross-organization (site admin context)
 
       expect(result.measurements.every(m => m.isVerified === true)).toBe(true);
     });
@@ -567,7 +575,7 @@ describe('MeasurementService', () => {
       const result = await measurementService.getMeasurements({
         userId: testUserId,
         includeUnverified: true,
-      });
+      }, true); // Allow cross-organization (site admin context)
 
       const hasUnverified = result.measurements.some(m => m.isVerified === false);
       expect(hasUnverified).toBe(true);
@@ -579,7 +587,7 @@ describe('MeasurementService', () => {
         dateFrom: '2024-02-01',
         dateTo: '2024-02-28',
         includeUnverified: true,
-      });
+      }, true); // Allow cross-organization (site admin context)
 
       expect(result.measurements.length).toBeGreaterThanOrEqual(1);
       expect(result.measurements.every(m => {
