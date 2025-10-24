@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { measurements, teams, organizations, users, userTeams, VALID_METRICS } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
 
 /**
@@ -224,7 +224,7 @@ export class AnalyticsService {
             .where(and(
               inArray(users.id, uniqueAthleteIds),
               eq(users.isActive, true),
-              ne(users.password, 'INVITATION_PENDING')
+              ne(users.password, INVITATION_PENDING_PASSWORD)
             ))
         ]);
 
@@ -242,7 +242,7 @@ export class AnalyticsService {
           .from(users)
           .where(and(
             eq(users.isActive, true),
-            ne(users.password, 'INVITATION_PENDING')
+            ne(users.password, INVITATION_PENDING_PASSWORD)
           ))
       ]);
 

@@ -606,6 +606,13 @@ export const UserRole = {
   ATHLETE: "athlete",
 } as const;
 
+/**
+ * Sentinel value for user passwords that are pending invitation acceptance
+ * Users with this password value have not yet completed registration
+ * @constant
+ */
+export const INVITATION_PENDING_PASSWORD = 'INVITATION_PENDING';
+
 export const OrganizationRole = {
   ORG_ADMIN: "org_admin",
   COACH: "coach",

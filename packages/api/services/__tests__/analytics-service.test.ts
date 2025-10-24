@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { AnalyticsService } from '../analytics-service';
 import { db } from '../../db';
-import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('AnalyticsService', () => {
@@ -336,7 +336,7 @@ describe('AnalyticsService', () => {
     it('should not count athletes with INVITATION_PENDING as active', async () => {
       // Update one athlete to invitation pending
       await db.update(users)
-        .set({ password: 'INVITATION_PENDING' })
+        .set({ password: INVITATION_PENDING_PASSWORD })
         .where(eq(users.id, testUserId2));
 
       const result = await analyticsService.getDashboardStats(testOrgId);
