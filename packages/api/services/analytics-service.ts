@@ -272,7 +272,7 @@ export class AnalyticsService {
     ];
 
     // Calculate best for each metric
-    const bestMetrics: DashboardStats = {
+    const bestMetrics: any = {
       totalAthletes,
       activeAthletes,
       totalTeams,
@@ -296,6 +296,6 @@ export class AnalyticsService {
       }
     });
 
-    return bestMetrics;
+    return bestMetrics as DashboardStats;
   }
 }
