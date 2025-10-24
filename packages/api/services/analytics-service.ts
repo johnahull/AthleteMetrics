@@ -186,10 +186,12 @@ export class AnalyticsService {
    */
   async getDashboardStats(organizationId?: string): Promise<DashboardStats> {
     // Get all athletes in the organization
-    // Athletes are linked to organizations through teams
-    let athletes: User[];
+    // Get athlete counts using database-level filtering (more efficient than application-level)
+    let totalAthletes: number;
+    let activeAthletes: number;
+
     if (organizationId) {
-      // Get athletes through team membership
+      // Get athlete IDs through team membership
       const athleteIds = await db
         .select({ userId: userTeams.userId })
         .from(userTeams)
@@ -200,23 +202,41 @@ export class AnalyticsService {
       const uniqueAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
 
       if (uniqueAthleteIds.length > 0) {
-        athletes = await db
-          .select()
-          .from(users)
-          .where(inArray(users.id, uniqueAthleteIds));
+        // Execute both counts in parallel using database filtering
+        const [totalCount, activeCount] = await Promise.all([
+          db.select({ count: sql<number>`count(*)::int` })
+            .from(users)
+            .where(inArray(users.id, uniqueAthleteIds)),
+          db.select({ count: sql<number>`count(*)::int` })
+            .from(users)
+            .where(and(
+              inArray(users.id, uniqueAthleteIds),
+              eq(users.isActive, true),
+              ne(users.password, 'INVITATION_PENDING')
+            ))
+        ]);
+
+        totalAthletes = totalCount[0]?.count || 0;
+        activeAthletes = activeCount[0]?.count || 0;
       } else {
-        athletes = [];
+        totalAthletes = 0;
+        activeAthletes = 0;
       }
     } else {
-      athletes = await db.select().from(users);
-    }
+      // Site-wide counts using database filtering
+      const [totalCount, activeCount] = await Promise.all([
+        db.select({ count: sql<number>`count(*)::int` }).from(users),
+        db.select({ count: sql<number>`count(*)::int` })
+          .from(users)
+          .where(and(
+            eq(users.isActive, true),
+            ne(users.password, 'INVITATION_PENDING')
+          ))
+      ]);
 
-    // Count total and active athletes
-    const totalAthletes = athletes.length;
-    const activeAthletes = athletes.filter(
-      (athlete) =>
-        athlete.isActive === true && athlete.password !== 'INVITATION_PENDING'
-    ).length;
+      totalAthletes = totalCount[0]?.count || 0;
+      activeAthletes = activeCount[0]?.count || 0;
+    }
 
     // Get all non-archived teams
     const teamConditions = [ne(teams.isArchived, true)];

@@ -44,6 +44,8 @@ const measurementQuerySchema = z.object({
   birthYearTo: z.coerce.number().int().min(1900).max(2100).optional(),
   ageFrom: z.coerce.number().int().min(0).max(120).optional(),
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
+  limit: z.coerce.number().int().min(1).max(10000).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
 });
 
 interface MeasurementFilters {
@@ -58,6 +60,8 @@ interface MeasurementFilters {
   ageFrom?: number;
   ageTo?: number;
   organizationId?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -88,14 +92,13 @@ export function registerMeasurementRoutes(app: Express) {
         birthYearTo: validatedParams.birthYearTo,
         ageFrom: validatedParams.ageFrom,
         ageTo: validatedParams.ageTo,
+        limit: validatedParams.limit,
+        offset: validatedParams.offset,
       };
 
       // Organization-based filtering for non-admin users
-      // Note: MeasurementService.getMeasurements doesn't support organizationId filter yet
-      // For now, we filter by the user's primary organization if they're not a site admin
       if (!isSiteAdmin(user) && user.primaryOrganizationId) {
         // Non-admin users should only see measurements from their organization
-        // This is enforced by filtering athletes who belong to their organization's teams
         filters.organizationId = user.primaryOrganizationId;
       }
 

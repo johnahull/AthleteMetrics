@@ -16,7 +16,7 @@ import {
   type Organization,
 } from '@shared/schema';
 import { db } from '../db';
-import { eq, and, gte, lte, or, isNull, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, or, isNull, sql, desc } from 'drizzle-orm';
 
 export interface MeasurementFilters {
   userId?: string;
@@ -35,6 +35,16 @@ export interface MeasurementFilters {
   gender?: string;
   position?: string;
   includeUnverified?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PaginatedMeasurements {
+  measurements: Measurement[];
+  total: number;
+  hasMore: boolean;
+  limit: number;
+  offset: number;
 }
 
 export class MeasurementService {
@@ -294,11 +304,11 @@ export class MeasurementService {
   }
 
   /**
-   * Get measurements with filters
-   * @param filters Measurement filters
-   * @returns Array of measurements
+   * Get measurements with filters and pagination
+   * @param filters Measurement filters including pagination options
+   * @returns Paginated measurements with metadata
    */
-  async getMeasurements(filters?: MeasurementFilters): Promise<Measurement[]> {
+  async getMeasurements(filters?: MeasurementFilters): Promise<PaginatedMeasurements> {
     // Build query conditions
     const conditions = [];
 
@@ -330,11 +340,34 @@ export class MeasurementService {
       conditions.push(eq(measurements.isVerified, true));
     }
 
-    // Build and execute query with conditions
-    const results = conditions.length > 0
-      ? await db.select().from(measurements).where(and(...conditions))
-      : await db.select().from(measurements);
+    // Pagination parameters with safety limits
+    const limit = Math.min(filters?.limit || 1000, 10000); // Default 1000, max 10000
+    const offset = filters?.offset || 0;
 
-    return results;
+    // Build WHERE clause
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Execute query with pagination and count in parallel
+    const [results, countResult] = await Promise.all([
+      db.select()
+        .from(measurements)
+        .where(whereClause)
+        .orderBy(desc(measurements.date))
+        .limit(limit)
+        .offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(measurements)
+        .where(whereClause)
+    ]);
+
+    const total = countResult[0]?.count || 0;
+
+    return {
+      measurements: results,
+      total,
+      hasMore: offset + results.length < total,
+      limit,
+      offset,
+    };
   }
 }
