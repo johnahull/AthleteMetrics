@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { measurements, teams, organizations, users, userTeams, type User } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
 import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
 
 interface AthleteStats {
