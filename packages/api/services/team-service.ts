@@ -1,261 +1,320 @@
 /**
- * Team management service
+ * TeamService - Handles all team-related business logic
+ * Refactored to use direct database access instead of storage layer
+ * This reduces coupling and improves modularity
  */
 
-import { BaseService } from "./base-service";
-import { insertTeamSchema, archiveTeamSchema, updateTeamMembershipSchema } from "@shared/schema";
-import type { Team, InsertTeam } from "@shared/schema";
+import {
+  teams,
+  organizations,
+  userTeams,
+  type Team,
+  type Organization,
+  type UserTeam,
+  type InsertTeam,
+} from '@shared/schema';
+import { db } from '../db';
+import { eq, and, asc, ne } from 'drizzle-orm';
 
-export interface TeamFilters {
-  organizationId?: string;
-  isActive?: string;
-  season?: string;
-  search?: string;
-}
-
-export class TeamService extends BaseService {
+export class TeamService {
   /**
-   * Get teams with filtering and organization access validation
+   * Get all non-archived teams for an organization
+   * @param organizationId Optional organization filter
+   * @returns Array of teams with organization details
    */
-  async getTeams(filters: TeamFilters, requestingUserId: string): Promise<Team[]> {
-    try {
-      // Get user's accessible organizations
-      const userOrgs = await this.getUserOrganizations(requestingUserId);
-      const requestingUser = await this.storage.getUser(requestingUserId);
-      
-      // Site admins can see all teams
-      if (requestingUser?.isSiteAdmin === true) {
-        return await this.storage.getTeams(filters.organizationId);
-      }
+  async getTeams(
+    organizationId?: string
+  ): Promise<(Team & { organization: Organization })[]> {
+    let query = db
+      .select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .orderBy(asc(teams.name));
 
-      // Filter teams by user's organizations
-      const accessibleOrgIds = userOrgs.map(org => org.organizationId);
-      // For now, use the first accessible organization ID
-      const teams = await this.storage.getTeams(accessibleOrgIds[0]);
+    // Build conditions array to exclude archived teams
+    const conditions = [];
 
-      return teams;
-    } catch (error) {
-      this.handleError(error, "TeamService.getTeams");
+    if (organizationId) {
+      conditions.push(eq(teams.organizationId, organizationId));
     }
+
+    // Always exclude archived teams
+    conditions.push(ne(teams.isArchived, true));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    const result: any[] = await query;
+    return result.map(({ teams: team, organizations: org }) => ({
+      ...team,
+      organization: org,
+    }));
+  }
+
+  /**
+   * Get a single team by ID with organization details
+   * @param id Team ID
+   * @returns Team with organization or undefined
+   */
+  async getTeam(
+    id: string
+  ): Promise<(Team & { organization: Organization }) | undefined> {
+    const result: any[] = await db
+      .select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(eq(teams.id, id));
+
+    if (result.length === 0) return undefined;
+
+    const { teams: team, organizations: org } = result[0];
+    return { ...team, organization: org };
   }
 
   /**
    * Create a new team
+   * @param team Team data to insert
+   * @returns Created team
    */
-  async createTeam(teamData: InsertTeam, requestingUserId: string): Promise<Team> {
-    try {
-      // Validate input
-      const validatedData = insertTeamSchema.parse(teamData);
-
-      // Validate organization access if organizationId provided
-      if (validatedData.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          validatedData.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this organization");
-          }
-        }
-      }
-
-      return await this.storage.createTeam(validatedData);
-    } catch (error) {
-      this.handleError(error, "TeamService.createTeam");
-    }
+  async createTeam(team: InsertTeam): Promise<Team> {
+    const [newTeam] = await db
+      .insert(teams)
+      .values({
+        name: team.name,
+        organizationId: team.organizationId!,
+        level: team.level || null,
+        notes: team.notes || null,
+      })
+      .returning();
+    return newTeam;
   }
 
   /**
-   * Update team with access validation
+   * Update team details
+   * Security: Strips organizationId to prevent unauthorized transfers
+   * @param id Team ID
+   * @param team Partial team data to update
+   * @returns Updated team
+   * @throws Error if no valid fields or team not found
    */
-  async updateTeam(
-    teamId: string, 
-    teamData: Partial<InsertTeam>, 
-    requestingUserId: string
-  ): Promise<Team> {
-    try {
-      // Get existing team
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+  async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team> {
+    // Defense in depth - ALWAYS strip organizationId at service layer
+    const { organizationId, ...safeTeamData } = team;
 
-      // Validate access
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
-
-      // Validate new organization if changing
-      if (teamData.organizationId && teamData.organizationId !== existingTeam.organizationId) {
-        const hasNewOrgAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          teamData.organizationId
-        );
-        
-        if (!hasNewOrgAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to target organization");
-          }
-        }
-      }
-
-      return await this.storage.updateTeam(teamId, teamData);
-    } catch (error) {
-      this.handleError(error, "TeamService.updateTeam");
+    if (Object.keys(safeTeamData).length === 0) {
+      throw new Error('No valid fields to update');
     }
+
+    // Trim whitespace from name if provided
+    const normalizedData = {
+      ...safeTeamData,
+      ...(safeTeamData.name && { name: safeTeamData.name.trim() }),
+    };
+
+    const [updated] = await db
+      .update(teams)
+      .set(normalizedData)
+      .where(eq(teams.id, id))
+      .returning();
+
+    if (!updated) throw new Error('Team not found');
+    return updated;
   }
 
   /**
-   * Delete team with access validation
+   * Delete a team and all associated memberships
+   * @param id Team ID
    */
-  async deleteTeam(teamId: string, requestingUserId: string): Promise<void> {
-    try {
-      // Get existing team
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+  async deleteTeam(id: string): Promise<void> {
+    // Delete all team memberships first
+    await db.delete(userTeams).where(eq(userTeams.teamId, id));
 
-      // Validate access
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
-
-      await this.storage.deleteTeam(teamId);
-    } catch (error) {
-      this.handleError(error, "TeamService.deleteTeam");
-    }
+    // Now delete the team
+    await db.delete(teams).where(eq(teams.id, id));
   }
 
   /**
-   * Archive team
+   * Archives a team and marks all current team memberships as inactive
+   * Uses transaction to ensure atomicity
+   * @param id Team ID to archive
+   * @param archiveDate Date when the team was archived (affects measurement context)
+   * @param season Final season designation for the team (e.g., "2024-Fall Soccer")
+   * @returns The archived team object
+   * @throws Error if team not found or archive operation fails
    */
   async archiveTeam(
-    teamId: string, 
-    archiveData: any, 
-    requestingUserId: string
-  ): Promise<void> {
-    try {
-      // Validate archive data
-      const validatedData = archiveTeamSchema.parse(archiveData);
+    id: string,
+    archiveDate: Date,
+    season: string
+  ): Promise<Team> {
+    return await db.transaction(async (tx: any) => {
+      const [archived] = await tx
+        .update(teams)
+        .set({
+          isArchived: true,
+          archivedAt: archiveDate,
+          season: season,
+        })
+        .where(eq(teams.id, id))
+        .returning();
 
-      // Get existing team and validate access
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+      // Mark all current team memberships as inactive
+      await tx
+        .update(userTeams)
+        .set({
+          isActive: false,
+          leftAt: archiveDate,
+          season: season,
+        })
+        .where(and(eq(userTeams.teamId, id), eq(userTeams.isActive, true)));
 
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
-
-      await this.storage.archiveTeam(teamId, validatedData.archiveDate || new Date(), validatedData.season);
-    } catch (error) {
-      this.handleError(error, "TeamService.archiveTeam");
-    }
+      return archived;
+    });
   }
 
   /**
-   * Unarchive team
+   * Unarchives a team by setting isArchived to false and clearing archivedAt
+   * Note: This does NOT automatically reactivate team memberships -
+   * users should be explicitly re-added to teams to prevent accidentally
+   * including old measurements in current analytics
+   * @param id Team ID
+   * @returns Unarchived team
    */
-  async unarchiveTeam(teamId: string, requestingUserId: string): Promise<void> {
-    try {
-      // Get existing team and validate access
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
+  async unarchiveTeam(id: string): Promise<Team> {
+    const [unarchived] = await db
+      .update(teams)
+      .set({
+        isArchived: false,
+        archivedAt: null,
+      })
+      .where(eq(teams.id, id))
+      .returning();
 
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
-        );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
-      }
+    // Note: We don't automatically reactivate team memberships when unarchiving
+    // This is intentional - users should be explicitly re-added to teams
+    // to prevent accidentally including old measurements in current analytics
 
-      await this.storage.unarchiveTeam(teamId);
-    } catch (error) {
-      this.handleError(error, "TeamService.unarchiveTeam");
-    }
+    return unarchived;
   }
 
   /**
-   * Update team membership
+   * Update team membership status and season
+   * @param teamId Team ID
+   * @param userId User ID
+   * @param membershipData Membership updates (leftAt, season)
+   * @returns Updated membership
    */
   async updateTeamMembership(
     teamId: string,
     userId: string,
-    membershipData: any,
-    requestingUserId: string
-  ): Promise<void> {
+    membershipData: { leftAt?: Date; season?: string }
+  ): Promise<UserTeam> {
+    const [updated] = await db
+      .update(userTeams)
+      .set({
+        leftAt: membershipData.leftAt,
+        season: membershipData.season,
+        isActive: membershipData.leftAt ? false : true,
+      })
+      .where(and(eq(userTeams.teamId, teamId), eq(userTeams.userId, userId)))
+      .returning();
+
+    return updated;
+  }
+
+  /**
+   * Add a user to a team
+   * Handles: existing active memberships, reactivation of inactive memberships,
+   * and creating new memberships while preserving historical data
+   * @param userId User ID
+   * @param teamId Team ID
+   * @returns User team membership
+   */
+  async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
     try {
-      // Validate membership data
-      const validatedData = updateTeamMembershipSchema.parse(membershipData);
-
-      // Get existing team and validate access
-      const existingTeam = await this.storage.getTeam(teamId);
-      if (!existingTeam) {
-        throw new Error("Team not found");
-      }
-
-      if (existingTeam.organizationId) {
-        const hasAccess = await this.validateOrganizationAccess(
-          requestingUserId, 
-          existingTeam.organizationId
+      // Check if user has an active membership in this team
+      const existingActiveAssignment = await db
+        .select()
+        .from(userTeams)
+        .where(
+          and(
+            eq(userTeams.userId, userId),
+            eq(userTeams.teamId, teamId),
+            eq(userTeams.isActive, true)
+          )
         );
-        
-        if (!hasAccess) {
-          const requestingUser = await this.storage.getUser(requestingUserId);
-          if (!requestingUser?.isSiteAdmin) {
-            throw new Error("Unauthorized: Access denied to this team");
-          }
-        }
+
+      if (existingActiveAssignment.length > 0) {
+        console.log('User already has active assignment to team');
+        return existingActiveAssignment[0];
       }
 
-      await this.storage.updateTeamMembership(teamId, userId, validatedData);
+      // Check if user has an inactive membership that can be reactivated
+      const existingInactiveAssignment = await db
+        .select()
+        .from(userTeams)
+        .where(
+          and(
+            eq(userTeams.userId, userId),
+            eq(userTeams.teamId, teamId),
+            eq(userTeams.isActive, false)
+          )
+        );
+
+      if (existingInactiveAssignment.length > 0) {
+        // Reactivate the membership
+        const [reactivated] = await db
+          .update(userTeams)
+          .set({
+            isActive: true,
+            leftAt: null,
+            joinedAt: new Date(), // Update join date for new active period
+          })
+          .where(eq(userTeams.id, existingInactiveAssignment[0].id))
+          .returning();
+
+        console.log('Reactivated inactive team membership');
+        return reactivated;
+      }
+
+      // No existing membership - create new one
+      const [newAssignment] = await db
+        .insert(userTeams)
+        .values({
+          userId,
+          teamId,
+          isActive: true,
+        })
+        .returning();
+
+      return newAssignment;
     } catch (error) {
-      this.handleError(error, "TeamService.updateTeamMembership");
+      console.error('Error adding user to team:', error);
+      throw error;
     }
+  }
+
+  /**
+   * Remove a user from a team by marking membership inactive
+   * Uses temporal pattern - doesn't delete, preserves history
+   * @param userId User ID
+   * @param teamId Team ID
+   */
+  async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
+    // Mark membership as inactive instead of deleting (temporal approach)
+    await db
+      .update(userTeams)
+      .set({
+        isActive: false,
+        leftAt: new Date(),
+      })
+      .where(
+        and(
+          eq(userTeams.userId, userId),
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, true)
+        )
+      );
   }
 }
