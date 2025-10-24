@@ -36,6 +36,8 @@ export class TeamService {
     conditions.push(ne(teams.isArchived, true));
 
     // Build and execute query with conditions
+    // Database Index: idx_teams_org_active (organization_id, id WHERE is_archived = false)
+    // See: migrations/0018_add_org_query_composite_indexes.sql
     const result = await db
       .select()
       .from(teams)

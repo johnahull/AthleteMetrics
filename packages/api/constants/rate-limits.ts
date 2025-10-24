@@ -8,6 +8,16 @@
  * - ANALYTICS_RATE_LIMIT: Override analytics request limit
  * - ANALYTICS_RATE_WINDOW_MS: Override window duration in milliseconds
  *
+ * Rate limiters use standardHeaders: 'draft-7', which sends these response headers:
+ * - `RateLimit-Limit` - Maximum requests allowed in the window
+ * - `RateLimit-Remaining` - Requests remaining in current window
+ * - `RateLimit-Reset` - Unix timestamp when the window resets
+ *
+ * When rate limit is exceeded, returns HTTP 429 with:
+ * - `Retry-After` - Seconds until the rate limit resets
+ *
+ * Clients can use these headers to implement adaptive throttling and retry logic.
+ *
  * @example
  * ```typescript
  * import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from './constants/rate-limits';
@@ -15,6 +25,7 @@
  * const limiter = rateLimit({
  *   windowMs: RATE_LIMIT_WINDOW_MS,
  *   limit: RATE_LIMITS.MUTATION,
+ *   standardHeaders: 'draft-7', // Enables RateLimit-* headers
  * });
  * ```
  */

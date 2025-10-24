@@ -166,6 +166,8 @@ export class MeasurementService {
 
       if (!teamId || teamId.trim() === '') {
         // Get athlete's active teams at measurement date (within transaction)
+        // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
+        // See: migrations/0018_add_org_query_composite_indexes.sql
         const activeTeams = await tx
           .select({
             teamId: teams.id,

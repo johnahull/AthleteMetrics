@@ -7,6 +7,13 @@ import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, VALID_METRICS } from '@shared/schema';
 import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
 
+/**
+ * Dashboard statistics time window
+ * Defines how many days back to look for "recent" measurements
+ * @default 30 days
+ */
+const DASHBOARD_STATS_WINDOW_DAYS = 30;
+
 interface AthleteStats {
   bestFly10?: number;
   bestVertical?: number;
@@ -57,12 +64,14 @@ export class AnalyticsService {
     // Filter and extract FLY10_TIME values
     const fly10Times = athleteMeasurements
       .filter((m) => m.metric === 'FLY10_TIME')
-      .map((m) => parseFloat(m.value));
+      .map((m) => parseFloat(m.value))
+      .filter((v) => !isNaN(v) && isFinite(v)); // Validate numeric values
 
     // Filter and extract VERTICAL_JUMP values
     const verticalJumps = athleteMeasurements
       .filter((m) => m.metric === 'VERTICAL_JUMP')
-      .map((m) => parseFloat(m.value));
+      .map((m) => parseFloat(m.value))
+      .filter((v) => !isNaN(v) && isFinite(v)); // Validate numeric values
 
     return {
       bestFly10: fly10Times.length > 0 ? Math.min(...fly10Times) : undefined,
@@ -254,13 +263,13 @@ export class AnalyticsService {
 
     const totalTeams = orgTeams.length;
 
-    // Get measurements from last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Get measurements from last N days (configurable via DASHBOARD_STATS_WINDOW_DAYS)
+    const windowStartDate = new Date();
+    windowStartDate.setDate(windowStartDate.getDate() - DASHBOARD_STATS_WINDOW_DAYS);
     const today = new Date();
 
     const measurementConditions = [
-      gte(measurements.date, thirtyDaysAgo.toISOString()),
+      gte(measurements.date, windowStartDate.toISOString()),
       lte(measurements.date, today.toISOString()),
       eq(measurements.isVerified, true),
     ];
@@ -311,6 +320,8 @@ export class AnalyticsService {
 
     // Optimized: Single query for all metrics using CASE WHEN
     // This eliminates N+1 query pattern (7 queries -> 1 query)
+    // Database Index: idx_measurements_org_date_metric_verified (organization_id, date DESC, metric, is_verified)
+    // See: migrations/0020_add_measurements_org_metric_analytics_index.sql
     const metricBests = await db
       .select({
         metric: measurements.metric,
