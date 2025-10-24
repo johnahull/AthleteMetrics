@@ -25,12 +25,6 @@ export class TeamService {
   async getTeams(
     organizationId?: string
   ): Promise<(Team & { organization: Organization })[]> {
-    let query = db
-      .select()
-      .from(teams)
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .orderBy(asc(teams.name));
-
     // Build conditions array to exclude archived teams
     const conditions = [];
 
@@ -41,11 +35,14 @@ export class TeamService {
     // Always exclude archived teams
     conditions.push(ne(teams.isArchived, true));
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
+    // Build and execute query with conditions
+    const result = await db
+      .select()
+      .from(teams)
+      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .where(and(...conditions))
+      .orderBy(asc(teams.name));
 
-    const result = await query;
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
       organization: org,

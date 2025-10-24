@@ -102,31 +102,52 @@ export class AnalyticsService {
         )
       );
 
-    // Calculate stats for each team
-    const teamStats = await Promise.all(
-      orgTeams.map(async ({ teams: team, organizations: org }) => {
-        // Get active team members
-        const teamMembers = await db
-          .select()
-          .from(userTeams)
-          .where(
-            and(
-              eq(userTeams.teamId, team.id),
-              eq(userTeams.isActive, true)
-            )
-          );
+    // Batch fetch all team members and measurements to avoid N+1 queries
+    const allTeamIds = orgTeams.map(({ teams: team }) => team.id);
 
-        // Get verified measurements for this team
-        const teamMeasurements = await db
-          .select()
-          .from(measurements)
-          .where(
-            and(
-              eq(measurements.teamId, team.id),
-              eq(measurements.isVerified, true)
-            )
+    const [allTeamMembers, allTeamMeasurements] = await Promise.all([
+      // Fetch all team members in one query
+      db
+        .select()
+        .from(userTeams)
+        .where(
+          and(
+            inArray(userTeams.teamId, allTeamIds),
+            eq(userTeams.isActive, true)
           )
-          .orderBy(desc(measurements.date));
+        ),
+      // Fetch all team measurements in one query
+      db
+        .select()
+        .from(measurements)
+        .where(
+          and(
+            inArray(measurements.teamId, allTeamIds),
+            eq(measurements.isVerified, true)
+          )
+        )
+        .orderBy(desc(measurements.date))
+    ]);
+
+    // Group data by teamId for fast lookup
+    const membersByTeam = allTeamMembers.reduce((acc, member) => {
+      if (!acc[member.teamId]) acc[member.teamId] = [];
+      acc[member.teamId].push(member);
+      return acc;
+    }, {} as Record<string, typeof allTeamMembers>);
+
+    const measurementsByTeam = allTeamMeasurements.reduce((acc, m) => {
+      if (m.teamId) {
+        if (!acc[m.teamId]) acc[m.teamId] = [];
+        acc[m.teamId].push(m);
+      }
+      return acc;
+    }, {} as Record<string, typeof allTeamMeasurements>);
+
+    // Calculate stats for each team using pre-fetched data
+    const teamStats = orgTeams.map(({ teams: team, organizations: org }) => {
+        const teamMembers = membersByTeam[team.id] || [];
+        const teamMeasurements = measurementsByTeam[team.id] || [];
 
         // Calculate best performances
         const fly10Times = teamMeasurements
@@ -153,8 +174,7 @@ export class AnalyticsService {
             verticalJumps.length > 0 ? Math.max(...verticalJumps) : undefined,
           latestTest: latestMeasurement?.date,
         };
-      })
-    );
+      });
 
     return teamStats;
   }

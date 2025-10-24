@@ -330,14 +330,11 @@ export class MeasurementService {
       conditions.push(eq(measurements.isVerified, true));
     }
 
-    // Build and execute query
-    let query = db.select().from(measurements);
+    // Build and execute query with conditions
+    const results = conditions.length > 0
+      ? await db.select().from(measurements).where(and(...conditions))
+      : await db.select().from(measurements);
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-
-    const results = await query;
     return results;
   }
 }

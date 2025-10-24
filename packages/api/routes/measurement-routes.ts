@@ -7,10 +7,12 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import { insertMeasurementSchema } from "@shared/schema";
+import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { z } from "zod";
 import { ZodError } from "zod";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -160,8 +162,25 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
       }
 
-      // Note: Organization validation for coaches/admins is handled at the service layer
-      // The measurement service auto-assigns organizationId based on the athlete's team context
+      // SECURITY: Verify coaches/org admins can only create measurements for users in their organization
+      if (!isSiteAdmin(user) && (user.role === 'coach' || user.role === 'org_admin')) {
+        const targetUserTeams = await db
+          .select({ organizationId: teams.organizationId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(eq(userTeams.userId, validatedData.userId));
+
+        if (targetUserTeams.length === 0) {
+          return res.status(404).json({ message: "User not found or not on any team" });
+        }
+
+        const hasOrgAccess = targetUserTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        if (!hasOrgAccess) {
+          return res.status(403).json({
+            message: "Cannot create measurements for users in different organizations"
+          });
+        }
+      }
 
       const measurement = await measurementService.createMeasurement(validatedData, user.id);
       res.status(201).json(measurement);

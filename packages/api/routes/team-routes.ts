@@ -7,7 +7,7 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { TeamService } from "../services/team-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import { insertTeamSchema, measurements } from "@shared/schema";
+import { insertTeamSchema, measurements, userOrganizations } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -306,6 +306,25 @@ export function registerTeamRoutes(app: Express) {
       // Permission check: non-admin users can only add members to their organization's teams
       if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+      }
+
+      // SECURITY: Verify userId belongs to same organization (prevent IDOR vulnerability)
+      if (!isSiteAdmin(user)) {
+        const targetUserOrgs = await db
+          .select({ organizationId: userOrganizations.organizationId })
+          .from(userOrganizations)
+          .where(eq(userOrganizations.userId, userId));
+
+        if (targetUserOrgs.length === 0) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        const targetUserOrgIds = targetUserOrgs.map(org => org.organizationId);
+        if (!targetUserOrgIds.includes(existingTeam.organization.id)) {
+          return res.status(403).json({
+            message: "Cannot add users from different organizations to your team"
+          });
+        }
       }
 
       const membership = await teamService.addUserToTeam(userId, teamId);

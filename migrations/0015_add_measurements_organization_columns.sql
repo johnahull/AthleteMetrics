@@ -1,0 +1,30 @@
+-- Migration: Add organization and team snapshot columns to measurements table
+-- Purpose: Track organization context and team name at time of measurement for historical accuracy
+-- Context: These are historical references WITHOUT foreign key constraints to preserve data integrity
+
+-- Add organization_id column (historical reference to organization at time of measurement)
+ALTER TABLE measurements
+ADD COLUMN IF NOT EXISTS organization_id VARCHAR;
+
+-- Add team_name_snapshot column (immutable team name at time of measurement)
+ALTER TABLE measurements
+ADD COLUMN IF NOT EXISTS team_name_snapshot TEXT;
+
+-- Add column comments for documentation
+COMMENT ON COLUMN measurements.organization_id IS
+  'Organization ID at time of measurement (historical reference, no FK constraint)';
+
+COMMENT ON COLUMN measurements.team_name_snapshot IS
+  'Team name at time of measurement (immutable snapshot for historical accuracy)';
+
+-- Backfill organization_id from team relationships for existing measurements
+-- This ensures historical data maintains organization context
+UPDATE measurements m
+SET organization_id = t.organization_id,
+    team_name_snapshot = t.name
+FROM teams t
+WHERE m.team_id = t.id
+  AND m.organization_id IS NULL;
+
+-- Note: Measurements without team_id will have NULL organization_id
+-- This is acceptable as they represent measurements without team context
