@@ -383,7 +383,12 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
       }
 
-      const verifiedMeasurement = await measurementService.verifyMeasurement(measurementId, user.id);
+      // SECURITY FIX: Pass expectedOrganizationId for defense-in-depth IDOR protection
+      const verifiedMeasurement = await measurementService.verifyMeasurement(
+        measurementId,
+        user.id,
+        isSiteAdmin(user) ? undefined : user.primaryOrganizationId
+      );
       res.json(verifiedMeasurement);
     } catch (error) {
       console.error("Verify measurement error:", error);

@@ -8,13 +8,15 @@ import {
   teams,
   organizations,
   userTeams,
+  userOrganizations,
+  measurements,
   type Team,
   type Organization,
   type UserTeam,
   type InsertTeam,
 } from '@shared/schema';
 import { db } from '../db';
-import { eq, and, asc, ne } from 'drizzle-orm';
+import { eq, and, asc, ne, sql } from 'drizzle-orm';
 
 export class TeamService {
   /**
@@ -92,12 +94,22 @@ export class TeamService {
   /**
    * Update team details
    * Security: Strips organizationId to prevent unauthorized transfers
+   *           and validates organization ownership when expectedOrganizationId provided
+   *
+   * Defense-in-depth: Even though route layer checks organization, this service-layer
+   * validation prevents IDOR attacks if called from other contexts or future endpoints.
+   *
    * @param id Team ID
    * @param team Partial team data to update
+   * @param expectedOrganizationId Optional organization ID for IDOR protection
    * @returns Updated team
-   * @throws Error if no valid fields or team not found
+   * @throws Error if no valid fields, team not found, or org mismatch
    */
-  async updateTeam(id: string, team: Partial<InsertTeam>): Promise<Team> {
+  async updateTeam(
+    id: string,
+    team: Partial<InsertTeam>,
+    expectedOrganizationId?: string
+  ): Promise<Team> {
     // Defense in depth - ALWAYS strip organizationId at service layer
     const { organizationId, ...safeTeamData } = team;
 
@@ -108,6 +120,23 @@ export class TeamService {
 
     if (Object.keys(safeTeamData).length === 0) {
       throw new Error('No valid fields to update');
+    }
+
+    // Defense-in-depth: Verify organization ownership at service layer
+    // This prevents IDOR attacks even if route-level checks are bypassed
+    if (expectedOrganizationId) {
+      const [existing] = await db
+        .select()
+        .from(teams)
+        .where(eq(teams.id, id));
+
+      if (!existing) {
+        throw new Error('Team not found');
+      }
+
+      if (existing.organizationId !== expectedOrganizationId) {
+        throw new Error('Access denied - team belongs to different organization');
+      }
     }
 
     // Trim whitespace from name if provided
@@ -128,12 +157,40 @@ export class TeamService {
 
   /**
    * Delete a team and all associated memberships
-   * Uses transaction to ensure atomicity
+   * Uses transaction to ensure atomicity and prevent race conditions
+   *
+   * Security: Validates no measurements exist INSIDE transaction with row-level locks
+   * to prevent race condition where measurements could be created between validation
+   * and deletion, causing orphaned records.
+   *
    * @param id Team ID
+   * @throws Error if team not found or has existing measurements
    */
   async deleteTeam(id: string): Promise<void> {
     await db.transaction(async (tx) => {
-      // Delete all team memberships first
+      // Lock the team row to prevent concurrent modifications
+      const [team] = await tx
+        .select()
+        .from(teams)
+        .where(eq(teams.id, id))
+        .for('update');
+
+      if (!team) {
+        throw new Error('Team not found');
+      }
+
+      // Check for measurements INSIDE transaction to prevent race conditions
+      // This prevents orphaned measurements if one is created during deletion
+      const [measurementCount] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(measurements)
+        .where(eq(measurements.teamId, id));
+
+      if (measurementCount.count > 0) {
+        throw new Error('Cannot delete team with existing measurements. Please delete or reassign measurements first.');
+      }
+
+      // Delete all team memberships first (foreign key constraints)
       await tx.delete(userTeams).where(eq(userTeams.teamId, id));
 
       // Now delete the team
@@ -229,41 +286,137 @@ export class TeamService {
 
   /**
    * Update team membership status and season
+   *
+   * Security: When expectedOrganizationId is provided, validates inside transaction
+   * to prevent TOCTOU race conditions where user/team could be transferred between
+   * validation and execution.
+   *
    * @param teamId Team ID
    * @param userId User ID
    * @param membershipData Membership updates (leftAt, season)
+   * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
    * @returns Updated membership
+   * @throws Error if organization validation fails or user/team belong to different org
    */
   async updateTeamMembership(
     teamId: string,
     userId: string,
-    membershipData: { leftAt?: Date; season?: string }
+    membershipData: { leftAt?: Date; season?: string },
+    expectedOrganizationId?: string
   ): Promise<UserTeam> {
-    const [updated] = await db
-      .update(userTeams)
-      .set({
-        leftAt: membershipData.leftAt ?? null,
-        season: membershipData.season,
-        isActive: membershipData.leftAt ? false : true,
-      })
-      .where(and(eq(userTeams.teamId, teamId), eq(userTeams.userId, userId)))
-      .returning();
+    // Use transaction for atomicity and organization validation
+    return await db.transaction(async (tx) => {
+      // Defense-in-depth: Validate organization membership INSIDE transaction
+      if (expectedOrganizationId) {
+        // Lock team row and verify organization
+        const [team] = await tx
+          .select()
+          .from(teams)
+          .where(eq(teams.id, teamId))
+          .for('update');
 
-    return updated;
+        if (!team) {
+          throw new Error('Team not found');
+        }
+
+        if (team.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - team belongs to different organization');
+        }
+
+        // Lock user-org relationship and verify user belongs to expected org
+        const [userOrg] = await tx
+          .select()
+          .from(userOrganizations)
+          .where(
+            and(
+              eq(userOrganizations.userId, userId),
+              eq(userOrganizations.organizationId, expectedOrganizationId)
+            )
+          )
+          .for('update');
+
+        if (!userOrg) {
+          throw new Error('Access denied - user does not belong to your organization');
+        }
+      }
+
+      const [updated] = await tx
+        .update(userTeams)
+        .set({
+          leftAt: membershipData.leftAt ?? null,
+          season: membershipData.season,
+          isActive: membershipData.leftAt ? false : true,
+        })
+        .where(and(eq(userTeams.teamId, teamId), eq(userTeams.userId, userId)))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Team membership not found');
+      }
+
+      return updated;
+    });
   }
 
   /**
    * Add a user to a team
    * Handles: existing active memberships, reactivation of inactive memberships,
    * and creating new memberships while preserving historical data
+   *
+   * Security: When expectedOrganizationId is provided, validates inside transaction
+   * to prevent TOCTOU race conditions where user/team could be transferred between
+   * validation and execution.
+   *
    * @param userId User ID
    * @param teamId Team ID
+   * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
    * @returns User team membership
+   * @throws Error if organization validation fails or user/team belong to different org
    */
-  async addUserToTeam(userId: string, teamId: string): Promise<UserTeam> {
+  async addUserToTeam(
+    userId: string,
+    teamId: string,
+    expectedOrganizationId?: string
+  ): Promise<UserTeam> {
     // Use transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx) => {
       try {
+        // Defense-in-depth: Validate organization membership INSIDE transaction
+        // This prevents TOCTOU vulnerability where user could be transferred
+        // between route-level check and service execution
+        if (expectedOrganizationId) {
+          // Lock team row and verify organization
+          const [team] = await tx
+            .select()
+            .from(teams)
+            .where(eq(teams.id, teamId))
+            .for('update');
+
+          if (!team) {
+            throw new Error('Team not found');
+          }
+
+          if (team.organizationId !== expectedOrganizationId) {
+            throw new Error('Access denied - team belongs to different organization');
+          }
+
+          // Lock user-org relationship and verify user belongs to expected org
+          const [userOrg] = await tx
+            .select()
+            .from(userOrganizations)
+            .where(
+              and(
+                eq(userOrganizations.userId, userId),
+                eq(userOrganizations.organizationId, expectedOrganizationId)
+              )
+            )
+            .for('update');
+
+          if (!userOrg) {
+            throw new Error('Access denied - user does not belong to your organization');
+          }
+        }
+
         // Check if user has an active membership in this team (with row-level lock)
         const existingActiveAssignment = await tx
           .select()
@@ -331,23 +484,71 @@ export class TeamService {
   /**
    * Remove a user from a team by marking membership inactive
    * Uses temporal pattern - doesn't delete, preserves history
+   *
+   * Security: When expectedOrganizationId is provided, validates inside transaction
+   * to prevent TOCTOU race conditions where user/team could be transferred between
+   * validation and execution.
+   *
    * @param userId User ID
    * @param teamId Team ID
+   * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   * @throws Error if organization validation fails or user/team belong to different org
    */
-  async removeUserFromTeam(userId: string, teamId: string): Promise<void> {
-    // Mark membership as inactive instead of deleting (temporal approach)
-    await db
-      .update(userTeams)
-      .set({
-        isActive: false,
-        leftAt: new Date(),
-      })
-      .where(
-        and(
-          eq(userTeams.userId, userId),
-          eq(userTeams.teamId, teamId),
-          eq(userTeams.isActive, true)
-        )
-      );
+  async removeUserFromTeam(
+    userId: string,
+    teamId: string,
+    expectedOrganizationId?: string
+  ): Promise<void> {
+    // Use transaction for atomicity and organization validation
+    await db.transaction(async (tx) => {
+      // Defense-in-depth: Validate organization membership INSIDE transaction
+      if (expectedOrganizationId) {
+        // Lock team row and verify organization
+        const [team] = await tx
+          .select()
+          .from(teams)
+          .where(eq(teams.id, teamId))
+          .for('update');
+
+        if (!team) {
+          throw new Error('Team not found');
+        }
+
+        if (team.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - team belongs to different organization');
+        }
+
+        // Lock user-org relationship and verify user belongs to expected org
+        const [userOrg] = await tx
+          .select()
+          .from(userOrganizations)
+          .where(
+            and(
+              eq(userOrganizations.userId, userId),
+              eq(userOrganizations.organizationId, expectedOrganizationId)
+            )
+          )
+          .for('update');
+
+        if (!userOrg) {
+          throw new Error('Access denied - user does not belong to your organization');
+        }
+      }
+
+      // Mark membership as inactive instead of deleting (temporal approach)
+      await tx
+        .update(userTeams)
+        .set({
+          isActive: false,
+          leftAt: new Date(),
+        })
+        .where(
+          and(
+            eq(userTeams.userId, userId),
+            eq(userTeams.teamId, teamId),
+            eq(userTeams.isActive, true)
+          )
+        );
+    });
   }
 }

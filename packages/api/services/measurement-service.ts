@@ -429,12 +429,21 @@ export class MeasurementService {
    * Mark measurement as verified
    * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
    * Idempotent operation - can be called multiple times safely
+   *
+   * Defense-in-depth: When expectedOrganizationId provided, validates organization
+   * ownership to prevent IDOR attacks even if route-level checks are bypassed.
+   *
    * @param id Measurement ID
    * @param verifiedBy User ID of verifier
+   * @param expectedOrganizationId Optional organization ID for IDOR protection
    * @returns Updated measurement
-   * @throws Error if measurement not found or transaction fails
+   * @throws Error if measurement not found, org mismatch, or transaction fails
    */
-  async verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement> {
+  async verifyMeasurement(
+    id: string,
+    verifiedBy: string,
+    expectedOrganizationId?: string
+  ): Promise<Measurement> {
     // Wrap in transaction to prevent race conditions during concurrent verifications
     // Race condition scenario: Two admins verify same measurement simultaneously, overwriting audit trail
     try {
@@ -448,6 +457,12 @@ export class MeasurementService {
 
         if (!existing) {
           throw new Error('Measurement not found');
+        }
+
+        // Defense-in-depth: Verify organization ownership at service layer
+        // This prevents IDOR attacks even if route-level checks are bypassed
+        if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - measurement belongs to different organization');
         }
 
         // Idempotency check: if already verified by this user, return existing record

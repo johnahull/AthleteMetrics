@@ -160,7 +160,12 @@ export function registerTeamRoutes(app: Express) {
       const updateSchema = insertTeamSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
-      const updatedTeam = await teamService.updateTeam(teamId, validatedData);
+      // SECURITY FIX: Pass expectedOrganizationId for defense-in-depth IDOR protection
+      const updatedTeam = await teamService.updateTeam(
+        teamId,
+        validatedData,
+        isSiteAdmin(user) ? undefined : existingTeam.organization.id
+      );
       res.json(updatedTeam);
     } catch (error) {
       console.error("Update team error:", error);
@@ -195,19 +200,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
-      // Check if team has measurements - prevent deletion if it does
-      const teamMeasurements = await db
-        .select()
-        .from(measurements)
-        .where(eq(measurements.teamId, teamId))
-        .limit(1);
-
-      if (teamMeasurements.length > 0) {
-        return res.status(400).json({
-          message: "Cannot delete team with existing measurements. Archive the team instead to preserve data integrity."
-        });
-      }
-
+      // SECURITY FIX: Measurement validation moved to service layer inside transaction
+      // This prevents race condition where measurements could be created between
+      // validation and deletion. Service layer now atomically checks and deletes.
       await teamService.deleteTeam(teamId);
       res.json({ message: "Team deleted successfully" });
     } catch (error) {
@@ -315,26 +310,14 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
-      // SECURITY: Verify userId belongs to same organization (prevent IDOR vulnerability)
-      if (!isSiteAdmin(user)) {
-        const targetUserOrgs = await db
-          .select({ organizationId: userOrganizations.organizationId })
-          .from(userOrganizations)
-          .where(eq(userOrganizations.userId, userId));
-
-        if (targetUserOrgs.length === 0) {
-          return res.status(404).json({ message: "User not found" });
-        }
-
-        const targetUserOrgIds = targetUserOrgs.map(org => org.organizationId);
-        if (!targetUserOrgIds.includes(existingTeam.organization.id)) {
-          return res.status(403).json({
-            message: "Cannot add users from different organizations to your team"
-          });
-        }
-      }
-
-      const membership = await teamService.addUserToTeam(userId, teamId);
+      // SECURITY FIX: Pass expectedOrganizationId to service layer for TOCTOU-safe validation
+      // Organization validation now happens INSIDE transaction to prevent race conditions
+      // where user/team could be transferred between route check and service execution
+      const membership = await teamService.addUserToTeam(
+        userId,
+        teamId,
+        isSiteAdmin(user) ? undefined : existingTeam.organization.id
+      );
       res.status(201).json(membership);
     } catch (error) {
       console.error("Add team member error:", error);
@@ -367,26 +350,13 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
-      // SECURITY: Verify userId belongs to same organization (prevent IDOR vulnerability)
-      if (!isSiteAdmin(user)) {
-        const targetUserOrgs = await db
-          .select({ organizationId: userOrganizations.organizationId })
-          .from(userOrganizations)
-          .where(eq(userOrganizations.userId, userId));
-
-        if (targetUserOrgs.length === 0) {
-          return res.status(404).json({ message: "User not found" });
-        }
-
-        const targetUserOrgIds = targetUserOrgs.map(org => org.organizationId);
-        if (!targetUserOrgIds.includes(existingTeam.organization.id)) {
-          return res.status(403).json({
-            message: "Cannot remove users from different organizations from your team"
-          });
-        }
-      }
-
-      await teamService.removeUserFromTeam(userId, teamId);
+      // SECURITY FIX: Pass expectedOrganizationId to service layer for TOCTOU-safe validation
+      // Organization validation now happens INSIDE transaction to prevent race conditions
+      await teamService.removeUserFromTeam(
+        userId,
+        teamId,
+        isSiteAdmin(user) ? undefined : existingTeam.organization.id
+      );
       res.json({ message: "Member removed from team successfully" });
     } catch (error) {
       console.error("Remove team member error:", error);
@@ -421,29 +391,17 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
-      // SECURITY: Verify userId belongs to same organization (prevent IDOR vulnerability)
-      if (!isSiteAdmin(user)) {
-        const targetUserOrgs = await db
-          .select({ organizationId: userOrganizations.organizationId })
-          .from(userOrganizations)
-          .where(eq(userOrganizations.userId, userId));
-
-        if (targetUserOrgs.length === 0) {
-          return res.status(404).json({ message: "User not found" });
-        }
-
-        const targetUserOrgIds = targetUserOrgs.map(org => org.organizationId);
-        if (!targetUserOrgIds.includes(existingTeam.organization.id)) {
-          return res.status(403).json({
-            message: "Cannot update membership for users from different organizations"
-          });
-        }
-      }
-
-      const membership = await teamService.updateTeamMembership(teamId, userId, {
-        leftAt: leftAt ? new Date(leftAt) : undefined,
-        season,
-      });
+      // SECURITY FIX: Pass expectedOrganizationId to service layer for TOCTOU-safe validation
+      // Organization validation now happens INSIDE transaction to prevent race conditions
+      const membership = await teamService.updateTeamMembership(
+        teamId,
+        userId,
+        {
+          leftAt: leftAt ? new Date(leftAt) : undefined,
+          season,
+        },
+        isSiteAdmin(user) ? undefined : existingTeam.organization.id
+      );
 
       res.json(membership);
     } catch (error) {
