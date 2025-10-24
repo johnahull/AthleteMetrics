@@ -189,8 +189,8 @@ export class MeasurementService {
         if (activeTeams.length === 1) {
           // Single team - auto-assign
           teamId = activeTeams[0].teamId;
-          // Use null instead of undefined for consistency with database NULL type
-          season = activeTeams[0].season ?? null;
+          // Use undefined for optional fields per TypeScript schema
+          season = activeTeams[0].season ?? undefined;
           teamContextAuto = true;
           // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
         } else if (activeTeams.length > 1) {
@@ -217,8 +217,8 @@ export class MeasurementService {
         if (team) {
           teamNameSnapshot = team.teams.name;
           organizationId = team.teams.organizationId;
-          // Use null instead of undefined for consistency with database NULL type
-          season = season ?? team.teams.season ?? null;
+          // Use undefined for optional fields per TypeScript schema
+          season = season ?? team.teams.season ?? undefined;
         }
       }
 
