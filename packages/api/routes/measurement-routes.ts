@@ -14,6 +14,7 @@ import { ZodError } from "zod";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { PAGINATION } from "../constants/pagination";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -46,8 +47,8 @@ const measurementQuerySchema = z.object({
   birthYearTo: z.coerce.number().int().min(1900).max(2100).optional(),
   ageFrom: z.coerce.number().int().min(0).max(120).optional(),
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
-  limit: z.coerce.number().int().min(1).max(20000).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).optional(),
+  offset: z.coerce.number().int().min(0).max(PAGINATION.MAX_OFFSET).optional(),
 });
 
 interface MeasurementFilters {
@@ -183,6 +184,25 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
       }
 
+      // SECURITY: Validate teamId exists (applies to all users)
+      if (validatedData.teamId) {
+        const [team] = await db
+          .select({ organizationId: teams.organizationId })
+          .from(teams)
+          .where(eq(teams.id, validatedData.teamId));
+
+        if (!team) {
+          return res.status(404).json({ message: "Team not found" });
+        }
+
+        // SECURITY: Non-site-admins can only assign measurements to teams in their organization
+        if (!isSiteAdmin(user) && team.organizationId !== user.primaryOrganizationId) {
+          return res.status(403).json({
+            message: "Cannot assign measurements to teams in different organizations"
+          });
+        }
+      }
+
       // SECURITY: Verify coaches/org admins can only create measurements for users in their organization
       if (!isSiteAdmin(user) && (user.role === 'coach' || user.role === 'org_admin')) {
         const targetUserTeams = await db
@@ -204,24 +224,6 @@ export function registerMeasurementRoutes(app: Express) {
           return res.status(403).json({
             message: "Cannot create measurements for users in different organizations"
           });
-        }
-
-        // SECURITY: If teamId provided, verify it belongs to the user's organization
-        if (validatedData.teamId) {
-          const [team] = await db
-            .select({ organizationId: teams.organizationId })
-            .from(teams)
-            .where(eq(teams.id, validatedData.teamId));
-
-          if (!team) {
-            return res.status(404).json({ message: "Team not found" });
-          }
-
-          if (team.organizationId !== user.primaryOrganizationId) {
-            return res.status(403).json({
-              message: "Cannot assign measurements to teams in different organizations"
-            });
-          }
         }
       }
 

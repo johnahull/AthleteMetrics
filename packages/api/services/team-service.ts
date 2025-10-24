@@ -99,6 +99,11 @@ export class TeamService {
     // Defense in depth - ALWAYS strip organizationId at service layer
     const { organizationId, ...safeTeamData } = team;
 
+    // Log if organizationId was provided (security monitoring)
+    if (organizationId !== undefined) {
+      console.warn(`[TeamService] Attempt to update organizationId for team ${id} was blocked. organizationId cannot be changed after team creation.`);
+    }
+
     if (Object.keys(safeTeamData).length === 0) {
       throw new Error('No valid fields to update');
     }

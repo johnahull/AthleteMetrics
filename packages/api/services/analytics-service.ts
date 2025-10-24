@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, VALID_METRICS } from '@shared/schema';
 import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
 
 interface AthleteStats {
@@ -301,17 +301,6 @@ export class AnalyticsService {
         .innerJoin(users, eq(measurements.userId, users.id))
         .where(and(...measurementConditions));
     }
-
-    // Define valid metrics and whether lower is better
-    const VALID_METRICS = [
-      { key: 'FLY10_TIME', lowerIsBetter: true },
-      { key: 'VERTICAL_JUMP', lowerIsBetter: false },
-      { key: 'AGILITY_505', lowerIsBetter: true },
-      { key: 'AGILITY_5105', lowerIsBetter: true },
-      { key: 'T_TEST', lowerIsBetter: true },
-      { key: 'DASH_40YD', lowerIsBetter: true },
-      { key: 'RSI', lowerIsBetter: false },
-    ] as const;
 
     // Calculate best for each metric using SQL aggregation (much faster than JavaScript reduce)
     const bestMetrics: Record<string, any> = {

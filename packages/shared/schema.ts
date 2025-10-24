@@ -568,6 +568,18 @@ export const MetricType = {
   TOP_SPEED: "TOP_SPEED",
 } as const;
 
+// Valid metrics for analytics with optimization hints
+// Defines which metrics should be minimized (lower is better) vs maximized (higher is better)
+export const VALID_METRICS = [
+  { key: 'FLY10_TIME', lowerIsBetter: true },
+  { key: 'VERTICAL_JUMP', lowerIsBetter: false },
+  { key: 'AGILITY_505', lowerIsBetter: true },
+  { key: 'AGILITY_5105', lowerIsBetter: true },
+  { key: 'T_TEST', lowerIsBetter: true },
+  { key: 'DASH_40YD', lowerIsBetter: true },
+  { key: 'RSI', lowerIsBetter: false },
+] as const;
+
 export const TeamLevel = {
   CLUB: "Club",
   HS: "HS",

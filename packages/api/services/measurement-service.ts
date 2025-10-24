@@ -17,6 +17,7 @@ import {
 } from '@shared/schema';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
+import { PAGINATION } from '../constants/pagination';
 
 export interface MeasurementFilters {
   userId?: string;
@@ -530,8 +531,8 @@ export class MeasurementService {
     }
 
     // Pagination parameters with safety limits to prevent memory exhaustion
-    const limit = Math.min(filters?.limit || 1000, 20000); // Default 1000, max 20000 for chart data
-    const offset = Math.min(filters?.offset || 0, 10000); // Cap offset at 10k to prevent expensive scans
+    const limit = Math.min(filters?.limit || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
+    const offset = Math.min(filters?.offset || 0, PAGINATION.MAX_OFFSET);
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
