@@ -32,13 +32,14 @@ BEGIN
     SET organization_id = t.organization_id,
         team_name_snapshot = t.name
     FROM teams t
-    WHERE m.ctid IN (
-      SELECT m2.ctid
-      FROM measurements m2
-      WHERE m2.team_id = t.id
-        AND m2.organization_id IS NULL
-      LIMIT 1000
-    );
+    WHERE m.team_id = t.id
+      AND m.organization_id IS NULL
+      AND m.ctid IN (
+        SELECT m2.ctid
+        FROM measurements m2
+        WHERE m2.organization_id IS NULL
+        LIMIT 1000
+      );
 
     GET DIAGNOSTICS rows_updated = ROW_COUNT;
     total_updated := total_updated + rows_updated;
