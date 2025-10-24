@@ -350,7 +350,9 @@ export class AnalyticsService {
 
       if (bestResult && bestResult.bestValue !== null) {
         bestMetrics[`best${key}Last30Days`] = {
-          value: bestResult.bestValue,
+          value: typeof bestResult.bestValue === 'string'
+            ? parseFloat(bestResult.bestValue)
+            : bestResult.bestValue,
           userName: bestResult.userName,
         };
       }
