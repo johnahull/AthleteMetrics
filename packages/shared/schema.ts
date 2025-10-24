@@ -489,7 +489,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   teamContextAuto: true, // Managed by system
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
-  date: z.string().min(1, "Date is required"),
+  date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),

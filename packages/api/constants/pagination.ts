@@ -24,10 +24,13 @@ export const PAGINATION = {
 
   /**
    * Maximum number of records per page for measurement queries
-   * Increased from 10k to 20k to support comprehensive chart data with all historical dates
-   * @default 20000
+   * Reduced from 20k to 1k to prevent memory exhaustion under load
+   * @default 1000
+   * @security Under load (50 concurrent requests × 20k records), could consume 5GB+ RAM
+   * @remarks For chart data with many records, use aggregated analytics endpoints
+   *          (/api/analytics) instead of raw measurement queries
    */
-  MAX_LIMIT: 20000,
+  MAX_LIMIT: 1000,
 
   /**
    * Maximum offset for pagination

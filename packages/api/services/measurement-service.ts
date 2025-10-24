@@ -185,7 +185,8 @@ export class MeasurementService {
               eq(userTeams.isActive, true),
               eq(teams.isArchived, false)
             )
-          );
+          )
+          .for('update'); // Prevent race condition with row-level lock
 
         if (activeTeams.length === 1) {
           // Single team - auto-assign
