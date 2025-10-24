@@ -6,6 +6,7 @@ cmds = ["npm ci"]
 
 [phases.build]
 cmds = ["npm run build"]
+# Force rebuild: 2025-10-24-19:15
 
 [start]
 cmd = "npm start"
