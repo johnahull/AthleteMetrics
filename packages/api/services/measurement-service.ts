@@ -16,7 +16,7 @@ import {
   type Organization,
 } from '@shared/schema';
 import { db } from '../db';
-import { eq, and, gte, lte, or, isNull, sql, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
 
 export interface MeasurementFilters {
   userId?: string;
@@ -407,7 +407,7 @@ export class MeasurementService {
         .innerJoin(teams, eq(userTeams.teamId, teams.id))
         .innerJoin(organizations, eq(teams.organizationId, organizations.id))
         .where(and(
-          sql`${userTeams.userId} = ANY(${uniqueUserIds})`,
+          inArray(userTeams.userId, uniqueUserIds),
           eq(userTeams.isActive, true),
           eq(teams.isArchived, false)
         ));
