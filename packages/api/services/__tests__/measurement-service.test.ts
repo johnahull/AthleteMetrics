@@ -505,8 +505,8 @@ describe('MeasurementService', () => {
         includeUnverified: true, // Include both verified and unverified
       });
 
-      expect(result.length).toBeGreaterThanOrEqual(2);
-      expect(result.every(m => m.userId === testUserId)).toBe(true);
+      expect(result.measurements.length).toBeGreaterThanOrEqual(2);
+      expect(result.measurements.every(m => m.userId === testUserId)).toBe(true);
     });
 
     it('should filter by metric', async () => {
@@ -515,8 +515,8 @@ describe('MeasurementService', () => {
         metric: 'FLY10_TIME',
       });
 
-      expect(result.length).toBeGreaterThanOrEqual(1);
-      expect(result.every(m => m.metric === 'FLY10_TIME')).toBe(true);
+      expect(result.measurements.length).toBeGreaterThanOrEqual(1);
+      expect(result.measurements.every(m => m.metric === 'FLY10_TIME')).toBe(true);
     });
 
     it('should exclude unverified by default', async () => {
@@ -525,7 +525,7 @@ describe('MeasurementService', () => {
         includeUnverified: false,
       });
 
-      expect(result.every(m => m.isVerified === true)).toBe(true);
+      expect(result.measurements.every(m => m.isVerified === true)).toBe(true);
     });
 
     it('should include unverified when requested', async () => {
@@ -534,7 +534,7 @@ describe('MeasurementService', () => {
         includeUnverified: true,
       });
 
-      const hasUnverified = result.some(m => m.isVerified === false);
+      const hasUnverified = result.measurements.some(m => m.isVerified === false);
       expect(hasUnverified).toBe(true);
     });
 
@@ -546,8 +546,8 @@ describe('MeasurementService', () => {
         includeUnverified: true,
       });
 
-      expect(result.length).toBeGreaterThanOrEqual(1);
-      expect(result.every(m => {
+      expect(result.measurements.length).toBeGreaterThanOrEqual(1);
+      expect(result.measurements.every(m => {
         const date = new Date(m.date);
         return date >= new Date('2024-02-01') && date <= new Date('2024-02-28');
       })).toBe(true);
