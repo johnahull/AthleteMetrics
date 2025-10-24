@@ -37,6 +37,7 @@ const measurementDeleteLimiter = rateLimit({
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
   athleteId: z.string().uuid().optional(),
+  organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
@@ -97,9 +98,19 @@ export function registerMeasurementRoutes(app: Express) {
         offset: validatedParams.offset,
       };
 
-      // Organization-based filtering for non-admin users
-      if (!isSiteAdmin(user) && user.primaryOrganizationId) {
-        // Non-admin users should only see measurements from their organization
+      // Organization-based filtering
+      if (validatedParams.organizationId) {
+        // If organizationId is provided, use it (with permission check below)
+        filters.organizationId = validatedParams.organizationId;
+
+        // Security: Non-admin users can only query their own organization
+        if (!isSiteAdmin(user) && filters.organizationId !== user.primaryOrganizationId) {
+          return res.status(403).json({
+            message: "Access denied - cannot query measurements from different organization"
+          });
+        }
+      } else if (!isSiteAdmin(user) && user.primaryOrganizationId) {
+        // Non-admin users without explicit organizationId should see their organization
         filters.organizationId = user.primaryOrganizationId;
       }
 
