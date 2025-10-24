@@ -281,12 +281,14 @@ export class MeasurementService {
    * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
    * @param id Measurement ID
    * @param measurement Partial measurement data
+   * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
    * @returns Updated measurement
-   * @throws Error if measurement not found or transaction fails
+   * @throws Error if measurement not found, org mismatch, or transaction fails
    */
   async updateMeasurement(
     id: string,
-    measurement: Partial<InsertMeasurement>
+    measurement: Partial<InsertMeasurement>,
+    expectedOrganizationId?: string
   ): Promise<Measurement> {
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
@@ -301,6 +303,12 @@ export class MeasurementService {
 
         if (!existing) {
           throw new Error('Measurement not found');
+        }
+
+        // Defense-in-depth: Verify organizationId if provided (IDOR prevention)
+        // This provides service-layer validation even if route-layer checks are bypassed
+        if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - measurement belongs to different organization');
         }
 
         const updateData: Partial<typeof measurements.$inferInsert> = {};
@@ -367,9 +375,10 @@ export class MeasurementService {
    * Delete a measurement
    * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
    * @param id Measurement ID
-   * @throws Error if measurement not found or transaction fails
+   * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
+   * @throws Error if measurement not found, org mismatch, or transaction fails
    */
-  async deleteMeasurement(id: string): Promise<void> {
+  async deleteMeasurement(id: string, expectedOrganizationId?: string): Promise<void> {
     // Wrap in transaction to prevent race conditions during concurrent operations
     // Race condition scenario: User deletes measurement while another user verifies/updates it
     try {
@@ -383,6 +392,12 @@ export class MeasurementService {
 
         if (!existing) {
           throw new Error('Measurement not found');
+        }
+
+        // Defense-in-depth: Verify organizationId if provided (IDOR prevention)
+        // This provides service-layer validation even if route-layer checks are bypassed
+        if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - measurement belongs to different organization');
         }
 
         // Delete the measurement
@@ -469,9 +484,20 @@ export class MeasurementService {
   /**
    * Get measurements with filters and pagination
    * @param filters Measurement filters including pagination options
+   * @param allowCrossOrganization Whether to allow queries without organizationId (site admin only)
    * @returns Paginated measurements with metadata
+   * @throws Error if organizationId not provided and allowCrossOrganization is false
    */
-  async getMeasurements(filters?: MeasurementFilters): Promise<PaginatedMeasurements> {
+  async getMeasurements(
+    filters?: MeasurementFilters,
+    allowCrossOrganization: boolean = false
+  ): Promise<PaginatedMeasurements> {
+    // Defense-in-depth: Enforce organizationId requirement for non-site-admin contexts
+    // This prevents accidental data leakage if route-layer authorization is bypassed
+    if (!filters?.organizationId && !allowCrossOrganization) {
+      throw new Error('organizationId is required for organization-scoped queries');
+    }
+
     // Build query conditions
     const conditions = [];
 

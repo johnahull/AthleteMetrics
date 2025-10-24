@@ -114,7 +114,9 @@ export function registerMeasurementRoutes(app: Express) {
         filters.organizationId = user.primaryOrganizationId;
       }
 
-      const result = await measurementService.getMeasurements(filters);
+      // Site admins can query across organizations, non-admins cannot
+      const allowCrossOrganization = isSiteAdmin(user);
+      const result = await measurementService.getMeasurements(filters, allowCrossOrganization);
       // Return just the measurements array for backwards compatibility
       res.json(result.measurements);
     } catch (error) {
@@ -275,7 +277,13 @@ export function registerMeasurementRoutes(app: Express) {
       const updateSchema = insertMeasurementSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
-      const updatedMeasurement = await measurementService.updateMeasurement(measurementId, validatedData);
+      // Pass organizationId for defense-in-depth validation (non-site-admins only)
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      const updatedMeasurement = await measurementService.updateMeasurement(
+        measurementId,
+        validatedData,
+        expectedOrganizationId
+      );
       res.json(updatedMeasurement);
     } catch (error) {
       console.error("Update measurement error:", error);
@@ -315,7 +323,9 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
-      await measurementService.deleteMeasurement(measurementId);
+      // Pass organizationId for defense-in-depth validation (non-site-admins only)
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
       res.json({ message: "Measurement deleted successfully" });
     } catch (error) {
       console.error("Delete measurement error:", error);
