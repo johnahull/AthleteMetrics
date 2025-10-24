@@ -198,8 +198,11 @@ export class MeasurementService {
         console.log('No active teams - measurement without team context');
         teamContextAuto = false;
       }
-    } else {
-      // Explicit teamId provided
+    }
+
+    // If teamId was explicitly provided or auto-assigned, fetch team details for snapshot
+    // (consolidate duplicate queries)
+    if (teamId && !teamNameSnapshot) {
       teamContextAuto = false;
       const [team] = await db
         .select()

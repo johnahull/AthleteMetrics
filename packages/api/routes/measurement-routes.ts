@@ -161,7 +161,8 @@ export function registerMeasurementRoutes(app: Express) {
       const validatedData = insertMeasurementSchema.parse(req.body);
 
       // Permission check: athletes can only create measurements for themselves
-      if (user.role === 'athlete' && validatedData.userId !== user.athleteId) {
+      // Use user.id as the athlete's userId (not user.athleteId which could be undefined)
+      if (user.role === 'athlete' && validatedData.userId !== user.id) {
         return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
       }
 

@@ -146,6 +146,7 @@ export class TeamService {
     season: string
   ): Promise<Team> {
     return await db.transaction(async (tx) => {
+      // Idempotency check: only archive if not already archived (prevents race conditions)
       const [archived] = await tx
         .update(teams)
         .set({
@@ -153,7 +154,7 @@ export class TeamService {
           archivedAt: archiveDate,
           season: season,
         })
-        .where(eq(teams.id, id))
+        .where(and(eq(teams.id, id), ne(teams.isArchived, true)))
         .returning();
 
       // Mark all current team memberships as inactive
