@@ -341,8 +341,41 @@ export class MeasurementService {
 
     // Execute query with pagination and count in parallel
     const [results, countResult] = await Promise.all([
-      db.select()
+      db.select({
+        // Measurement fields
+        id: measurements.id,
+        userId: measurements.userId,
+        submittedBy: measurements.submittedBy,
+        verifiedBy: measurements.verifiedBy,
+        isVerified: measurements.isVerified,
+        date: measurements.date,
+        age: measurements.age,
+        metric: measurements.metric,
+        value: measurements.value,
+        units: measurements.units,
+        flyInDistance: measurements.flyInDistance,
+        notes: measurements.notes,
+        teamId: measurements.teamId,
+        teamNameSnapshot: measurements.teamNameSnapshot,
+        organizationId: measurements.organizationId,
+        season: measurements.season,
+        teamContextAuto: measurements.teamContextAuto,
+        createdAt: measurements.createdAt,
+        // User data
+        user: sql<any>`jsonb_build_object(
+          'id', ${users.id},
+          'firstName', ${users.firstName},
+          'lastName', ${users.lastName},
+          'fullName', ${users.fullName},
+          'birthYear', ${users.birthYear},
+          'birthDate', ${users.birthDate},
+          'sports', ${users.sports},
+          'gender', ${users.gender},
+          'positions', ${users.positions}
+        )`,
+      })
         .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
         .where(whereClause)
         .orderBy(desc(measurements.date))
         .limit(limit)
@@ -354,8 +387,72 @@ export class MeasurementService {
 
     const total = countResult[0]?.count || 0;
 
+    // Enrich with team data
+    const uniqueUserIds = [...new Set(results.map((r: any) => r.userId))];
+    let measurementsWithTeams = results;
+
+    if (uniqueUserIds.length > 0) {
+      // Query user teams
+      const allUserTeams = await db
+        .select({
+          userId: userTeams.userId,
+          teamId: teams.id,
+          teamName: teams.name,
+          joinedAt: userTeams.joinedAt,
+          leftAt: userTeams.leftAt,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+        .where(and(
+          sql`${userTeams.userId} = ANY(${uniqueUserIds})`,
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        ));
+
+      // Build map of userId -> teams
+      const userTeamsMap = new Map<string, typeof allUserTeams>();
+      allUserTeams.forEach((ut) => {
+        if (!userTeamsMap.has(ut.userId)) {
+          userTeamsMap.set(ut.userId, []);
+        }
+        userTeamsMap.get(ut.userId)!.push(ut);
+      });
+
+      // Attach teams to measurements
+      measurementsWithTeams = results.map((measurement: any) => {
+        const userMemberships = userTeamsMap.get(measurement.userId) || [];
+
+        // Show currently active teams
+        const activeTeams = userMemberships.filter((membership) => {
+          const leftDate = membership.leftAt ? new Date(membership.leftAt) : null;
+          const now = new Date();
+          return (!leftDate || leftDate >= now);
+        });
+
+        const teams = activeTeams.map((membership) => ({
+          id: membership.teamId,
+          name: membership.teamName,
+          organization: {
+            id: membership.organizationId,
+            name: membership.organizationName,
+          },
+        }));
+
+        return {
+          ...measurement,
+          user: {
+            ...measurement.user,
+            teams,
+          },
+        };
+      });
+    }
+
     return {
-      measurements: results,
+      measurements: measurementsWithTeams,
       total,
       hasMore: offset + results.length < total,
       limit,
