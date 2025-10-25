@@ -31,8 +31,8 @@ interface PerformanceChartProps {
 export default function PerformanceChart({ organizationId }: PerformanceChartProps) {
   const [timeRange, setTimeRange] = useState("thisyear");
 
-  const { data: measurements, isError, error } = useQuery({
-    queryKey: ["/api/measurements", organizationId, timeRange],
+  const { data: trendsData, isError, error } = useQuery({
+    queryKey: ["/api/analytics/performance-trends", organizationId, timeRange],
     enabled: !!organizationId, // Only run query if organizationId is provided
     queryFn: async () => {
       if (!organizationId) {
@@ -59,7 +59,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
           break;
       }
 
-      const url = `/api/measurements?organizationId=${organizationId}&dateFrom=${dateFrom}&limit=1000`;
+      const url = `/api/analytics/performance-trends?organizationId=${organizationId}&dateFrom=${dateFrom}&metrics=FLY10_TIME,VERTICAL_JUMP`;
       const response = await fetch(url, {
         credentials: 'include'
       });
@@ -70,85 +70,44 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
     },
   });
 
-  // Process data for weekly trends
-  const processWeeklyData = (measurements: any[], timeRange: string) => {
-    if (!measurements || measurements.length === 0) return { labels: [], datasets: [] };
-
-    // Group by week and find best performances
-    const weeklyData = new Map();
-
-    measurements.forEach(measurement => {
-      const date = new Date(measurement.date);
-      const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
-      const weekKey = weekStart.toISOString().split('T')[0];
-
-      if (!weeklyData.has(weekKey)) {
-        weeklyData.set(weekKey, {
-          date: weekStart,
-          bestFly10: null,
-          bestVertical: null,
-        });
-      }
-
-      const week = weeklyData.get(weekKey);
-      const value = parseFloat(measurement.value);
-
-      if (measurement.metric === "FLY10_TIME") {
-        if (!week.bestFly10 || value < week.bestFly10) {
-          week.bestFly10 = value;
-        }
-      } else if (measurement.metric === "VERTICAL_JUMP") {
-        if (!week.bestVertical || value > week.bestVertical) {
-          week.bestVertical = value;
-        }
-      }
-    });
-
-    // Sort by date and prepare chart data
-    let sortedWeeks = Array.from(weeklyData.values())
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    // Limit weeks based on time range
-    if (timeRange === "last8weeks") {
-      sortedWeeks = sortedWeeks.slice(-8);
-    } else if (timeRange === "last30days") {
-      sortedWeeks = sortedWeeks.slice(-5); // ~4-5 weeks
-    } else if (timeRange === "last90days") {
-      sortedWeeks = sortedWeeks.slice(-13); // ~13 weeks
+  // Transform server-aggregated data into Chart.js format
+  const formatChartData = (data: any) => {
+    if (!data || !data.weeks || data.weeks.length === 0) {
+      return { labels: [], datasets: [] };
     }
-    // For "thisyear", show all weeks (no slice)
 
-    const labels = sortedWeeks.map(week => 
-      week.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    );
-
-    const fly10Data = sortedWeeks.map(week => week.bestFly10);
-    const verticalData = sortedWeeks.map(week => week.bestVertical);
+    // Format week labels for display (e.g., "Jan 1" instead of "2025-01-01")
+    const labels = data.weeks.map((weekStr: string) => {
+      const date = new Date(weekStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
 
     return {
       labels,
       datasets: [
         {
           label: 'Best Fly-10 (s)',
-          data: fly10Data,
+          data: data.metrics.FLY10_TIME || [],
           borderColor: 'hsl(203.8863, 88.2845%, 53.1373%)',
           backgroundColor: 'hsla(203.8863, 88.2845%, 53.1373%, 0.1)',
           tension: 0.4,
           yAxisID: 'y',
+          spanGaps: true, // Connect points even if there are null values
         },
         {
           label: 'Best Vertical (in)',
-          data: verticalData,
+          data: data.metrics.VERTICAL_JUMP || [],
           borderColor: 'hsl(159.7826, 100%, 36.0784%)',
           backgroundColor: 'hsla(159.7826, 100%, 36.0784%, 0.1)',
           tension: 0.4,
           yAxisID: 'y1',
+          spanGaps: true, // Connect points even if there are null values
         },
       ],
     };
   };
 
-  const chartData = processWeeklyData((measurements as any[]) || [], timeRange);
+  const chartData = formatChartData(trendsData);
 
   const options = {
     responsive: true,
