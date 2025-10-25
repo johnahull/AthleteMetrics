@@ -260,7 +260,7 @@ CI/CD pipelines include automatic test database cleanup to prevent data leakage:
   if: always()
   run: ./scripts/ci-test-cleanup.sh
   env:
-    DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athlete_performance_test
+    DATABASE_URL: postgresql://test_user:test_password@localhost:5432/athletemetrics_test
 ```
 
 **Cleanup Script:** `scripts/ci-test-cleanup.sh`

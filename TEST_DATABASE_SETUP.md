@@ -23,9 +23,9 @@ The AthleteMetrics test suite requires a PostgreSQL database for integration and
    sudo -u postgres psql
 
    # Create test database and user
-   CREATE DATABASE athlete_performance_test;
+   CREATE DATABASE athletemetrics_test;
    CREATE USER test_user WITH PASSWORD 'test_password';
-   GRANT ALL PRIVILEGES ON DATABASE athlete_performance_test TO test_user;
+   GRANT ALL PRIVILEGES ON DATABASE athletemetrics_test TO test_user;
 
    # Exit psql
    \q
@@ -34,7 +34,7 @@ The AthleteMetrics test suite requires a PostgreSQL database for integration and
 3. **Set environment variable**:
    ```bash
    # Add to your ~/.bashrc or ~/.zshrc
-   export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/athlete_performance_test"
+   export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/athletemetrics_test"
    ```
 
 4. **Run migrations**:
@@ -53,7 +53,7 @@ The AthleteMetrics test suite requires a PostgreSQL database for integration and
 1. **Start PostgreSQL container**:
    ```bash
    docker run --name athlete-test-db \
-     -e POSTGRES_DB=athlete_performance_test \
+     -e POSTGRES_DB=athletemetrics_test \
      -e POSTGRES_USER=test_user \
      -e POSTGRES_PASSWORD=test_password \
      -p 5432:5432 \
@@ -62,7 +62,7 @@ The AthleteMetrics test suite requires a PostgreSQL database for integration and
 
 2. **Set environment variable**:
    ```bash
-   export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/athlete_performance_test"
+   export DATABASE_URL="postgresql://test_user:test_password@localhost:5432/athletemetrics_test"
    ```
 
 3. **Run migrations and tests** (same as Option 1 steps 4-5)
@@ -79,7 +79,7 @@ The project's GitHub Actions workflow automatically provisions a PostgreSQL serv
 - Check user permissions in PostgreSQL
 
 ### "database does not exist"
-- Create the database: `createdb athlete_performance_test`
+- Create the database: `createdb athletemetrics_test`
 - Or use the SQL command in Option 1
 
 ### Tests timeout or hang
@@ -103,5 +103,5 @@ The project's GitHub Actions workflow automatically provisions a PostgreSQL serv
 
 ### Test Configuration
 - Setup file: `vitest.setup.ts`
-- Default test DB: `postgresql://localhost:5432/athlete_performance_test`
+- Default test DB: `postgresql://localhost:5432/athletemetrics_test`
 - Override via: `DATABASE_URL` environment variable
