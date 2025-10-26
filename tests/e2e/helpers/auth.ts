@@ -97,12 +97,12 @@ export async function logout(page: Page): Promise<void> {
     await page.click('[data-testid="user-menu"]', { timeout: 2000 });
     await page.click('text=Logout', { timeout: 2000 });
   } catch (error) {
-    console.debug('Logout: user menu not found, trying direct logout button', error);
+    console.warn('Logout: user menu not found, trying direct logout button:', error instanceof Error ? error.message : error);
     // If that fails, try direct logout button
     try {
       await page.click('button:has-text("Logout")', { timeout: 2000 });
     } catch (error2) {
-      console.debug('Logout: logout button not found, using API endpoint', error2);
+      console.warn('Logout: logout button not found, using API endpoint:', error2 instanceof Error ? error2.message : error2);
       // If no logout button found, navigate to logout endpoint directly
       await page.goto(`${STAGING_URL}/api/auth/logout`);
     }
@@ -133,12 +133,12 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
     await page.waitForSelector('[data-testid="user-menu"]', { timeout: 1000 });
     return true;
   } catch (error) {
-    console.debug('isLoggedIn: user-menu not found, trying logout button', error);
+    console.warn('isLoggedIn: user-menu not found, trying logout button:', error instanceof Error ? error.message : error);
     try {
       await page.waitForSelector('button:has-text("Logout")', { timeout: 1000 });
       return true;
     } catch (error2) {
-      console.debug('isLoggedIn: no auth indicators found, user not logged in', error2);
+      console.warn('isLoggedIn: no auth indicators found, user not logged in:', error2 instanceof Error ? error2.message : error2);
       return false;
     }
   }

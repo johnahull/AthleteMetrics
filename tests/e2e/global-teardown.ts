@@ -43,13 +43,31 @@ async function globalTeardown(config: FullConfig) {
 
     if (response.ok()) {
       const athletes = await response.json();
-      const testAthletes = athletes.filter((athlete: any) =>
-        athlete.firstName?.startsWith('Test') ||
-        athlete.lastName?.startsWith('Test') ||
-        athlete.emails?.some((email: string) => email.includes('@test.com'))
-      );
+
+      // Enhanced filtering to catch timestamp-based test names
+      // Matches: TestFirst123456789, Test123, TestLast987654321, etc.
+      const timestampPattern = /^Test\w*\d{10,}/; // Matches Test followed by 10+ digits
+
+      const testAthletes = athletes.filter((athlete: any) => {
+        const firstNameMatch = athlete.firstName?.startsWith('Test') ||
+                              timestampPattern.test(athlete.firstName || '');
+        const lastNameMatch = athlete.lastName?.startsWith('Test') ||
+                             timestampPattern.test(athlete.lastName || '');
+        const emailMatch = athlete.emails?.some((email: string) =>
+          email.includes('@test.com') ||
+          email.includes('@example.com') ||
+          /test\d+@/.test(email) // Matches test123@, test456@, etc.
+        );
+
+        return firstNameMatch || lastNameMatch || emailMatch;
+      });
 
       console.log(`   Found ${testAthletes.length} test athletes to clean up`);
+
+      // Track cleanup results
+      let successCount = 0;
+      let failureCount = 0;
+      const failures: Array<{ id: string; name: string; error: string }> = [];
 
       // Delete test athletes (this will cascade to measurements)
       for (const athlete of testAthletes) {
@@ -58,11 +76,36 @@ async function globalTeardown(config: FullConfig) {
             `${STAGING_URL}/api/athletes/${athlete.id}`
           );
           if (deleteResponse.ok()) {
+            successCount++;
             console.log(`   ✓ Deleted test athlete: ${athlete.firstName} ${athlete.lastName}`);
+          } else {
+            failureCount++;
+            const errorMsg = `HTTP ${deleteResponse.status()}`;
+            failures.push({
+              id: athlete.id,
+              name: `${athlete.firstName} ${athlete.lastName}`,
+              error: errorMsg
+            });
+            console.warn(`   ⚠ Failed to delete athlete ${athlete.id}: ${errorMsg}`);
           }
         } catch (error) {
-          console.warn(`   ⚠ Failed to delete athlete ${athlete.id}:`, error);
+          failureCount++;
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          failures.push({
+            id: athlete.id,
+            name: `${athlete.firstName} ${athlete.lastName}`,
+            error: errorMsg
+          });
+          console.warn(`   ⚠ Failed to delete athlete ${athlete.id}:`, errorMsg);
         }
+      }
+
+      // Summary
+      console.log(`\n   Cleanup summary:`);
+      console.log(`   ✓ Successfully deleted: ${successCount} athletes`);
+      if (failureCount > 0) {
+        console.log(`   ⚠ Failed to delete: ${failureCount} athletes`);
+        console.log(`   Failed athletes:`, failures);
       }
     }
 

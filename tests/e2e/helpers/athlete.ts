@@ -20,7 +20,7 @@ export async function createAthlete(page: Page, athleteData: {
 }): Promise<void> {
   await goToAthletes(page);
   await page.click('[data-testid="add-athlete-button"]', { timeout: 5000 }).catch((err) => {
-    console.debug('Add athlete button testid not found, using text selector', err);
+    console.warn('Add athlete button testid not found, using text selector:', err instanceof Error ? err.message : err);
     return page.click('button:has-text("Add Athlete")');
   });
 
@@ -36,7 +36,7 @@ export async function createAthlete(page: Page, athleteData: {
 
   // Submit
   await page.click('[data-testid="submit-athlete"]', { timeout: 5000 }).catch((err) => {
-    console.debug('Submit athlete button testid not found, using type selector', err);
+    console.warn('Submit athlete button testid not found, using type selector:', err instanceof Error ? err.message : err);
     return page.click('button[type="submit"]');
   });
 
