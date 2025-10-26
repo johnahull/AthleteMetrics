@@ -520,6 +520,128 @@ For each test:
 
 ---
 
+## Follow-up Work (Non-Blocking)
+
+### Code Quality Improvements
+These incremental improvements can be made over time to further enhance the E2E test suite:
+
+#### 1. Replace Remaining waitForTimeout Instances
+**Status**: 🟡 Partially Complete (5 of 51 fixed)
+- **Fixed**: 5 critical instances in reusable code (helpers, page objects)
+- **Remaining**: 46 instances in test spec files
+- **Impact**: Low - these are in test files, not reusable infrastructure
+- **Files affected**:
+  - `athlete-crud.spec.ts` (13 instances)
+  - `csv-import.spec.ts` (16 instances)
+  - `measurement-entry.spec.ts` (8 instances)
+  - `permissions.spec.ts` (2 instances)
+  - `staging-full-flow.spec.ts` (7 instances)
+
+**Replacement pattern:**
+```typescript
+// ❌ Before (flaky)
+await page.waitForTimeout(1000);
+
+// ✅ After (deterministic)
+await page.waitForLoadState('networkidle');
+// or
+await page.waitForSelector('[data-testid="element"]');
+// or
+await expect(page.locator('[data-testid="element"]')).toBeVisible();
+```
+
+#### 2. Add Debug Logging to Catch Blocks
+**Status**: 🟡 Partially Complete (auth.ts, athlete.ts done)
+- **Fixed**: Critical catch blocks in auth.ts (logout, isLoggedIn) and athlete.ts (createAthlete)
+- **Remaining**: Catch blocks in other helpers (measurement.ts, csv.ts, navigation.ts, assertions.ts)
+- **Impact**: Low - improves debugging but doesn't affect test reliability
+- **Pattern**:
+```typescript
+// ❌ Before (silent error swallowing)
+try {
+  await page.click('[data-testid="button"]');
+} catch {
+  await page.click('button:has-text("Click Me")');
+}
+
+// ✅ After (logged fallback)
+try {
+  await page.click('[data-testid="button"]');
+} catch (error) {
+  console.debug('Primary selector failed, using fallback', error);
+  await page.click('button:has-text("Click Me")');
+}
+```
+
+#### 3. Create Shared Selector Fallback Helper
+**Status**: 🔵 Proposed
+- **Current**: Each helper has its own fallback logic
+- **Proposed**: Centralized helper with logging
+- **Example**:
+```typescript
+// Proposed helper
+async function clickWithFallback(
+  page: Page,
+  primarySelector: string,
+  fallbackSelector: string,
+  description: string
+) {
+  try {
+    await page.click(primarySelector);
+  } catch (error) {
+    console.debug(`${description}: primary selector failed, using fallback`, error);
+    await page.click(fallbackSelector);
+  }
+}
+```
+
+#### 4. Expand Visual Regression Testing
+**Status**: 🔵 Proposed
+- **Current**: No visual regression tests
+- **Proposed**: Add screenshot comparison tests for critical UI components
+- **Suggested tests**:
+  - Login page layout
+  - Athlete list table
+  - Measurement form
+  - CSV import wizard
+  - Dashboard charts
+
+#### 5. Enhanced RBAC Edge Cases
+**Status**: 🔵 Proposed
+- **Current**: 16 RBAC tests covering basic scenarios
+- **Proposed**: Add edge cases
+  - Cross-organization data isolation (coach from Org A cannot see athletes from Org B)
+  - Permission escalation prevention (athlete cannot modify URL to access admin page)
+  - Multi-org context switching (coach in 2 orgs sees correct data after switching)
+  - Expired session handling
+
+#### 6. Environment Variable Validation
+**Status**: ✅ Complete for test users
+- **Fixed**: test-users.ts now uses environment variables instead of hardcoded passwords
+- **Note**: File is in .gitignore, so changes are local-only
+- **Required env vars**:
+  - `E2E_SITE_ADMIN_PASSWORD`
+  - `E2E_ORG_ADMIN_PASSWORD`
+  - `E2E_COACH_PASSWORD`
+  - `E2E_ATHLETE_PASSWORD`
+  - `E2E_MULTI_ORG_COACH_PASSWORD`
+  - `E2E_COACH_ORG2_PASSWORD`
+
+### Priority Ranking
+1. **Low Priority**: Replace remaining waitForTimeout (test reliability already good)
+2. **Low Priority**: Add debug logging to catch blocks (nice-to-have for debugging)
+3. **Medium Priority**: Shared selector fallback helper (improves maintainability)
+4. **Medium Priority**: Visual regression testing (catches UI regressions)
+5. **High Priority**: RBAC edge cases (critical security testing)
+
+### When to Address
+- **Before v1.0 release**: RBAC edge cases (#5)
+- **Before adding more tests**: Shared selector helper (#3)
+- **Ongoing maintenance**: waitForTimeout replacements (#1), debug logging (#2)
+- **Future enhancement**: Visual regression testing (#4)
+
+---
+
 ## Resources
 
 - [Playwright Documentation](https://playwright.dev/)
