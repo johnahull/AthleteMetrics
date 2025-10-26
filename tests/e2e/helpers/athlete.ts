@@ -19,9 +19,10 @@ export async function createAthlete(page: Page, athleteData: {
   gender?: string;
 }): Promise<void> {
   await goToAthletes(page);
-  await page.click('[data-testid="add-athlete-button"]', { timeout: 5000 }).catch(() =>
-    page.click('button:has-text("Add Athlete")')
-  );
+  await page.click('[data-testid="add-athlete-button"]', { timeout: 5000 }).catch((err) => {
+    console.debug('Add athlete button testid not found, using text selector', err);
+    return page.click('button:has-text("Add Athlete")');
+  });
 
   // Fill form
   await page.fill('[name="firstName"]', athleteData.firstName);
@@ -34,9 +35,10 @@ export async function createAthlete(page: Page, athleteData: {
   if (athleteData.gender) await page.selectOption('[name="gender"]', athleteData.gender);
 
   // Submit
-  await page.click('[data-testid="submit-athlete"]', { timeout: 5000 }).catch(() =>
-    page.click('button[type="submit"]')
-  );
+  await page.click('[data-testid="submit-athlete"]', { timeout: 5000 }).catch((err) => {
+    console.debug('Submit athlete button testid not found, using type selector', err);
+    return page.click('button[type="submit"]');
+  });
 
   await page.waitForLoadState('networkidle');
 }

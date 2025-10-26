@@ -52,7 +52,8 @@ export class AthletesPage {
     await this.page.fill('[data-testid="athlete-search"]', name).catch(() =>
       this.page.fill('input[placeholder*="Search" i]', name)
     );
-    await this.page.waitForTimeout(500);
+    // Wait for search results to update (either network request or client-side filter)
+    await this.page.waitForLoadState('networkidle');
   }
 
   async clickEditAthlete(athleteName: string): Promise<void> {

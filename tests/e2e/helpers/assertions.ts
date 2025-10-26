@@ -317,8 +317,8 @@ export async function expectNoConsoleErrors(
     }
   });
 
-  // Wait a moment for any errors to appear
-  await page.waitForTimeout(1000);
+  // Wait for page to be fully loaded to ensure all console messages are captured
+  await page.waitForLoadState('load');
 
   if (consoleErrors.length > 0) {
     throw new Error(`Console errors found:\n${consoleErrors.join('\n')}`);

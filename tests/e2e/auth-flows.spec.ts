@@ -63,8 +63,8 @@ test.describe('Authentication Flow Tests', () => {
     // Submit login form
     await page.click('[data-testid="button-login"]');
 
-    // Wait a moment for error to appear
-    await page.waitForTimeout(1000);
+    // Wait for login request to complete
+    await page.waitForLoadState('networkidle');
 
     // Should still be on login page
     expect(page.url()).toContain('/login');
@@ -144,8 +144,8 @@ test.describe('Authentication Flow Tests', () => {
     // Leave fields empty and try to submit
     await page.click('[data-testid="button-login"]');
 
-    // Wait a moment for validation message
-    await page.waitForTimeout(1000);
+    // Wait for validation to complete
+    await page.waitForLoadState('networkidle');
 
     // Should still be on login page
     expect(page.url()).toContain('/login');

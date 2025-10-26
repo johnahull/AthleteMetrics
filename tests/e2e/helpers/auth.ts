@@ -64,6 +64,28 @@ export async function loginAs(
 }
 
 /**
+ * Login with default staging credentials
+ * Convenience function for tests that don't need specific roles
+ *
+ * @param page - Playwright Page object
+ * @returns Promise<void>
+ * @throws Error if STAGING_USERNAME or STAGING_PASSWORD not set
+ */
+export async function loginAsDefaultUser(page: Page): Promise<void> {
+  const username = process.env.STAGING_USERNAME;
+  const password = process.env.STAGING_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error(
+      'STAGING_USERNAME and STAGING_PASSWORD environment variables must be set. ' +
+      'These credentials are used for E2E test authentication.'
+    );
+  }
+
+  await loginWithCredentials(page, username, password, true);
+}
+
+/**
  * Logout current user
  *
  * @param page - Playwright Page object
@@ -74,11 +96,13 @@ export async function logout(page: Page): Promise<void> {
     // Try clicking user menu first (if exists)
     await page.click('[data-testid="user-menu"]', { timeout: 2000 });
     await page.click('text=Logout', { timeout: 2000 });
-  } catch {
+  } catch (error) {
+    console.debug('Logout: user menu not found, trying direct logout button', error);
     // If that fails, try direct logout button
     try {
       await page.click('button:has-text("Logout")', { timeout: 2000 });
-    } catch {
+    } catch (error2) {
+      console.debug('Logout: logout button not found, using API endpoint', error2);
       // If no logout button found, navigate to logout endpoint directly
       await page.goto(`${STAGING_URL}/api/auth/logout`);
     }
