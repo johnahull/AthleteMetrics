@@ -403,7 +403,7 @@ describe('Athletes Page - Pagination', () => {
       });
 
       // Change search filter
-      const searchInput = screen.getByTestId('input-search-athletes');
+      const searchInput = screen.getByTestId('athlete-search');
       await user.type(searchInput, 'test');
 
       // Should reset to page 1 (after debounce - using setTimeout in real code)
