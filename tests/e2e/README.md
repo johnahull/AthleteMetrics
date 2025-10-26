@@ -1,302 +1,258 @@
-# AthleteMetrics E2E Test Suite
-
-Comprehensive end-to-end testing for the AthleteMetrics application using Playwright.
+# AthleteMetrics E2E Testing Guide
 
 ## Overview
 
-This test suite validates all major pages and features in the staging environment:
-
-- **Authentication**: Login/logout flows
-- **Navigation**: All major routes (Dashboard, Teams, Athletes, Organizations, User Management, Data Entry, Analytics, Import/Export, Profile, Admin)
-- **Page Loading**: Verifies pages load without console errors or network failures
-- **UI Elements**: Checks for critical UI components
-- **Interactions**: Tests key user interactions (navigation, context switching)
-- **Error Detection**: Monitors console errors and network failures
+This directory contains end-to-end (E2E) tests for the AthleteMetrics application using Playwright. Tests are organized by feature area and follow Test-Driven Development (TDD) methodology.
 
 ## Prerequisites
 
-1. **Playwright Installation**:
-   ```bash
-   npm install
-   npx playwright install chromium
-   ```
-
-2. **Staging Environment**: A deployed staging environment with test data
-
-3. **Test Account**: A test user account in the staging environment
-
-## Configuration
-
 ### Environment Variables
 
-Create a `.env.staging` file (copy from `.env.staging.example`):
+Before running E2E tests, set the following environment variables:
 
 ```bash
-cp .env.staging.example .env.staging
+export STAGING_URL="https://your-staging-environment.railway.app"
+export STAGING_USERNAME="your-test-username"
+export STAGING_PASSWORD="your-test-password"
 ```
 
-Then edit `.env.staging` with your actual staging credentials:
+Alternatively, create a `.env.staging` file in the project root:
 
 ```env
-STAGING_URL=https://your-staging-app.railway.app
+STAGING_URL=https://your-staging-environment.railway.app
 STAGING_USERNAME=your-test-username
 STAGING_PASSWORD=your-test-password
 ```
 
-**IMPORTANT**: Never commit `.env.staging` to version control. It's already in `.gitignore`.
+### Staging Environment Setup
+
+1. Ensure the staging environment is deployed and accessible
+2. Create a test user account with the credentials above
+3. Verify the staging environment is healthy by running validation tests:
+
+```bash
+npm run test:staging:validate
+```
 
 ## Running Tests
 
-### Basic Usage
+### All E2E Tests
 
 ```bash
-# Run all E2E tests against staging
 npm run test:staging
 ```
 
-### Advanced Options
+### Specific Test Suite
 
 ```bash
-# Run tests in headed mode (see browser window)
-PLAYWRIGHT_HEADED=true npm run test:staging
+npm run test:staging -- tests/e2e/auth-flows.spec.ts
+npm run test:staging -- tests/e2e/athlete-crud.spec.ts
+npm run test:staging -- tests/e2e/measurement-entry.spec.ts
+npm run test:staging -- tests/e2e/csv-import.spec.ts
+npm run test:staging -- tests/e2e/permissions.spec.ts
+```
 
-# Run specific test file
-npx playwright test tests/e2e/staging-full-flow.spec.ts --config=playwright.staging.config.ts
+### Debug Mode
 
-# Run tests in debug mode
-PWDEBUG=1 npm run test:staging
+Run tests with headed browser (visible):
 
-# Run tests with UI mode (interactive)
-npx playwright test --ui --config=playwright.staging.config.ts
+```bash
+npx playwright test --config=playwright.staging.config.ts --headed
+```
+
+### UI Mode (Interactive)
+
+```bash
+npx playwright test --config=playwright.staging.config.ts --ui
 ```
 
 ## Test Structure
 
-### Test Files
+```
+tests/e2e/
+├── fixtures/              # Test data and CSV files
+│   ├── test-data.ts      # Athlete, team, measurement fixtures
+│   ├── test-users.ts     # User fixtures with different roles
+│   └── csv-files/        # CSV test files
+├── helpers/               # Reusable helper functions
+│   ├── auth.ts           # Login, logout, session helpers
+│   ├── athlete.ts        # Create, edit, delete athletes
+│   ├── measurement.ts    # Add, verify measurements
+│   ├── csv.ts            # CSV upload and import helpers
+│   ├── navigation.ts     # Navigation utilities
+│   └── assertions.ts     # Custom assertions
+├── pages/                 # Page Object Models
+│   ├── LoginPage.ts      # Login page interactions
+│   ├── DashboardPage.ts  # Dashboard page
+│   ├── AthletesPage.ts   # Athletes list/management
+│   ├── MeasurementPage.ts # Measurement entry
+│   └── ImportPage.ts     # CSV import page
+├── global-setup.ts        # Test environment setup
+├── global-teardown.ts     # Test environment cleanup
+├── auth-flows.spec.ts     # Authentication tests (8 tests)
+├── athlete-crud.spec.ts   # Athlete CRUD tests (8 tests)
+├── measurement-entry.spec.ts # Measurement tests (8 tests)
+├── csv-import.spec.ts     # CSV import tests (10 tests)
+└── permissions.spec.ts    # RBAC/permissions tests (10 tests)
+```
 
-- **`staging-full-flow.spec.ts`**: Comprehensive test suite covering all major pages and features
+## Test Coverage
 
-### Helper Functions
+### TIER 1 CRITICAL Tests (44 total)
 
-- **`login(page)`**: Logs into the application
-- **`logout(page)`**: Logs out of the application
-- **`checkConsoleErrors(page, context)`**: Monitors console for errors
-- **`checkNetworkErrors(page)`**: Monitors network requests for failures
+#### Authentication (8 tests)
+- Login with valid credentials
+- Login with invalid credentials
+- Logout functionality
+- Session persistence
+- Unauthorized access protection
+- Form validation
+- Loading states
+- Login redirects
 
-## What Gets Tested
+#### Athlete CRUD (8 tests)
+- Create new athlete
+- Edit athlete
+- Delete athlete
+- Form validation (required fields)
+- Form validation (email format)
+- View athlete profile
+- Bulk delete
+- Search/filter athletes
 
-### Pages Tested
+#### Measurements (8 tests)
+- Add measurement for athlete
+- Measurement appears in profile
+- Validation errors
+- Verify measurement
+- Edit measurement
+- Delete measurement
+- Multiple measurement types
+- Measurement history
 
-- ✅ Login page
-- ✅ Dashboard
-- ✅ Teams page
-- ✅ Athletes page (including individual athlete profiles)
-- ✅ Organizations page
-- ✅ User Management page (if user has access)
-- ✅ Data Entry page
-- ✅ Analytics page
-- ✅ Coach Analytics page
-- ✅ Athlete Analytics page
-- ✅ Import/Export page
-- ✅ Profile page
-- ✅ Admin page (if user is site admin)
+#### CSV Import (10 tests)
+- Upload CSV and show preview
+- Column mapping workflow
+- Confirm import creates athletes
+- Import error handling
+- Large file handling
+- Auto-create teams during import
+- Import measurements from CSV
+- Duplicate athlete handling
+- Cancel import flow
+- Import progress tracking
 
-### Validations
+#### RBAC/Permissions (10 tests)
+- Athlete role: own data only
+- Coach role: team athletes only
+- Org admin: org-scoped access
+- Site admin: full access
+- Unauthorized access → 403
+- Organization context switching
+- Data filtered by organization
+- Cross-org data isolation
+- Permission-based navigation
+- Role inheritance
 
-For each page:
-- Page loads successfully (no 404/500 errors)
-- URL is correct
-- Main content is visible
-- No console errors
-- Screenshot captured for visual verification
+## TDD Workflow
 
-### Key Interactions
+These tests were created using Test-Driven Development:
 
-- Login/logout flow
-- Navigation between pages
-- Organization context switching (if available)
-- Button clicks (non-destructive)
-- Dropdown interactions
+1. **Write Test First** - Define expected behavior
+2. **Run Test** - Watch it fail (Red)
+3. **Build Infrastructure** - Create helpers/pages needed
+4. **Run Test Again** - Watch it pass (Green)
+5. **Refactor** - Improve code quality
+6. **Commit** - Save working test
 
-## Test Philosophy
+## Best Practices
 
-### Idempotent Tests
+### Test Independence
+- Each test should be runnable in isolation
+- Tests create their own test data
+- Tests clean up after themselves
+- No dependencies between tests
 
-All tests are **idempotent** - they only **read** data, never create/modify/delete. This ensures:
-- Tests can run multiple times without side effects
-- No cleanup required
-- Safe to run against staging with real data
+### Selectors
+- Prefer `data-testid` attributes over text/CSS selectors
+- Use semantic selectors when possible
+- Avoid brittle selectors (nth-child, specific classes)
 
-### Non-Destructive
+### Reliability
+- Use `waitForLoadState('networkidle')` after navigation
+- Use explicit waits over arbitrary timeouts
+- Handle race conditions properly
+- Retry flaky network operations
 
-Tests interact with the UI but:
-- Never submit forms that modify data
-- Never delete records
-- Only verify existing functionality
+### Data Management
+- Use fixtures for realistic test data
+- Clean up test data after each test
+- Avoid polluting production-like environments
+- Use unique identifiers (timestamps, UUIDs)
 
-## Output & Artifacts
+## Debugging Failed Tests
 
-### Test Reports
-
-After running tests:
+### View Test Report
 
 ```bash
-# View HTML report
 npx playwright show-report
+```
+
+### View Trace
+
+```bash
+npx playwright show-trace test-results/<test-name>/trace.zip
 ```
 
 ### Screenshots
 
-Screenshots are saved to `screenshots/` directory:
-- `dashboard.png`
-- `teams.png`
-- `athletes.png`
-- `athlete-profile.png`
-- `organizations.png`
-- `user-management.png`
-- `data-entry.png`
-- `analytics.png`
-- `coach-analytics.png`
-- `athlete-analytics.png`
-- `import-export.png`
-- `profile.png`
-- `admin.png`
-- `org-context-switch.png`
+Screenshots are automatically captured on test failure and saved to `test-results/`
 
-### Test Results
+### Videos
 
-Test results are saved to `test-results/` directory with:
-- Video recordings (on failure)
-- Trace files (on failure)
-- Console logs
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. "STAGING_USERNAME and STAGING_PASSWORD environment variables are required"
-
-**Solution**: Create `.env.staging` file with valid credentials.
-
-#### 2. Login fails
-
-**Solutions**:
-- Verify credentials are correct in `.env.staging`
-- Check that test account exists in staging environment
-- Ensure staging URL is correct and accessible
-
-#### 3. Tests time out
-
-**Solutions**:
-- Check staging environment is running and accessible
-- Increase timeout in `playwright.staging.config.ts`
-- Check network connection
-
-#### 4. Console errors detected
-
-**Solution**: This is expected behavior - tests log console errors but may not fail. Review screenshots to determine if errors are critical.
-
-#### 5. Page not found (404)
-
-**Solutions**:
-- Verify staging deployment is complete
-- Check route exists in current version
-- Ensure user has permission to access page
-
-### Debug Mode
-
-Run tests in debug mode to step through:
-
-```bash
-PWDEBUG=1 npm run test:staging
-```
-
-This opens Playwright Inspector where you can:
-- Step through test actions
-- Inspect page elements
-- View console output
-- Pause/resume execution
-
-### Headed Mode
-
-See browser window during test execution:
-
-```bash
-PLAYWRIGHT_HEADED=true npm run test:staging
-```
+Videos are recorded for failed tests and saved to `test-results/`
 
 ## CI/CD Integration
 
-### GitHub Actions Example
+These tests are designed to run in GitHub Actions. See `.github/workflows/` for the CI configuration.
 
-```yaml
-name: E2E Tests - Staging
+## Troubleshooting
 
-on:
-  push:
-    branches: [develop]
-  schedule:
-    - cron: '0 0 * * *' # Daily at midnight
+### Tests Failing with Connection Refused
 
-jobs:
-  e2e-staging:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npx playwright install chromium
-      - run: npm run test:staging
-        env:
-          STAGING_URL: ${{ secrets.STAGING_URL }}
-          STAGING_USERNAME: ${{ secrets.STAGING_USERNAME }}
-          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
-      - uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
+Ensure `STAGING_URL` is set correctly and the staging environment is running.
+
+### Tests Failing with Invalid Credentials
+
+Ensure `STAGING_USERNAME` and `STAGING_PASSWORD` match a valid test account in the staging environment.
+
+### Tests Timing Out
+
+Increase timeout in `playwright.staging.config.ts` or use `--timeout` flag:
+
+```bash
+npx playwright test --config=playwright.staging.config.ts --timeout=90000
 ```
 
-## Best Practices
+### Rate Limiting Issues
 
-### When to Run
+If tests fail due to rate limiting, ensure the staging environment has appropriate rate limit settings for testing.
 
-- **Before merging to main**: Validate staging environment
-- **After deployment**: Smoke test production-like environment
-- **Nightly**: Catch regressions early
-- **Before releases**: Final validation
+## Contributing
 
-### Maintaining Tests
+When adding new E2E tests:
 
-- Update selectors when UI changes
-- Add tests for new pages/features
-- Keep test data minimal but realistic
-- Review and update screenshots periodically
-
-### Performance
-
-- Tests run sequentially (single worker) to avoid race conditions
-- Each test is independent
-- Total runtime: ~2-5 minutes for full suite
-
-## Future Enhancements
-
-Potential improvements:
-- [ ] Visual regression testing
-- [ ] Performance metrics tracking
-- [ ] Multi-browser testing (Firefox, Safari)
-- [ ] Mobile viewport testing
-- [ ] Accessibility testing (WCAG compliance)
-- [ ] API response validation
-- [ ] Database state validation
+1. Follow TDD methodology (test-first)
+2. Add tests to appropriate spec file
+3. Create/update helpers and page objects as needed
+4. Add `data-testid` attributes to components
+5. Document any new environment variables
+6. Ensure tests pass locally before committing
+7. Update this README if adding new test categories
 
 ## Support
 
-For issues or questions:
-- Check troubleshooting section above
-- Review test logs in `test-results/`
-- Inspect screenshots in `screenshots/`
-- Run in debug mode: `PWDEBUG=1 npm run test:staging`
+For issues with E2E tests, check:
+- Playwright documentation: https://playwright.dev
+- AthleteMetrics repository issues
+- Team Slack channel
