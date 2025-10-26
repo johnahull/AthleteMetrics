@@ -212,7 +212,7 @@ test.describe('RBAC/Permissions Tests', () => {
         // Select a different organization
         await page.click('[role="option"]').catch(() => page.locator('option').nth(1).click());
 
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Data should be filtered by new organization
         // Verify by checking if page reloads or updates
@@ -239,7 +239,7 @@ test.describe('RBAC/Permissions Tests', () => {
       if (hasSwitcher > 0) {
         await orgSwitcher.click();
         await page.click('[role="option"]').catch(() => page.locator('option').nth(1).click());
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         const newAthleteCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
 

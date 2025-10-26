@@ -83,7 +83,7 @@ test.describe('Measurement Entry Tests', () => {
     await page.click('[data-testid="button-submit-measurement"], button[type="submit"]:has-text("Add"), button:has-text("Save Measurement")');
 
     // Wait for submission
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Verify success message
     const successMessage = await page.locator('text=/measurement.*added|success|saved/i').count();
@@ -109,7 +109,7 @@ test.describe('Measurement Entry Tests', () => {
     await page.fill('[data-testid="input-value"], input[name="value"]', testMeasurement.value.toString());
 
     await page.click('[data-testid="button-submit-measurement"], button[type="submit"]');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Navigate to athlete profile
     // This is simplified - actual implementation may vary
@@ -137,7 +137,7 @@ test.describe('Measurement Entry Tests', () => {
       // Button might be disabled, which is also valid
     });
 
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle');
 
     // Should show validation error
     const validationError = await page.locator('.error, [role="alert"], text=/required|must|invalid/i').count();
@@ -162,7 +162,7 @@ test.describe('Measurement Entry Tests', () => {
 
     await page.fill('[data-testid="input-value"], input[name="value"]', testMeasurement.value.toString());
     await page.click('[data-testid="button-submit-measurement"], button[type="submit"]');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Navigate to measurements view or athlete profile
     await page.goto(`${STAGING_URL}/athletes`);
@@ -174,7 +174,7 @@ test.describe('Measurement Entry Tests', () => {
 
     if (verifyExists > 0) {
       await verifyButton.first().click();
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
 
       // Verify success
       const verified = await page.locator('text=/verified|confirmed/i').count();
@@ -211,7 +211,7 @@ test.describe('Measurement Entry Tests', () => {
 
         // Save changes
         await page.click('button[type="submit"]:has-text("Save"), button:has-text("Update")');
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Verify update success
         const updated = await page.locator(`text=${newValue}`).count();
@@ -249,7 +249,7 @@ test.describe('Measurement Entry Tests', () => {
           await confirmButton.click();
         }
 
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Verify measurement was deleted
         const finalCount = await page.locator('[data-testid^="button-delete-measurement-"], .measurement-row, tr').count();
@@ -289,7 +289,7 @@ test.describe('Measurement Entry Tests', () => {
 
       // Submit
       await page.click('[data-testid="button-submit-measurement"], button[type="submit"]');
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
     }
 
     // Verify success messages appeared for all types

@@ -27,7 +27,7 @@ async function checkConsoleErrors(page: Page, context: string) {
   });
 
   // Give a moment for any async console errors to appear
-  await page.waitForTimeout(500);
+  await page.waitForLoadState('networkidle');
 
   if (consoleErrors.length > 0) {
     console.warn(`Console errors on ${context}:`, consoleErrors);
@@ -273,7 +273,7 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     expect(hasContent).toBeTruthy();
 
     // Wait for charts to potentially load
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
 
     // Check console for errors
     const errors = await checkConsoleErrors(page, 'Analytics');
@@ -294,7 +294,7 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     expect(hasContent).toBeTruthy();
 
     // Wait for charts to potentially load
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
 
     // Check console for errors
     const errors = await checkConsoleErrors(page, 'Coach Analytics');
@@ -315,7 +315,7 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     expect(hasContent).toBeTruthy();
 
     // Wait for charts to potentially load
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
 
     // Check console for errors
     const errors = await checkConsoleErrors(page, 'Athlete Analytics');
@@ -429,7 +429,7 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
         await page.selectOption('[data-testid="org-selector"], select[name="organization"]', { index: 1 });
 
         // Wait for page to update
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Verify no errors occurred
         const errors = await checkConsoleErrors(page, 'Organization Context Switch');
@@ -487,7 +487,7 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     const addTeamButton = await page.locator('button:has-text("Add Team")').count();
     if (addTeamButton > 0) {
       await page.click('button:has-text("Add Team")');
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
 
       // Verify modal/form opened
       const hasModal = await page.locator('[role="dialog"], .modal').count() > 0;
@@ -496,7 +496,7 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
       // Close modal if it opened (press Escape)
       if (hasModal) {
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(500);
+        await page.waitForLoadState('networkidle');
       }
     }
 
