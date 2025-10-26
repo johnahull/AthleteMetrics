@@ -132,11 +132,13 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
   try {
     await page.waitForSelector('[data-testid="user-menu"]', { timeout: 1000 });
     return true;
-  } catch {
+  } catch (error) {
+    console.debug('isLoggedIn: user-menu not found, trying logout button', error);
     try {
       await page.waitForSelector('button:has-text("Logout")', { timeout: 1000 });
       return true;
-    } catch {
+    } catch (error2) {
+      console.debug('isLoggedIn: no auth indicators found, user not logged in', error2);
       return false;
     }
   }

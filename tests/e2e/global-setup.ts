@@ -18,14 +18,26 @@ async function globalSetup(config: FullConfig) {
   const STAGING_USERNAME = process.env.STAGING_USERNAME || '';
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD || '';
 
-  // Verify required environment variables
-  if (!STAGING_URL) {
-    throw new Error('STAGING_URL environment variable is required');
+  // Validate STAGING_URL format
+  if (!STAGING_URL.match(/^https?:\/\/.+/)) {
+    throw new Error(
+      `Invalid STAGING_URL format: "${STAGING_URL}". ` +
+      `Must be a valid HTTP or HTTPS URL (e.g., https://staging.example.com)`
+    );
   }
 
+  // Warn if using localhost in CI
+  if (process.env.CI && STAGING_URL.includes('localhost')) {
+    console.warn('⚠️  WARNING: E2E tests running against localhost in CI environment');
+    console.warn('   This usually indicates a configuration error.');
+  }
+
+  // Verify credentials are provided
   if (!STAGING_USERNAME || !STAGING_PASSWORD) {
-    console.warn('⚠️  WARNING: STAGING_USERNAME or STAGING_PASSWORD not set');
-    console.warn('   Tests will use default credentials or may fail');
+    throw new Error(
+      'STAGING_USERNAME and STAGING_PASSWORD environment variables are required. ' +
+      'Please set these credentials for E2E test authentication.'
+    );
   }
 
   // Launch browser for setup
@@ -52,8 +64,14 @@ async function globalSetup(config: FullConfig) {
     await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
     await page.fill('[data-testid="input-password"]', STAGING_PASSWORD);
     await page.click('[data-testid="button-login"]');
-    await page.waitForLoadState('networkidle');
 
+    // Wait for navigation away from login page
+    await page.waitForURL(url => !url.pathname.includes('/login'), {
+      timeout: 10000,
+      waitUntil: 'networkidle'
+    });
+
+    // Verify login succeeded
     if (page.url().includes('/login')) {
       throw new Error('Login credentials are invalid');
     }
