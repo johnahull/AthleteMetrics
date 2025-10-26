@@ -212,6 +212,16 @@ export async function goToImportExport(page: Page): Promise<void> {
 }
 
 /**
+ * Navigate to organizations page
+ *
+ * @param page - Playwright Page object
+ * @returns Promise<void>
+ */
+export async function goToOrganizations(page: Page): Promise<void> {
+  await navigateTo(page, '/organizations');
+}
+
+/**
  * Navigate to specific athlete profile
  *
  * @param page - Playwright Page object

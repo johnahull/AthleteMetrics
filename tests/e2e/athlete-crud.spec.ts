@@ -58,8 +58,8 @@ test.describe('Athlete CRUD Tests', () => {
     // Wait for modal to close
     await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
 
-    // Verify athlete appears in the list
-    await page.waitForTimeout(1000); // Allow time for list to refresh
+    // Verify athlete appears in the list - wait for the athlete row to be visible
+    await page.waitForSelector(`text=${testAthlete.firstName} ${testAthlete.lastName}`, { timeout: 10000 });
     const athleteRow = await page.locator(`text=${testAthlete.firstName} ${testAthlete.lastName}`).count();
     expect(athleteRow).toBeGreaterThan(0);
 
@@ -77,7 +77,9 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[name="email"], [type="email"]', testAthlete.email);
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
     await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
-    await page.waitForTimeout(1000);
+
+    // Wait for athlete to appear in list
+    await page.waitForSelector('[data-testid^="button-edit-athlete-"]', { timeout: 10000 });
 
     // Find and click edit button for the athlete
     // The edit button should have a data-testid with the athlete ID
@@ -98,8 +100,8 @@ test.describe('Athlete CRUD Tests', () => {
     // Wait for modal to close
     await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
 
-    // Verify changes were saved
-    await page.waitForTimeout(1000);
+    // Verify changes were saved - wait for updated school text to appear
+    await page.waitForSelector(`text=${updatedSchool}`, { timeout: 10000 });
     const updatedSchoolText = await page.locator(`text=${updatedSchool}`).count();
     expect(updatedSchoolText).toBeGreaterThan(0);
   });
@@ -113,7 +115,9 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[name="email"], [type="email"]', testAthlete.email);
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
     await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
-    await page.waitForTimeout(1000);
+
+    // Wait for athlete to appear and page to update
+    await page.waitForLoadState('networkidle');
 
     // Get initial athlete count
     const initialCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -129,8 +133,8 @@ test.describe('Athlete CRUD Tests', () => {
       await confirmButton.first().click();
     }
 
-    // Wait for deletion to complete
-    await page.waitForTimeout(1000);
+    // Wait for deletion to complete - wait for page to update
+    await page.waitForLoadState('networkidle');
 
     // Verify athlete count decreased
     const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -149,8 +153,8 @@ test.describe('Athlete CRUD Tests', () => {
     // Try to submit without filling required fields
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
 
-    // Wait a moment for validation errors to appear
-    await page.waitForTimeout(500);
+    // Wait for validation errors to appear
+    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i', { timeout: 5000 });
 
     // Should still be on the form (modal visible)
     const modalVisible = await page.locator('[role="dialog"], .modal').count();
@@ -174,8 +178,8 @@ test.describe('Athlete CRUD Tests', () => {
     // Try to submit
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
 
-    // Wait for validation
-    await page.waitForTimeout(500);
+    // Wait for email validation error to appear
+    await page.waitForSelector('text=/invalid.*email|valid email|email.*format/i', { timeout: 5000 });
 
     // Should show email validation error
     const emailError = await page.locator('text=/invalid.*email|valid email|email.*format/i').count();
@@ -195,7 +199,9 @@ test.describe('Athlete CRUD Tests', () => {
       await page.fill('[name="email"], [type="email"]', testAthlete.email);
       await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
       await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
-      await page.waitForTimeout(1000);
+
+      // Wait for athlete to appear in list
+      await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 10000 });
     }
 
     // Click "View" button for first athlete
@@ -222,7 +228,9 @@ test.describe('Athlete CRUD Tests', () => {
       await page.fill('[name="email"], [type="email"]', `${timestamp}${i}@example.com`);
       await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
       await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
-      await page.waitForTimeout(500);
+
+      // Wait for athlete to appear in list
+      await page.waitForLoadState('networkidle');
     }
 
     // Get initial count
@@ -250,7 +258,7 @@ test.describe('Athlete CRUD Tests', () => {
       }
 
       // Wait for deletion to complete
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       // Verify athlete count decreased
       const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -268,14 +276,16 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[name="email"], [type="email"]', `search${timestamp}@example.com`);
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
     await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
-    await page.waitForTimeout(1000);
+
+    // Wait for athlete to appear in list
+    await page.waitForSelector(`text=${uniqueName}`, { timeout: 10000 });
 
     // Use search functionality
     const searchInput = page.locator('[data-testid="input-search-athletes"]');
     await searchInput.fill(uniqueName);
 
-    // Wait for search results to update
-    await page.waitForTimeout(1000);
+    // Wait for search results to update - wait for network to settle
+    await page.waitForLoadState('networkidle');
 
     // Verify only the searched athlete appears
     const searchResults = await page.locator(`text=${uniqueName}`).count();
@@ -283,7 +293,9 @@ test.describe('Athlete CRUD Tests', () => {
 
     // Clear search
     await searchInput.clear();
-    await page.waitForTimeout(500);
+
+    // Wait for search to clear and all athletes to appear
+    await page.waitForLoadState('networkidle');
 
     // Should show all athletes again
     const allAthletes = await page.locator('[data-testid^="checkbox-athlete-"]').count();

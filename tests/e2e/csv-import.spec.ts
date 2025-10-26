@@ -46,8 +46,8 @@ test.describe('CSV Import Tests', () => {
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
 
-    // Wait for file to be processed
-    await page.waitForTimeout(2000);
+    // Wait for file to be processed - wait for preview table to appear
+    await page.waitForSelector('table, [role="table"], .preview', { state: 'visible', timeout: 10000 });
 
     // Should show preview table
     const previewTable = await page.locator('table, [role="table"], .preview').count();
@@ -65,7 +65,9 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for upload to complete and preview/mapping interface to load
+    await page.waitForSelector('[data-testid="button-import"], table, [role="table"]', { timeout: 10000 });
 
     // Look for column mapping interface
     const mappingInterface = await page.locator('text=/map.*column|column.*mapping|select.*field/i').count();
@@ -91,7 +93,9 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed - wait for import button to be enabled
+    await page.waitForSelector('[data-testid="button-import"]', { timeout: 10000 });
 
     // Get initial athlete count (navigate to athletes page)
     await page.goto(`${STAGING_URL}/athletes`);
@@ -103,13 +107,15 @@ test.describe('CSV Import Tests', () => {
     await page.click('[data-testid="select-import-type"]');
     await page.click('text="Athletes"');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed
+    await page.waitForSelector('[data-testid="button-import"]', { timeout: 10000 });
 
     // Confirm import
     await page.click('[data-testid="button-import"]');
 
-    // Wait for import to complete
-    await page.waitForTimeout(3000);
+    // Wait for import to complete - wait for success message to appear
+    await page.waitForSelector('text=/import.*complete|success|imported/i', { timeout: 15000 });
 
     // Should show success message
     const successMessage = await page.locator('text=/import.*complete|success|imported/i').count();
@@ -129,7 +135,9 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(INVALID_DATA_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed and errors to appear
+    await page.waitForSelector('.error, [role="alert"], text=/invalid|error|warning/i', { timeout: 10000 });
 
     // Should show error messages or warnings
     const errorMessages = await page.locator('.error, [role="alert"], text=/invalid|error|warning/i').count();
@@ -149,8 +157,8 @@ test.describe('CSV Import Tests', () => {
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(LARGE_FILE_CSV);
 
-    // Wait for file to be processed (may take longer)
-    await page.waitForTimeout(5000);
+    // Wait for file to be processed - wait for preview table to appear (may take longer for large files)
+    await page.waitForSelector('table, [role="table"]', { state: 'visible', timeout: 20000 });
 
     // Should show preview (possibly paginated)
     const previewTable = await page.locator('table, [role="table"]').count();
@@ -182,11 +190,15 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed
+    await page.waitForSelector('[data-testid="button-import"]', { timeout: 10000 });
 
     // Confirm import
     await page.click('[data-testid="button-import"]');
-    await page.waitForTimeout(3000);
+
+    // Wait for import to complete
+    await page.waitForSelector('text=/import.*complete|success/i', { timeout: 15000 });
 
     // Navigate to teams page and verify new teams
     await page.goto(`${STAGING_URL}/teams`);
@@ -203,7 +215,9 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_MEASUREMENTS_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed and preview to appear
+    await page.waitForSelector('table', { state: 'visible', timeout: 10000 });
 
     // Preview should show measurement data
     const previewTable = await page.locator('table').count();
@@ -211,7 +225,9 @@ test.describe('CSV Import Tests', () => {
 
     // Confirm import
     await page.click('[data-testid="button-import"]');
-    await page.waitForTimeout(3000);
+
+    // Wait for import to complete
+    await page.waitForSelector('text=/import.*complete|success/i', { timeout: 15000 });
 
     // Should show success
     const successMessage = await page.locator('text=/import.*complete|success/i').count();
@@ -243,14 +259,18 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed
+    await page.waitForSelector('[data-testid="button-import"]', { timeout: 10000 });
 
     // Should show duplicate detection info
     const duplicateInfo = await page.locator('text=/duplicate|already.*exist|matching/i').count();
 
     // Import should proceed with chosen strategy
     await page.click('[data-testid="button-import"]');
-    await page.waitForTimeout(3000);
+
+    // Wait for import to complete
+    await page.waitForLoadState('networkidle');
   });
 
   test('should support cancel import flow', async ({ page }) => {
@@ -260,7 +280,9 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed
+    await page.waitForSelector('table, [role="table"], [data-testid="button-cancel-import"]', { timeout: 10000 });
 
     // Click cancel button
     const cancelButton = page.locator('[data-testid="button-cancel-import"]');
@@ -282,7 +304,9 @@ test.describe('CSV Import Tests', () => {
 
     const fileInput = page.locator('[data-testid="input-file-upload"]');
     await fileInput.setInputFiles(VALID_ATHLETES_CSV);
-    await page.waitForTimeout(2000);
+
+    // Wait for file to be processed
+    await page.waitForSelector('[data-testid="button-import"]', { timeout: 10000 });
 
     // Start import
     await page.click('[data-testid="button-import"]');
@@ -290,8 +314,8 @@ test.describe('CSV Import Tests', () => {
     // Should show progress indicator
     const progressIndicator = await page.locator('[role="progressbar"], .progress, text=/importing|processing/i').count();
 
-    // Progress should complete
-    await page.waitForTimeout(3000);
+    // Progress should complete - wait for completion message
+    await page.waitForSelector('text=/complete|success|finished/i', { timeout: 15000 });
 
     // Should show completion message
     const completionMessage = await page.locator('text=/complete|success|finished/i').count();
