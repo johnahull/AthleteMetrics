@@ -103,8 +103,8 @@ export default defineConfig({
   preserveOutput: 'failures-only',
 
   // Global setup/teardown
-  globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
-  globalTeardown: require.resolve('./tests/e2e/global-teardown.ts'),
+  globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
 
   // Web server configuration (not used for staging - staging server should already be running)
   // webServer: undefined,
