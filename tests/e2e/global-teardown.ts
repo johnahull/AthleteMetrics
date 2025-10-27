@@ -104,8 +104,12 @@ async function globalTeardown(config: FullConfig) {
       console.log(`\n   Cleanup summary:`);
       console.log(`   ✓ Successfully deleted: ${successCount} athletes`);
       if (failureCount > 0) {
-        console.log(`   ⚠ Failed to delete: ${failureCount} athletes`);
-        console.log(`   Failed athletes:`, failures);
+        console.warn(`\n⚠️  WARNING: Failed to delete ${failureCount} test athletes!`);
+        console.warn(`   Test data accumulation detected in staging database.`);
+        console.warn(`   This may cause future test conflicts or database pollution.`);
+        console.warn(`   Failed athletes:`, JSON.stringify(failures, null, 2));
+        console.warn(`\n   Action required: Manual cleanup may be needed in staging environment.`);
+        console.warn(`   Review the failed athletes list above for details.\n`);
       }
     }
 
@@ -118,8 +122,12 @@ async function globalTeardown(config: FullConfig) {
     console.log('\n✅ E2E Test Teardown Complete\n');
   } catch (error) {
     console.error('\n❌ E2E Test Teardown Failed:', error);
-    console.log('   Test data may remain in staging database');
+    console.error('   Test data may remain in staging database');
+    console.error('   This could lead to test data accumulation and future test conflicts.');
+    console.error('   Manual cleanup of staging environment may be required.\n');
     // Don't throw - teardown failures shouldn't fail the test run
+    // Rationale: Test suite results are more important than cleanup failures.
+    // However, we log prominently to ensure cleanup issues are noticed and addressed.
   } finally {
     await context.close();
     await browser.close();

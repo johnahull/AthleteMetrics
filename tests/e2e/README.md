@@ -11,28 +11,58 @@ This directory contains end-to-end (E2E) tests for the AthleteMetrics applicatio
 Before running E2E tests, set the following environment variables:
 
 ```bash
+# Required for all tests
 export STAGING_URL="https://your-staging-environment.railway.app"
 export STAGING_USERNAME="your-test-username"
 export STAGING_PASSWORD="your-test-password"
+
+# Required for RBAC/Permissions tests (tests/e2e/permissions.spec.ts)
+export E2E_SITE_ADMIN_USERNAME="test-site-admin"
+export E2E_SITE_ADMIN_PASSWORD="your-site-admin-password"
+export E2E_ORG_ADMIN_USERNAME="test-org-admin"
+export E2E_ORG_ADMIN_PASSWORD="your-org-admin-password"
+export E2E_COACH_USERNAME="test-coach"
+export E2E_COACH_PASSWORD="your-coach-password"
+export E2E_ATHLETE_USERNAME="test-athlete"
+export E2E_ATHLETE_PASSWORD="your-athlete-password"
 ```
 
 Alternatively, create a `.env.staging` file in the project root:
 
 ```env
+# Required for all tests
 STAGING_URL=https://your-staging-environment.railway.app
 STAGING_USERNAME=your-test-username
 STAGING_PASSWORD=your-test-password
+
+# Required for RBAC/Permissions tests
+E2E_SITE_ADMIN_USERNAME=test-site-admin
+E2E_SITE_ADMIN_PASSWORD=your-site-admin-password
+E2E_ORG_ADMIN_USERNAME=test-org-admin
+E2E_ORG_ADMIN_PASSWORD=your-org-admin-password
+E2E_COACH_USERNAME=test-coach
+E2E_COACH_PASSWORD=your-coach-password
+E2E_ATHLETE_USERNAME=test-athlete
+E2E_ATHLETE_PASSWORD=your-athlete-password
 ```
 
 ### Staging Environment Setup
 
 1. Ensure the staging environment is deployed and accessible
-2. Create a test user account with the credentials above
+2. Create test user accounts with the credentials above:
+   - **Primary test account**: Used for most E2E tests (STAGING_USERNAME/STAGING_PASSWORD)
+   - **RBAC test accounts**: Required for permissions testing (16 RBAC tests)
+     - Site Admin: Full system access
+     - Org Admin: Organization-scoped access
+     - Coach: Team-scoped access
+     - Athlete: Self-scoped access only
 3. Verify the staging environment is healthy by running validation tests:
 
 ```bash
 npm run test:staging:validate
 ```
+
+**Note**: RBAC tests (16 tests in `permissions.spec.ts`) will be skipped if the role-based environment variables are not set. This allows running the other 63 tests without RBAC test accounts.
 
 ## Running Tests
 

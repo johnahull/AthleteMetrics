@@ -23,8 +23,13 @@ export default defineConfig({
   fullyParallel: false, // Run tests sequentially to avoid race conditions
   workers: 1, // Single worker for staging tests
 
-  // Retry failed tests once (helps with flaky network issues)
-  retries: 1,
+  // Retry strategy:
+  // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
+  // - Local development: 0 retries to surface flaky tests early
+  // Rationale: Staging environment can have intermittent network issues or slow responses
+  // that don't indicate test failures. Retries help distinguish real failures from
+  // environmental flakiness while keeping local development strict for test quality.
+  retries: process.env.CI ? 1 : 0,
 
   // Reporter configuration
   reporter: [
