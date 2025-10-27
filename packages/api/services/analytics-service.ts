@@ -43,6 +43,19 @@ interface DashboardStats {
   bestRSILast30Days?: { value: number; userName: string };
 }
 
+interface WeeklyTrendDataPoint {
+  weekStart: string;
+  metric: string;
+  bestValue: number;
+}
+
+interface PerformanceTrendsData {
+  weeks: string[];
+  metrics: {
+    [metricKey: string]: (number | null)[];
+  };
+}
+
 export class AnalyticsService {
   /**
    * Get statistics for an athlete
@@ -376,5 +389,90 @@ export class AnalyticsService {
     });
 
     return bestMetrics as DashboardStats;
+  }
+
+  /**
+   * Get weekly performance trends for specified metrics
+   * Returns best measurement per week, aggregated server-side for efficiency
+   * @param organizationId Organization to filter by
+   * @param dateFrom Start date for trend analysis
+   * @param metrics Array of metric keys to include (defaults to FLY10_TIME and VERTICAL_JUMP)
+   * @returns Weekly trend data with best values per metric per week
+   */
+  async getPerformanceTrends(
+    organizationId: string,
+    dateFrom: Date,
+    metrics: string[] = ['FLY10_TIME', 'VERTICAL_JUMP']
+  ): Promise<PerformanceTrendsData> {
+    // Get athlete IDs for the organization
+    const athleteIds = await db
+      .select({ userId: userTeams.userId })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(eq(teams.organizationId, organizationId))
+      .groupBy(userTeams.userId);
+
+    const uniqueAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
+
+    if (uniqueAthleteIds.length === 0) {
+      // No athletes in organization, return empty data
+      return { weeks: [], metrics: {} };
+    }
+
+    // Query measurements grouped by week with best values per metric
+    // Uses PostgreSQL's date_trunc to group by week (starting Monday)
+    const weeklyData = await db
+      .select({
+        weekStart: sql<string>`date_trunc('week', ${measurements.date}::date)::date::text`,
+        metric: measurements.metric,
+        bestValue: sql<number>`
+          CASE
+            WHEN ${measurements.metric} IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            THEN MIN(CAST(${measurements.value} AS NUMERIC))::float
+            ELSE MAX(CAST(${measurements.value} AS NUMERIC))::float
+          END
+        `,
+      })
+      .from(measurements)
+      .where(
+        and(
+          gte(measurements.date, dateFrom.toISOString()),
+          inArray(measurements.userId, uniqueAthleteIds),
+          inArray(measurements.metric, metrics),
+          eq(measurements.isVerified, true)
+        )
+      )
+      .groupBy(
+        sql`date_trunc('week', ${measurements.date}::date)`,
+        measurements.metric
+      )
+      .orderBy(sql`date_trunc('week', ${measurements.date}::date)`);
+
+    // Transform data into chart-friendly format
+    const weeksSet = new Set<string>();
+    const metricData = new Map<string, Map<string, number>>();
+
+    weeklyData.forEach(row => {
+      weeksSet.add(row.weekStart);
+      if (!metricData.has(row.metric)) {
+        metricData.set(row.metric, new Map());
+      }
+      metricData.get(row.metric)!.set(row.weekStart, row.bestValue);
+    });
+
+    const weeks = Array.from(weeksSet).sort();
+    const metricsOutput: { [metricKey: string]: (number | null)[] } = {};
+
+    metrics.forEach(metric => {
+      const metricValues = metricData.get(metric);
+      metricsOutput[metric] = weeks.map(week =>
+        metricValues?.get(week) ?? null
+      );
+    });
+
+    return {
+      weeks,
+      metrics: metricsOutput,
+    };
   }
 }

@@ -92,6 +92,69 @@
       "when": 1760714400000,
       "tag": "0012_fix_audit_logs_user_id_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1729814000000,
+      "tag": "0013_add_organization_soft_delete_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1729814100000,
+      "tag": "0014_add_organization_soft_delete_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1729814200000,
+      "tag": "0015_add_measurements_organization_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1729814300000,
+      "tag": "0016_add_measurements_table_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1729814400000,
+      "tag": "0017_add_composite_analytics_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1729814500000,
+      "tag": "0018_add_org_query_composite_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1729814600000,
+      "tag": "0019_add_user_teams_temporal_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1729814700000,
+      "tag": "0020_add_measurements_org_metric_analytics_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1729814800000,
+      "tag": "0021_backfill_measurements_org_from_users",
+      "breakpoints": true
     }
   ]
 }

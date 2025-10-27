@@ -205,4 +205,56 @@ export function registerAnalyticsRoutes(app: Express) {
       res.status(500).json({ message });
     }
   });
+
+  /**
+   * Get performance trends (weekly best measurements)
+   */
+  app.get("/api/analytics/performance-trends", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get organizationId from query or user's primary organization
+      let organizationId = req.query.organizationId as string | undefined;
+
+      if (!organizationId && !isSiteAdmin(user)) {
+        organizationId = user.primaryOrganizationId;
+      }
+
+      if (!organizationId) {
+        return res.status(400).json({ message: "organizationId is required" });
+      }
+
+      // Permission check: non-admin users can only access their organization
+      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      }
+
+      // Parse dateFrom parameter (required)
+      const dateFromStr = req.query.dateFrom as string | undefined;
+      if (!dateFromStr) {
+        return res.status(400).json({ message: "dateFrom parameter is required" });
+      }
+
+      const dateFrom = new Date(dateFromStr);
+      if (isNaN(dateFrom.getTime())) {
+        return res.status(400).json({ message: "Invalid dateFrom format. Use ISO 8601 date string." });
+      }
+
+      // Parse optional metrics parameter (comma-separated)
+      const metricsParam = req.query.metrics as string | undefined;
+      const metrics = metricsParam
+        ? metricsParam.split(',').map(m => m.trim())
+        : ['FLY10_TIME', 'VERTICAL_JUMP'];
+
+      const trendsData = await analyticsService.getPerformanceTrends(organizationId, dateFrom, metrics);
+      res.json(trendsData);
+    } catch (error) {
+      console.error("Get performance trends error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch performance trends";
+      res.status(500).json({ message });
+    }
+  });
 }
