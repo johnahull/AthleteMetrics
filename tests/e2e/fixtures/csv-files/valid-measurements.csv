@@ -1,0 +1,8 @@
+athleteEmail,metric,value,units,date,notes
+john.csv@example.com,FLY10_TIME,1.52,s,2024-10-15,Good form
+jane.csv@example.com,VERTICAL_JUMP,28.5,in,2024-10-15,Personal best
+mike.csv@example.com,DASH_40YD,5.23,s,2024-10-15,Electronic timing
+sarah.csv@example.com,AGILITY_505,2.34,s,2024-10-15,Left turn
+alex.csv@example.com,T_TEST,9.87,s,2024-10-15,Good technique
+john.csv@example.com,VERTICAL_JUMP,27.0,in,2024-10-16,Second test
+jane.csv@example.com,FLY10_TIME,1.68,s,2024-10-16,Follow-up test

@@ -122,9 +122,8 @@ test.describe('Staging Environment Validation', () => {
     // Navigate to dashboard
     await page.goto(`${STAGING_URL}/dashboard`);
     await page.waitForLoadState('networkidle');
-
-    // Wait a moment for any async errors
-    await page.waitForTimeout(2000);
+    // Wait for DOM to be fully loaded to catch any delayed console errors
+    await page.waitForLoadState('load');
 
     if (consoleErrors.length > 0) {
       console.warn('⚠ Console errors detected:', consoleErrors);

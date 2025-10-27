@@ -1,0 +1,6 @@
+firstName,lastName,email,birthDate,graduationYear,school,sport,position,gender,phoneNumber,height,weight
+John,Doe,john.csv@example.com,2006-03-15,2024,CSV High School,Soccer,F,555-1001,72,165
+Jane,Smith,jane.csv@example.com,2007-07-22,2025,CSV High School,Soccer,M,555-1002,65,135
+Mike,Johnson,mike.csv@example.com,2005-11-30,2024,CSV Academy,Soccer,GK,555-1003,74,180
+Sarah,Williams,sarah.csv@example.com,2006-05-10,2024,CSV High School,Soccer,D,555-1004,67,145
+Alex,Martinez,alex.csv@example.com,2007-01-18,2025,CSV High School,Soccer,F,555-1005,70,160

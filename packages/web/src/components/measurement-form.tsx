@@ -236,7 +236,7 @@ export default function MeasurementForm() {
               searchPlaceholder="Search athletes by name or team..."
               showTeamInfo={true}
               disabled={createMeasurementMutation.isPending}
-              data-testid="input-search-athlete"
+              data-testid="athlete-select"
             />
             <p className="text-xs text-gray-500 mt-1">Click to browse or type to search athletes</p>
           </div>
@@ -278,7 +278,7 @@ export default function MeasurementForm() {
                   disabled={createMeasurementMutation.isPending}
                 >
                   <FormControl>
-                    <SelectTrigger data-testid="select-measurement-metric">
+                    <SelectTrigger data-testid="metric-select">
                       <SelectValue placeholder="Select metric..." />
                     </SelectTrigger>
                   </FormControl>
@@ -309,14 +309,14 @@ export default function MeasurementForm() {
                 </FormLabel>
                 <div className="flex">
                   <FormControl>
-                    <Input 
+                    <Input
                       {...field}
                       type="number"
                       step="0.01"
                       placeholder="Enter value"
                       disabled={createMeasurementMutation.isPending}
                       className={units ? "rounded-r-none" : ""}
-                      data-testid="input-measurement-value"
+                      data-testid="measurement-value"
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                       value={field.value || ''}
                     />
@@ -648,10 +648,10 @@ export default function MeasurementForm() {
           >
             Clear Form
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={createMeasurementMutation.isPending || !selectedAthlete}
-            data-testid="button-save-measurement"
+            data-testid="submit-measurement"
           >
             <Save className="h-4 w-4 mr-2" />
             {createMeasurementMutation.isPending ? "Saving..." : "Save Measurement"}

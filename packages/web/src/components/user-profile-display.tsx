@@ -36,7 +36,7 @@ export function UserProfileDisplay({
         <button
           onClick={onLogout}
           className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-          data-testid="button-logout"
+          data-testid="logout-button"
         >
           <LogOut className="h-5 w-5" />
         </button>
