@@ -41,7 +41,7 @@ test.describe('Athlete CRUD Tests', () => {
 
   test('should successfully create a new athlete', async ({ page }) => {
     // Click "Add Athlete" button
-    await page.click('[data-testid="button-add-athlete"]');
+    await page.click('[data-testid="add-athlete-button"]');
 
     // Wait for modal to appear
     await page.waitForSelector('[role="dialog"], .modal, form', { timeout: 5000 });
@@ -70,7 +70,7 @@ test.describe('Athlete CRUD Tests', () => {
 
   test('should successfully edit an existing athlete', async ({ page }) => {
     // First, create an athlete to edit
-    await page.click('[data-testid="button-add-athlete"]');
+    await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
     await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
     await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
@@ -108,7 +108,7 @@ test.describe('Athlete CRUD Tests', () => {
 
   test('should successfully delete an athlete', async ({ page }) => {
     // First, create an athlete to delete
-    await page.click('[data-testid="button-add-athlete"]');
+    await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
     await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
     await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
@@ -147,7 +147,7 @@ test.describe('Athlete CRUD Tests', () => {
 
   test('should show validation errors for required fields', async ({ page }) => {
     // Click "Add Athlete" button
-    await page.click('[data-testid="button-add-athlete"]');
+    await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
 
     // Try to submit without filling required fields
@@ -167,7 +167,7 @@ test.describe('Athlete CRUD Tests', () => {
 
   test('should show validation error for invalid email format', async ({ page }) => {
     // Click "Add Athlete" button
-    await page.click('[data-testid="button-add-athlete"]');
+    await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
 
     // Fill in fields with invalid email
@@ -192,7 +192,7 @@ test.describe('Athlete CRUD Tests', () => {
 
     if (athleteCount === 0) {
       // Create an athlete first
-      await page.click('[data-testid="button-add-athlete"]');
+      await page.click('[data-testid="add-athlete-button"]');
       await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
       await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
       await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
@@ -221,7 +221,7 @@ test.describe('Athlete CRUD Tests', () => {
   test('should successfully perform bulk delete operation', async ({ page }) => {
     // First, create multiple athletes
     for (let i = 0; i < 2; i++) {
-      await page.click('[data-testid="button-add-athlete"]');
+      await page.click('[data-testid="add-athlete-button"]');
       await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
       await page.fill('[name="firstName"], input[placeholder*="First Name" i]', `${testAthlete.firstName}${i}`);
       await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', `${testAthlete.lastName}${i}`);
@@ -268,7 +268,7 @@ test.describe('Athlete CRUD Tests', () => {
 
   test('should successfully search and filter athletes', async ({ page }) => {
     // First, create a test athlete with unique name
-    await page.click('[data-testid="button-add-athlete"]');
+    await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
     const uniqueName = `UniqueSearchTest${timestamp}`;
     await page.fill('[name="firstName"], input[placeholder*="First Name" i]', uniqueName);
@@ -281,7 +281,7 @@ test.describe('Athlete CRUD Tests', () => {
     await page.waitForSelector(`text=${uniqueName}`, { timeout: 10000 });
 
     // Use search functionality
-    const searchInput = page.locator('[data-testid="input-search-athletes"]');
+    const searchInput = page.locator('[data-testid="athlete-search"]');
     await searchInput.fill(uniqueName);
 
     // Wait for search results to update - wait for network to settle
