@@ -35,14 +35,20 @@ export async function loginWithCredentials(
   // Submit login form
   await page.click('button[type="submit"]');
 
-  // Wait for response
-  await page.waitForLoadState('networkidle');
-
   if (shouldSucceed) {
+    // Wait for navigation away from login page (client-side redirect)
+    await page.waitForURL(url => !url.pathname.includes('/login'), {
+      timeout: 10000,
+      waitUntil: 'networkidle'
+    });
+
     // Verify we're logged in (should redirect away from /login)
     const currentUrl = page.url();
     expect(currentUrl).not.toContain('/login');
   } else {
+    // Wait a moment for any error messages to appear
+    await page.waitForLoadState('networkidle');
+
     // Verify we're still on login page (login failed)
     await expect(page).toHaveURL(/\/login/);
   }
