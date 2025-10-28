@@ -188,6 +188,7 @@ jobs:
       - name: Run E2E tests against deployed staging
         id: e2e-tests
         continue-on-error: true
+        timeout-minutes: 30
         run: npm run test:staging
         env:
           CI: true
