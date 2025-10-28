@@ -60,7 +60,9 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() =>
       console.debug('No charts found on dashboard')
     );
-    await page.waitForTimeout(1000); // Additional buffer for Chart.js animation completion
+    // Wait for Chart.js animation to complete (1000ms default animation duration)
+    // Cannot use selector wait as Canvas rendering is async and doesn't emit DOM events
+    await page.waitForTimeout(1000);
 
     // Take screenshot of dashboard
     await expect(page).toHaveScreenshot('dashboard-overview.png', {
@@ -97,8 +99,8 @@ test.describe('Visual Regression Tests', () => {
     // Wait for modal to appear and animation to complete
     await page.waitForSelector('[data-testid="submit-athlete"], button:has-text("Save")', { state: 'visible' });
 
-    // Wait for CSS animation to complete (fade-in, slide-in, etc.)
-    // Note: Cannot be detected programmatically, so using timeout
+    // Wait for CSS animation to complete (fade-in, slide-in transitions typically 300-500ms)
+    // Cannot use selector wait as CSS transitions don't emit detectable DOM events
     await page.waitForTimeout(500);
 
     // Take screenshot of modal
@@ -152,8 +154,8 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 })
       .catch(() => console.log('No charts found on analytics page'));
 
-    // Wait for charts to fully render (Chart.js uses Canvas with async rendering)
-    // Chart data fetching, processing, and animation cannot be detected via selectors
+    // Wait for charts to fully render (Chart.js uses Canvas with async rendering, 1000ms animation + processing time)
+    // Cannot use selector wait as Canvas rendering and Chart.js animations don't emit detectable DOM events
     await page.waitForTimeout(2000);
 
     // Take screenshot of analytics page
@@ -194,7 +196,9 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() =>
       console.debug('No charts found on dashboard')
     );
-    await page.waitForTimeout(1000); // Additional buffer for Chart.js animation completion
+    // Wait for Chart.js animation to complete (1000ms default animation duration)
+    // Cannot use selector wait as Canvas rendering is async and doesn't emit DOM events
+    await page.waitForTimeout(1000);
 
     // Take screenshot in tablet viewport
     await expect(page).toHaveScreenshot('dashboard-tablet.png', {
@@ -221,8 +225,8 @@ test.describe('Visual Regression Tests', () => {
         console.debug('Dark mode class not detected on body/html')
       );
 
-      // Wait for CSS transition to complete (color changes, background transitions)
-      // CSS transitions cannot be reliably detected, so using timeout
+      // Wait for CSS transition to complete (color changes, background transitions typically 300-500ms)
+      // Cannot use selector wait as CSS color/background transitions don't emit detectable DOM events
       await page.waitForTimeout(500);
 
       // Take screenshot in dark mode

@@ -53,6 +53,7 @@ const __dirname = dirname(__filename);
 
 const E2E_ORG_NAME = 'E2E Test Organization';
 const E2E_TEAM_NAME = 'E2E Test Team';
+const E2E_CONFIG_FILE = '.e2e-test-config.json';
 
 interface TestUserConfig {
   username: string;
@@ -373,7 +374,7 @@ async function globalSetup(config: FullConfig) {
       timestamp: new Date().toISOString()
     };
 
-    const configPath = join(__dirname, '.e2e-test-config.json');
+    const configPath = join(__dirname, E2E_CONFIG_FILE);
     writeFileSync(configPath, JSON.stringify(testConfig, null, 2));
     console.log(`\n✅ Test configuration written to ${configPath}`);
 
