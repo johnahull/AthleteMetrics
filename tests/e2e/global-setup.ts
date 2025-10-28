@@ -51,8 +51,6 @@ import type { Role } from '@shared/role-types';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const E2E_ORG_NAME = 'E2E Test Organization';
-const E2E_TEAM_NAME = 'E2E Test Team';
 const E2E_CONFIG_FILE = '.e2e-test-config.json';
 
 interface TestUserConfig {
@@ -72,6 +70,10 @@ async function globalSetup(config: FullConfig) {
   // Priority: TESTING_* > STAGING_*
   const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
   const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
+
+  // Environment-specific test data names to prevent conflicts between environments
+  const E2E_ORG_NAME = `E2E Test Organization (${ENV_NAME})`;
+  const E2E_TEAM_NAME = `E2E Test Team (${ENV_NAME})`;
 
   const TARGET_URL = isTesting
     ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')

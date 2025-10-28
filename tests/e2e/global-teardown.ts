@@ -22,8 +22,8 @@ import postgres from 'postgres';
 import { eq, or, like, inArray } from 'drizzle-orm';
 import * as schema from '@shared/schema';
 
-const E2E_ORG_NAME = 'E2E Test Organization';
-const E2E_SECOND_ORG_NAME = 'E2E Test Organization 2';
+// Organization names are environment-specific (defined in globalTeardown function)
+// to prevent conflicts between staging and testing environments
 
 // Test data patterns for identifying test athletes
 const TEST_NAME_PATTERNS = {
@@ -49,6 +49,10 @@ async function globalTeardown(config: FullConfig) {
   const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
   const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
 
+  // Environment-specific test data names to match global-setup.ts
+  const E2E_ORG_NAME = `E2E Test Organization (${ENV_NAME})`;
+  const E2E_SECOND_ORG_NAME = `E2E Test Organization 2 (${ENV_NAME})`;
+
   console.log(`📍 Cleaning up ${ENV_NAME} environment`);
 
   // Clean up via API first (test athletes created during tests)
@@ -60,7 +64,7 @@ async function globalTeardown(config: FullConfig) {
     : process.env.DATABASE_URL;
 
   if (DATABASE_URL) {
-    await cleanupDatabase(DATABASE_URL, ENV_NAME);
+    await cleanupDatabase(DATABASE_URL, ENV_NAME, E2E_ORG_NAME, E2E_SECOND_ORG_NAME);
   } else {
     console.warn(`⚠️  ${ENV_NAME}_DATABASE_URL not set - skipping database cleanup`);
   }
@@ -172,7 +176,12 @@ async function cleanupViaAPI(isTesting: boolean, ENV_NAME: string) {
 /**
  * Clean up database resources created in global setup
  */
-async function cleanupDatabase(DATABASE_URL: string, ENV_NAME: string) {
+async function cleanupDatabase(
+  DATABASE_URL: string,
+  ENV_NAME: string,
+  E2E_ORG_NAME: string,
+  E2E_SECOND_ORG_NAME: string
+) {
   console.log('🗑️  Cleaning up database resources...');
 
   // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
@@ -186,8 +195,8 @@ async function cleanupDatabase(DATABASE_URL: string, ENV_NAME: string) {
   const db = drizzle(client, { schema });
 
   try {
-    // 1. Find E2E test organization
-    console.log('  📦 Looking for E2E test organization...');
+    // 1. Find E2E test organizations
+    console.log('  📦 Looking for E2E test organizations...');
     const organization = await db.query.organizations.findFirst({
       where: eq(schema.organizations.name, E2E_ORG_NAME),
     });

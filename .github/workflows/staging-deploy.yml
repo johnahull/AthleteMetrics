@@ -225,11 +225,9 @@ jobs:
 
       - name: Notify deployment success
         if: success()
-        env:
-          STAGING_URL: ${{ secrets.STAGING_URL }}
         run: |
           echo "✅ Staging deployment successful!"
-          echo "URL: $STAGING_URL"
+          echo "Staging environment is ready for testing"
 
       - name: Notify deployment failure
         if: failure()
