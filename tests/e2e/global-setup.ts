@@ -61,9 +61,10 @@ async function globalSetup(config: FullConfig) {
     await page.goto(`${STAGING_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
-    await page.fill('[data-testid="input-password"]', STAGING_PASSWORD);
-    await page.click('[data-testid="button-login"]');
+    // Use actual form field names (not data-testids)
+    await page.fill('input[name="username"]', STAGING_USERNAME);
+    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    await page.click('button[type="submit"]');
 
     // Wait for navigation away from login page
     await page.waitForURL(url => !url.pathname.includes('/login'), {
