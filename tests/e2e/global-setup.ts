@@ -13,10 +13,12 @@
  * Environment Variables Required:
  * - DATABASE_URL: PostgreSQL connection string
  * - STAGING_URL: Staging environment URL (for verification)
- * - STAGING_USERNAME: Site admin username (primary test account)
- * - STAGING_PASSWORD: Site admin password
- * - E2E_ORG_ADMIN_USERNAME: Organization admin username (optional)
- * - E2E_ORG_ADMIN_PASSWORD: Organization admin password (optional)
+ * - STAGING_USERNAME: Org admin username (primary test account)
+ * - STAGING_PASSWORD: Org admin password
+ * - E2E_SITE_ADMIN_USERNAME: Site admin username (optional, for RBAC tests)
+ * - E2E_SITE_ADMIN_PASSWORD: Site admin password (optional, for RBAC tests)
+ * - E2E_ORG_ADMIN_USERNAME: Second org admin username (optional, for RBAC tests)
+ * - E2E_ORG_ADMIN_PASSWORD: Second org admin password (optional, for RBAC tests)
  * - E2E_COACH_USERNAME: Coach username (optional)
  * - E2E_COACH_PASSWORD: Coach password (optional)
  * - E2E_ATHLETE_USERNAME: Athlete username (optional)
@@ -156,23 +158,35 @@ async function globalSetup(config: FullConfig) {
         username: STAGING_USERNAME,
         password: STAGING_PASSWORD,
         firstName: 'E2E',
-        lastName: 'SiteAdmin',
-        role: 'site_admin',
-        isSiteAdmin: true,
-        emails: ['e2e-site-admin@test.com'],
+        lastName: 'OrgAdmin',
+        role: 'org_admin',
+        isSiteAdmin: false,
+        emails: ['e2e-primary@test.com'],
       },
     ];
 
     // Add optional RBAC test users if credentials are provided
+    if (process.env.E2E_SITE_ADMIN_USERNAME && process.env.E2E_SITE_ADMIN_PASSWORD) {
+      testUsers.push({
+        username: process.env.E2E_SITE_ADMIN_USERNAME,
+        password: process.env.E2E_SITE_ADMIN_PASSWORD,
+        firstName: 'E2E',
+        lastName: 'SiteAdmin',
+        role: 'site_admin',
+        isSiteAdmin: true,
+        emails: ['e2e-site-admin@test.com'],
+      });
+    }
+
     if (process.env.E2E_ORG_ADMIN_USERNAME && process.env.E2E_ORG_ADMIN_PASSWORD) {
       testUsers.push({
         username: process.env.E2E_ORG_ADMIN_USERNAME,
         password: process.env.E2E_ORG_ADMIN_PASSWORD,
         firstName: 'E2E',
-        lastName: 'OrgAdmin',
+        lastName: 'OrgAdmin2',
         role: 'org_admin',
         isSiteAdmin: false,
-        emails: ['e2e-org-admin@test.com'],
+        emails: ['e2e-org-admin-2@test.com'],
       });
     }
 
