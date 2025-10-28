@@ -44,19 +44,21 @@ test.describe('Athlete CRUD Tests', () => {
     await page.click('[data-testid="add-athlete-button"]');
 
     // Wait for modal to appear
-    await page.waitForSelector('[role="dialog"], .modal, form', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-    // Fill in athlete information
-    // Note: These selectors may need adjustment based on actual form implementation
-    await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
-    await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
-    await page.fill('[name="email"], [type="email"]', testAthlete.email);
+    // Fill in athlete information using actual form data-testids
+    await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
+    await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+
+    // Add email field (form uses dynamic email fields - need to click "+ Add Email" first)
+    await page.click('[data-testid="button-add-email"]');
+    await page.fill('[data-testid="input-email-0"]', testAthlete.email);
 
     // Submit the form
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete"), button:has-text("Create")');
+    await page.click('button[type="submit"]:has-text("Add Athlete")');
 
     // Wait for modal to close
-    await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Verify athlete appears in the list - wait for the athlete row to be visible
     await page.waitForSelector(`text=${testAthlete.firstName} ${testAthlete.lastName}`, { timeout: 10000 });
@@ -71,12 +73,13 @@ test.describe('Athlete CRUD Tests', () => {
   test('should successfully edit an existing athlete', async ({ page }) => {
     // First, create an athlete to edit
     await page.click('[data-testid="add-athlete-button"]');
-    await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
-    await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
-    await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
-    await page.fill('[name="email"], [type="email"]', testAthlete.email);
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
-    await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
+    await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+    await page.click('[data-testid="button-add-email"]');
+    await page.fill('[data-testid="input-email-0"]', testAthlete.email);
+    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for athlete to appear in list
     await page.waitForSelector('[data-testid^="button-edit-athlete-"]', { timeout: 10000 });
@@ -88,17 +91,17 @@ test.describe('Athlete CRUD Tests', () => {
     await editButton.click();
 
     // Wait for edit modal to appear
-    await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
     // Update athlete information
     const updatedSchool = 'Updated High School';
-    await page.fill('[name="school"], input[placeholder*="School" i]', updatedSchool);
+    await page.fill('[data-testid="input-athlete-school"]', updatedSchool);
 
     // Save changes
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Update")');
+    await page.click('button[type="submit"]:has-text("Add Athlete")');
 
     // Wait for modal to close
-    await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Verify changes were saved - wait for updated school text to appear
     await page.waitForSelector(`text=${updatedSchool}`, { timeout: 10000 });
@@ -109,12 +112,13 @@ test.describe('Athlete CRUD Tests', () => {
   test('should successfully delete an athlete', async ({ page }) => {
     // First, create an athlete to delete
     await page.click('[data-testid="add-athlete-button"]');
-    await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
-    await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
-    await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
-    await page.fill('[name="email"], [type="email"]', testAthlete.email);
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
-    await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
+    await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+    await page.click('[data-testid="button-add-email"]');
+    await page.fill('[data-testid="input-email-0"]', testAthlete.email);
+    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for athlete to appear and page to update
     await page.waitForLoadState('networkidle');
@@ -168,12 +172,15 @@ test.describe('Athlete CRUD Tests', () => {
   test('should show validation error for invalid email format', async ({ page }) => {
     // Click "Add Athlete" button
     await page.click('[data-testid="add-athlete-button"]');
-    await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
     // Fill in fields with invalid email
-    await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
-    await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
-    await page.fill('[name="email"], [type="email"]', 'invalid-email-format');
+    await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
+    await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+
+    // Add email field and fill with invalid email
+    await page.click('[data-testid="button-add-email"]');
+    await page.fill('[data-testid="input-email-0"]', 'invalid-email-format');
 
     // Try to submit
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
@@ -193,12 +200,13 @@ test.describe('Athlete CRUD Tests', () => {
     if (athleteCount === 0) {
       // Create an athlete first
       await page.click('[data-testid="add-athlete-button"]');
-      await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
-      await page.fill('[name="firstName"], input[placeholder*="First Name" i]', testAthlete.firstName);
-      await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', testAthlete.lastName);
-      await page.fill('[name="email"], [type="email"]', testAthlete.email);
-      await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
-      await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+      await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+      await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
+      await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+      await page.click('[data-testid="button-add-email"]');
+      await page.fill('[data-testid="input-email-0"]', testAthlete.email);
+      await page.click('button[type="submit"]:has-text("Add Athlete")');
+      await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
       // Wait for athlete to appear in list
       await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 10000 });
@@ -222,12 +230,13 @@ test.describe('Athlete CRUD Tests', () => {
     // First, create multiple athletes
     for (let i = 0; i < 2; i++) {
       await page.click('[data-testid="add-athlete-button"]');
-      await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
-      await page.fill('[name="firstName"], input[placeholder*="First Name" i]', `${testAthlete.firstName}${i}`);
-      await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', `${testAthlete.lastName}${i}`);
-      await page.fill('[name="email"], [type="email"]', `${timestamp}${i}@example.com`);
-      await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
-      await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+      await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+      await page.fill('[data-testid="input-athlete-firstname"]', `${testAthlete.firstName}${i}`);
+      await page.fill('[data-testid="input-athlete-lastname"]', `${testAthlete.lastName}${i}`);
+      await page.click('[data-testid="button-add-email"]');
+      await page.fill('[data-testid="input-email-0"]', `${timestamp}${i}@example.com`);
+      await page.click('button[type="submit"]:has-text("Add Athlete")');
+      await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
       // Wait for athlete to appear in list
       await page.waitForLoadState('networkidle');
@@ -269,13 +278,14 @@ test.describe('Athlete CRUD Tests', () => {
   test('should successfully search and filter athletes', async ({ page }) => {
     // First, create a test athlete with unique name
     await page.click('[data-testid="add-athlete-button"]');
-    await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
     const uniqueName = `UniqueSearchTest${timestamp}`;
-    await page.fill('[name="firstName"], input[placeholder*="First Name" i]', uniqueName);
-    await page.fill('[name="lastName"], input[placeholder*="Last Name" i]', 'SearchLastName');
-    await page.fill('[name="email"], [type="email"]', `search${timestamp}@example.com`);
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
-    await page.waitForSelector('[role="dialog"], .modal', { state: 'hidden', timeout: 5000 });
+    await page.fill('[data-testid="input-athlete-firstname"]', uniqueName);
+    await page.fill('[data-testid="input-athlete-lastname"]', 'SearchLastName');
+    await page.click('[data-testid="button-add-email"]');
+    await page.fill('[data-testid="input-email-0"]', `search${timestamp}@example.com`);
+    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for athlete to appear in list
     await page.waitForSelector(`text=${uniqueName}`, { timeout: 10000 });
