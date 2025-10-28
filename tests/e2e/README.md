@@ -8,7 +8,13 @@ This directory contains end-to-end (E2E) tests for the AthleteMetrics applicatio
 
 ### Environment Variables
 
-Before running E2E tests, set the following environment variables:
+E2E tests can run against **two environments**:
+- **Staging Environment** - Pre-production environment for final testing
+- **Testing Environment** - Continuous testing environment for integration testing
+
+Set environment variables for the environment you want to test:
+
+#### Staging Environment
 
 ```bash
 # Required for all tests
@@ -16,7 +22,10 @@ export STAGING_URL="https://your-staging-environment.railway.app"
 export STAGING_USERNAME="your-test-username"
 export STAGING_PASSWORD="your-test-password"
 
-# Required for RBAC/Permissions tests (tests/e2e/permissions.spec.ts)
+# Optional: For test data setup (creates test org, users, teams in DB)
+export DATABASE_URL="postgresql://user:password@host:port/dbname"
+
+# Optional: Required for RBAC/Permissions tests (tests/e2e/permissions.spec.ts)
 export E2E_SITE_ADMIN_USERNAME="test-site-admin"
 export E2E_SITE_ADMIN_PASSWORD="your-site-admin-password"
 export E2E_ORG_ADMIN_USERNAME="test-org-admin"
@@ -27,13 +36,61 @@ export E2E_ATHLETE_USERNAME="test-athlete"
 export E2E_ATHLETE_PASSWORD="your-athlete-password"
 ```
 
-Alternatively, create a `.env.staging` file in the project root:
+#### Testing Environment
 
+```bash
+# Required for all tests
+export TESTING_URL="https://athletemetrics-testing.up.railway.app"
+export TESTING_USERNAME="your-test-username"
+export TESTING_PASSWORD="your-test-password"
+
+# Optional: For test data setup (creates test org, users, teams in DB)
+export TESTING_DATABASE_URL="postgresql://user:password@host:port/dbname"
+
+# Optional: Required for RBAC/Permissions tests (same as staging)
+export E2E_SITE_ADMIN_USERNAME="test-site-admin"
+export E2E_SITE_ADMIN_PASSWORD="your-site-admin-password"
+export E2E_ORG_ADMIN_USERNAME="test-org-admin"
+export E2E_ORG_ADMIN_PASSWORD="your-org-admin-password"
+export E2E_COACH_USERNAME="test-coach"
+export E2E_COACH_PASSWORD="your-coach-password"
+export E2E_ATHLETE_USERNAME="test-athlete"
+export E2E_ATHLETE_PASSWORD="your-athlete-password"
+```
+
+**Environment Auto-Detection**:
+The E2E framework automatically detects which environment to use based on which variables are set:
+- If `TESTING_URL` or `TESTING_USERNAME` is set → uses **Testing** environment
+- Otherwise → uses **Staging** environment
+
+Alternatively, create environment files in the project root:
+
+`.env.staging`:
 ```env
 # Required for all tests
 STAGING_URL=https://your-staging-environment.railway.app
 STAGING_USERNAME=your-test-username
 STAGING_PASSWORD=your-test-password
+DATABASE_URL=postgresql://user:password@host:port/dbname
+
+# Required for RBAC/Permissions tests
+E2E_SITE_ADMIN_USERNAME=test-site-admin
+E2E_SITE_ADMIN_PASSWORD=your-site-admin-password
+E2E_ORG_ADMIN_USERNAME=test-org-admin
+E2E_ORG_ADMIN_PASSWORD=your-org-admin-password
+E2E_COACH_USERNAME=test-coach
+E2E_COACH_PASSWORD=your-coach-password
+E2E_ATHLETE_USERNAME=test-athlete
+E2E_ATHLETE_PASSWORD=your-athlete-password
+```
+
+`.env.testing`:
+```env
+# Required for all tests
+TESTING_URL=https://athletemetrics-testing.up.railway.app
+TESTING_USERNAME=your-test-username
+TESTING_PASSWORD=your-test-password
+TESTING_DATABASE_URL=postgresql://user:password@host:port/dbname
 
 # Required for RBAC/Permissions tests
 E2E_SITE_ADMIN_USERNAME=test-site-admin
@@ -68,18 +125,44 @@ npm run test:staging:validate
 
 ### All E2E Tests
 
+#### Against Staging Environment
 ```bash
 npm run test:staging
+```
+
+#### Against Testing Environment
+```bash
+npm run test:testing
+```
+
+### Validation Tests Only
+
+Quick validation tests to verify environment is working:
+
+```bash
+# Staging
+npm run test:staging:validate
+
+# Testing
+npm run test:testing:validate
 ```
 
 ### Specific Test Suite
 
 ```bash
+# Staging
 npm run test:staging -- tests/e2e/auth-flows.spec.ts
 npm run test:staging -- tests/e2e/athlete-crud.spec.ts
 npm run test:staging -- tests/e2e/measurement-entry.spec.ts
 npm run test:staging -- tests/e2e/csv-import.spec.ts
 npm run test:staging -- tests/e2e/permissions.spec.ts
+
+# Testing
+npm run test:testing -- tests/e2e/auth-flows.spec.ts
+npm run test:testing -- tests/e2e/athlete-crud.spec.ts
+npm run test:testing -- tests/e2e/measurement-entry.spec.ts
+npm run test:testing -- tests/e2e/csv-import.spec.ts
+npm run test:testing -- tests/e2e/permissions.spec.ts
 ```
 
 ### Debug Mode
@@ -87,13 +170,21 @@ npm run test:staging -- tests/e2e/permissions.spec.ts
 Run tests with headed browser (visible):
 
 ```bash
+# Staging
 npx playwright test --config=playwright.staging.config.ts --headed
+
+# Testing
+npx playwright test --config=playwright.testing.config.ts --headed
 ```
 
 ### UI Mode (Interactive)
 
 ```bash
+# Staging
 npx playwright test --config=playwright.staging.config.ts --ui
+
+# Testing
+npx playwright test --config=playwright.testing.config.ts --ui
 ```
 
 ## Test Structure

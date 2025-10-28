@@ -1,0 +1,193 @@
+name: E2E Test Reminder
+
+# Trigger on pull requests to main branch
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-e2e-coverage:
+    name: Check E2E Test Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Fetch all history to compare with base branch
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            packages/web/src/**/*.tsx
+            packages/web/src/**/*.ts
+            packages/api/routes/**/*.ts
+            packages/api/auth/**/*.ts
+            packages/api/middleware/**/*.ts
+            packages/api/ocr/**/*.ts
+            packages/shared/schema.ts
+          files_ignore: |
+            **/*.test.ts
+            **/*.test.tsx
+            **/*.spec.ts
+            **/*.spec.tsx
+            **/*.stories.tsx
+            **/*.d.ts
+
+      - name: Get changed E2E test files
+        id: changed-e2e-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            tests/e2e/**/*.spec.ts
+          files_ignore: |
+            tests/e2e/templates/**
+
+      - name: Check if E2E tests needed
+        id: check-e2e
+        env:
+          USER_FACING_CHANGED: ${{ steps.changed-files.outputs.any_changed }}
+          E2E_TESTS_CHANGED: ${{ steps.changed-e2e-files.outputs.any_changed }}
+        run: |
+          echo "User-facing files changed: $USER_FACING_CHANGED"
+          echo "E2E test files changed: $E2E_TESTS_CHANGED"
+
+          # If user-facing files changed but NO E2E tests changed, warn
+          if [[ "$USER_FACING_CHANGED" == "true" ]] && [[ "$E2E_TESTS_CHANGED" == "false" ]]; then
+            echo "needs_reminder=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_reminder=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post reminder comment
+        if: steps.check-e2e.outputs.needs_reminder == 'true'
+        uses: actions/github-script@v7
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        with:
+          script: |
+            try {
+              // Sanitize CHANGED_FILES to prevent script injection via malicious filenames
+              // Only allow: word characters, whitespace, hyphens, dots, forward slashes
+              const changedFilesStr = (process.env.CHANGED_FILES || '').replace(/[^\w\s\-./]/g, '');
+              if (!changedFilesStr) {
+                console.log('No changed files detected');
+                return;
+              }
+
+              const changedFiles = changedFilesStr.split(/\s+/).filter(f => f.length > 0);
+              const fileList = changedFiles.slice(0, 10).map(f => `- \`${f}\``).join('\n');
+              const moreFiles = changedFiles.length > 10 ? `\n... and ${changedFiles.length - 10} more` : '';
+
+              const body = `## ⚠️ E2E Test Coverage Reminder
+
+            This PR modifies user-facing code but doesn't include E2E test changes.
+
+            **Changed files that may need E2E test coverage:**
+            ${fileList}${moreFiles}
+
+            ### Do you need to add E2E tests?
+
+            ✅ **E2E tests ARE required for:**
+            - New pages/routes
+            - New forms or data entry workflows
+            - New CRUD operations
+            - Authentication or authorization changes
+            - Changes to existing user workflows
+
+            ❌ **E2E tests are NOT required for:**
+            - Pure CSS/styling changes (no UX impact)
+            - Internal refactoring with identical UX
+            - Backend-only changes (use integration tests instead)
+            - Documentation updates
+
+            ### How to add E2E tests:
+
+            1. **Use test templates** from \`tests/e2e/templates/\`:
+               - \`crud-template.spec.ts\` - For Create/Read/Update/Delete workflows
+               - \`auth-template.spec.ts\` - For authentication/authorization
+               - \`form-validation-template.spec.ts\` - For form validation
+
+            2. **Copy and customize** a template:
+               \`\`\`bash
+               cp tests/e2e/templates/crud-template.spec.ts tests/e2e/my-feature.spec.ts
+               # Edit the file following the HOW TO USE instructions
+               \`\`\`
+
+            3. **Run tests locally**:
+               \`\`\`bash
+               npm run test:staging
+               \`\`\`
+
+            4. **Or use the test-driven-feature-agent** in Claude Code:
+               \`\`\`
+               @claude implement [feature] with E2E tests
+               \`\`\`
+
+            ### If E2E tests aren't needed:
+
+            Please add a note in the PR description explaining why existing tests provide adequate coverage or why E2E tests aren't applicable to these changes.
+
+            ---
+
+            📚 See [CLAUDE.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CLAUDE.md#e2e-test-maintenance-policy) for the full E2E test policy.
+
+            *This is a non-blocking reminder. The PR can still be merged, but please ensure adequate test coverage.*`;
+
+              // Check if we've already posted this comment
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+
+              const botComment = comments.find(comment =>
+                comment.user?.type === 'Bot' &&
+                comment.body?.includes('E2E Test Coverage Reminder')
+              );
+
+              if (botComment) {
+                // Update existing comment
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+                console.log('Updated existing E2E test reminder comment');
+              } else {
+                // Create new comment
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: body
+                });
+                console.log('Posted E2E test reminder comment');
+              }
+            } catch (error) {
+              console.error('Failed to post E2E reminder:', error);
+              // Don't fail the workflow - this is a non-blocking reminder
+            }
+
+      - name: Summary
+        env:
+          NEEDS_REMINDER: ${{ steps.check-e2e.outputs.needs_reminder }}
+        run: |
+          if [[ "$NEEDS_REMINDER" == "true" ]]; then
+            echo "⚠️ E2E test reminder posted - user-facing code changed without E2E tests"
+            echo "This is a NON-BLOCKING reminder. PR can still be merged."
+          else
+            echo "✅ E2E test coverage check passed"
+          fi

@@ -30,9 +30,12 @@ export async function mapColumns(page: Page, columnMapping: Record<string, strin
     await page.selectOption(
       `[data-testid="map-column-${csvColumn}"]`,
       appColumn
-    ).catch(() =>
-      page.selectOption(`select[name="${csvColumn}"]`, appColumn)
-    );
+    ).catch((error) => {
+      console.debug(`mapColumns: testid failed for column "${csvColumn}", using fallback`,
+        error instanceof Error ? error.message : error
+      );
+      return page.selectOption(`select[name="${csvColumn}"]`, appColumn);
+    });
   }
 }
 
@@ -40,9 +43,12 @@ export async function mapColumns(page: Page, columnMapping: Record<string, strin
  * Confirm import after preview
  */
 export async function confirmImport(page: Page): Promise<void> {
-  await page.click('[data-testid="csv-confirm-import"]').catch(() =>
-    page.click('button:has-text("Confirm Import")')
-  );
+  await page.click('[data-testid="csv-confirm-import"]').catch((error) => {
+    console.debug('confirmImport: testid failed, using fallback',
+      error instanceof Error ? error.message : error
+    );
+    return page.click('button:has-text("Confirm Import")');
+  });
 
   await page.waitForLoadState('networkidle');
 }
@@ -51,9 +57,12 @@ export async function confirmImport(page: Page): Promise<void> {
  * Cancel import
  */
 export async function cancelImport(page: Page): Promise<void> {
-  await page.click('[data-testid="csv-cancel-import"]').catch(() =>
-    page.click('button:has-text("Cancel")')
-  );
+  await page.click('[data-testid="csv-cancel-import"]').catch((error) => {
+    console.debug('cancelImport: testid failed, using fallback',
+      error instanceof Error ? error.message : error
+    );
+    return page.click('button:has-text("Cancel")');
+  });
 }
 
 /**
@@ -64,9 +73,12 @@ export async function waitForImportComplete(page: Page, timeout: number = 60000)
   await page.waitForSelector('[data-testid="csv-progress-bar"]', {
     state: 'hidden',
     timeout
-  }).catch(() =>
-    page.waitForSelector('.progress-bar', { state: 'hidden', timeout })
-  );
+  }).catch((error) => {
+    console.debug('waitForImportComplete: progress bar testid failed, using fallback',
+      error instanceof Error ? error.message : error
+    );
+    return page.waitForSelector('.progress-bar', { state: 'hidden', timeout });
+  });
 }
 
 /**

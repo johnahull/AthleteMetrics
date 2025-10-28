@@ -5,6 +5,7 @@
  */
 
 import { Page, expect } from '@playwright/test';
+import { clickWithMultipleFallbacks } from './selectors';
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 
@@ -138,17 +139,14 @@ export async function clickNavLink(page: Page, linkText: string): Promise<void> 
     `a:has-text("${linkText}")`,
   ];
 
-  for (const selector of selectors) {
-    try {
-      await page.click(selector, { timeout: 2000 });
-      await waitForPageLoad(page);
-      return;
-    } catch {
-      // Continue to next selector
-    }
-  }
+  await clickWithMultipleFallbacks(
+    page,
+    selectors,
+    `Navigation link "${linkText}"`,
+    { timeout: 2000 }
+  );
 
-  throw new Error(`Could not find navigation link with text "${linkText}"`);
+  await waitForPageLoad(page);
 }
 
 /**

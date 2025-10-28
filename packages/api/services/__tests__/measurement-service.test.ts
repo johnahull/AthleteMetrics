@@ -62,10 +62,14 @@ describe('MeasurementService', () => {
     }).returning();
     testSubmitterId = submitter.id;
 
-    // Add athlete to team
+    // Add athlete to team with joinedAt in the past to avoid race conditions
+    // (measurement date needs to be >= joinedAt for auto-assignment to work)
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 30); // 30 days ago
     await db.insert(userTeams).values({
       userId: testUserId,
       teamId: testTeamId,
+      joinedAt: pastDate,
       isActive: true,
     });
   });
@@ -184,10 +188,13 @@ describe('MeasurementService', () => {
         organizationId: testOrgId,
       }).returning();
 
-      // Add athlete to second team
+      // Add athlete to second team with joinedAt in the past
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 30);
       await db.insert(userTeams).values({
         userId: testUserId,
         teamId: team2.id,
+        joinedAt: pastDate,
         isActive: true,
       });
 
@@ -271,10 +278,13 @@ describe('MeasurementService', () => {
       expect(result.teamNameSnapshot).toBeNull();
       expect(result.teamContextAuto).toBe(false);
 
-      // Re-add athlete to team for other tests
+      // Re-add athlete to team for other tests with joinedAt in the past
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 30);
       await db.insert(userTeams).values({
         userId: testUserId,
         teamId: testTeamId,
+        joinedAt: pastDate,
         isActive: true,
       });
     });

@@ -21,8 +21,10 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq, or, like, inArray } from 'drizzle-orm';
 import * as schema from '@shared/schema';
+import { retryDatabaseOperation } from './constants';
 
-const E2E_ORG_NAME = 'E2E Test Organization';
+// Organization names are environment-specific (defined in globalTeardown function)
+// to prevent conflicts between staging and testing environments
 
 // Test data patterns for identifying test athletes
 const TEST_NAME_PATTERNS = {
@@ -43,14 +45,29 @@ interface AthleteResponse {
 async function globalTeardown(config: FullConfig) {
   console.log('\n🧹 Starting E2E Test Teardown...\n');
 
+  // Auto-detect environment based on which environment variables are set
+  // Priority: TESTING_* > STAGING_*
+  const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
+  const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
+
+  // Environment-specific test data names to match global-setup.ts
+  const E2E_ORG_NAME = `E2E Test Organization (${ENV_NAME})`;
+  const E2E_SECOND_ORG_NAME = `E2E Test Organization 2 (${ENV_NAME})`;
+
+  console.log(`📍 Cleaning up ${ENV_NAME} environment`);
+
   // Clean up via API first (test athletes created during tests)
-  await cleanupViaAPI();
+  await cleanupViaAPI(isTesting, ENV_NAME);
 
   // Then clean up database resources created in setup
-  if (process.env.DATABASE_URL) {
-    await cleanupDatabase();
+  const DATABASE_URL = isTesting
+    ? process.env.TESTING_DATABASE_URL
+    : process.env.DATABASE_URL;
+
+  if (DATABASE_URL) {
+    await cleanupDatabase(DATABASE_URL, ENV_NAME, E2E_ORG_NAME, E2E_SECOND_ORG_NAME);
   } else {
-    console.warn('⚠️  DATABASE_URL not set - skipping database cleanup');
+    console.warn(`⚠️  ${ENV_NAME}_DATABASE_URL not set - skipping database cleanup`);
   }
 
   console.log('\n✅ E2E Test Teardown Complete\n');
@@ -59,15 +76,23 @@ async function globalTeardown(config: FullConfig) {
 /**
  * Clean up test athletes created during tests via API
  */
-async function cleanupViaAPI() {
+async function cleanupViaAPI(isTesting: boolean, ENV_NAME: string) {
   console.log('🗑️  Cleaning up test athletes via API...');
 
-  const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
-  const STAGING_USERNAME = process.env.STAGING_USERNAME;
-  const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
+  const TARGET_URL = isTesting
+    ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
+    : (process.env.STAGING_URL || 'http://localhost:5000');
 
-  if (!STAGING_USERNAME || !STAGING_PASSWORD) {
-    console.warn('  ⚠️  STAGING credentials not set - skipping API cleanup');
+  const TARGET_USERNAME = isTesting
+    ? process.env.TESTING_USERNAME
+    : process.env.STAGING_USERNAME;
+
+  const TARGET_PASSWORD = isTesting
+    ? process.env.TESTING_PASSWORD
+    : process.env.STAGING_PASSWORD;
+
+  if (!TARGET_USERNAME || !TARGET_PASSWORD) {
+    console.warn(`  ⚠️  ${ENV_NAME} credentials not set - skipping API cleanup`);
     return;
   }
 
@@ -76,16 +101,22 @@ async function cleanupViaAPI() {
   const page = await context.newPage();
 
   try {
-    // Login to staging
+    // Login to environment
     console.log('  🔐 Logging in...');
-    await page.goto(`${STAGING_URL}/login`);
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    await page.goto(`${TARGET_URL}/login`);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for login form to be visible (React SPA needs time to mount)
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    // Use ID selectors (testing env) with name fallback (staging env)
+    await page.fill('#username, input[name="username"]', TARGET_USERNAME);
+    await page.fill('#password, input[name="password"]', TARGET_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
     // Fetch all athletes
-    const response = await page.request.get(`${STAGING_URL}/api/athletes`);
+    const response = await page.request.get(`${TARGET_URL}/api/athletes`);
 
     if (!response.ok()) {
       console.warn('  ⚠️  Failed to fetch athletes - skipping API cleanup');
@@ -117,7 +148,7 @@ async function cleanupViaAPI() {
     for (const athlete of testAthletes) {
       try {
         const deleteResponse = await page.request.delete(
-          `${STAGING_URL}/api/athletes/${athlete.id}`
+          `${TARGET_URL}/api/athletes/${athlete.id}`
         );
         if (deleteResponse.ok()) {
           successCount++;
@@ -146,12 +177,17 @@ async function cleanupViaAPI() {
 /**
  * Clean up database resources created in global setup
  */
-async function cleanupDatabase() {
+async function cleanupDatabase(
+  DATABASE_URL: string,
+  ENV_NAME: string,
+  E2E_ORG_NAME: string,
+  E2E_SECOND_ORG_NAME: string
+) {
   console.log('🗑️  Cleaning up database resources...');
 
-  // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
-  const isLocalhost = process.env.DATABASE_URL!.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
-  const client = postgres(process.env.DATABASE_URL!, {
+  // Strict localhost detection - only matches actual localhost hosts in postgresql:// URLs
+  const isLocalhost = DATABASE_URL.match(/^postgresql:\/\/[^@]+@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/);
+  const client = postgres(DATABASE_URL, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
     idle_timeout: 10, // Close idle connections quickly in teardown (short-lived script)
@@ -160,11 +196,14 @@ async function cleanupDatabase() {
   const db = drizzle(client, { schema });
 
   try {
-    // 1. Find E2E test organization
-    console.log('  📦 Looking for E2E test organization...');
-    const organization = await db.query.organizations.findFirst({
-      where: eq(schema.organizations.name, E2E_ORG_NAME),
-    });
+    // 1. Find E2E test organizations
+    console.log('  📦 Looking for E2E test organizations...');
+    const organization = await retryDatabaseOperation(
+      async () => await db.query.organizations.findFirst({
+        where: eq(schema.organizations.name, E2E_ORG_NAME),
+      }),
+      'Find E2E test organization'
+    );
 
     if (!organization) {
       console.log('  ℹ️  E2E test organization not found - nothing to clean up');
@@ -175,9 +214,12 @@ async function cleanupDatabase() {
 
     // 2. Find all E2E test users (by firstName 'E2E' which matches all setup users)
     console.log('  👥 Finding E2E test users...');
-    const e2eUsers = await db.query.users.findMany({
-      where: eq(schema.users.firstName, 'E2E'),
-    });
+    const e2eUsers = await retryDatabaseOperation(
+      async () => await db.query.users.findMany({
+        where: eq(schema.users.firstName, 'E2E'),
+      }),
+      'Find E2E test users'
+    );
 
     console.log(`  Found ${e2eUsers.length} E2E test users`);
 
@@ -250,8 +292,11 @@ async function cleanupDatabase() {
     // 7. Delete user-organization assignments (will be cascade deleted, but explicit for clarity)
     console.log('  🏢 Deleting user-organization assignments...');
     try {
-      await db.delete(schema.userOrganizations)
-        .where(eq(schema.userOrganizations.organizationId, organization.id));
+      await retryDatabaseOperation(
+        async () => await db.delete(schema.userOrganizations)
+          .where(eq(schema.userOrganizations.organizationId, organization.id)),
+        'Delete user-organization assignments'
+      );
       console.log('    ✓ Deleted user-organization assignments');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -262,9 +307,12 @@ async function cleanupDatabase() {
     // 8. Delete teams in the E2E organization
     console.log('  🏈 Deleting teams...');
     try {
-      const teams = await db.delete(schema.teams)
-        .where(eq(schema.teams.organizationId, organization.id))
-        .returning();
+      const teams = await retryDatabaseOperation(
+        async () => await db.delete(schema.teams)
+          .where(eq(schema.teams.organizationId, organization.id))
+          .returning(),
+        'Delete teams'
+      );
       console.log(`    ✓ Deleted ${teams.length} teams`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -290,12 +338,85 @@ async function cleanupDatabase() {
     // 10. Delete E2E test organization (this will cascade delete any remaining related records)
     console.log('  🏢 Deleting test organization...');
     try {
-      await db.delete(schema.organizations).where(eq(schema.organizations.id, organization.id));
+      await retryDatabaseOperation(
+        async () => await db.delete(schema.organizations).where(eq(schema.organizations.id, organization.id)),
+        'Delete test organization'
+      );
       console.log(`    ✓ Deleted organization: ${organization.name}`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn('    ⚠ Failed to delete organization:', errorMsg);
       // Don't throw - we've cleaned up what we could
+    }
+
+    // 11. Delete second E2E test organization (for multi-org testing)
+    console.log('  🏢 Deleting second test organization...');
+    const secondOrganization = await retryDatabaseOperation(
+      async () => await db.query.organizations.findFirst({
+        where: eq(schema.organizations.name, E2E_SECOND_ORG_NAME),
+      }),
+      'Find second test organization'
+    );
+
+    if (secondOrganization) {
+      try {
+        // Delete user-organization assignments for second org
+        await retryDatabaseOperation(
+          async () => await db.delete(schema.userOrganizations)
+            .where(eq(schema.userOrganizations.organizationId, secondOrganization.id)),
+          'Delete user-organization assignments for second org'
+        );
+
+        // Delete teams in second org
+        await retryDatabaseOperation(
+          async () => await db.delete(schema.teams)
+            .where(eq(schema.teams.organizationId, secondOrganization.id)),
+          'Delete teams in second org'
+        );
+
+        // Delete second organization
+        await retryDatabaseOperation(
+          async () => await db.delete(schema.organizations).where(eq(schema.organizations.id, secondOrganization.id)),
+          'Delete second organization'
+        );
+        console.log(`    ✓ Deleted second organization: ${secondOrganization.name}`);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn('    ⚠ Failed to delete second organization:', errorMsg);
+      }
+    } else {
+      console.log('    ℹ️  Second organization not found');
+    }
+
+    // 12. Verify cleanup was successful
+    console.log('  🔍 Verifying cleanup...');
+    try {
+      const verificationResults = await verifyCleanup(db, E2E_ORG_NAME, E2E_SECOND_ORG_NAME);
+
+      if (verificationResults.success) {
+        console.log('  ✅ Cleanup verification passed - all E2E test data removed');
+      } else {
+        console.warn('  ⚠️  Cleanup verification found remaining data:');
+        if (verificationResults.remainingOrgs > 0) {
+          console.warn(`    - ${verificationResults.remainingOrgs} E2E organizations still exist`);
+        }
+        if (verificationResults.remainingUsers > 0) {
+          console.warn(`    - ${verificationResults.remainingUsers} E2E users still exist`);
+        }
+        if (verificationResults.remainingTeams > 0) {
+          console.warn(`    - ${verificationResults.remainingTeams} E2E teams still exist`);
+        }
+        if (verificationResults.remainingSessions > 0) {
+          console.warn(`    - ${verificationResults.remainingSessions} E2E user sessions still exist`);
+        }
+        if (verificationResults.remainingMeasurements > 0) {
+          console.warn(`    - ${verificationResults.remainingMeasurements} E2E user measurements still exist`);
+        }
+        console.warn('  Manual cleanup may be required for remaining data');
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Cleanup verification failed:', error instanceof Error ? error.message : error);
+      // Don't fail teardown on verification errors
     }
 
     console.log('  ✅ Database cleanup complete');
@@ -306,6 +427,76 @@ async function cleanupDatabase() {
   } finally {
     await client.end();
   }
+}
+
+/**
+ * Verify that all E2E test data was successfully cleaned up
+ */
+async function verifyCleanup(
+  db: ReturnType<typeof drizzle>,
+  E2E_ORG_NAME: string,
+  E2E_SECOND_ORG_NAME: string
+): Promise<{
+  success: boolean;
+  remainingOrgs: number;
+  remainingUsers: number;
+  remainingTeams: number;
+  remainingSessions: number;
+  remainingMeasurements: number;
+}> {
+  // Check for remaining E2E organizations
+  const remainingOrgs = await db.query.organizations.findMany({
+    where: or(
+      eq(schema.organizations.name, E2E_ORG_NAME),
+      eq(schema.organizations.name, E2E_SECOND_ORG_NAME)
+    ),
+  });
+
+  // Check for remaining E2E users (firstName = 'E2E')
+  const remainingUsers = await db.query.users.findMany({
+    where: eq(schema.users.firstName, 'E2E'),
+  });
+
+  // Check for remaining teams from E2E orgs
+  const remainingTeams = remainingOrgs.length > 0
+    ? await db.query.teams.findMany({
+        where: or(
+          ...remainingOrgs.map(org => eq(schema.teams.organizationId, org.id))
+        ),
+      })
+    : [];
+
+  // Check for remaining sessions for E2E users
+  const remainingSessions = remainingUsers.length > 0
+    ? await db.query.sessions.findMany({
+        where: or(
+          ...remainingUsers.map(user => eq(schema.sessions.userId, user.id))
+        ),
+      })
+    : [];
+
+  // Check for remaining measurements for E2E users
+  const remainingMeasurements = remainingUsers.length > 0
+    ? await db.query.measurements.findMany({
+        where: or(
+          ...remainingUsers.map(user => eq(schema.measurements.userId, user.id))
+        ),
+      })
+    : [];
+
+  return {
+    success:
+      remainingOrgs.length === 0 &&
+      remainingUsers.length === 0 &&
+      remainingTeams.length === 0 &&
+      remainingSessions.length === 0 &&
+      remainingMeasurements.length === 0,
+    remainingOrgs: remainingOrgs.length,
+    remainingUsers: remainingUsers.length,
+    remainingTeams: remainingTeams.length,
+    remainingSessions: remainingSessions.length,
+    remainingMeasurements: remainingMeasurements.length,
+  };
 }
 
 export default globalTeardown;

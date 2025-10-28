@@ -144,6 +144,95 @@ When ENABLED:
 - `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database
 - Database migrations are handled through Drizzle Kit configuration in `drizzle.config.ts`
 
+## E2E Test Maintenance Policy
+
+**CRITICAL**: All user-facing features MUST have E2E test coverage before merging to main.
+
+### When to Add/Update E2E Tests
+
+✅ **Always Required:**
+- New user-facing pages or routes
+- New forms or data entry workflows
+- New CRUD operations (Create, Read, Update, Delete)
+- Authentication or authorization changes
+- Critical user workflows (signup, login, data import, etc.)
+- Changes to existing user workflows
+
+⚠️ **Usually Required:**
+- UI component changes affecting user interaction
+- API endpoint changes that impact frontend behavior
+- Navigation or routing modifications
+- Form validation rule changes
+
+❌ **Not Required:**
+- Pure CSS/styling changes (no UX impact)
+- Internal refactoring with identical UX
+- Backend-only changes (use integration tests instead)
+- Documentation updates
+
+### Test-First Development Workflow
+
+**Use `test-driven-feature-agent` for new features:**
+
+1. **Write E2E test first** (`tests/e2e/`)
+   - Describe expected user behavior from end-user perspective
+   - Test will fail initially (red phase)
+   - Use existing test patterns as templates
+
+2. **Implement feature** (`packages/web/`, `packages/api/`)
+   - Build minimum code to make test pass
+   - Follow existing architectural patterns
+
+3. **Verify tests pass** (green phase)
+   - Run: `npm run test:staging`
+   - Fix any issues
+   - Ensure test is stable and not flaky
+
+4. **Refactor if needed** (refactor phase)
+   - Improve code quality
+   - Tests continue to pass
+
+### How to Invoke Test Agents
+
+**Automatic (when keywords detected):**
+- "implement feature with tests"
+- "add e2e test for..."
+- "test-first implementation"
+
+**Manual invocation:**
+```bash
+# For TDD feature development
+@claude use test-driven-feature-agent to implement [feature] with E2E tests
+
+# For UI testing specifically
+@claude use ui-testing-agent to create E2E tests for [workflow]
+```
+
+### E2E Test Location
+
+- **CRUD tests**: `tests/e2e/[entity]-crud.spec.ts`
+- **Workflow tests**: `tests/e2e/[workflow-name].spec.ts`
+- **Auth tests**: `tests/e2e/auth-flows.spec.ts`
+- **Permission tests**: `tests/e2e/permissions.spec.ts`
+
+### Running E2E Tests
+
+```bash
+# Run all E2E tests against staging
+npm run test:staging
+
+# Run all E2E tests against testing environment
+npm run test:testing
+
+# Run specific test file
+npx playwright test tests/e2e/athlete-crud.spec.ts --config=playwright.staging.config.ts
+
+# Run with UI (debugging)
+npx playwright test --ui --config=playwright.staging.config.ts
+```
+
+**Multi-Environment Setup**: See [TESTING_ENV_SETUP.md](TESTING_ENV_SETUP.md) for configuring the testing environment with credentials and database connection.
+
 ## Project Architecture
 
 ### Monorepo Structure
