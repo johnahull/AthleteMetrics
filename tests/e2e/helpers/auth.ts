@@ -6,6 +6,7 @@
 
 import { Page, expect } from '@playwright/test';
 import { getUserByRole } from '../fixtures/test-users';
+import { clickWithFallback, clickWithMultipleFallbacks } from './selectors';
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 
@@ -28,9 +29,12 @@ export async function loginWithCredentials(
   await page.goto(`${STAGING_URL}/login`);
   await page.waitForLoadState('networkidle');
 
-  // Fill in login form
-  await page.fill('input[name="username"]', username);
-  await page.fill('input[name="password"]', password);
+  // Wait for login form to be visible (React SPA needs time to mount)
+  await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+  // Fill in login form - use ID selectors (testing env) with name fallback (staging env)
+  await page.fill('#username, input[name="username"]', username);
+  await page.fill('#password, input[name="password"]', password);
 
   // Submit login form
   await page.click('button[type="submit"]');
@@ -98,19 +102,35 @@ export async function loginAsDefaultUser(page: Page): Promise<void> {
  */
 export async function logout(page: Page): Promise<void> {
   try {
-    // Try clicking user menu first (if exists)
-    await page.click('[data-testid="user-menu"]', { timeout: 2000 });
-    await page.click('text=Logout', { timeout: 2000 });
-  } catch (error) {
-    console.warn('Logout: user menu not found, trying direct logout button:', error instanceof Error ? error.message : error);
-    // If that fails, try direct logout button
-    try {
-      await page.click('button:has-text("Logout")', { timeout: 2000 });
-    } catch (error2) {
-      console.warn('Logout: logout button not found, using API endpoint:', error2 instanceof Error ? error2.message : error2);
-      // If no logout button found, navigate to logout endpoint directly
-      await page.goto(`${STAGING_URL}/api/auth/logout`);
+    // Try multiple logout strategies in order
+    await clickWithMultipleFallbacks(
+      page,
+      [
+        '[data-testid="logout-button"]',
+        'button:has-text("Logout")',
+        '[data-testid="user-menu"]' // User menu dropdown, then click logout
+      ],
+      'Logout button',
+      { timeout: 2000 }
+    );
+
+    // If user menu was clicked, also click the logout option
+    const isOnLoginPage = page.url().includes('/login');
+    if (!isOnLoginPage) {
+      try {
+        await page.click('text=Logout', { timeout: 2000 });
+      } catch (error) {
+        console.debug('Logout: text=Logout not found, assuming already logged out or using different flow',
+          error instanceof Error ? error.message : error
+        );
+      }
     }
+  } catch (error) {
+    console.warn('Logout: all button selectors failed, using API endpoint:',
+      error instanceof Error ? error.message : error
+    );
+    // If no logout button found, navigate to logout endpoint directly
+    await page.goto(`${STAGING_URL}/api/auth/logout`);
   }
 
   await page.waitForLoadState('networkidle');
@@ -133,20 +153,27 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
     return false;
   }
 
-  // Check for presence of user menu or logout button
-  try {
-    await page.waitForSelector('[data-testid="user-menu"]', { timeout: 1000 });
-    return true;
-  } catch (error) {
-    console.warn('isLoggedIn: user-menu not found, trying logout button:', error instanceof Error ? error.message : error);
+  // Check for presence of user menu or logout button using multiple fallbacks
+  const authIndicators = [
+    '[data-testid="user-menu"]',
+    '[data-testid="logout-button"]',
+    'button:has-text("Logout")'
+  ];
+
+  for (const selector of authIndicators) {
     try {
-      await page.waitForSelector('button:has-text("Logout")', { timeout: 1000 });
+      await page.waitForSelector(selector, { timeout: 1000 });
       return true;
-    } catch (error2) {
-      console.warn('isLoggedIn: no auth indicators found, user not logged in:', error2 instanceof Error ? error2.message : error2);
-      return false;
+    } catch (error) {
+      // Continue to next selector
+      console.debug(`isLoggedIn: selector "${selector}" not found, trying next...`,
+        error instanceof Error ? error.message : error
+      );
     }
   }
+
+  console.debug('isLoggedIn: no auth indicators found, user not logged in');
+  return false;
 }
 
 /**
@@ -185,9 +212,9 @@ export async function waitForLogin(page: Page, timeout: number = 5000): Promise<
 export async function expectLoginPage(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/login/);
 
-  // Verify login form elements are present
-  await expect(page.locator('input[name="username"]')).toBeVisible();
-  await expect(page.locator('input[name="password"]')).toBeVisible();
+  // Verify login form elements are present - use ID selectors with name fallback
+  await expect(page.locator('#username, input[name="username"]')).toBeVisible();
+  await expect(page.locator('#password, input[name="password"]')).toBeVisible();
   await expect(page.locator('button[type="submit"]')).toBeVisible();
 }
 

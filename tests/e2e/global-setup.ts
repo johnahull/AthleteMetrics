@@ -11,14 +11,24 @@
  * The setup is idempotent - it checks if resources exist before creating them.
  *
  * Environment Variables Required:
- * - DATABASE_URL: PostgreSQL connection string
- * - STAGING_URL: Staging environment URL (for verification)
+ *
+ * For Staging Environment:
+ * - STAGING_URL: Staging environment URL (default: http://localhost:5000)
  * - STAGING_USERNAME: Org admin username (primary test account)
  * - STAGING_PASSWORD: Org admin password
- * - E2E_SITE_ADMIN_USERNAME: Site admin username (optional, for RBAC tests)
- * - E2E_SITE_ADMIN_PASSWORD: Site admin password (optional, for RBAC tests)
- * - E2E_ORG_ADMIN_USERNAME: Second org admin username (optional, for RBAC tests)
- * - E2E_ORG_ADMIN_PASSWORD: Second org admin password (optional, for RBAC tests)
+ * - DATABASE_URL: PostgreSQL connection string (optional, for test data setup)
+ *
+ * For Testing Environment:
+ * - TESTING_URL: Testing environment URL (default: https://athletemetrics-testing-testing.up.railway.app)
+ * - TESTING_USERNAME: Org admin username (primary test account)
+ * - TESTING_PASSWORD: Org admin password
+ * - TESTING_DATABASE_URL: PostgreSQL connection string (optional, for test data setup)
+ *
+ * Optional (for both environments):
+ * - E2E_SITE_ADMIN_USERNAME: Site admin username (for RBAC tests)
+ * - E2E_SITE_ADMIN_PASSWORD: Site admin password (for RBAC tests)
+ * - E2E_ORG_ADMIN_USERNAME: Second org admin username (for RBAC tests)
+ * - E2E_ORG_ADMIN_PASSWORD: Second org admin password (for RBAC tests)
  * - E2E_COACH_USERNAME: Coach username (optional)
  * - E2E_COACH_PASSWORD: Coach password (optional)
  * - E2E_ATHLETE_USERNAME: Athlete username (optional)
@@ -31,10 +41,15 @@ import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
 import { writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import * as schema from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import type { Role } from '@shared/role-types';
+
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const E2E_ORG_NAME = 'E2E Test Organization';
 const E2E_TEAM_NAME = 'E2E Test Team';
@@ -52,49 +67,69 @@ interface TestUserConfig {
 async function globalSetup(config: FullConfig) {
   console.log('\n🚀 Starting E2E Test Setup...\n');
 
-  const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
-  const STAGING_USERNAME = process.env.STAGING_USERNAME || '';
-  const STAGING_PASSWORD = process.env.STAGING_PASSWORD || '';
+  // Auto-detect environment based on which environment variables are set
+  // Priority: TESTING_* > STAGING_*
+  const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
+  const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
 
-  // Validate STAGING_URL format
-  if (!STAGING_URL.match(/^https?:\/\/.+/)) {
+  const TARGET_URL = isTesting
+    ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
+    : (process.env.STAGING_URL || 'http://localhost:5000');
+
+  const TARGET_USERNAME = isTesting
+    ? (process.env.TESTING_USERNAME || '')
+    : (process.env.STAGING_USERNAME || '');
+
+  const TARGET_PASSWORD = isTesting
+    ? (process.env.TESTING_PASSWORD || '')
+    : (process.env.STAGING_PASSWORD || '');
+
+  console.log(`📍 Target Environment: ${ENV_NAME}`);
+  console.log(`🌐 Target URL: ${TARGET_URL}`);
+
+  // Validate URL format
+  if (!TARGET_URL.match(/^https?:\/\/.+/)) {
     throw new Error(
-      `Invalid STAGING_URL format: "${STAGING_URL}". ` +
+      `Invalid ${ENV_NAME}_URL format: "${TARGET_URL}". ` +
       `Must be a valid HTTP or HTTPS URL (e.g., https://staging.example.com)`
     );
   }
 
   // Verify credentials are provided
-  if (!STAGING_USERNAME || !STAGING_PASSWORD) {
+  if (!TARGET_USERNAME || !TARGET_PASSWORD) {
     throw new Error(
-      'STAGING_USERNAME and STAGING_PASSWORD environment variables are required. ' +
+      `${ENV_NAME}_USERNAME and ${ENV_NAME}_PASSWORD environment variables are required. ` +
       'Please set these credentials for E2E test authentication.'
     );
   }
 
-  // Step 1: Verify staging environment is accessible
-  console.log(`🔍 Verifying staging environment: ${STAGING_URL}`);
+  // Step 1: Verify environment is accessible
+  console.log(`🔍 Verifying ${ENV_NAME} environment: ${TARGET_URL}`);
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
 
   try {
-    const response = await page.goto(STAGING_URL);
+    const response = await page.goto(TARGET_URL);
 
     if (!response || response.status() >= 400) {
-      throw new Error(`Staging environment not accessible: ${response?.status()}`);
+      throw new Error(`${ENV_NAME} environment not accessible: ${response?.status()}`);
     }
 
-    console.log('✅ Staging environment is accessible');
+    console.log(`✅ ${ENV_NAME} environment is accessible`);
 
     // Verify login credentials work
     console.log('🔐 Verifying primary login credentials...');
-    await page.goto(`${STAGING_URL}/login`);
+    await page.goto(`${TARGET_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    // Use actual form field names (not data-testids)
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    // Wait for login form to be visible (React SPA needs time to mount)
+    // Use ID selectors as fallback for environments without name attributes
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    // Use ID selectors (testing env) with name fallback (staging env)
+    await page.fill('#username, input[name="username"]', TARGET_USERNAME);
+    await page.fill('#password, input[name="password"]', TARGET_PASSWORD);
     await page.click('button[type="submit"]');
 
     await page.waitForURL(url => !url.pathname.includes('/login'), {
@@ -107,7 +142,7 @@ async function globalSetup(config: FullConfig) {
 
     console.log('✅ Primary login credentials verified');
   } catch (error) {
-    console.error('\n❌ Staging environment verification failed:', error);
+    console.error(`\n❌ ${ENV_NAME} environment verification failed:`, error);
     throw error;
   } finally {
     await context.close();
@@ -115,9 +150,13 @@ async function globalSetup(config: FullConfig) {
   }
 
   // Step 2: Database setup - create test organization and users
-  if (!process.env.DATABASE_URL) {
-    console.warn('\n⚠️  DATABASE_URL not set - skipping test data seeding');
-    console.warn('   Tests will use existing staging data');
+  const DATABASE_URL = isTesting
+    ? process.env.TESTING_DATABASE_URL
+    : process.env.DATABASE_URL;
+
+  if (!DATABASE_URL) {
+    console.warn(`\n⚠️  ${ENV_NAME}_DATABASE_URL not set - skipping test data seeding`);
+    console.warn(`   Tests will use existing ${ENV_NAME} data`);
     console.log('\n✅ E2E Test Setup Complete (verification only)\n');
     return;
   }
@@ -126,8 +165,8 @@ async function globalSetup(config: FullConfig) {
 
   // Connect to database
   // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
-  const isLocalhost = process.env.DATABASE_URL.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
-  const client = postgres(process.env.DATABASE_URL, {
+  const isLocalhost = DATABASE_URL.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
+  const client = postgres(DATABASE_URL, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
     idle_timeout: 10, // Close idle connections quickly in setup (short-lived script)
@@ -159,8 +198,8 @@ async function globalSetup(config: FullConfig) {
 
     const testUsers: TestUserConfig[] = [
       {
-        username: STAGING_USERNAME,
-        password: STAGING_PASSWORD,
+        username: TARGET_USERNAME,
+        password: TARGET_PASSWORD,
         firstName: 'E2E',
         lastName: 'OrgAdmin',
         role: 'org_admin',

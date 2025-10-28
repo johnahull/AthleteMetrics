@@ -48,17 +48,23 @@ export async function createAthlete(page: Page, athleteData: {
  */
 export async function editAthlete(page: Page, athleteName: string, updates: Record<string, string>): Promise<void> {
   await goToAthletes(page);
-  await page.click(`tr:has-text("${athleteName}") [data-testid="edit-athlete"]`).catch(() =>
-    page.click(`tr:has-text("${athleteName}") button:has-text("Edit")`)
-  );
+  await page.click(`tr:has-text("${athleteName}") [data-testid="edit-athlete"]`).catch((error) => {
+    console.debug(`editAthlete: edit button testid failed for "${athleteName}", using fallback`,
+      error instanceof Error ? error.message : error
+    );
+    return page.click(`tr:has-text("${athleteName}") button:has-text("Edit")`);
+  });
 
   for (const [field, value] of Object.entries(updates)) {
     await page.fill(`[name="${field}"]`, value);
   }
 
-  await page.click('[data-testid="submit-athlete"]').catch(() =>
-    page.click('button[type="submit"]')
-  );
+  await page.click('[data-testid="submit-athlete"]').catch((error) => {
+    console.debug('editAthlete: submit button testid failed, using fallback',
+      error instanceof Error ? error.message : error
+    );
+    return page.click('button[type="submit"]');
+  });
 
   await page.waitForLoadState('networkidle');
 }
@@ -68,14 +74,20 @@ export async function editAthlete(page: Page, athleteName: string, updates: Reco
  */
 export async function deleteAthlete(page: Page, athleteName: string): Promise<void> {
   await goToAthletes(page);
-  await page.click(`tr:has-text("${athleteName}") [data-testid="delete-athlete"]`).catch(() =>
-    page.click(`tr:has-text("${athleteName}") button:has-text("Delete")`)
-  );
+  await page.click(`tr:has-text("${athleteName}") [data-testid="delete-athlete"]`).catch((error) => {
+    console.debug(`deleteAthlete: delete button testid failed for "${athleteName}", using fallback`,
+      error instanceof Error ? error.message : error
+    );
+    return page.click(`tr:has-text("${athleteName}") button:has-text("Delete")`);
+  });
 
   // Confirm deletion
-  await page.click('[data-testid="confirm-delete"]').catch(() =>
-    page.click('button:has-text("Confirm")')
-  );
+  await page.click('[data-testid="confirm-delete"]').catch((error) => {
+    console.debug('deleteAthlete: confirm button testid failed, using fallback',
+      error instanceof Error ? error.message : error
+    );
+    return page.click('button:has-text("Confirm")');
+  });
 
   await page.waitForLoadState('networkidle');
 }
@@ -85,9 +97,12 @@ export async function deleteAthlete(page: Page, athleteName: string): Promise<vo
  */
 export async function searchAthlete(page: Page, searchTerm: string): Promise<void> {
   await goToAthletes(page);
-  await page.fill('[data-testid="athlete-search"]', searchTerm).catch(() =>
-    page.fill('input[placeholder*="Search" i]', searchTerm)
-  );
+  await page.fill('[data-testid="athlete-search"]', searchTerm).catch((error) => {
+    console.debug('searchAthlete: search input testid failed, using fallback',
+      error instanceof Error ? error.message : error
+    );
+    return page.fill('input[placeholder*="Search" i]', searchTerm);
+  });
   await page.waitForLoadState('networkidle');
 }
 

@@ -25,6 +25,8 @@
     "test:integration": "NODE_ENV=test NODE_OPTIONS=\"--max-old-space-size=${TEST_HEAP_SIZE:-4096}\" vitest run --config vitest.integration.config.ts",
     "test:staging": "playwright test --config=playwright.staging.config.ts",
     "test:staging:validate": "playwright test tests/e2e/validate-staging.spec.ts --config=playwright.staging.config.ts",
+    "test:testing": "playwright test --config=playwright.testing.config.ts",
+    "test:testing:validate": "playwright test tests/e2e/validate-staging.spec.ts --config=playwright.testing.config.ts",
     "deploy:testing": "node scripts/validate-testing-env.js && railway up --environment testing --service athletemetrics-testing",
     "logs:testing": "railway logs --environment testing",
     "shell:testing": "railway run --environment testing bash",

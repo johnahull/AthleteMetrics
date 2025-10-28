@@ -43,14 +43,25 @@ interface AthleteResponse {
 async function globalTeardown(config: FullConfig) {
   console.log('\n🧹 Starting E2E Test Teardown...\n');
 
+  // Auto-detect environment based on which environment variables are set
+  // Priority: TESTING_* > STAGING_*
+  const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
+  const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
+
+  console.log(`📍 Cleaning up ${ENV_NAME} environment`);
+
   // Clean up via API first (test athletes created during tests)
-  await cleanupViaAPI();
+  await cleanupViaAPI(isTesting, ENV_NAME);
 
   // Then clean up database resources created in setup
-  if (process.env.DATABASE_URL) {
-    await cleanupDatabase();
+  const DATABASE_URL = isTesting
+    ? process.env.TESTING_DATABASE_URL
+    : process.env.DATABASE_URL;
+
+  if (DATABASE_URL) {
+    await cleanupDatabase(DATABASE_URL, ENV_NAME);
   } else {
-    console.warn('⚠️  DATABASE_URL not set - skipping database cleanup');
+    console.warn(`⚠️  ${ENV_NAME}_DATABASE_URL not set - skipping database cleanup`);
   }
 
   console.log('\n✅ E2E Test Teardown Complete\n');
@@ -59,15 +70,23 @@ async function globalTeardown(config: FullConfig) {
 /**
  * Clean up test athletes created during tests via API
  */
-async function cleanupViaAPI() {
+async function cleanupViaAPI(isTesting: boolean, ENV_NAME: string) {
   console.log('🗑️  Cleaning up test athletes via API...');
 
-  const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
-  const STAGING_USERNAME = process.env.STAGING_USERNAME;
-  const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
+  const TARGET_URL = isTesting
+    ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
+    : (process.env.STAGING_URL || 'http://localhost:5000');
 
-  if (!STAGING_USERNAME || !STAGING_PASSWORD) {
-    console.warn('  ⚠️  STAGING credentials not set - skipping API cleanup');
+  const TARGET_USERNAME = isTesting
+    ? process.env.TESTING_USERNAME
+    : process.env.STAGING_USERNAME;
+
+  const TARGET_PASSWORD = isTesting
+    ? process.env.TESTING_PASSWORD
+    : process.env.STAGING_PASSWORD;
+
+  if (!TARGET_USERNAME || !TARGET_PASSWORD) {
+    console.warn(`  ⚠️  ${ENV_NAME} credentials not set - skipping API cleanup`);
     return;
   }
 
@@ -76,16 +95,22 @@ async function cleanupViaAPI() {
   const page = await context.newPage();
 
   try {
-    // Login to staging
+    // Login to environment
     console.log('  🔐 Logging in...');
-    await page.goto(`${STAGING_URL}/login`);
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    await page.goto(`${TARGET_URL}/login`);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for login form to be visible (React SPA needs time to mount)
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    // Use ID selectors (testing env) with name fallback (staging env)
+    await page.fill('#username, input[name="username"]', TARGET_USERNAME);
+    await page.fill('#password, input[name="password"]', TARGET_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
     // Fetch all athletes
-    const response = await page.request.get(`${STAGING_URL}/api/athletes`);
+    const response = await page.request.get(`${TARGET_URL}/api/athletes`);
 
     if (!response.ok()) {
       console.warn('  ⚠️  Failed to fetch athletes - skipping API cleanup');
@@ -117,7 +142,7 @@ async function cleanupViaAPI() {
     for (const athlete of testAthletes) {
       try {
         const deleteResponse = await page.request.delete(
-          `${STAGING_URL}/api/athletes/${athlete.id}`
+          `${TARGET_URL}/api/athletes/${athlete.id}`
         );
         if (deleteResponse.ok()) {
           successCount++;
@@ -146,12 +171,12 @@ async function cleanupViaAPI() {
 /**
  * Clean up database resources created in global setup
  */
-async function cleanupDatabase() {
+async function cleanupDatabase(DATABASE_URL: string, ENV_NAME: string) {
   console.log('🗑️  Cleaning up database resources...');
 
   // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
-  const isLocalhost = process.env.DATABASE_URL!.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
-  const client = postgres(process.env.DATABASE_URL!, {
+  const isLocalhost = DATABASE_URL.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
+  const client = postgres(DATABASE_URL, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
     idle_timeout: 10, // Close idle connections quickly in teardown (short-lived script)
