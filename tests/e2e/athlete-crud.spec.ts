@@ -25,7 +25,7 @@ const testAthlete = {
   firstName: `TestFirst${timestamp}`,
   lastName: `TestLast${timestamp}`,
   email: `test${timestamp}@example.com`,
-  birthDate: '01/15/2005', // mm/dd/yyyy format
+  birthDate: '2005-01-15', // YYYY-MM-DD format for HTML date input
   birthYear: 2005,
   school: 'Test High School',
   sport: 'Soccer',
