@@ -21,6 +21,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq, or, like, inArray } from 'drizzle-orm';
 import * as schema from '@shared/schema';
+import { retryDatabaseOperation } from './constants';
 
 // Organization names are environment-specific (defined in globalTeardown function)
 // to prevent conflicts between staging and testing environments
@@ -197,9 +198,12 @@ async function cleanupDatabase(
   try {
     // 1. Find E2E test organizations
     console.log('  📦 Looking for E2E test organizations...');
-    const organization = await db.query.organizations.findFirst({
-      where: eq(schema.organizations.name, E2E_ORG_NAME),
-    });
+    const organization = await retryDatabaseOperation(
+      async () => await db.query.organizations.findFirst({
+        where: eq(schema.organizations.name, E2E_ORG_NAME),
+      }),
+      'Find E2E test organization'
+    );
 
     if (!organization) {
       console.log('  ℹ️  E2E test organization not found - nothing to clean up');
@@ -210,9 +214,12 @@ async function cleanupDatabase(
 
     // 2. Find all E2E test users (by firstName 'E2E' which matches all setup users)
     console.log('  👥 Finding E2E test users...');
-    const e2eUsers = await db.query.users.findMany({
-      where: eq(schema.users.firstName, 'E2E'),
-    });
+    const e2eUsers = await retryDatabaseOperation(
+      async () => await db.query.users.findMany({
+        where: eq(schema.users.firstName, 'E2E'),
+      }),
+      'Find E2E test users'
+    );
 
     console.log(`  Found ${e2eUsers.length} E2E test users`);
 
@@ -285,8 +292,11 @@ async function cleanupDatabase(
     // 7. Delete user-organization assignments (will be cascade deleted, but explicit for clarity)
     console.log('  🏢 Deleting user-organization assignments...');
     try {
-      await db.delete(schema.userOrganizations)
-        .where(eq(schema.userOrganizations.organizationId, organization.id));
+      await retryDatabaseOperation(
+        async () => await db.delete(schema.userOrganizations)
+          .where(eq(schema.userOrganizations.organizationId, organization.id)),
+        'Delete user-organization assignments'
+      );
       console.log('    ✓ Deleted user-organization assignments');
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -297,9 +307,12 @@ async function cleanupDatabase(
     // 8. Delete teams in the E2E organization
     console.log('  🏈 Deleting teams...');
     try {
-      const teams = await db.delete(schema.teams)
-        .where(eq(schema.teams.organizationId, organization.id))
-        .returning();
+      const teams = await retryDatabaseOperation(
+        async () => await db.delete(schema.teams)
+          .where(eq(schema.teams.organizationId, organization.id))
+          .returning(),
+        'Delete teams'
+      );
       console.log(`    ✓ Deleted ${teams.length} teams`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -325,7 +338,10 @@ async function cleanupDatabase(
     // 10. Delete E2E test organization (this will cascade delete any remaining related records)
     console.log('  🏢 Deleting test organization...');
     try {
-      await db.delete(schema.organizations).where(eq(schema.organizations.id, organization.id));
+      await retryDatabaseOperation(
+        async () => await db.delete(schema.organizations).where(eq(schema.organizations.id, organization.id)),
+        'Delete test organization'
+      );
       console.log(`    ✓ Deleted organization: ${organization.name}`);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -335,22 +351,34 @@ async function cleanupDatabase(
 
     // 11. Delete second E2E test organization (for multi-org testing)
     console.log('  🏢 Deleting second test organization...');
-    const secondOrganization = await db.query.organizations.findFirst({
-      where: eq(schema.organizations.name, E2E_SECOND_ORG_NAME),
-    });
+    const secondOrganization = await retryDatabaseOperation(
+      async () => await db.query.organizations.findFirst({
+        where: eq(schema.organizations.name, E2E_SECOND_ORG_NAME),
+      }),
+      'Find second test organization'
+    );
 
     if (secondOrganization) {
       try {
         // Delete user-organization assignments for second org
-        await db.delete(schema.userOrganizations)
-          .where(eq(schema.userOrganizations.organizationId, secondOrganization.id));
+        await retryDatabaseOperation(
+          async () => await db.delete(schema.userOrganizations)
+            .where(eq(schema.userOrganizations.organizationId, secondOrganization.id)),
+          'Delete user-organization assignments for second org'
+        );
 
         // Delete teams in second org
-        await db.delete(schema.teams)
-          .where(eq(schema.teams.organizationId, secondOrganization.id));
+        await retryDatabaseOperation(
+          async () => await db.delete(schema.teams)
+            .where(eq(schema.teams.organizationId, secondOrganization.id)),
+          'Delete teams in second org'
+        );
 
         // Delete second organization
-        await db.delete(schema.organizations).where(eq(schema.organizations.id, secondOrganization.id));
+        await retryDatabaseOperation(
+          async () => await db.delete(schema.organizations).where(eq(schema.organizations.id, secondOrganization.id)),
+          'Delete second organization'
+        );
         console.log(`    ✓ Deleted second organization: ${secondOrganization.name}`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -358,6 +386,37 @@ async function cleanupDatabase(
       }
     } else {
       console.log('    ℹ️  Second organization not found');
+    }
+
+    // 12. Verify cleanup was successful
+    console.log('  🔍 Verifying cleanup...');
+    try {
+      const verificationResults = await verifyCleanup(db, E2E_ORG_NAME, E2E_SECOND_ORG_NAME);
+
+      if (verificationResults.success) {
+        console.log('  ✅ Cleanup verification passed - all E2E test data removed');
+      } else {
+        console.warn('  ⚠️  Cleanup verification found remaining data:');
+        if (verificationResults.remainingOrgs > 0) {
+          console.warn(`    - ${verificationResults.remainingOrgs} E2E organizations still exist`);
+        }
+        if (verificationResults.remainingUsers > 0) {
+          console.warn(`    - ${verificationResults.remainingUsers} E2E users still exist`);
+        }
+        if (verificationResults.remainingTeams > 0) {
+          console.warn(`    - ${verificationResults.remainingTeams} E2E teams still exist`);
+        }
+        if (verificationResults.remainingSessions > 0) {
+          console.warn(`    - ${verificationResults.remainingSessions} E2E user sessions still exist`);
+        }
+        if (verificationResults.remainingMeasurements > 0) {
+          console.warn(`    - ${verificationResults.remainingMeasurements} E2E user measurements still exist`);
+        }
+        console.warn('  Manual cleanup may be required for remaining data');
+      }
+    } catch (error) {
+      console.warn('  ⚠️  Cleanup verification failed:', error instanceof Error ? error.message : error);
+      // Don't fail teardown on verification errors
     }
 
     console.log('  ✅ Database cleanup complete');
@@ -368,6 +427,76 @@ async function cleanupDatabase(
   } finally {
     await client.end();
   }
+}
+
+/**
+ * Verify that all E2E test data was successfully cleaned up
+ */
+async function verifyCleanup(
+  db: ReturnType<typeof drizzle>,
+  E2E_ORG_NAME: string,
+  E2E_SECOND_ORG_NAME: string
+): Promise<{
+  success: boolean;
+  remainingOrgs: number;
+  remainingUsers: number;
+  remainingTeams: number;
+  remainingSessions: number;
+  remainingMeasurements: number;
+}> {
+  // Check for remaining E2E organizations
+  const remainingOrgs = await db.query.organizations.findMany({
+    where: or(
+      eq(schema.organizations.name, E2E_ORG_NAME),
+      eq(schema.organizations.name, E2E_SECOND_ORG_NAME)
+    ),
+  });
+
+  // Check for remaining E2E users (firstName = 'E2E')
+  const remainingUsers = await db.query.users.findMany({
+    where: eq(schema.users.firstName, 'E2E'),
+  });
+
+  // Check for remaining teams from E2E orgs
+  const remainingTeams = remainingOrgs.length > 0
+    ? await db.query.teams.findMany({
+        where: or(
+          ...remainingOrgs.map(org => eq(schema.teams.organizationId, org.id))
+        ),
+      })
+    : [];
+
+  // Check for remaining sessions for E2E users
+  const remainingSessions = remainingUsers.length > 0
+    ? await db.query.sessions.findMany({
+        where: or(
+          ...remainingUsers.map(user => eq(schema.sessions.userId, user.id))
+        ),
+      })
+    : [];
+
+  // Check for remaining measurements for E2E users
+  const remainingMeasurements = remainingUsers.length > 0
+    ? await db.query.measurements.findMany({
+        where: or(
+          ...remainingUsers.map(user => eq(schema.measurements.userId, user.id))
+        ),
+      })
+    : [];
+
+  return {
+    success:
+      remainingOrgs.length === 0 &&
+      remainingUsers.length === 0 &&
+      remainingTeams.length === 0 &&
+      remainingSessions.length === 0 &&
+      remainingMeasurements.length === 0,
+    remainingOrgs: remainingOrgs.length,
+    remainingUsers: remainingUsers.length,
+    remainingTeams: remainingTeams.length,
+    remainingSessions: remainingSessions.length,
+    remainingMeasurements: remainingMeasurements.length,
+  };
 }
 
 export default globalTeardown;

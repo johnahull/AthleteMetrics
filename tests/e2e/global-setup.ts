@@ -46,6 +46,7 @@ import { fileURLToPath } from 'url';
 import * as schema from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import type { Role } from '@shared/role-types';
+import { retryDatabaseOperation } from './constants';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -199,16 +200,22 @@ async function globalSetup(config: FullConfig) {
   try {
     // Create or find E2E test organization
     console.log('  📦 Creating test organization...');
-    let organization = await db.query.organizations.findFirst({
-      where: eq(schema.organizations.name, E2E_ORG_NAME),
-    });
+    let organization = await retryDatabaseOperation(
+      async () => await db.query.organizations.findFirst({
+        where: eq(schema.organizations.name, E2E_ORG_NAME),
+      }),
+      'Find test organization'
+    );
 
     if (!organization) {
-      const [newOrg] = await db.insert(schema.organizations).values({
-        name: E2E_ORG_NAME,
-        description: `E2E Test Organization - Created by Playwright global setup (${new Date().toISOString()})`,
-        isActive: true,
-      }).returning();
+      const [newOrg] = await retryDatabaseOperation(
+        async () => (await db.insert(schema.organizations).values({
+          name: E2E_ORG_NAME,
+          description: `E2E Test Organization - Created by Playwright global setup (${new Date().toISOString()})`,
+          isActive: true,
+        }).returning()),
+        'Create test organization'
+      );
       organization = newOrg;
       console.log(`    ✅ Created organization: ${organization.name}`);
     } else {

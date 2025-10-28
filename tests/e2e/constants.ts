@@ -162,3 +162,49 @@ export const DEFAULT_STAGING_URL = 'http://localhost:5000';
  * Default testing environment URL
  */
 export const DEFAULT_TESTING_URL = 'https://athletemetrics-testing-testing.up.railway.app';
+
+// ============================================================================
+// Database Retry Utility
+// ============================================================================
+
+/**
+ * Retry a database operation with exponential backoff
+ *
+ * @param operation - Async function to retry
+ * @param operationName - Human-readable name for logging
+ * @param maxRetries - Maximum number of retry attempts (default: DB_MAX_RETRIES)
+ * @returns Promise<T> - Result of the operation
+ * @throws Error if all retry attempts fail
+ */
+export async function retryDatabaseOperation<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  maxRetries: number = DB_MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | unknown;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s for retries 1, 2, 3
+        const delayMs = DB_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(
+          `  ⚠️  ${operationName} failed (attempt ${attempt}/${maxRetries}): ${errorMsg}`
+        );
+        console.log(`  ⏳ Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } else {
+        console.error(
+          `  ❌ ${operationName} failed after ${maxRetries} attempts: ${errorMsg}`
+        );
+      }
+    }
+  }
+
+  throw lastError;
+}
