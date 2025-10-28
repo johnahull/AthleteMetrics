@@ -55,24 +55,24 @@ jobs:
       - name: Check if E2E tests needed
         id: check-e2e
         env:
-          USER_FACING_CHANGED: ${{ steps.changed-files.any_changed }}
-          E2E_TESTS_CHANGED: ${{ steps.changed-e2e-files.any_changed }}
+          USER_FACING_CHANGED: ${{ steps.changed-files.outputs.any_changed }}
+          E2E_TESTS_CHANGED: ${{ steps.changed-e2e-files.outputs.any_changed }}
         run: |
           echo "User-facing files changed: $USER_FACING_CHANGED"
           echo "E2E test files changed: $E2E_TESTS_CHANGED"
 
           # If user-facing files changed but NO E2E tests changed, warn
           if [[ "$USER_FACING_CHANGED" == "true" ]] && [[ "$E2E_TESTS_CHANGED" == "false" ]]; then
-            echo "needs_reminder=true" >> $GITHUB_OUTPUT
+            echo "needs_reminder=true" >> "$GITHUB_OUTPUT"
           else
-            echo "needs_reminder=false" >> $GITHUB_OUTPUT
+            echo "needs_reminder=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Post reminder comment
         if: steps.check-e2e.outputs.needs_reminder == 'true'
         uses: actions/github-script@v7
         env:
-          CHANGED_FILES: ${{ steps.changed-files.all_changed_files }}
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         with:
           script: |
             const changedFilesStr = process.env.CHANGED_FILES || '';
