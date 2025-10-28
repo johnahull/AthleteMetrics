@@ -24,6 +24,22 @@ import * as schema from '@shared/schema';
 
 const E2E_ORG_NAME = 'E2E Test Organization';
 
+// Test data patterns for identifying test athletes
+const TEST_NAME_PATTERNS = {
+  timestamp: /^Test\w*\d{10,}/,
+  testPrefix: /^Test/,
+  testEmail: /test\d+@/,
+  testDomains: ['@test.com', '@example.com']
+} as const;
+
+// Athlete response type from API
+interface AthleteResponse {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  emails?: string[];
+}
+
 async function globalTeardown(config: FullConfig) {
   console.log('\n🧹 Starting E2E Test Teardown...\n');
 
@@ -76,19 +92,17 @@ async function cleanupViaAPI() {
       return;
     }
 
-    const athletes = await response.json();
+    const athletes: AthleteResponse[] = await response.json();
 
     // Filter test athletes (those created with "Test" prefix or test emails)
-    const timestampPattern = /^Test\w*\d{10,}/;
-    const testAthletes = athletes.filter((athlete: any) => {
-      const firstNameMatch = athlete.firstName?.startsWith('Test') ||
-                            timestampPattern.test(athlete.firstName || '');
-      const lastNameMatch = athlete.lastName?.startsWith('Test') ||
-                           timestampPattern.test(athlete.lastName || '');
+    const testAthletes = athletes.filter((athlete: AthleteResponse) => {
+      const firstNameMatch = TEST_NAME_PATTERNS.testPrefix.test(athlete.firstName || '') ||
+                            TEST_NAME_PATTERNS.timestamp.test(athlete.firstName || '');
+      const lastNameMatch = TEST_NAME_PATTERNS.testPrefix.test(athlete.lastName || '') ||
+                           TEST_NAME_PATTERNS.timestamp.test(athlete.lastName || '');
       const emailMatch = athlete.emails?.some((email: string) =>
-        email.includes('@test.com') ||
-        email.includes('@example.com') ||
-        /test\d+@/.test(email)
+        TEST_NAME_PATTERNS.testDomains.some(domain => email.includes(domain)) ||
+        TEST_NAME_PATTERNS.testEmail.test(email)
       );
 
       return firstNameMatch || lastNameMatch || emailMatch;
@@ -140,6 +154,7 @@ async function cleanupDatabase() {
   const client = postgres(process.env.DATABASE_URL!, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
+    idle_timeout: 10, // Close idle connections quickly in teardown (short-lived script)
     ssl: isLocalhost ? false : 'require',
   });
   const db = drizzle(client, { schema });

@@ -30,8 +30,11 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
 import * as schema from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import type { Role } from '@shared/role-types';
 
 const E2E_ORG_NAME = 'E2E Test Organization';
 const E2E_TEAM_NAME = 'E2E Test Team';
@@ -41,7 +44,7 @@ interface TestUserConfig {
   password: string;
   firstName: string;
   lastName: string;
-  role: 'site_admin' | 'org_admin' | 'coach' | 'athlete';
+  role: Role;
   isSiteAdmin: boolean;
   emails: string[];
 }
@@ -128,6 +131,7 @@ async function globalSetup(config: FullConfig) {
   const client = postgres(process.env.DATABASE_URL, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
+    idle_timeout: 10, // Close idle connections quickly in setup (short-lived script)
     ssl: isLocalhost ? false : 'require',
   });
   const db = drizzle(client, { schema });
@@ -150,9 +154,6 @@ async function globalSetup(config: FullConfig) {
     } else {
       console.log(`    ✅ Organization already exists: ${organization.name}`);
     }
-
-    // Store organization ID for tests
-    process.env.E2E_ORG_ID = organization.id;
 
     // Create test users
     console.log('  👥 Creating test users...');
@@ -294,9 +295,6 @@ async function globalSetup(config: FullConfig) {
       console.log(`    ✅ Team already exists: ${team.name}`);
     }
 
-    // Store team ID for tests
-    process.env.E2E_TEAM_ID = team.id;
-
     // Assign coach and athlete to team (if they exist)
     if (createdUserIds.coach && createdUserIds.athlete) {
       console.log('  👥 Assigning users to team...');
@@ -326,6 +324,20 @@ async function globalSetup(config: FullConfig) {
         }
       }
     }
+
+    // Write test configuration to JSON file for tests to read
+    // (process.env doesn't persist from global-setup to test workers)
+    const testConfig = {
+      organizationId: organization.id,
+      organizationName: organization.name,
+      teamId: team.id,
+      teamName: team.name,
+      timestamp: new Date().toISOString()
+    };
+
+    const configPath = join(__dirname, '.e2e-test-config.json');
+    writeFileSync(configPath, JSON.stringify(testConfig, null, 2));
+    console.log(`\n✅ Test configuration written to ${configPath}`);
 
     console.log('\n✅ Test data setup complete');
     console.log(`   Organization: ${organization.name} (${organization.id})`);
