@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Fetch all history to compare with base branch
 
@@ -34,6 +34,8 @@ jobs:
             packages/web/src/**/*.ts
             packages/api/routes/**/*.ts
             packages/api/auth/**/*.ts
+            packages/api/middleware/**/*.ts
+            packages/api/ocr/**/*.ts
             packages/shared/schema.ts
           files_ignore: |
             **/*.test.ts

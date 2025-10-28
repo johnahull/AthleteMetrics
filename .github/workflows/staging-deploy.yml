@@ -182,13 +182,21 @@ jobs:
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests against deployed staging
         id: e2e-tests
         continue-on-error: true
-        timeout-minutes: 30
+        timeout-minutes: 45  # Playwright setup (5-10min) + full suite (15-25min) + artifacts (2-5min)
         run: npm run test:staging
         env:
           CI: true

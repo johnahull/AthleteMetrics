@@ -98,6 +98,14 @@ async function globalSetup(config: FullConfig) {
     );
   }
 
+  // Production environment safety check - prevent tests from running against production
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'E2E tests cannot run in production environment (NODE_ENV=production). ' +
+      'Tests should only run against staging, testing, or local development environments.'
+    );
+  }
+
   // Verify credentials are provided
   if (!TARGET_USERNAME || !TARGET_PASSWORD) {
     throw new Error(
@@ -167,8 +175,8 @@ async function globalSetup(config: FullConfig) {
   console.log('\n📦 Setting up test data in database...');
 
   // Connect to database
-  // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
-  const isLocalhost = DATABASE_URL.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
+  // Strict localhost detection - only matches actual localhost hosts in postgresql:// URLs
+  const isLocalhost = DATABASE_URL.match(/^postgresql:\/\/[^@]+@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/);
   const client = postgres(DATABASE_URL, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginWithCredentials, logout } from './helpers/auth';
 import { goToAthletes, goToDashboard, goToOrganizations } from './helpers/navigation';
+import { getUserByRole } from './fixtures/test-users';
 
 /**
  * TIER 1 CRITICAL: RBAC/Permissions Tests
@@ -21,28 +22,17 @@ import { goToAthletes, goToDashboard, goToOrganizations } from './helpers/naviga
  *
  * IMPORTANT: These tests require test users with different roles to be created
  * in the staging environment. See fixtures/test-users.ts for user setup.
+ * Users are loaded from E2E_* environment variables with no weak fallbacks.
  */
 
-const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
+const STAGING_URL = process.env.STAGING_URL || process.env.TESTING_URL || 'http://localhost:5000';
 
-// Test user credentials (should be created in staging environment)
+// Test user credentials loaded from fixtures with required env var validation
 const TEST_USERS = {
-  siteAdmin: {
-    username: process.env.TEST_SITE_ADMIN_USERNAME || 'test-site-admin',
-    password: process.env.TEST_SITE_ADMIN_PASSWORD || 'test-password'
-  },
-  orgAdmin: {
-    username: process.env.TEST_ORG_ADMIN_USERNAME || 'test-org-admin',
-    password: process.env.TEST_ORG_ADMIN_PASSWORD || 'test-password'
-  },
-  coach: {
-    username: process.env.TEST_COACH_USERNAME || 'test-coach',
-    password: process.env.TEST_COACH_PASSWORD || 'test-password'
-  },
-  athlete: {
-    username: process.env.TEST_ATHLETE_USERNAME || 'test-athlete',
-    password: process.env.TEST_ATHLETE_PASSWORD || 'test-password'
-  }
+  siteAdmin: getUserByRole('site_admin'),
+  orgAdmin: getUserByRole('org_admin'),
+  coach: getUserByRole('coach'),
+  athlete: getUserByRole('athlete')
 };
 
 test.describe('RBAC/Permissions Tests', () => {
