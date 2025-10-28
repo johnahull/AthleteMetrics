@@ -22,6 +22,7 @@ import {
   type Measurement
 } from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 describe('Site Admin Deletion with Foreign Key Cleanup', () => {
   let testOrg: Organization;
@@ -1057,7 +1058,7 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
   it('should exclude soft-deleted users from authentication', async () => {
     // Hash the password for authentication test
     const bcrypt = await import('bcrypt');
-    const hashedPassword = await bcrypt.hash('password123', 10);
+    const hashedPassword = await bcrypt.hash('password123', BCRYPT_SALT_ROUNDS);
 
     // Update athlete with hashed password
     await db.update(users)

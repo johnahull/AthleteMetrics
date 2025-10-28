@@ -3,6 +3,13 @@
  */
 
 /**
+ * Bcrypt salt rounds for password hashing
+ * Using 10 rounds provides a good balance between security and performance
+ * (OWASP recommended minimum is 10 rounds as of 2024)
+ */
+export const BCRYPT_SALT_ROUNDS = 10;
+
+/**
  * Database constraint names for team name uniqueness per organization
  * - 'uniqueTeamPerOrg': Drizzle ORM generated constraint name
  * - 'teams_organization_id_name_unique': Direct PostgreSQL constraint name
