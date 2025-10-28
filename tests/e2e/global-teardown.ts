@@ -23,6 +23,7 @@ import { eq, or, like, inArray } from 'drizzle-orm';
 import * as schema from '@shared/schema';
 
 const E2E_ORG_NAME = 'E2E Test Organization';
+const E2E_SECOND_ORG_NAME = 'E2E Test Organization 2';
 
 // Test data patterns for identifying test athletes
 const TEST_NAME_PATTERNS = {
@@ -321,6 +322,33 @@ async function cleanupDatabase(DATABASE_URL: string, ENV_NAME: string) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn('    ⚠ Failed to delete organization:', errorMsg);
       // Don't throw - we've cleaned up what we could
+    }
+
+    // 11. Delete second E2E test organization (for multi-org testing)
+    console.log('  🏢 Deleting second test organization...');
+    const secondOrganization = await db.query.organizations.findFirst({
+      where: eq(schema.organizations.name, E2E_SECOND_ORG_NAME),
+    });
+
+    if (secondOrganization) {
+      try {
+        // Delete user-organization assignments for second org
+        await db.delete(schema.userOrganizations)
+          .where(eq(schema.userOrganizations.organizationId, secondOrganization.id));
+
+        // Delete teams in second org
+        await db.delete(schema.teams)
+          .where(eq(schema.teams.organizationId, secondOrganization.id));
+
+        // Delete second organization
+        await db.delete(schema.organizations).where(eq(schema.organizations.id, secondOrganization.id));
+        console.log(`    ✓ Deleted second organization: ${secondOrganization.name}`);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn('    ⚠ Failed to delete second organization:', errorMsg);
+      }
+    } else {
+      console.log('    ℹ️  Second organization not found');
     }
 
     console.log('  ✅ Database cleanup complete');

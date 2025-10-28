@@ -68,7 +68,11 @@ export async function fillWithFallback(
  * @param primarySelector - Primary selector to try first
  * @param fallbackSelector - Fallback selector if primary fails
  * @param description - Human-readable description for logging
- * @returns Locator (always returns a locator, even if element doesn't exist yet)
+ * @returns Locator using CSS selector syntax for automatic fallback
+ *
+ * Note: Uses Playwright's CSS selector list syntax which automatically tries
+ * selectors in order: "primary, fallback". This is more efficient than
+ * try-catch since page.locator() doesn't throw errors.
  */
 export function locatorWithFallback(
   page: Page,
@@ -76,18 +80,9 @@ export function locatorWithFallback(
   fallbackSelector: string,
   description: string = 'Element'
 ): Locator {
-  // Try to use primary selector if element exists, otherwise use fallback
-  // Note: This returns a locator immediately without waiting for element
-  try {
-    const primaryLocator = page.locator(primarySelector);
-    // Return primary locator - it will be evaluated when used
-    return primaryLocator;
-  } catch (error) {
-    console.debug(`${description}: primary selector "${primarySelector}" failed, using fallback "${fallbackSelector}"`,
-      error instanceof Error ? error.message : error
-    );
-    return page.locator(fallbackSelector);
-  }
+  // Use CSS selector list syntax - Playwright tries each selector in order
+  // This is the recommended approach and doesn't require try-catch
+  return page.locator(`${primarySelector}, ${fallbackSelector}`);
 }
 
 /**
@@ -202,7 +197,10 @@ export async function withFallback<T>(
  * @param page - Playwright Page object
  * @param selectors - Array of selectors to try in order
  * @param description - Human-readable description for logging
- * @returns Locator for first selector that matches
+ * @returns Locator using CSS selector list syntax
+ *
+ * Note: Uses Playwright's CSS selector list syntax which automatically tries
+ * selectors in order. This is more efficient than iterating with try-catch.
  */
 export function locatorWithMultipleFallbacks(
   page: Page,
@@ -213,30 +211,9 @@ export function locatorWithMultipleFallbacks(
     throw new Error('At least one selector must be provided');
   }
 
-  // Try each selector in order
-  for (let i = 0; i < selectors.length; i++) {
-    const selector = selectors[i];
-    try {
-      const locator = page.locator(selector);
-      if (i > 0) {
-        console.debug(`${description}: using fallback selector #${i + 1}: "${selector}"`);
-      }
-      return locator;
-    } catch (error) {
-      if (i === selectors.length - 1) {
-        // Last selector also failed
-        console.error(`${description}: all ${selectors.length} selectors failed`,
-          error instanceof Error ? error.message : error
-        );
-        throw error;
-      }
-      // Try next selector
-      continue;
-    }
-  }
-
-  // Should never reach here, but TypeScript needs a return
-  return page.locator(selectors[0]);
+  // Use CSS selector list syntax - Playwright tries each selector in order
+  // Join all selectors with comma to create a selector list
+  return page.locator(selectors.join(', '));
 }
 
 /**

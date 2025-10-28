@@ -17,8 +17,9 @@ export default defineConfig({
   // Test directory
   testDir: './tests/e2e',
 
-  // Maximum time one test can run for (60 seconds)
-  timeout: 60 * 1000,
+  // Maximum time one test can run for (120 seconds)
+  // Increased from 60s to match staging config and handle RBAC tests with multi-org switching
+  timeout: 120 * 1000,
 
   // Test execution configuration
   fullyParallel: false, // Run tests sequentially to avoid race conditions

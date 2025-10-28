@@ -194,6 +194,25 @@ async function globalSetup(config: FullConfig) {
       console.log(`    ✅ Organization already exists: ${organization.name}`);
     }
 
+    // Create second organization for multi-org testing
+    console.log('  📦 Creating second test organization for multi-org tests...');
+    const E2E_SECOND_ORG_NAME = 'E2E Test Organization 2';
+    let secondOrganization = await db.query.organizations.findFirst({
+      where: eq(schema.organizations.name, E2E_SECOND_ORG_NAME),
+    });
+
+    if (!secondOrganization) {
+      const [newOrg] = await db.insert(schema.organizations).values({
+        name: E2E_SECOND_ORG_NAME,
+        description: `E2E Second Test Organization - For multi-org testing (${new Date().toISOString()})`,
+        isActive: true,
+      }).returning();
+      secondOrganization = newOrg;
+      console.log(`    ✅ Created second organization: ${secondOrganization.name}`);
+    } else {
+      console.log(`    ✅ Second organization already exists: ${secondOrganization.name}`);
+    }
+
     // Create test users
     console.log('  👥 Creating test users...');
 
@@ -308,6 +327,27 @@ async function globalSetup(config: FullConfig) {
         } else {
           console.log(`      ✅ Already assigned to organization`);
         }
+
+        // For multi-org testing: assign coach to second organization as well
+        if (userConfig.role === 'coach') {
+          const existingSecondAssignment = await db.query.userOrganizations.findFirst({
+            where: and(
+              eq(schema.userOrganizations.userId, user.id),
+              eq(schema.userOrganizations.organizationId, secondOrganization.id)
+            ),
+          });
+
+          if (!existingSecondAssignment) {
+            await db.insert(schema.userOrganizations).values({
+              userId: user.id,
+              organizationId: secondOrganization.id,
+              role: 'coach',
+            });
+            console.log(`      ✅ Also assigned to second organization for multi-org testing`);
+          } else {
+            console.log(`      ✅ Already assigned to second organization`);
+          }
+        }
       }
     }
 
@@ -369,6 +409,8 @@ async function globalSetup(config: FullConfig) {
     const testConfig = {
       organizationId: organization.id,
       organizationName: organization.name,
+      secondOrganizationId: secondOrganization.id,
+      secondOrganizationName: secondOrganization.name,
       teamId: team.id,
       teamName: team.name,
       timestamp: new Date().toISOString()

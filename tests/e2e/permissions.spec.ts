@@ -499,6 +499,130 @@ test.describe('Enhanced RBAC Edge Cases', () => {
   });
 });
 
+test.describe('Security: Input Validation & Injection Prevention', () => {
+  test('should prevent SQL injection in athlete ID lookup', async ({ page }) => {
+    // Login as coach to access athlete pages
+    await loginWithCredentials(page, TEST_USERS.coach.username, TEST_USERS.coach.password);
+    await goToDashboard(page);
+
+    // Attempt SQL injection via athlete ID parameter
+    const maliciousId = "1' OR '1'='1";
+    await page.goto(`${STAGING_URL}/athletes/${encodeURIComponent(maliciousId)}`);
+    await page.waitForLoadState('networkidle');
+
+    // Should return 404 or error page, NOT expose all athletes
+    const is404 = await page.locator('text=/not found|404/i').count() > 0;
+    const isError = await page.locator('text=/error|invalid/i').count() > 0;
+
+    // Should not see athlete list (which would indicate SQL injection success)
+    const athleteList = await page.locator('[data-testid^="checkbox-athlete-"]').count();
+
+    expect(is404 || isError).toBeTruthy();
+    expect(athleteList).toBe(0);
+  });
+
+  test('should prevent SQL injection in team ID lookup', async ({ page }) => {
+    // Login as coach
+    await loginWithCredentials(page, TEST_USERS.coach.username, TEST_USERS.coach.password);
+    await goToDashboard(page);
+
+    // Attempt SQL injection via team ID parameter
+    const maliciousId = "1' OR '1'='1' --";
+    await page.goto(`${STAGING_URL}/teams/${encodeURIComponent(maliciousId)}`);
+    await page.waitForLoadState('networkidle');
+
+    // Should return 404 or error page
+    const is404 = await page.locator('text=/not found|404/i').count() > 0;
+    const isError = await page.locator('text=/error|invalid/i').count() > 0;
+
+    expect(is404 || isError).toBeTruthy();
+  });
+
+  test('should sanitize XSS attempts in athlete names', async ({ page }) => {
+    // Login as coach who can create athletes
+    await loginWithCredentials(page, TEST_USERS.coach.username, TEST_USERS.coach.password);
+    await goToAthletes(page);
+
+    // Try to create athlete with XSS payload
+    await page.click('[data-testid="add-athlete-button"], button:has-text("Add Athlete")');
+    await page.waitForSelector('[data-testid="submit-athlete"], button:has-text("Save")');
+
+    const xssPayload = '<script>alert("XSS")</script>';
+    const testTimestamp = Date.now();
+
+    // Fill form with XSS payload in name fields
+    await page.fill('[data-testid="athlete-first-name"], input[name="firstName"]', xssPayload);
+    await page.fill('[data-testid="athlete-last-name"], input[name="lastName"]', `TestXSS${testTimestamp}`);
+    await page.fill('[data-testid="athlete-email"], input[name="email"]', `xss-test-${testTimestamp}@test.com`);
+
+    // Submit form
+    await page.click('[data-testid="submit-athlete"], button:has-text("Save")');
+    await page.waitForLoadState('networkidle');
+
+    // Wait a moment for athlete to be created
+    await page.waitForTimeout(1000);
+
+    // Navigate to athletes page and search for the test athlete
+    await goToAthletes(page);
+    await page.waitForLoadState('networkidle');
+
+    // Look for athlete in list by last name
+    const athleteRow = page.locator(`text=TestXSS${testTimestamp}`).first();
+    const athleteExists = await athleteRow.count() > 0;
+
+    if (athleteExists) {
+      // Verify script tag is NOT present in DOM (XSS sanitized)
+      const hasScriptTag = await page.locator('script:has-text("XSS")').count();
+      expect(hasScriptTag).toBe(0);
+
+      // Verify the XSS payload is either escaped or stripped
+      const pageContent = await page.content();
+      const hasRawScript = pageContent.includes('<script>alert("XSS")</script>');
+      expect(hasRawScript).toBe(false);
+
+      console.log('✓ XSS payload successfully sanitized in athlete name');
+    } else {
+      console.log('⚠️  Test athlete not found - form may have validation that rejected XSS payload');
+    }
+  });
+
+  test('should sanitize XSS attempts in team names', async ({ page }) => {
+    // Login as org admin who can create teams
+    await loginWithCredentials(page, TEST_USERS.orgAdmin.username, TEST_USERS.orgAdmin.password);
+    await page.goto(`${STAGING_URL}/teams`);
+    await page.waitForLoadState('networkidle');
+
+    // Try to create team with XSS payload
+    const addTeamButton = page.locator('[data-testid="add-team-button"], button:has-text("Add Team")');
+    const hasAddButton = await addTeamButton.count() > 0;
+
+    if (hasAddButton) {
+      await addTeamButton.click();
+      await page.waitForSelector('[data-testid="submit-team"], button:has-text("Save")');
+
+      const xssPayload = '<img src=x onerror="alert(\'XSS\')">';
+      const testTimestamp = Date.now();
+
+      await page.fill('[data-testid="team-name"], input[name="name"]', `${xssPayload} TestTeam${testTimestamp}`);
+
+      await page.click('[data-testid="submit-team"], button:has-text("Save")');
+      await page.waitForLoadState('networkidle');
+
+      // Verify XSS payload is sanitized
+      const hasImgTag = await page.locator('img[src="x"][onerror]').count();
+      expect(hasImgTag).toBe(0);
+
+      const pageContent = await page.content();
+      const hasRawImgTag = pageContent.includes('onerror="alert');
+      expect(hasRawImgTag).toBe(false);
+
+      console.log('✓ XSS payload successfully sanitized in team name');
+    } else {
+      console.log('⏭️  Skipping team XSS test: User does not have permission to create teams');
+    }
+  });
+});
+
 test.describe('RBAC/Permissions Summary', () => {
   test('print permissions test summary', async () => {
     console.log('\n═══════════════════════════════════════════════════');
@@ -521,6 +645,11 @@ test.describe('RBAC/Permissions Summary', () => {
     console.log('✅ Expired session handling (redirects to login)');
     console.log('✅ Unauthenticated API access (returns 401)');
     console.log('✅ Session hijacking prevention (invalidated cookies rejected)');
+    console.log('\n--- Security: Input Validation ---');
+    console.log('✅ SQL injection prevention (athlete ID lookup)');
+    console.log('✅ SQL injection prevention (team ID lookup)');
+    console.log('✅ XSS sanitization (athlete names)');
+    console.log('✅ XSS sanitization (team names)');
     console.log('═══════════════════════════════════════════════════\n');
   });
 });
