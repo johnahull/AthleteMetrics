@@ -30,11 +30,11 @@ jobs:
         uses: tj-actions/changed-files@v45
         with:
           files: |
-            client/src/**/*.tsx
-            client/src/**/*.ts
-            server/routes/**/*.ts
-            server/auth/**/*.ts
-            shared/schema.ts
+            packages/web/src/**/*.tsx
+            packages/web/src/**/*.ts
+            packages/api/routes/**/*.ts
+            packages/api/auth/**/*.ts
+            packages/shared/schema.ts
           files_ignore: |
             **/*.test.ts
             **/*.test.tsx
