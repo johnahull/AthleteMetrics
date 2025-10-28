@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsDefaultUser } from '../helpers/auth';
+import { FORM_VALIDATION_TIMEOUT } from '../constants';
 
 /**
  * E2E Test Template: Form Validation
@@ -118,7 +119,7 @@ test.describe('[FORM] Validation Tests', () => {
     await page.fill('[data-testid="input-email-0"]', validData.email);
 
     // Error should disappear
-    await page.waitForTimeout(500); // Brief wait for validation
+    await page.waitForTimeout(FORM_VALIDATION_TIMEOUT); // Brief wait for validation
     const errorAfterFix = await page.locator('text=/invalid.*email/i').count();
     expect(errorAfterFix).toBe(0);
   });
@@ -312,7 +313,7 @@ test.describe('[FORM] Validation Tests', () => {
     await page.fill('[data-testid="input-[required-field]"]', validData.field1);
 
     // Wait briefly for validation to clear
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(FORM_VALIDATION_TIMEOUT);
 
     // Error should be gone or count should decrease
     const errorsAfter = await page.locator('.error, [role="alert"]').count();

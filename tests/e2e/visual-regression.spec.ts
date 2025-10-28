@@ -1,6 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { loginAsDefaultUser } from './helpers/auth';
 import { goToAthletes, goToDashboard, goToImportExport, goToDataEntry } from './helpers/navigation';
+import {
+  CSS_TRANSITION_TIMEOUT,
+  CHART_ANIMATION_TIMEOUT,
+  CHART_RENDER_TIMEOUT,
+  VISUAL_DIFF_TOLERANCE_STANDARD,
+  VISUAL_DIFF_TOLERANCE_CHARTS,
+  VISUAL_DIFF_TOLERANCE_COMPLEX_PAGE,
+  VISUAL_DIFF_TOLERANCE_ANALYTICS,
+} from './constants';
 
 /**
  * Visual Regression Tests
@@ -45,7 +54,7 @@ test.describe('Visual Regression Tests', () => {
       fullPage: true,
       animations: 'disabled',
       // Allow small differences due to anti-aliasing, font rendering, etc.
-      maxDiffPixels: 100
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_STANDARD
     });
   });
 
@@ -60,15 +69,16 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() =>
       console.debug('No charts found on dashboard')
     );
-    // Wait for Chart.js animation to complete (1000ms default animation duration)
+    // Wait for Chart.js animation to complete
     // Cannot use selector wait as Canvas rendering is async and doesn't emit DOM events
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
 
     // Take screenshot of dashboard
     await expect(page).toHaveScreenshot('dashboard-overview.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 200 // Charts may have slight rendering differences
+      // Charts need higher tolerance due to Canvas rendering variations
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_CHARTS
     });
   });
 
@@ -85,7 +95,7 @@ test.describe('Visual Regression Tests', () => {
     await expect(page).toHaveScreenshot('athlete-list-table.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 150
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_COMPLEX_PAGE
     });
   });
 
@@ -99,15 +109,15 @@ test.describe('Visual Regression Tests', () => {
     // Wait for modal to appear and animation to complete
     await page.waitForSelector('[data-testid="submit-athlete"], button:has-text("Save")', { state: 'visible' });
 
-    // Wait for CSS animation to complete (fade-in, slide-in transitions typically 300-500ms)
+    // Wait for CSS animation to complete (fade-in, slide-in transitions)
     // Cannot use selector wait as CSS transitions don't emit detectable DOM events
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(CSS_TRANSITION_TIMEOUT);
 
     // Take screenshot of modal
     const modal = page.locator('[role="dialog"], .modal, .athlete-form').first();
     await expect(modal).toHaveScreenshot('athlete-form-modal.png', {
       animations: 'disabled',
-      maxDiffPixels: 100
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_STANDARD
     });
   });
 
@@ -123,7 +133,7 @@ test.describe('Visual Regression Tests', () => {
     await expect(page).toHaveScreenshot('measurement-entry-form.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 150
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_COMPLEX_PAGE
     });
   });
 
@@ -139,7 +149,7 @@ test.describe('Visual Regression Tests', () => {
     await expect(page).toHaveScreenshot('csv-import-wizard-initial.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 100
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_STANDARD
     });
   });
 
@@ -154,15 +164,16 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 })
       .catch(() => console.log('No charts found on analytics page'));
 
-    // Wait for charts to fully render (Chart.js uses Canvas with async rendering, 1000ms animation + processing time)
+    // Wait for charts to fully render (Chart.js uses Canvas with async rendering)
     // Cannot use selector wait as Canvas rendering and Chart.js animations don't emit detectable DOM events
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(CHART_RENDER_TIMEOUT);
 
     // Take screenshot of analytics page
     await expect(page).toHaveScreenshot('analytics-charts.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 300 // Charts can have rendering variations
+      // Analytics pages have multiple charts with data-driven variations
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_ANALYTICS
     });
   });
 
@@ -179,7 +190,7 @@ test.describe('Visual Regression Tests', () => {
     await expect(page).toHaveScreenshot('athlete-list-mobile.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 150
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_COMPLEX_PAGE
     });
   });
 
@@ -196,15 +207,16 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() =>
       console.debug('No charts found on dashboard')
     );
-    // Wait for Chart.js animation to complete (1000ms default animation duration)
+    // Wait for Chart.js animation to complete
     // Cannot use selector wait as Canvas rendering is async and doesn't emit DOM events
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
 
     // Take screenshot in tablet viewport
     await expect(page).toHaveScreenshot('dashboard-tablet.png', {
       fullPage: true,
       animations: 'disabled',
-      maxDiffPixels: 200
+      // Charts need higher tolerance due to Canvas rendering variations
+      maxDiffPixels: VISUAL_DIFF_TOLERANCE_CHARTS
     });
   });
 
@@ -225,15 +237,16 @@ test.describe('Visual Regression Tests', () => {
         console.debug('Dark mode class not detected on body/html')
       );
 
-      // Wait for CSS transition to complete (color changes, background transitions typically 300-500ms)
+      // Wait for CSS transition to complete (color changes, background transitions)
       // Cannot use selector wait as CSS color/background transitions don't emit detectable DOM events
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(CSS_TRANSITION_TIMEOUT);
 
       // Take screenshot in dark mode
       await expect(page).toHaveScreenshot('dashboard-dark-mode.png', {
         fullPage: true,
         animations: 'disabled',
-        maxDiffPixels: 200
+        // Charts need higher tolerance due to Canvas rendering variations
+        maxDiffPixels: VISUAL_DIFF_TOLERANCE_CHARTS
       });
     } else {
       console.log('⏭️  Skipping dark mode test: Dark mode toggle not found');

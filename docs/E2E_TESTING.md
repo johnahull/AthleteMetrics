@@ -215,6 +215,213 @@ Main config: `playwright.staging.config.ts`
 | `STAGING_PASSWORD` | Test user password | (required) |
 | `CI` | Enables CI-specific behavior | `false` |
 
+## Visual Regression Testing
+
+Visual regression tests use Playwright's screenshot comparison to detect unintended UI changes. These tests capture screenshots of pages/components and compare them against baseline images to catch visual bugs.
+
+### How Visual Regression Works
+
+1. **Baseline Creation**: First run creates baseline screenshots stored in `tests/e2e/__screenshots__/`
+2. **Comparison**: Subsequent runs compare new screenshots against baselines
+3. **Diff Detection**: Playwright highlights pixel differences above tolerance threshold
+4. **Test Failure**: Tests fail if differences exceed `maxDiffPixels` threshold
+
+### Running Visual Regression Tests
+
+```bash
+# Run all visual regression tests
+npm run test:staging -- visual-regression.spec.ts
+
+# Update baselines after intentional UI changes
+npm run test:staging -- visual-regression.spec.ts --update-snapshots
+
+# View diffs in HTML report
+npx playwright show-report
+```
+
+### Baseline Management
+
+**When to update baselines:**
+✅ Intentional UI/design changes
+✅ Component library updates (shadcn/ui)
+✅ Typography or spacing adjustments
+✅ Responsive breakpoint changes
+
+**When NOT to update:**
+❌ Flaky test failures (investigate root cause)
+❌ Random pixel differences (increase tolerance instead)
+❌ Environment-specific rendering (use separate baselines)
+
+### Visual Diff Tolerance Levels
+
+Tolerance values are defined in `tests/e2e/constants.ts`:
+
+| Tolerance Constant | Value | Used For | Why? |
+|-------------------|-------|----------|------|
+| `VISUAL_DIFF_TOLERANCE_STANDARD` | 100px | Static UI (forms, tables, modals) | Accounts for anti-aliasing, font rendering |
+| `VISUAL_DIFF_TOLERANCE_CHARTS` | 150px | Chart.js canvas elements | Canvas rendering varies slightly |
+| `VISUAL_DIFF_TOLERANCE_COMPLEX_PAGE` | 150px | Multi-component pages | Layout shifts, dynamic content |
+| `VISUAL_DIFF_TOLERANCE_ANALYTICS` | 200px | Analytics dashboards | Multiple charts + data variations |
+
+**Adjusting tolerance:**
+```typescript
+// In your test
+await expect(page).toHaveScreenshot('my-page.png', {
+  maxDiffPixels: VISUAL_DIFF_TOLERANCE_STANDARD, // Use constant
+  // or
+  maxDiffPixels: 250 // Custom value if needed
+});
+```
+
+### Environment-Specific Baselines
+
+Visual regression tests run against both STAGING and TESTING environments. Baseline management:
+
+**Approach 1: Shared Baselines (Current)**
+- Single set of baselines in `tests/e2e/__screenshots__/`
+- Tolerances account for minor environment differences
+- Simpler to maintain
+
+**Approach 2: Environment-Specific Baselines (Future)**
+- Separate baselines per environment
+- Tighter tolerances possible
+- More maintenance overhead
+
+### Troubleshooting Visual Regression Failures
+
+#### Problem: "Screenshot mismatch" on first run
+**Cause**: No baseline exists yet
+**Solution**: Run with `--update-snapshots` to create baseline
+```bash
+npm run test:staging -- visual-regression.spec.ts --update-snapshots
+```
+
+#### Problem: Consistent failures with small pixel diffs
+**Cause**: Font rendering, anti-aliasing differences between environments
+**Solution 1**: Increase `maxDiffPixels` tolerance
+**Solution 2**: Disable font anti-aliasing in Playwright config
+```typescript
+// playwright.staging.config.ts
+use: {
+  launchOptions: {
+    args: ['--font-render-hinting=none']
+  }
+}
+```
+
+#### Problem: Charts always fail visual regression
+**Cause**: Chart.js Canvas rendering is non-deterministic
+**Solution**:
+1. Use higher tolerance (`VISUAL_DIFF_TOLERANCE_CHARTS = 150`)
+2. Ensure animations are disabled (`animations: 'disabled'`)
+3. Wait for chart rendering to complete:
+```typescript
+await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
+```
+
+#### Problem: Flaky failures (pass/fail intermittently)
+**Cause**: Timing issues, animations not complete, async rendering
+**Solutions**:
+1. Add explicit waits before screenshots:
+```typescript
+await page.waitForSelector('canvas'); // Wait for chart canvas
+await page.waitForTimeout(CHART_RENDER_TIMEOUT); // Wait for rendering
+```
+2. Disable animations globally in test setup:
+```typescript
+await page.addStyleTag({
+  content: '*, *::before, *::after { animation-duration: 0s !important; }'
+});
+```
+
+#### Problem: Different screenshots in CI vs local
+**Cause**: OS-level font/rendering differences
+**Solutions**:
+1. Use Docker container for consistent rendering
+2. Use Playwright's `--debug` mode to inspect CI screenshots
+3. Download CI artifacts to compare locally:
+```bash
+# In GitHub Actions "Summary" tab
+# Download "e2e-test-results-<run-number>.zip"
+# Extract and view in playwright-report/
+```
+
+### Best Practices
+
+**1. Minimize Dynamic Content**
+```typescript
+// ❌ Bad: Date/time will always differ
+await expect(page).toHaveScreenshot('dashboard.png');
+
+// ✅ Good: Hide dynamic elements
+await page.addStyleTag({
+  content: '.timestamp, .live-data { visibility: hidden; }'
+});
+await expect(page).toHaveScreenshot('dashboard.png');
+```
+
+**2. Use Specific Selectors**
+```typescript
+// ❌ Bad: Full page screenshot includes dynamic content
+await expect(page).toHaveScreenshot('page.png');
+
+// ✅ Good: Screenshot specific component
+const modal = page.locator('[role="dialog"]');
+await expect(modal).toHaveScreenshot('modal.png');
+```
+
+**3. Wait for Stability**
+```typescript
+// ❌ Bad: Screenshot immediately
+await page.goto('/analytics');
+await expect(page).toHaveScreenshot();
+
+// ✅ Good: Wait for all content to load and animate
+await page.goto('/analytics');
+await page.waitForLoadState('networkidle');
+await page.waitForSelector('canvas');
+await page.waitForTimeout(CHART_RENDER_TIMEOUT);
+await expect(page).toHaveScreenshot();
+```
+
+**4. Baseline Versioning**
+- Commit baselines to git for version control
+- Update baselines in separate PRs when possible
+- Document baseline changes in commit messages
+```bash
+git add tests/e2e/__screenshots__/
+git commit -m "chore(e2e): update visual regression baselines for new dashboard design"
+```
+
+### Visual Regression Coverage
+
+Current coverage (see `tests/e2e/visual-regression.spec.ts`):
+- ✅ Login page layout
+- ✅ Dashboard overview (with charts)
+- ✅ Athlete list table
+- ✅ Athlete form modal
+- ✅ Measurement entry form
+- ✅ CSV import wizard
+- ✅ Analytics charts
+- ✅ Mobile responsive (iPhone SE)
+- ✅ Tablet responsive (iPad)
+- ✅ Dark mode (if supported)
+
+**Adding new visual tests:**
+```typescript
+test('new feature matches baseline', async ({ page }) => {
+  await loginAsDefaultUser(page);
+  await page.goto('/new-feature');
+  await page.waitForLoadState('networkidle');
+
+  await expect(page).toHaveScreenshot('new-feature.png', {
+    fullPage: true,
+    animations: 'disabled',
+    maxDiffPixels: VISUAL_DIFF_TOLERANCE_STANDARD
+  });
+});
+```
+
 ## Troubleshooting
 
 ### "Tests are not running in CI"

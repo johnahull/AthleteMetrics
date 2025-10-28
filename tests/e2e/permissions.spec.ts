@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginWithCredentials, logout } from './helpers/auth';
 import { goToAthletes, goToDashboard, goToOrganizations } from './helpers/navigation';
 import { getUserByRole } from './fixtures/test-users';
+import { CHART_ANIMATION_TIMEOUT } from './constants';
 
 /**
  * TIER 1 CRITICAL: RBAC/Permissions Tests
@@ -549,8 +550,8 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
     await page.click('[data-testid="submit-athlete"], button:has-text("Save")');
     await page.waitForLoadState('networkidle');
 
-    // Wait a moment for athlete to be created
-    await page.waitForTimeout(1000);
+    // Wait a moment for athlete to be created and UI to update
+    await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
 
     // Navigate to athletes page and search for the test athlete
     await goToAthletes(page);
