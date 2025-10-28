@@ -89,6 +89,7 @@ async function globalSetup(config: FullConfig) {
     await page.goto(`${STAGING_URL}/login`);
     await page.waitForLoadState('networkidle');
 
+    // Use actual form field names (not data-testids)
     await page.fill('input[name="username"]', STAGING_USERNAME);
     await page.fill('input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
