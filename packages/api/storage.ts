@@ -8,6 +8,7 @@ import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
 
 /**
  * Helper function to create a WHERE condition that excludes soft-deleted users.
@@ -257,7 +258,7 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     // For invited users, password might be empty - use a placeholder
     const password = user.password || "INVITATION_PENDING";
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
     // Calculate fullName and birthYear from provided data
     const fullName = `${user.firstName} ${user.lastName}`;
@@ -355,7 +356,7 @@ export class DatabaseStorage implements IStorage {
     });
 
     if (user.password) {
-      updateData.password = await bcrypt.hash(user.password, 10);
+      updateData.password = await bcrypt.hash(user.password, BCRYPT_SALT_ROUNDS);
     }
 
     // Update computed fields if relevant data changed

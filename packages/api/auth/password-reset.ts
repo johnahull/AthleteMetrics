@@ -3,6 +3,7 @@ import { storage } from '../storage';
 import { AuthSecurity } from './security';
 import { passwordSchema } from '@shared/password-validation';
 import bcrypt from 'bcrypt';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 export class PasswordResetService {
   private static readonly RESET_TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour
@@ -148,9 +149,9 @@ export class PasswordResetService {
       }
 
       const userId = tokenValidation.userId!;
-      
+
       // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
       
       // Update password and mark token as used
       await storage.updateUserPassword(userId, hashedPassword);
@@ -316,7 +317,7 @@ export class PasswordResetService {
       }
 
       // Hash and update password
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
       await storage.updateUserPassword(userId, hashedPassword);
       await storage.updatePasswordChangedAt(userId);
 

@@ -31,8 +31,8 @@ import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '@shared/schema';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
-const BCRYPT_SALT_ROUNDS = 10;
 const E2E_ORG_NAME = 'E2E Test Organization';
 const E2E_TEAM_NAME = 'E2E Test Team';
 
@@ -123,9 +123,12 @@ async function globalSetup(config: FullConfig) {
   console.log('\n📦 Setting up test data in database...');
 
   // Connect to database
+  // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
+  const isLocalhost = process.env.DATABASE_URL.match(/localhost|127\.0\.0\.1|::1/);
   const client = postgres(process.env.DATABASE_URL, {
     max: 1,
-    ssl: process.env.DATABASE_URL.includes('localhost') ? false : 'require',
+    connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
+    ssl: isLocalhost ? false : 'require',
   });
   const db = drizzle(client, { schema });
 
@@ -139,7 +142,7 @@ async function globalSetup(config: FullConfig) {
     if (!organization) {
       const [newOrg] = await db.insert(schema.organizations).values({
         name: E2E_ORG_NAME,
-        description: 'E2E Test Organization - Managed by Playwright tests',
+        description: `E2E Test Organization - Created by Playwright global setup (${new Date().toISOString()})`,
         isActive: true,
       }).returning();
       organization = newOrg;

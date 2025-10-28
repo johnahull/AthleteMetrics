@@ -135,9 +135,12 @@ async function cleanupViaAPI() {
 async function cleanupDatabase() {
   console.log('🗑️  Cleaning up database resources...');
 
+  // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
+  const isLocalhost = process.env.DATABASE_URL!.match(/localhost|127\.0\.0\.1|::1/);
   const client = postgres(process.env.DATABASE_URL!, {
     max: 1,
-    ssl: process.env.DATABASE_URL!.includes('localhost') ? false : 'require',
+    connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
+    ssl: isLocalhost ? false : 'require',
   });
   const db = drizzle(client, { schema });
 
@@ -155,13 +158,10 @@ async function cleanupDatabase() {
 
     console.log(`  Found organization: ${organization.name} (${organization.id})`);
 
-    // 2. Find all E2E test users (by username prefix or organization membership)
+    // 2. Find all E2E test users (by firstName 'E2E' which matches all setup users)
     console.log('  👥 Finding E2E test users...');
     const e2eUsers = await db.query.users.findMany({
-      where: or(
-        like(schema.users.username, 'e2e-%'),
-        eq(schema.users.firstName, 'E2E')
-      ),
+      where: eq(schema.users.firstName, 'E2E'),
     });
 
     console.log(`  Found ${e2eUsers.length} E2E test users`);
@@ -194,12 +194,14 @@ async function cleanupDatabase() {
       }
     }
 
-    // 5. Delete measurements for E2E users (no FK constraint, but good practice)
+    // 5. Delete measurements for E2E users
+    // Note: measurements table has a userId field but no FK constraint defined in schema
+    // We delete them explicitly for data completeness before deleting users
     if (e2eUsers.length > 0) {
       console.log('  📊 Deleting measurements...');
       for (const user of e2eUsers) {
         try {
-          const deleted = await db.delete(schema.measurements)
+          await db.delete(schema.measurements)
             .where(eq(schema.measurements.userId, user.id));
           console.log(`    ✓ Deleted measurements for ${user.username}`);
         } catch (error) {
