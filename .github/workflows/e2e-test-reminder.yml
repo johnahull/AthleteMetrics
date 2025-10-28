@@ -75,12 +75,18 @@ jobs:
           CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         with:
           script: |
-            const changedFilesStr = process.env.CHANGED_FILES || '';
-            const changedFiles = changedFilesStr.split(' ').filter(f => f.length > 0);
-            const fileList = changedFiles.slice(0, 10).map(f => `- \`${f}\``).join('\n');
-            const moreFiles = changedFiles.length > 10 ? `\n... and ${changedFiles.length - 10} more` : '';
+            try {
+              const changedFilesStr = process.env.CHANGED_FILES || '';
+              if (!changedFilesStr) {
+                console.log('No changed files detected');
+                return;
+              }
 
-            const body = `## ⚠️ E2E Test Coverage Reminder
+              const changedFiles = changedFilesStr.split(/\s+/).filter(f => f.length > 0);
+              const fileList = changedFiles.slice(0, 10).map(f => `- \`${f}\``).join('\n');
+              const moreFiles = changedFiles.length > 10 ? `\n... and ${changedFiles.length - 10} more` : '';
+
+              const body = `## ⚠️ E2E Test Coverage Reminder
 
             This PR modifies user-facing code but doesn't include E2E test changes.
 
@@ -135,34 +141,40 @@ jobs:
 
             *This is a non-blocking reminder. The PR can still be merged, but please ensure adequate test coverage.*`;
 
-            // Check if we've already posted this comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const botComment = comments.find(comment =>
-              comment.user?.type === 'Bot' &&
-              comment.body?.includes('E2E Test Coverage Reminder')
-            );
-
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
+              // Check if we've already posted this comment
+              const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: body
               });
+
+              const botComment = comments.find(comment =>
+                comment.user?.type === 'Bot' &&
+                comment.body?.includes('E2E Test Coverage Reminder')
+              );
+
+              if (botComment) {
+                // Update existing comment
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+                console.log('Updated existing E2E test reminder comment');
+              } else {
+                // Create new comment
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: body
+                });
+                console.log('Posted E2E test reminder comment');
+              }
+            } catch (error) {
+              console.error('Failed to post E2E reminder:', error);
+              // Don't fail the workflow - this is a non-blocking reminder
             }
 
       - name: Summary
