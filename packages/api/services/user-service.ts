@@ -262,7 +262,7 @@ export class UserService extends BaseService {
       const validatedData = createSiteAdminSchema.parse(adminData);
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(validatedData.password, 10);
+      const hashedPassword = await bcrypt.hash(validatedData.password, BCRYPT_SALT_ROUNDS);
 
       const userData: InsertUser = {
         username: validatedData.username,
