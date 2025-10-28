@@ -78,7 +78,9 @@ jobs:
         with:
           script: |
             try {
-              const changedFilesStr = process.env.CHANGED_FILES || '';
+              // Sanitize CHANGED_FILES to prevent script injection via malicious filenames
+              // Only allow: word characters, whitespace, hyphens, dots, forward slashes
+              const changedFilesStr = (process.env.CHANGED_FILES || '').replace(/[^\w\s\-./]/g, '');
               if (!changedFilesStr) {
                 console.log('No changed files detected');
                 return;
