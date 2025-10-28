@@ -6,13 +6,13 @@ The testing environment is already configured and ready to use!
 
 ### 1. Environment File
 
-Your testing credentials are already configured in `.env.testing`:
+Configure your testing credentials in `.env.testing`:
 
 ```bash
-TESTING_URL=https://athletemetrics-testing.up.railway.app
-TESTING_USERNAME=texasfcadmin1
-TESTING_PASSWORD=Way2good@99?
-TESTING_DATABASE_URL=postgresql://postgres:rdnrfZfXPiZWKbahqepvoYnYerNoLiRG@maglev.proxy.rlwy.net:29985/railway
+TESTING_URL=https://your-testing-environment.up.railway.app
+TESTING_USERNAME=your-testing-username
+TESTING_PASSWORD=your-testing-password
+TESTING_DATABASE_URL=postgresql://user:password@host:port/database
 ```
 
 **Note**: This file is gitignored and won't be committed to the repository.
@@ -60,7 +60,7 @@ This means:
 With `TESTING_DATABASE_URL` configured, the global setup will:
 
 1. ✅ Verify testing environment is accessible
-2. ✅ Verify login credentials work (`texasfcadmin1` / `Way2good@99?`)
+2. ✅ Verify login credentials work
 3. ✅ Create "E2E Test Organization" (idempotent - checks if exists)
 4. ✅ Create test user with org admin role
 5. ✅ Create "E2E Test Team" within the organization
@@ -104,8 +104,8 @@ npx playwright show-trace test-results-testing/<test-name>/trace.zip
 
 | Feature | Staging | Testing |
 |---------|---------|---------|
-| **URL** | Custom staging URL | `https://athletemetrics-testing.up.railway.app` |
-| **Username** | `STAGING_USERNAME` | `texasfcadmin1` |
+| **URL** | Custom staging URL | `TESTING_URL` |
+| **Username** | `STAGING_USERNAME` | `TESTING_USERNAME` |
 | **Database** | `DATABASE_URL` | `TESTING_DATABASE_URL` |
 | **Config File** | `playwright.staging.config.ts` | `playwright.testing.config.ts` |
 | **Run Command** | `npm run test:staging` | `npm run test:testing` |
@@ -123,20 +123,13 @@ curl -I https://athletemetrics-testing.up.railway.app
 
 ### Tests fail with "Invalid Credentials"
 
-Verify credentials in `.env.testing` match the testing environment:
-- Username: `texasfcadmin1`
-- Password: `Way2good@99?`
+Verify credentials in `.env.testing` match the testing environment.
 
 ### Database connection fails
 
 Verify `TESTING_DATABASE_URL` is correct:
 ```bash
 echo $TESTING_DATABASE_URL
-```
-
-Should output:
-```
-postgresql://postgres:rdnrfZfXPiZWKbahqepvoYnYerNoLiRG@maglev.proxy.rlwy.net:29985/railway
 ```
 
 ### Clear test data manually
