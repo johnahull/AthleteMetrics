@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAsDefaultUser } from './helpers/auth';
 import { goToImportExport } from './helpers/navigation';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 /**
  * TIER 1 CRITICAL: CSV Import Tests
@@ -22,6 +23,10 @@ import path from 'path';
  */
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
+
+// ES module compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // CSV file paths (will be created in fixtures)
 const VALID_ATHLETES_CSV = path.join(__dirname, 'fixtures/csv-files/valid-athletes.csv');
