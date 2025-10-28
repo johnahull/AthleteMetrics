@@ -4,6 +4,7 @@
 
 import { Page } from '@playwright/test';
 import { goToAthletes } from './navigation';
+import { clickWithFallback, fillWithFallback } from './selectors';
 
 /**
  * Create athlete via UI
@@ -19,26 +20,33 @@ export async function createAthlete(page: Page, athleteData: {
   gender?: string;
 }): Promise<void> {
   await goToAthletes(page);
-  await page.click('[data-testid="add-athlete-button"]', { timeout: 5000 }).catch((err) => {
-    console.warn('Add athlete button testid not found, using text selector:', err instanceof Error ? err.message : err);
-    return page.click('button:has-text("Add Athlete")');
-  });
+
+  await clickWithFallback(
+    page,
+    '[data-testid="add-athlete-button"]',
+    'button:has-text("Add Athlete")',
+    'Add athlete button',
+    { timeout: 5000 }
+  );
 
   // Fill form
-  await page.fill('[name="firstName"]', athleteData.firstName);
-  await page.fill('[name="lastName"]', athleteData.lastName);
-  if (athleteData.email) await page.fill('[name="email"]', athleteData.email);
-  if (athleteData.birthDate) await page.fill('[name="birthDate"]', athleteData.birthDate);
-  if (athleteData.school) await page.fill('[name="school"]', athleteData.school);
+  await fillWithFallback(page, '[data-testid="athlete-first-name"]', '[name="firstName"]', athleteData.firstName, 'First name');
+  await fillWithFallback(page, '[data-testid="athlete-last-name"]', '[name="lastName"]', athleteData.lastName, 'Last name');
+  if (athleteData.email) await fillWithFallback(page, '[data-testid="athlete-email"]', '[name="email"]', athleteData.email, 'Email');
+  if (athleteData.birthDate) await fillWithFallback(page, '[data-testid="athlete-birth-date"]', '[name="birthDate"]', athleteData.birthDate, 'Birth date');
+  if (athleteData.school) await fillWithFallback(page, '[data-testid="athlete-school"]', '[name="school"]', athleteData.school, 'School');
   if (athleteData.sport) await page.selectOption('[name="sport"]', athleteData.sport);
-  if (athleteData.position) await page.fill('[name="position"]', athleteData.position);
+  if (athleteData.position) await fillWithFallback(page, '[data-testid="athlete-position"]', '[name="position"]', athleteData.position, 'Position');
   if (athleteData.gender) await page.selectOption('[name="gender"]', athleteData.gender);
 
   // Submit
-  await page.click('[data-testid="submit-athlete"]', { timeout: 5000 }).catch((err) => {
-    console.warn('Submit athlete button testid not found, using type selector:', err instanceof Error ? err.message : err);
-    return page.click('button[type="submit"]');
-  });
+  await clickWithFallback(
+    page,
+    '[data-testid="submit-athlete"]',
+    'button[type="submit"]',
+    'Submit athlete button',
+    { timeout: 5000 }
+  );
 
   await page.waitForLoadState('networkidle');
 }
@@ -48,23 +56,25 @@ export async function createAthlete(page: Page, athleteData: {
  */
 export async function editAthlete(page: Page, athleteName: string, updates: Record<string, string>): Promise<void> {
   await goToAthletes(page);
-  await page.click(`tr:has-text("${athleteName}") [data-testid="edit-athlete"]`).catch((error) => {
-    console.debug(`editAthlete: edit button testid failed for "${athleteName}", using fallback`,
-      error instanceof Error ? error.message : error
-    );
-    return page.click(`tr:has-text("${athleteName}") button:has-text("Edit")`);
-  });
+
+  await clickWithFallback(
+    page,
+    `tr:has-text("${athleteName}") [data-testid="edit-athlete"]`,
+    `tr:has-text("${athleteName}") button:has-text("Edit")`,
+    `Edit button for ${athleteName}`
+  );
 
   for (const [field, value] of Object.entries(updates)) {
+    // Note: Could be enhanced with fillWithFallback if testid attributes are added
     await page.fill(`[name="${field}"]`, value);
   }
 
-  await page.click('[data-testid="submit-athlete"]').catch((error) => {
-    console.debug('editAthlete: submit button testid failed, using fallback',
-      error instanceof Error ? error.message : error
-    );
-    return page.click('button[type="submit"]');
-  });
+  await clickWithFallback(
+    page,
+    '[data-testid="submit-athlete"]',
+    'button[type="submit"]',
+    'Submit athlete button'
+  );
 
   await page.waitForLoadState('networkidle');
 }
@@ -74,20 +84,21 @@ export async function editAthlete(page: Page, athleteName: string, updates: Reco
  */
 export async function deleteAthlete(page: Page, athleteName: string): Promise<void> {
   await goToAthletes(page);
-  await page.click(`tr:has-text("${athleteName}") [data-testid="delete-athlete"]`).catch((error) => {
-    console.debug(`deleteAthlete: delete button testid failed for "${athleteName}", using fallback`,
-      error instanceof Error ? error.message : error
-    );
-    return page.click(`tr:has-text("${athleteName}") button:has-text("Delete")`);
-  });
+
+  await clickWithFallback(
+    page,
+    `tr:has-text("${athleteName}") [data-testid="delete-athlete"]`,
+    `tr:has-text("${athleteName}") button:has-text("Delete")`,
+    `Delete button for ${athleteName}`
+  );
 
   // Confirm deletion
-  await page.click('[data-testid="confirm-delete"]').catch((error) => {
-    console.debug('deleteAthlete: confirm button testid failed, using fallback',
-      error instanceof Error ? error.message : error
-    );
-    return page.click('button:has-text("Confirm")');
-  });
+  await clickWithFallback(
+    page,
+    '[data-testid="confirm-delete"]',
+    'button:has-text("Confirm")',
+    'Confirm delete button'
+  );
 
   await page.waitForLoadState('networkidle');
 }
@@ -97,12 +108,15 @@ export async function deleteAthlete(page: Page, athleteName: string): Promise<vo
  */
 export async function searchAthlete(page: Page, searchTerm: string): Promise<void> {
   await goToAthletes(page);
-  await page.fill('[data-testid="athlete-search"]', searchTerm).catch((error) => {
-    console.debug('searchAthlete: search input testid failed, using fallback',
-      error instanceof Error ? error.message : error
-    );
-    return page.fill('input[placeholder*="Search" i]', searchTerm);
-  });
+
+  await fillWithFallback(
+    page,
+    '[data-testid="athlete-search"]',
+    'input[placeholder*="Search" i]',
+    searchTerm,
+    'Athlete search input'
+  );
+
   await page.waitForLoadState('networkidle');
 }
 
@@ -111,6 +125,13 @@ export async function searchAthlete(page: Page, searchTerm: string): Promise<voi
  */
 export async function goToAthleteProfile(page: Page, athleteName: string): Promise<void> {
   await goToAthletes(page);
-  await page.click(`tr:has-text("${athleteName}") a, tr:has-text("${athleteName}") button:has-text("View")`);
+
+  await clickWithFallback(
+    page,
+    `tr:has-text("${athleteName}") [data-testid="view-athlete"]`,
+    `tr:has-text("${athleteName}") a, tr:has-text("${athleteName}") button:has-text("View")`,
+    `View profile link for ${athleteName}`
+  );
+
   await page.waitForLoadState('networkidle');
 }
