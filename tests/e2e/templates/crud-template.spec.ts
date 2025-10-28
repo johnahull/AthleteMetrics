@@ -50,7 +50,7 @@ test.describe('[ENTITY] CRUD Tests', () => {
     await page.click('[data-testid="add-[entity]-button"]');
 
     // Wait for modal/form to appear
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]');
 
     // Fill in form fields
     // TODO: Update selectors and fields to match your actual form
@@ -66,10 +66,10 @@ test.describe('[ENTITY] CRUD Tests', () => {
     await page.click('button[type="submit"]:has-text("Add [ENTITY]")');
 
     // Wait for modal to close
-    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden' });
 
     // Verify [ENTITY] appears in the list
-    await page.waitForSelector(`text=${testData.name}`, { timeout: 10000 });
+    await page.waitForSelector(`text=${testData.name}`);
     const entityRow = await page.locator(`text=${testData.name}`).count();
     expect(entityRow).toBeGreaterThan(0);
 
@@ -81,21 +81,21 @@ test.describe('[ENTITY] CRUD Tests', () => {
   test('should successfully edit an existing [ENTITY]', async ({ page }) => {
     // First, create an [ENTITY] to edit
     await page.click('[data-testid="add-[entity]-button"]');
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]');
     await page.fill('[data-testid="input-[entity]-name"]', testData.name);
     await page.fill('[data-testid="input-[entity]-field1"]', testData.field1);
     await page.click('button[type="submit"]:has-text("Add [ENTITY]")');
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for [ENTITY] to appear in list
-    await page.waitForSelector('[data-testid^="button-edit-[entity]-"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid^="button-edit-[entity]-"]');
 
     // Find and click edit button
     const editButton = page.locator('[data-testid^="button-edit-[entity]-"]').first();
     await editButton.click();
 
     // Wait for edit modal to appear
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]');
 
     // Update a field
     const updatedValue = 'Updated Value';
@@ -105,10 +105,10 @@ test.describe('[ENTITY] CRUD Tests', () => {
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Update")');
 
     // Wait for modal to close
-    await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]', { state: 'hidden' });
 
     // Verify changes were saved
-    await page.waitForSelector(`text=${updatedValue}`, { timeout: 10000 });
+    await page.waitForSelector(`text=${updatedValue}`);
     const updated = await page.locator(`text=${updatedValue}`).count();
     expect(updated).toBeGreaterThan(0);
   });
@@ -116,7 +116,7 @@ test.describe('[ENTITY] CRUD Tests', () => {
   test('should successfully delete a [ENTITY]', async ({ page }) => {
     // First, create an [ENTITY] to delete
     await page.click('[data-testid="add-[entity]-button"]');
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]');
     await page.fill('[data-testid="input-[entity]-name"]', testData.name);
     await page.fill('[data-testid="input-[entity]-field1"]', testData.field1);
     await page.click('button[type="submit"]:has-text("Add [ENTITY]")');
@@ -154,13 +154,13 @@ test.describe('[ENTITY] CRUD Tests', () => {
   test('should show validation errors for required fields', async ({ page }) => {
     // Click "Add [ENTITY]" button
     await page.click('[data-testid="add-[entity]-button"]');
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]');
 
     // Try to submit without filling required fields
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add [ENTITY]")');
 
     // Wait for validation errors to appear
-    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i', { timeout: 5000 });
+    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i');
 
     // Should still be on the form (modal visible)
     const modalVisible = await page.locator('[role="dialog"]').count();
@@ -178,12 +178,12 @@ test.describe('[ENTITY] CRUD Tests', () => {
     if (entityCount === 0) {
       // Create an [ENTITY] first
       await page.click('[data-testid="add-[entity]-button"]');
-      await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+      await page.waitForSelector('[role="dialog"]');
       await page.fill('[data-testid="input-[entity]-name"]', testData.name);
       await page.fill('[data-testid="input-[entity]-field1"]', testData.field1);
       await page.click('button[type="submit"]:has-text("Add [ENTITY]")');
       await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
-      await page.waitForSelector('[data-testid^="button-view-[entity]-"]', { timeout: 10000 });
+      await page.waitForSelector('[data-testid^="button-view-[entity]-"]');
     }
 
     // Click "View" button for first [ENTITY]
@@ -204,7 +204,7 @@ test.describe('[ENTITY] CRUD Tests', () => {
     // Create a test [ENTITY] with unique name
     const uniqueName = `UniqueSearch${timestamp}`;
     await page.click('[data-testid="add-[entity]-button"]');
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await page.waitForSelector('[role="dialog"]');
     await page.fill('[data-testid="input-[entity]-name"]', uniqueName);
     await page.fill('[data-testid="input-[entity]-field1"]', testData.field1);
     await page.click('button[type="submit"]:has-text("Add [ENTITY]")');

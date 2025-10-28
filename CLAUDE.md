@@ -221,12 +221,17 @@ When ENABLED:
 # Run all E2E tests against staging
 npm run test:staging
 
+# Run all E2E tests against testing environment
+npm run test:testing
+
 # Run specific test file
 npx playwright test tests/e2e/athlete-crud.spec.ts --config=playwright.staging.config.ts
 
 # Run with UI (debugging)
 npx playwright test --ui --config=playwright.staging.config.ts
 ```
+
+**Multi-Environment Setup**: See [TESTING_ENV_SETUP.md](TESTING_ENV_SETUP.md) for configuring the testing environment with credentials and database connection.
 
 ## Project Architecture
 

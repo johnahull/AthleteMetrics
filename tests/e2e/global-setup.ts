@@ -106,6 +106,17 @@ async function globalSetup(config: FullConfig) {
     );
   }
 
+  // Additional URL pattern validation to prevent tests from running against production domains
+  if (TARGET_URL.includes('athletemetrics.com') ||
+      TARGET_URL.includes('production') ||
+      TARGET_URL.match(/prod\./i)) {
+    throw new Error(
+      'E2E tests cannot run against production URLs. ' +
+      `Detected production URL pattern in: ${TARGET_URL}. ` +
+      'Tests should only run against staging, testing, or local development environments.'
+    );
+  }
+
   // Verify credentials are provided
   if (!TARGET_USERNAME || !TARGET_PASSWORD) {
     throw new Error(
