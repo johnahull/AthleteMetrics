@@ -98,8 +98,7 @@ async function globalSetup(config: FullConfig) {
     await page.click('button[type="submit"]');
 
     await page.waitForURL(url => !url.pathname.includes('/login'), {
-      timeout: 10000,
-      waitUntil: 'networkidle'
+      timeout: 10000
     });
 
     if (page.url().includes('/login')) {

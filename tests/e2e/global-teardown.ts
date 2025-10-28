@@ -192,7 +192,8 @@ async function cleanupDatabase() {
           .where(inArray(schema.sessions.userId, userIds));
         console.log(`    ✓ Deleted sessions for ${e2eUsers.length} users`);
       } catch (error) {
-        console.warn('    ⚠ Failed to delete sessions:', error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn('    ⚠ Failed to delete sessions:', errorMsg);
         // Continue cleanup
       }
 
@@ -203,7 +204,8 @@ async function cleanupDatabase() {
           .where(inArray(schema.auditLogs.userId, userIds));
         console.log(`    ✓ Deleted audit logs for ${e2eUsers.length} users`);
       } catch (error) {
-        console.warn('    ⚠ Failed to delete audit logs:', error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn('    ⚠ Failed to delete audit logs:', errorMsg);
         // Continue cleanup
       }
 
@@ -216,7 +218,8 @@ async function cleanupDatabase() {
           .where(inArray(schema.measurements.userId, userIds));
         console.log(`    ✓ Deleted measurements for ${e2eUsers.length} users`);
       } catch (error) {
-        console.warn('    ⚠ Failed to delete measurements:', error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn('    ⚠ Failed to delete measurements:', errorMsg);
         // Continue cleanup
       }
     }
@@ -239,7 +242,8 @@ async function cleanupDatabase() {
         console.log('    ℹ️  No teams found');
       }
     } catch (error) {
-      console.warn('    ⚠ Failed to delete user-team assignments:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn('    ⚠ Failed to delete user-team assignments:', errorMsg);
       // Continue cleanup
     }
 
@@ -250,7 +254,8 @@ async function cleanupDatabase() {
         .where(eq(schema.userOrganizations.organizationId, organization.id));
       console.log('    ✓ Deleted user-organization assignments');
     } catch (error) {
-      console.warn('    ⚠ Failed to delete user-organization assignments:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn('    ⚠ Failed to delete user-organization assignments:', errorMsg);
       // Continue cleanup
     }
 
@@ -262,7 +267,8 @@ async function cleanupDatabase() {
         .returning();
       console.log(`    ✓ Deleted ${teams.length} teams`);
     } catch (error) {
-      console.warn('    ⚠ Failed to delete teams:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn('    ⚠ Failed to delete teams:', errorMsg);
       // Continue cleanup
     }
 
@@ -274,7 +280,8 @@ async function cleanupDatabase() {
           await db.delete(schema.users).where(eq(schema.users.id, user.id));
           console.log(`    ✓ Deleted user: ${user.username}`);
         } catch (error) {
-          console.warn(`    ⚠ Failed to delete user ${user.username}:`, error);
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.warn(`    ⚠ Failed to delete user ${user.username}:`, errorMsg);
           // Continue cleanup
         }
       }
@@ -286,7 +293,8 @@ async function cleanupDatabase() {
       await db.delete(schema.organizations).where(eq(schema.organizations.id, organization.id));
       console.log(`    ✓ Deleted organization: ${organization.name}`);
     } catch (error) {
-      console.warn('    ⚠ Failed to delete organization:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn('    ⚠ Failed to delete organization:', errorMsg);
       // Don't throw - we've cleaned up what we could
     }
 
