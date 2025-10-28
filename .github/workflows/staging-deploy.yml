@@ -182,11 +182,53 @@ jobs:
           HEALTH_CHECK_TIMEOUT: 60000
           HEALTH_CHECK_RETRIES: 5
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests against deployed staging
+        id: e2e-tests
+        continue-on-error: true
+        run: npm run test:staging
+        env:
+          CI: true
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          STAGING_USERNAME: ${{ secrets.STAGING_USERNAME }}
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+
+      - name: Upload E2E test artifacts
+        if: always() && steps.e2e-tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-${{ github.run_number }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Report E2E test results
+        if: always() && steps.e2e-tests.outcome != 'skipped'
+        env:
+          E2E_OUTCOME: ${{ steps.e2e-tests.outcome }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ "$E2E_OUTCOME" == "success" ]; then
+            echo "✅ E2E tests passed!"
+          else
+            echo "⚠️  E2E tests failed!"
+            echo "View test artifacts: https://github.com/$REPO/actions/runs/$RUN_ID"
+            echo ""
+            echo "Note: Deployment succeeded but E2E tests need attention."
+            echo "This is a non-blocking failure - please review and fix failing tests."
+          fi
+
       - name: Notify deployment success
         if: success()
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
         run: |
           echo "✅ Staging deployment successful!"
-          echo "URL: ${{ secrets.STAGING_URL }}"
+          echo "URL: $STAGING_URL"
 
       - name: Notify deployment failure
         if: failure()

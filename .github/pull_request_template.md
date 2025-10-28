@@ -48,6 +48,15 @@ If NO E2E tests were added:
 - [ ] Existing E2E tests cover the changes OR
 - [ ] Reason: _____________________________
 
+### Automated E2E Testing
+
+**After merging to `develop`:**
+- E2E tests run automatically after Railway deployment completes
+- Tests validate the deployed staging environment
+- Results appear in GitHub Actions workflow: "Deploy to Staging"
+- Test failures are non-blocking but should be addressed promptly
+- Artifacts (screenshots, videos, HTML report) are available for debugging
+
 ## Documentation
 - [ ] Updated relevant documentation (README, API docs, etc.)
 - [ ] Updated CHANGELOG.md (if applicable)
