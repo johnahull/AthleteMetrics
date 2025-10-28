@@ -7,7 +7,7 @@ import { defineConfig, devices } from '@playwright/test';
  * It runs tests sequentially to avoid race conditions and captures screenshots/videos on failure.
  *
  * Environment Variables:
- * - TESTING_URL: Base URL of testing environment (default: https://athletemetrics-testing-testing.up.railway.app)
+ * - TESTING_URL: Base URL of testing environment (default: https://athletemetrics-testing.up.railway.app)
  * - TESTING_USERNAME: Username for test account
  * - TESTING_PASSWORD: Password for test account
  * - TESTING_DATABASE_URL: PostgreSQL connection string for testing database (optional, for test data setup)
@@ -41,7 +41,7 @@ export default defineConfig({
   // Shared settings for all projects
   use: {
     // Base URL from environment variable
-    baseURL: process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app',
+    baseURL: process.env.TESTING_URL || 'https://athletemetrics-testing.up.railway.app',
 
     // Browser options
     trace: 'retain-on-failure', // Collect trace on failure
