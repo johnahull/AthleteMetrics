@@ -38,8 +38,7 @@ export async function loginWithCredentials(
   if (shouldSucceed) {
     // Wait for navigation away from login page (client-side redirect)
     await page.waitForURL(url => !url.pathname.includes('/login'), {
-      timeout: 10000,
-      waitUntil: 'networkidle'
+      timeout: 10000
     });
 
     // Verify we're logged in (should redirect away from /login)

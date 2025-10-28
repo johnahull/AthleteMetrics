@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { loginAsDefaultUser, loginWithCredentials, logout, isLoggedIn } from './helpers/auth';
 
 /**
  * TIER 1 CRITICAL: Authentication Flow Tests
  *
  * These tests verify the core authentication functionality of AthleteMetrics.
- * All tests follow TDD methodology: written first, then infrastructure built to make them pass.
+ * Uses helper functions from helpers/auth.ts for maintainable, reusable test code.
  *
  * Test Coverage:
  * - Login with valid credentials
@@ -13,8 +14,8 @@ import { test, expect } from '@playwright/test';
  * - Session persistence across page refreshes
  * - Unauthorized access protection
  * - Login form validation
- * - Session timeout handling
- * - Login redirect after successful authentication
+ * - Button state during authentication
+ * - Post-login redirect handling
  */
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
@@ -24,22 +25,8 @@ const STAGING_PASSWORD = process.env.STAGING_PASSWORD || '';
 test.describe('Authentication Flow Tests', () => {
 
   test('should successfully login with valid credentials and redirect to dashboard', async ({ page }) => {
-    // Navigate to login page
-    await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
-
-    // Verify we're on login page
-    expect(page.url()).toContain('/login');
-
-    // Fill in valid credentials
-    await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
-    await page.fill('[data-testid="input-password"]', STAGING_PASSWORD);
-
-    // Submit login form
-    await page.click('[data-testid="button-login"]');
-
-    // Wait for navigation after successful login
-    await page.waitForLoadState('networkidle');
+    // Login using helper function
+    await loginAsDefaultUser(page);
 
     // Should redirect away from /login page
     expect(page.url()).not.toContain('/login');
@@ -47,70 +34,44 @@ test.describe('Authentication Flow Tests', () => {
     // Should redirect to dashboard or home page
     expect(page.url()).toMatch(/\/(dashboard|$)/);
 
-    // Page should not show login form
-    const loginForm = await page.locator('[data-testid="button-login"]').count();
-    expect(loginForm).toBe(0);
+    // Verify user is logged in
+    const loggedIn = await isLoggedIn(page);
+    expect(loggedIn).toBe(true);
   });
 
   test('should show error message for invalid credentials', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
-
-    // Fill in invalid credentials
-    await page.fill('[data-testid="input-username"]', 'invalid_user');
-    await page.fill('[data-testid="input-password"]', 'wrong_password');
-
-    // Submit login form
-    await page.click('[data-testid="button-login"]');
-
-    // Wait for login request to complete
-    await page.waitForLoadState('networkidle');
+    // Attempt login with invalid credentials (shouldSucceed=false)
+    await loginWithCredentials(page, 'invalid_user', 'wrong_password', false);
 
     // Should still be on login page
     expect(page.url()).toContain('/login');
 
     // Should show error message (toast or inline error)
-    // Toast appears as dismissible message
     const errorMessage = await page.locator('text=/invalid.*username.*password/i').count();
     expect(errorMessage).toBeGreaterThan(0);
   });
 
   test('should successfully logout and redirect to login page', async ({ page }) => {
-    // First, login
-    await page.goto(`${STAGING_URL}/login`);
-    await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
-    await page.fill('[data-testid="input-password"]', STAGING_PASSWORD);
-    await page.click('[data-testid="button-login"]');
-    await page.waitForLoadState('networkidle');
+    // Login first
+    await loginAsDefaultUser(page);
 
-    // Verify we're logged in (not on login page)
+    // Verify we're logged in
     expect(page.url()).not.toContain('/login');
 
-    // Find and click logout button (usually in header/nav)
-    // Try multiple possible selectors
-    const logoutButton = page.locator('[data-testid="button-logout"]')
-      .or(page.locator('button:has-text("Logout")'))
-      .or(page.locator('button:has-text("Sign Out")'))
-      .or(page.locator('a:has-text("Logout")'));
-
-    await logoutButton.first().click();
-    await page.waitForLoadState('networkidle');
+    // Logout using helper function
+    await logout(page);
 
     // Should redirect to login page
     expect(page.url()).toContain('/login');
 
-    // Should see login form again
-    const loginForm = await page.locator('[data-testid="button-login"]').count();
-    expect(loginForm).toBeGreaterThan(0);
+    // Verify user is no longer logged in
+    const loggedIn = await isLoggedIn(page);
+    expect(loggedIn).toBe(false);
   });
 
   test('should maintain session after page refresh', async ({ page }) => {
     // Login
-    await page.goto(`${STAGING_URL}/login`);
-    await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
-    await page.fill('[data-testid="input-password"]', STAGING_PASSWORD);
-    await page.click('[data-testid="button-login"]');
-    await page.waitForLoadState('networkidle');
+    await loginAsDefaultUser(page);
 
     // Navigate to dashboard
     await page.goto(`${STAGING_URL}/dashboard`);
@@ -119,6 +80,10 @@ test.describe('Authentication Flow Tests', () => {
     // Should be on dashboard (not redirected to login)
     expect(page.url()).toContain('/dashboard');
 
+    // Verify logged in before refresh
+    let loggedIn = await isLoggedIn(page);
+    expect(loggedIn).toBe(true);
+
     // Refresh the page
     await page.reload();
     await page.waitForLoadState('networkidle');
@@ -126,6 +91,10 @@ test.describe('Authentication Flow Tests', () => {
     // Should still be on dashboard (session persisted)
     expect(page.url()).toContain('/dashboard');
     expect(page.url()).not.toContain('/login');
+
+    // Verify still logged in after refresh
+    loggedIn = await isLoggedIn(page);
+    expect(loggedIn).toBe(true);
   });
 
   test('should redirect unauthorized users to login page', async ({ page }) => {
@@ -189,11 +158,8 @@ test.describe('Authentication Flow Tests', () => {
     // Should be redirected to login
     expect(page.url()).toContain('/login');
 
-    // Login
-    await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
-    await page.fill('[data-testid="input-password"]', STAGING_PASSWORD);
-    await page.click('[data-testid="button-login"]');
-    await page.waitForLoadState('networkidle');
+    // Login using helper
+    await loginWithCredentials(page, STAGING_USERNAME, STAGING_PASSWORD, true);
 
     // After successful login, should redirect to originally requested page (or dashboard)
     // This is a nice-to-have feature, so we'll accept either the original page or dashboard
