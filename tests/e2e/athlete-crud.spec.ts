@@ -25,6 +25,7 @@ const testAthlete = {
   firstName: `TestFirst${timestamp}`,
   lastName: `TestLast${timestamp}`,
   email: `test${timestamp}@example.com`,
+  birthDate: '01/15/2005', // mm/dd/yyyy format
   birthYear: 2005,
   school: 'Test High School',
   sport: 'Soccer',
@@ -49,6 +50,9 @@ test.describe('Athlete CRUD Tests', () => {
     // Fill in athlete information using actual form data-testids
     await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
     await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+
+    // Fill in required birth date field
+    await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
 
     // Add email field (form uses dynamic email fields - need to click "+ Add Email" first)
     await page.click('[data-testid="button-add-email"]');
@@ -76,6 +80,7 @@ test.describe('Athlete CRUD Tests', () => {
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
     await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
     await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+    await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', testAthlete.email);
     await page.click('button[type="submit"]:has-text("Add Athlete")');
@@ -115,6 +120,7 @@ test.describe('Athlete CRUD Tests', () => {
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
     await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
     await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+    await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', testAthlete.email);
     await page.click('button[type="submit"]:has-text("Add Athlete")');
@@ -203,6 +209,7 @@ test.describe('Athlete CRUD Tests', () => {
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
       await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
       await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
+      await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
       await page.click('[data-testid="button-add-email"]');
       await page.fill('[data-testid="input-email-0"]', testAthlete.email);
       await page.click('button[type="submit"]:has-text("Add Athlete")');
@@ -233,6 +240,7 @@ test.describe('Athlete CRUD Tests', () => {
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
       await page.fill('[data-testid="input-athlete-firstname"]', `${testAthlete.firstName}${i}`);
       await page.fill('[data-testid="input-athlete-lastname"]', `${testAthlete.lastName}${i}`);
+      await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
       await page.click('[data-testid="button-add-email"]');
       await page.fill('[data-testid="input-email-0"]', `${timestamp}${i}@example.com`);
       await page.click('button[type="submit"]:has-text("Add Athlete")');
@@ -282,6 +290,7 @@ test.describe('Athlete CRUD Tests', () => {
     const uniqueName = `UniqueSearchTest${timestamp}`;
     await page.fill('[data-testid="input-athlete-firstname"]', uniqueName);
     await page.fill('[data-testid="input-athlete-lastname"]', 'SearchLastName');
+    await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', `search${timestamp}@example.com`);
     await page.click('button[type="submit"]:has-text("Add Athlete")');
