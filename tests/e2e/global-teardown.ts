@@ -1,26 +1,57 @@
-import { FullConfig, chromium } from '@playwright/test';
-
 /**
  * Global Teardown for E2E Tests
  *
- * This runs ONCE after all tests complete.
- * Use it to:
- * - Clean up test data
- * - Remove test athletes/measurements created during tests
- * - Archive test results
+ * This runs ONCE after all tests complete to clean up test data.
+ *
+ * Cleanup strategy:
+ * 1. Delete test users created during setup (will cascade to sessions, userOrganizations, userTeams)
+ * 2. Delete test teams (will cascade to userTeams)
+ * 3. Delete test organization (will cascade to teams, userOrganizations)
+ * 4. Delete orphaned measurements (no FK constraint, requires manual cleanup)
+ * 5. Clean up any test athletes created during tests via API
+ *
+ * The cleanup is designed to:
+ * - Be safe (only delete E2E test data)
+ * - Continue on errors (log but don't fail)
+ * - Respect foreign key constraints (delete in correct order)
  */
+
+import { FullConfig, chromium } from '@playwright/test';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { eq, or, like } from 'drizzle-orm';
+import * as schema from '@shared/schema';
+
+const E2E_ORG_NAME = 'E2E Test Organization';
 
 async function globalTeardown(config: FullConfig) {
   console.log('\n🧹 Starting E2E Test Teardown...\n');
+
+  // Clean up via API first (test athletes created during tests)
+  await cleanupViaAPI();
+
+  // Then clean up database resources created in setup
+  if (process.env.DATABASE_URL) {
+    await cleanupDatabase();
+  } else {
+    console.warn('⚠️  DATABASE_URL not set - skipping database cleanup');
+  }
+
+  console.log('\n✅ E2E Test Teardown Complete\n');
+}
+
+/**
+ * Clean up test athletes created during tests via API
+ */
+async function cleanupViaAPI() {
+  console.log('🗑️  Cleaning up test athletes via API...');
 
   const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
   const STAGING_USERNAME = process.env.STAGING_USERNAME;
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
 
-  // Skip cleanup if credentials not available
   if (!STAGING_USERNAME || !STAGING_PASSWORD) {
-    console.warn('⚠️  Skipping test data cleanup: STAGING credentials not set');
-    console.log('   Test data will remain in staging database');
+    console.warn('  ⚠️  STAGING credentials not set - skipping API cleanup');
     return;
   }
 
@@ -29,108 +60,220 @@ async function globalTeardown(config: FullConfig) {
   const page = await context.newPage();
 
   try {
-    // Step 1: Login to staging
-    console.log('🔐 Logging in to staging...');
+    // Login to staging
+    console.log('  🔐 Logging in...');
     await page.goto(`${STAGING_URL}/login`);
     await page.fill('input[name="username"]', STAGING_USERNAME);
     await page.fill('input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
-    // Step 2: Clean up test athletes (those created with "TestFirst" or "Test" prefix)
-    console.log('🗑️  Cleaning up test athletes...');
+    // Fetch all athletes
     const response = await page.request.get(`${STAGING_URL}/api/athletes`);
 
-    if (response.ok()) {
-      const athletes = await response.json();
+    if (!response.ok()) {
+      console.warn('  ⚠️  Failed to fetch athletes - skipping API cleanup');
+      return;
+    }
 
-      // Enhanced filtering to catch timestamp-based test names
-      // Matches: TestFirst123456789, Test123, TestLast987654321, etc.
-      const timestampPattern = /^Test\w*\d{10,}/; // Matches Test followed by 10+ digits
+    const athletes = await response.json();
 
-      const testAthletes = athletes.filter((athlete: any) => {
-        const firstNameMatch = athlete.firstName?.startsWith('Test') ||
-                              timestampPattern.test(athlete.firstName || '');
-        const lastNameMatch = athlete.lastName?.startsWith('Test') ||
-                             timestampPattern.test(athlete.lastName || '');
-        const emailMatch = athlete.emails?.some((email: string) =>
-          email.includes('@test.com') ||
-          email.includes('@example.com') ||
-          /test\d+@/.test(email) // Matches test123@, test456@, etc.
+    // Filter test athletes (those created with "Test" prefix or test emails)
+    const timestampPattern = /^Test\w*\d{10,}/;
+    const testAthletes = athletes.filter((athlete: any) => {
+      const firstNameMatch = athlete.firstName?.startsWith('Test') ||
+                            timestampPattern.test(athlete.firstName || '');
+      const lastNameMatch = athlete.lastName?.startsWith('Test') ||
+                           timestampPattern.test(athlete.lastName || '');
+      const emailMatch = athlete.emails?.some((email: string) =>
+        email.includes('@test.com') ||
+        email.includes('@example.com') ||
+        /test\d+@/.test(email)
+      );
+
+      return firstNameMatch || lastNameMatch || emailMatch;
+    });
+
+    console.log(`  Found ${testAthletes.length} test athletes to clean up`);
+
+    // Delete test athletes
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const athlete of testAthletes) {
+      try {
+        const deleteResponse = await page.request.delete(
+          `${STAGING_URL}/api/athletes/${athlete.id}`
         );
-
-        return firstNameMatch || lastNameMatch || emailMatch;
-      });
-
-      console.log(`   Found ${testAthletes.length} test athletes to clean up`);
-
-      // Track cleanup results
-      let successCount = 0;
-      let failureCount = 0;
-      const failures: Array<{ id: string; name: string; error: string }> = [];
-
-      // Delete test athletes (this will cascade to measurements)
-      for (const athlete of testAthletes) {
-        try {
-          const deleteResponse = await page.request.delete(
-            `${STAGING_URL}/api/athletes/${athlete.id}`
-          );
-          if (deleteResponse.ok()) {
-            successCount++;
-            console.log(`   ✓ Deleted test athlete: ${athlete.firstName} ${athlete.lastName}`);
-          } else {
-            failureCount++;
-            const errorMsg = `HTTP ${deleteResponse.status()}`;
-            failures.push({
-              id: athlete.id,
-              name: `${athlete.firstName} ${athlete.lastName}`,
-              error: errorMsg
-            });
-            console.warn(`   ⚠ Failed to delete athlete ${athlete.id}: ${errorMsg}`);
-          }
-        } catch (error) {
+        if (deleteResponse.ok()) {
+          successCount++;
+          console.log(`    ✓ Deleted: ${athlete.firstName} ${athlete.lastName}`);
+        } else {
           failureCount++;
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          failures.push({
-            id: athlete.id,
-            name: `${athlete.firstName} ${athlete.lastName}`,
-            error: errorMsg
-          });
-          console.warn(`   ⚠ Failed to delete athlete ${athlete.id}:`, errorMsg);
+          console.warn(`    ⚠ Failed to delete ${athlete.id}: HTTP ${deleteResponse.status()}`);
         }
-      }
-
-      // Summary
-      console.log(`\n   Cleanup summary:`);
-      console.log(`   ✓ Successfully deleted: ${successCount} athletes`);
-      if (failureCount > 0) {
-        console.warn(`\n⚠️  WARNING: Failed to delete ${failureCount} test athletes!`);
-        console.warn(`   Test data accumulation detected in staging database.`);
-        console.warn(`   This may cause future test conflicts or database pollution.`);
-        console.warn(`   Failed athletes:`, JSON.stringify(failures, null, 2));
-        console.warn(`\n   Action required: Manual cleanup may be needed in staging environment.`);
-        console.warn(`   Review the failed athletes list above for details.\n`);
+      } catch (error) {
+        failureCount++;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`    ⚠ Failed to delete ${athlete.id}: ${errorMsg}`);
       }
     }
 
-    console.log('✅ Test data cleanup complete');
-
-    // Log test results summary
-    console.log('\n📊 E2E Test Run Complete');
-    console.log('   See playwright-report/ for detailed results');
-
-    console.log('\n✅ E2E Test Teardown Complete\n');
+    console.log(`  ✅ API cleanup: ${successCount} deleted, ${failureCount} failed`);
   } catch (error) {
-    console.error('\n❌ E2E Test Teardown Failed:', error);
-    console.error('   Test data may remain in staging database');
-    console.error('   This could lead to test data accumulation and future test conflicts.');
-    console.error('   Manual cleanup of staging environment may be required.\n');
-    // Don't throw - teardown failures shouldn't fail the test run
-    // Rationale: Test suite results are more important than cleanup failures.
-    // However, we log prominently to ensure cleanup issues are noticed and addressed.
+    console.error('  ❌ API cleanup failed:', error);
+    // Continue to database cleanup even if API cleanup fails
   } finally {
     await context.close();
     await browser.close();
+  }
+}
+
+/**
+ * Clean up database resources created in global setup
+ */
+async function cleanupDatabase() {
+  console.log('🗑️  Cleaning up database resources...');
+
+  const client = postgres(process.env.DATABASE_URL!, {
+    max: 1,
+    ssl: process.env.DATABASE_URL!.includes('localhost') ? false : 'require',
+  });
+  const db = drizzle(client, { schema });
+
+  try {
+    // 1. Find E2E test organization
+    console.log('  📦 Looking for E2E test organization...');
+    const organization = await db.query.organizations.findFirst({
+      where: eq(schema.organizations.name, E2E_ORG_NAME),
+    });
+
+    if (!organization) {
+      console.log('  ℹ️  E2E test organization not found - nothing to clean up');
+      return;
+    }
+
+    console.log(`  Found organization: ${organization.name} (${organization.id})`);
+
+    // 2. Find all E2E test users (by username prefix or organization membership)
+    console.log('  👥 Finding E2E test users...');
+    const e2eUsers = await db.query.users.findMany({
+      where: or(
+        like(schema.users.username, 'e2e-%'),
+        eq(schema.users.firstName, 'E2E')
+      ),
+    });
+
+    console.log(`  Found ${e2eUsers.length} E2E test users`);
+
+    // 3. Delete sessions for E2E users (foreign key constraint)
+    if (e2eUsers.length > 0) {
+      console.log('  🔐 Deleting sessions...');
+      for (const user of e2eUsers) {
+        try {
+          await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
+          console.log(`    ✓ Deleted sessions for ${user.username}`);
+        } catch (error) {
+          console.warn(`    ⚠ Failed to delete sessions for ${user.username}:`, error);
+          // Continue cleanup
+        }
+      }
+    }
+
+    // 4. Delete audit logs for E2E users (foreign key constraint)
+    if (e2eUsers.length > 0) {
+      console.log('  📋 Deleting audit logs...');
+      for (const user of e2eUsers) {
+        try {
+          await db.delete(schema.auditLogs).where(eq(schema.auditLogs.userId, user.id));
+          console.log(`    ✓ Deleted audit logs for ${user.username}`);
+        } catch (error) {
+          console.warn(`    ⚠ Failed to delete audit logs for ${user.username}:`, error);
+          // Continue cleanup
+        }
+      }
+    }
+
+    // 5. Delete measurements for E2E users (no FK constraint, but good practice)
+    if (e2eUsers.length > 0) {
+      console.log('  📊 Deleting measurements...');
+      for (const user of e2eUsers) {
+        try {
+          const deleted = await db.delete(schema.measurements)
+            .where(eq(schema.measurements.userId, user.id));
+          console.log(`    ✓ Deleted measurements for ${user.username}`);
+        } catch (error) {
+          console.warn(`    ⚠ Failed to delete measurements for ${user.username}:`, error);
+          // Continue cleanup
+        }
+      }
+    }
+
+    // 6. Delete user-team assignments (will be cascade deleted, but explicit for clarity)
+    console.log('  🏈 Deleting user-team assignments...');
+    try {
+      await db.delete(schema.userTeams)
+        .where(eq(schema.userTeams.teamId, process.env.E2E_TEAM_ID || ''));
+      console.log('    ✓ Deleted user-team assignments');
+    } catch (error) {
+      console.warn('    ⚠ Failed to delete user-team assignments:', error);
+      // Continue cleanup
+    }
+
+    // 7. Delete user-organization assignments (will be cascade deleted, but explicit for clarity)
+    console.log('  🏢 Deleting user-organization assignments...');
+    try {
+      await db.delete(schema.userOrganizations)
+        .where(eq(schema.userOrganizations.organizationId, organization.id));
+      console.log('    ✓ Deleted user-organization assignments');
+    } catch (error) {
+      console.warn('    ⚠ Failed to delete user-organization assignments:', error);
+      // Continue cleanup
+    }
+
+    // 8. Delete teams in the E2E organization
+    console.log('  🏈 Deleting teams...');
+    try {
+      const teams = await db.delete(schema.teams)
+        .where(eq(schema.teams.organizationId, organization.id))
+        .returning();
+      console.log(`    ✓ Deleted ${teams.length} teams`);
+    } catch (error) {
+      console.warn('    ⚠ Failed to delete teams:', error);
+      // Continue cleanup
+    }
+
+    // 9. Delete E2E test users
+    if (e2eUsers.length > 0) {
+      console.log('  👥 Deleting test users...');
+      for (const user of e2eUsers) {
+        try {
+          await db.delete(schema.users).where(eq(schema.users.id, user.id));
+          console.log(`    ✓ Deleted user: ${user.username}`);
+        } catch (error) {
+          console.warn(`    ⚠ Failed to delete user ${user.username}:`, error);
+          // Continue cleanup
+        }
+      }
+    }
+
+    // 10. Delete E2E test organization (this will cascade delete any remaining related records)
+    console.log('  🏢 Deleting test organization...');
+    try {
+      await db.delete(schema.organizations).where(eq(schema.organizations.id, organization.id));
+      console.log(`    ✓ Deleted organization: ${organization.name}`);
+    } catch (error) {
+      console.warn('    ⚠ Failed to delete organization:', error);
+      // Don't throw - we've cleaned up what we could
+    }
+
+    console.log('  ✅ Database cleanup complete');
+  } catch (error) {
+    console.error('  ❌ Database cleanup failed:', error);
+    console.error('  Test data may remain in database - manual cleanup may be required');
+    // Don't throw - teardown failures shouldn't fail the test run
+  } finally {
+    await client.end();
   }
 }
 

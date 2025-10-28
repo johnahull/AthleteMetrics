@@ -157,25 +157,39 @@
 
 ---
 
-### 1.4 Global Setup/Teardown - ⏳ Not Started
+### 1.4 Global Setup/Teardown - ✅ Complete
 
-#### `tests/e2e/global-setup.ts`
-- [ ] Create test organization "E2E Test Org"
-- [ ] Create test users (site admin, org admin, coach, athlete)
-- [ ] Assign users to test organization with roles
-- [ ] Seed minimal test data (optional)
-- [ ] Store test credentials in process.env
+#### `tests/e2e/global-setup.ts` - ✅ Complete
+- [x] Verify staging environment is accessible
+- [x] Verify login credentials work
+- [x] Create test organization "E2E Test Organization" (idempotent)
+- [x] Create test users (site admin, org admin, coach, athlete) with bcrypt password hashing
+- [x] Assign users to test organization with appropriate roles
+- [x] Create test team within organization
+- [x] Assign coach and athlete to team
+- [x] Store organization ID and team ID in process.env
+- [x] Gracefully handle missing DATABASE_URL (verification-only mode)
+- [x] Gracefully handle missing optional RBAC user credentials
 
-#### `tests/e2e/global-teardown.ts`
-- [ ] Delete test organization (cascade deletes users, athletes, teams, measurements)
-- [ ] Clean up any orphaned test data
-- [ ] Close database connections
+#### `tests/e2e/global-teardown.ts` - ✅ Complete
+- [x] Clean up test athletes created during tests (via API)
+- [x] Delete sessions for E2E test users
+- [x] Delete audit logs for E2E test users
+- [x] Delete measurements for E2E test users
+- [x] Delete user-team assignments
+- [x] Delete user-organization assignments
+- [x] Delete test teams
+- [x] Delete test users
+- [x] Delete test organization (cascade deletes remaining related records)
+- [x] Close database connections properly
+- [x] Continue cleanup on errors (log warnings but don't fail)
+- [x] Respect foreign key constraints (delete in correct order)
 
-#### Update `playwright.staging.config.ts`
-- [ ] Add `globalSetup: './tests/e2e/global-setup.ts'`
-- [ ] Add `globalTeardown: './tests/e2e/global-teardown.ts'`
-- [ ] Configure test timeout (default: 30s per test)
-- [ ] Configure parallel execution settings
+#### Update `playwright.staging.config.ts` - ✅ Complete (Already Configured)
+- [x] Add `globalSetup: './tests/e2e/global-setup.ts'` (line 106)
+- [x] Add `globalTeardown: './tests/e2e/global-teardown.ts'` (line 107)
+- [x] Configure test timeout (60s per test)
+- [x] Configure parallel execution (workers: 1, fullyParallel: false)
 
 ---
 
@@ -434,8 +448,8 @@
 - Test Fixtures: ✅ 100% complete (6/6 files)
 - Helper Functions: ✅ 100% complete (6/6 files, 60+ functions)
 - Page Object Models: ✅ 100% complete (5/5 pages, 50+ methods)
-- Global Setup/Teardown: ⏳ 0% complete
-- data-testid Attributes: ⏳ 0% complete
+- Global Setup/Teardown: ✅ 100% complete (2/2 files)
+- data-testid Attributes: ✅ 100% complete
 
 ### Phase 2: Test Suites (Estimated: 32 hours)
 - Authentication Tests: ⏳ 0/8 complete (0%)
@@ -504,6 +518,26 @@ For each test:
   - `ImportPage.ts` - 9 methods (CSV upload, mapping, progress tracking, errors)
   - All page objects use class-based pattern with encapsulated selectors
   - Consistent method naming and flexible selector fallbacks
+- **✅ Completed Phase 1.4 - Global Setup/Teardown (2 files):**
+  - `global-setup.ts` - Database-driven test environment setup
+    - Verifies staging environment accessibility and login credentials
+    - Creates E2E test organization (idempotent)
+    - Creates test users with bcrypt password hashing (site admin, org admin, coach, athlete)
+    - Assigns users to organization with appropriate roles
+    - Creates test team and assigns users to team
+    - Stores organization/team IDs in process.env for test access
+    - Gracefully handles missing DATABASE_URL (verification-only mode)
+    - Optional RBAC user creation (based on environment variables)
+  - `global-teardown.ts` - Comprehensive cleanup with error resilience
+    - Cleans up test athletes created during tests (via API)
+    - Deletes E2E test data in correct order (respects foreign key constraints)
+    - Deletes sessions, audit logs, measurements, user-team assignments
+    - Deletes user-organization assignments, teams, users, organization
+    - Continues cleanup on errors (logs warnings but doesn't fail test run)
+    - Properly closes database connections
+  - `playwright.staging.config.ts` already configured with global setup/teardown references
+
+**Phase 1: Infrastructure - 100% Complete** ✅
 
 ---
 
@@ -511,12 +545,13 @@ For each test:
 
 1. ~~Create test fixtures and test data~~ ✅ Complete
 2. ~~Build all helper functions~~ ✅ Complete
-3. **Next: Create Page Object Models** (Login, Athletes, Dashboard, etc.)
-4. **Next: Add data-testid attributes** to components
-5. Write first auth test (TDD) - login with valid credentials
-6. Iterate through all 8 auth tests
-7. Move to athlete CRUD tests
-8. Continue through all TIER 1 test suites
+3. ~~Create Page Object Models~~ ✅ Complete
+4. ~~Add data-testid attributes~~ ✅ Complete
+5. ~~Implement Global Setup/Teardown~~ ✅ Complete
+6. **Next: Write first auth test (TDD)** - login with valid credentials
+7. Iterate through all 8 auth tests (Phase 2.1)
+8. Move to athlete CRUD tests (Phase 2.2)
+9. Continue through all TIER 1 test suites
 
 ---
 
