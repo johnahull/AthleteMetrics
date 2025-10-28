@@ -19,7 +19,7 @@
 import { FullConfig, chromium } from '@playwright/test';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, or, like } from 'drizzle-orm';
+import { eq, or, like, inArray } from 'drizzle-orm';
 import * as schema from '@shared/schema';
 
 const E2E_ORG_NAME = 'E2E Test Organization';
@@ -136,7 +136,7 @@ async function cleanupDatabase() {
   console.log('🗑️  Cleaning up database resources...');
 
   // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
-  const isLocalhost = process.env.DATABASE_URL!.match(/localhost|127\.0\.0\.1|::1/);
+  const isLocalhost = process.env.DATABASE_URL!.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
   const client = postgres(process.env.DATABASE_URL!, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
@@ -167,56 +167,62 @@ async function cleanupDatabase() {
     console.log(`  Found ${e2eUsers.length} E2E test users`);
 
     // 3. Delete sessions for E2E users (foreign key constraint)
+    // Using batch deletion with inArray for better performance (3 queries vs 15+ individual queries)
     if (e2eUsers.length > 0) {
+      const userIds = e2eUsers.map(u => u.id);
+
       console.log('  🔐 Deleting sessions...');
-      for (const user of e2eUsers) {
-        try {
-          await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.id));
-          console.log(`    ✓ Deleted sessions for ${user.username}`);
-        } catch (error) {
-          console.warn(`    ⚠ Failed to delete sessions for ${user.username}:`, error);
-          // Continue cleanup
-        }
+      try {
+        await db.delete(schema.sessions)
+          .where(inArray(schema.sessions.userId, userIds));
+        console.log(`    ✓ Deleted sessions for ${e2eUsers.length} users`);
+      } catch (error) {
+        console.warn('    ⚠ Failed to delete sessions:', error);
+        // Continue cleanup
       }
-    }
 
-    // 4. Delete audit logs for E2E users (foreign key constraint)
-    if (e2eUsers.length > 0) {
+      // 4. Delete audit logs for E2E users (foreign key constraint)
       console.log('  📋 Deleting audit logs...');
-      for (const user of e2eUsers) {
-        try {
-          await db.delete(schema.auditLogs).where(eq(schema.auditLogs.userId, user.id));
-          console.log(`    ✓ Deleted audit logs for ${user.username}`);
-        } catch (error) {
-          console.warn(`    ⚠ Failed to delete audit logs for ${user.username}:`, error);
-          // Continue cleanup
-        }
+      try {
+        await db.delete(schema.auditLogs)
+          .where(inArray(schema.auditLogs.userId, userIds));
+        console.log(`    ✓ Deleted audit logs for ${e2eUsers.length} users`);
+      } catch (error) {
+        console.warn('    ⚠ Failed to delete audit logs:', error);
+        // Continue cleanup
       }
-    }
 
-    // 5. Delete measurements for E2E users
-    // Note: measurements table has a userId field but no FK constraint defined in schema
-    // We delete them explicitly for data completeness before deleting users
-    if (e2eUsers.length > 0) {
+      // 5. Delete measurements for E2E users
+      // Note: measurements table has a userId field but no FK constraint defined in schema
+      // We delete them explicitly for data completeness before deleting users
       console.log('  📊 Deleting measurements...');
-      for (const user of e2eUsers) {
-        try {
-          await db.delete(schema.measurements)
-            .where(eq(schema.measurements.userId, user.id));
-          console.log(`    ✓ Deleted measurements for ${user.username}`);
-        } catch (error) {
-          console.warn(`    ⚠ Failed to delete measurements for ${user.username}:`, error);
-          // Continue cleanup
-        }
+      try {
+        await db.delete(schema.measurements)
+          .where(inArray(schema.measurements.userId, userIds));
+        console.log(`    ✓ Deleted measurements for ${e2eUsers.length} users`);
+      } catch (error) {
+        console.warn('    ⚠ Failed to delete measurements:', error);
+        // Continue cleanup
       }
     }
 
     // 6. Delete user-team assignments (will be cascade deleted, but explicit for clarity)
     console.log('  🏈 Deleting user-team assignments...');
     try {
-      await db.delete(schema.userTeams)
-        .where(eq(schema.userTeams.teamId, process.env.E2E_TEAM_ID || ''));
-      console.log('    ✓ Deleted user-team assignments');
+      // Query teams by organizationId since process.env.E2E_TEAM_ID is not available
+      // (global-setup and global-teardown run in separate Node.js processes)
+      const teams = await db.query.teams.findMany({
+        where: eq(schema.teams.organizationId, organization.id),
+      });
+
+      if (teams.length > 0) {
+        const teamIds = teams.map(t => t.id);
+        await db.delete(schema.userTeams)
+          .where(inArray(schema.userTeams.teamId, teamIds));
+        console.log(`    ✓ Deleted user-team assignments for ${teams.length} teams`);
+      } else {
+        console.log('    ℹ️  No teams found');
+      }
     } catch (error) {
       console.warn('    ⚠ Failed to delete user-team assignments:', error);
       // Continue cleanup

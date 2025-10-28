@@ -124,7 +124,7 @@ async function globalSetup(config: FullConfig) {
 
   // Connect to database
   // More robust local environment detection (handles localhost, 127.0.0.1, and ::1)
-  const isLocalhost = process.env.DATABASE_URL.match(/localhost|127\.0\.0\.1|::1/);
+  const isLocalhost = process.env.DATABASE_URL.match(/\b(localhost|127\.0\.0\.1|::1)\b/);
   const client = postgres(process.env.DATABASE_URL, {
     max: 1,
     connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
