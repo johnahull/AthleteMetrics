@@ -731,9 +731,8 @@ None found ✅
 
 **Works with:**
 - `ui-testing-agent` - E2E tests for flows
-- `ui-component-library-agent` - Design system consistency
-- `test-driven-feature-agent` - Automated reviews in TDD workflow
-- `testing-qa-agent` - Accessibility test coverage
+- `ui-development-agent` - Design system consistency, component development
+- `test-driven-feature-agent` - Automated reviews in TDD workflow, accessibility test coverage
 
 ## Tools Summary
 

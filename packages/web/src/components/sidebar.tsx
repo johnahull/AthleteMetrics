@@ -146,7 +146,7 @@ export default function Sidebar() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold text-gray-900">Performance Hub</h1>
+              <h1 className="text-lg font-semibold text-gray-900">AthleteMetrics</h1>
               <span className="px-1.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-800 rounded border border-orange-200">
                 BETA
               </span>

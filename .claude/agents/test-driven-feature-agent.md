@@ -31,7 +31,7 @@ Actions:
 2. Break down into testable components
 3. Identify affected systems (database, API, frontend, etc.)
 4. Create TodoWrite plan with all tasks
-5. Invoke testing-qa-agent to write comprehensive tests
+5. Write comprehensive tests following TDD principles
 ```
 
 **TodoWrite Structure:**
@@ -51,11 +51,9 @@ Actions:
 
 **Step 1: Write Failing Tests**
 ```typescript
-// Invoke testing-qa-agent
-Task({
-  subagent_type: "testing-qa-agent",
-  description: "Write tests for feature X",
-  prompt: `Write comprehensive tests for the following feature:
+// Write tests directly (absorbed from testing-qa-agent)
+// Test-driven-feature-agent now handles all test creation
+const testPrompt = `Write comprehensive tests for the following feature:
 
 [Feature Requirements]
 
@@ -77,8 +75,9 @@ Context:
 - Database schema: [relevant schema]
 - Existing APIs: [related endpoints]
 - Component structure: [UI context if applicable]
-`
-});
+`;
+
+// Use Write tool to create test files directly
 ```
 
 **Step 2: Verify Tests Fail (Expected)**
@@ -115,7 +114,7 @@ if (feature.requiresAPI) {
 
 if (feature.requiresUI) {
   Task({
-    subagent_type: "ui-component-library-agent",
+    subagent_type: "ui-development-agent",
     description: "Build UI components",
     prompt: "Create React components for feature X..."
   });
@@ -399,15 +398,12 @@ Fix: Add null checks, verify data fetching, check React Query setup
 - Provides: Form components, validation logic, error handling
 - Context needed: Field requirements, validation rules, UX patterns
 
-**ui-component-library-agent**
-- Triggers: UI components, styling, accessibility, responsive design
-- Provides: React components, Tailwind styling, shadcn/ui integration
+**ui-development-agent**
+- Triggers: UI components, styling, accessibility, responsive design, shadcn/ui, Tailwind
+- Provides: React components, Tailwind styling, shadcn/ui integration, visual feedback
 - Context needed: Design system, component requirements, accessibility needs
 
-**testing-qa-agent**
-- Triggers: Test creation, coverage analysis, bug verification
-- Provides: Test files, mocking patterns, test utilities
-- Context needed: Code to test, expected behavior, edge cases
+**NOTE:** Test creation is now handled directly by test-driven-feature-agent (unit, integration, coverage analysis)
 
 ### Multi-Agent Coordination Examples
 
@@ -448,7 +444,7 @@ Task({ subagent_type: "api-route-architecture-agent", ... });
 
 // Phase 3: UI layer (sequential after Phase 2)
 Promise.all([
-  Task({ subagent_type: "ui-component-library-agent", ... }),
+  Task({ subagent_type: "ui-development-agent", ... }),
   Task({ subagent_type: "analytics-visualization-agent", ... })
 ]);
 ```
@@ -460,7 +456,7 @@ Promise.all([
 User: "Implement broad jump measurement tracking with tests"
 
 Agent:
-1. Writes tests for broad jump (testing-qa-agent)
+1. Writes tests for broad jump (test-driven-feature-agent writes tests directly)
 2. Adds BROAD_JUMP to schema (database-schema-agent)
 3. Runs tests → Fails (expected)
 4. Implements form validation
@@ -474,14 +470,14 @@ Agent:
 User: "Implement coach analytics dashboard showing team performance trends with role-based access"
 
 Agent:
-1. Writes comprehensive test suite (testing-qa-agent)
+1. Writes comprehensive test suite (test-driven-feature-agent writes tests directly)
 2. Parallel implementation:
    - Database queries (database-schema-agent)
    - Permission checks (security-authentication-agent)
 3. Runs tests → Fails (missing API endpoints)
 4. Implements API (api-route-architecture-agent)
 5. Runs tests → Fails (UI components missing)
-6. Implements UI (ui-component-library-agent + analytics-visualization-agent)
+6. Implements UI (ui-development-agent + analytics-visualization-agent)
 7. Runs tests → Passes
 8. Done in 4 iterations
 ```
@@ -491,7 +487,7 @@ Agent:
 User: "Fix: Athletes from archived teams aren't showing in analytics"
 
 Agent:
-1. Writes regression test (testing-qa-agent)
+1. Writes regression test (test-driven-feature-agent writes test directly)
 2. Runs test → Confirms bug (test fails)
 3. Analyzes query logic (database-schema-agent)
 4. Fixes archived team filtering

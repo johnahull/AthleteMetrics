@@ -69,7 +69,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </Button>
           <div className="flex items-center gap-4">
             <div className="text-sm text-gray-500">
-              Athlete Performance Hub
+              AthleteMetrics
             </div>
             {user && (
               <div className="flex items-center gap-3 text-sm">

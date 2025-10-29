@@ -598,10 +598,10 @@ export default function OrganizationProfile() {
   // Update document title when organization data loads
   useEffect(() => {
     if (organization?.name) {
-      document.title = `${organization.name} - Performance Hub`;
+      document.title = `${organization.name} - AthleteMetrics`;
     }
     return () => {
-      document.title = "Performance Hub";
+      document.title = "AthleteMetrics";
     };
   }, [organization?.name]);
 

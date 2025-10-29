@@ -107,8 +107,12 @@ export const measurements = pgTable("measurements", {
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   notes: text("notes"),
-  // Team context fields - auto-populated when measurement is created
-  teamId: varchar("team_id").references(() => teams.id), // Team athlete was on when measurement was taken
+  // Team context fields - immutable snapshot of team at time of measurement
+  // IMPORTANT: teamId is historical reference WITHOUT foreign key constraint
+  // This allows measurements to retain team context even after team deletion/rename
+  teamId: varchar("team_id"), // Team ID at time of measurement (no FK - historical reference like userId)
+  teamNameSnapshot: text("team_name_snapshot"), // Team name at time of measurement (immutable)
+  organizationId: varchar("organization_id"), // Organization ID at time of measurement (no FK - historical reference)
   season: text("season"), // Season designation (e.g., "2024-Fall")
   teamContextAuto: boolean("team_context_auto").default(true).notNull(), // Whether team was auto-assigned vs manually selected
   createdAt: timestamp("created_at").defaultNow().notNull(),

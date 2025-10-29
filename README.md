@@ -1,4 +1,4 @@
-# Athlete Performance Hub
+# AthleteMetrics
 
 A full-stack web application for tracking and analyzing athlete performance data, specifically focused on 10-yard fly time and vertical jump measurements.
 
