@@ -81,6 +81,22 @@ export async function loginAs(
  * @throws Error if STAGING_USERNAME or STAGING_PASSWORD not set
  */
 export async function loginAsDefaultUser(page: Page): Promise<void> {
+  // Check if already authenticated (from storageState or previous login)
+  // Try to navigate to a protected route and check if we stay there
+  const stagingUrl = process.env.STAGING_URL || 'http://localhost:5000';
+  await page.goto(`${stagingUrl}/athletes`);
+
+  // Wait a moment for potential redirect
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+  // If URL contains '/login', we're not authenticated, need to log in
+  const currentUrl = page.url();
+  if (!currentUrl.includes('/login')) {
+    // Already authenticated, no need to login
+    console.log('✓ Already authenticated via storageState, skipping login');
+    return;
+  }
+
   const username = process.env.STAGING_USERNAME;
   const password = process.env.STAGING_PASSWORD;
 
