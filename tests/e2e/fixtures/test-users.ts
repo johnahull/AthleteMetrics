@@ -28,8 +28,8 @@ export function getUserByRole(role: UserRole): TestUser {
       role: 'site_admin',
     },
     org_admin: {
-      username: process.env.E2E_ORG_ADMIN_USERNAME || '',
-      password: process.env.E2E_ORG_ADMIN_PASSWORD || '',
+      username: process.env.E2E_ORG_ADMIN_USERNAME || process.env.STAGING_USERNAME || '',
+      password: process.env.E2E_ORG_ADMIN_PASSWORD || process.env.STAGING_PASSWORD || '',
       role: 'org_admin',
     },
     coach: {
