@@ -59,6 +59,7 @@ test-results/
 test-results-testing/
 playwright-report/
 playwright-report-testing/
+playwright/.auth/
 screenshots/
 screenshots-testing/
 .e2e-test-config.json

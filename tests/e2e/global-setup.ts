@@ -40,7 +40,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
-import { writeFileSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import * as schema from '@shared/schema';
@@ -164,6 +164,13 @@ async function globalSetup(config: FullConfig) {
     }
 
     console.log('✅ Primary login credentials verified');
+
+    // Save authentication state for test reuse (prevents rate limiting)
+    const authDir = join(__dirname, '../../playwright/.auth');
+    mkdirSync(authDir, { recursive: true });
+    const authFile = join(authDir, 'user.json');
+    await context.storageState({ path: authFile });
+    console.log('💾 Authentication state saved for test reuse');
   } catch (error) {
     console.error(`\n❌ ${ENV_NAME} environment verification failed:`, error);
     throw error;
