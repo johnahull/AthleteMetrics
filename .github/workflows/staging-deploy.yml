@@ -203,6 +203,10 @@ jobs:
           STAGING_URL: ${{ secrets.STAGING_URL }}
           STAGING_USERNAME: ${{ secrets.STAGING_USERNAME }}
           STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          E2E_COACH_USERNAME: ${{ secrets.E2E_COACH_USERNAME }}
+          E2E_COACH_PASSWORD: ${{ secrets.E2E_COACH_PASSWORD }}
+          E2E_ATHLETE_USERNAME: ${{ secrets.E2E_ATHLETE_USERNAME }}
+          E2E_ATHLETE_PASSWORD: ${{ secrets.E2E_ATHLETE_PASSWORD }}
 
       - name: Upload E2E test artifacts
         if: always() && steps.e2e-tests.outcome != 'skipped'
