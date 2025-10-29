@@ -81,18 +81,10 @@ export async function loginAs(
  * @throws Error if STAGING_USERNAME or STAGING_PASSWORD not set
  */
 export async function loginAsDefaultUser(page: Page): Promise<void> {
-  // Check if already authenticated (from storageState or previous login)
-  // Try to navigate to a protected route and check if we stay there
-  const stagingUrl = process.env.STAGING_URL || 'http://localhost:5000';
-  await page.goto(`${stagingUrl}/athletes`);
-
-  // Wait a moment for potential redirect
-  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-
-  // If URL contains '/login', we're not authenticated, need to log in
-  const currentUrl = page.url();
-  if (!currentUrl.includes('/login')) {
-    // Already authenticated, no need to login
+  // Check if already authenticated by looking for session cookie (fast, no navigation)
+  const sessionCookie = await getSessionCookie(page);
+  if (sessionCookie) {
+    // Already authenticated via storageState, skip login
     console.log('✓ Already authenticated via storageState, skipping login');
     return;
   }
@@ -169,7 +161,13 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
     return false;
   }
 
-  // Check for presence of user menu or logout button using multiple fallbacks
+  // Fast check: look for session cookie first (instant, no DOM queries)
+  const sessionCookie = await getSessionCookie(page);
+  if (sessionCookie) {
+    return true;
+  }
+
+  // Fallback: Check for presence of user menu or logout button with reduced timeout
   const authIndicators = [
     '[data-testid="user-menu"]',
     '[data-testid="logout-button"]',
@@ -178,7 +176,8 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
 
   for (const selector of authIndicators) {
     try {
-      await page.waitForSelector(selector, { timeout: 1000 });
+      // Reduced timeout from 1000ms to 500ms to speed up checks
+      await page.waitForSelector(selector, { timeout: 500 });
       return true;
     } catch (error) {
       // Continue to next selector
