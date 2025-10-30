@@ -167,21 +167,47 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
 
+      - name: Verify migration completion
+        timeout-minutes: 5
+        id: verify-migrations
+        if: steps.migrate.outcome == 'success'
+        run: |
+          echo "🔍 Verifying all migrations applied correctly..."
+          node scripts/verify-migration-completion.js
+          echo "✅ Migration verification passed"
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
+
       - name: Handle migration failure
-        if: failure() && steps.migrate.outcome == 'failure'
+        if: failure() && (steps.migrate.outcome == 'failure' || steps.verify-migrations.outcome == 'failure')
+        env:
+          VERIFY_OUTCOME: ${{ steps.verify-migrations.outcome }}
         run: |
           echo "❌ Migration failed - deployment BLOCKED"
           echo ""
+          if [ "$VERIFY_OUTCOME" == "failure" ]; then
+            echo "⚠️  CRITICAL: Migration verification detected incomplete database structure in PRODUCTION!"
+            echo "   This usually means migrations were skipped due to existing schema."
+            echo ""
+            echo "🔧 Resolution steps (PRODUCTION - BE EXTREMELY CAREFUL):"
+            echo "1. Verify database backup exists before proceeding"
+            echo "2. Manually apply missing migrations from migrations/ folder"
+            echo "3. Run: railway run --environment production bash"
+            echo "4. Apply migrations: for f in migrations/*.sql; do psql \$DATABASE_URL -f \$f; done"
+            echo "5. Re-run this workflow"
+            echo ""
+          fi
           echo "⚠️  Manual intervention required:"
           echo "1. Check Railway logs for migration errors"
-          echo "2. Restore database from backup if needed"
-          echo "3. Review migration files for issues"
+          echo "2. Review verification output above"
+          echo "3. Ensure database backup is available"
+          echo "4. Review migration files for issues"
           echo ""
           echo "See docs/database-migration-rollback.md for detailed procedures"
           exit 1
 
       - name: Deploy to Railway Production
-        if: steps.migrate.outcome == 'success'
+        if: steps.migrate.outcome == 'success' && steps.verify-migrations.outcome == 'success'
         id: deploy
         run: |
           echo "🚀 Deploying to Railway Production..."
