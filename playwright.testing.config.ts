@@ -18,7 +18,8 @@ export default defineConfig({
   testDir: './tests/e2e',
 
   // Maximum time one test can run for (120 seconds)
-  // Increased from 60s to match staging config and handle RBAC tests with multi-org switching
+  // Set to 120s (2x staging's 60s) to handle testing environment's slower response times
+  // due to cold starts and RBAC tests with multi-org switching
   timeout: 120 * 1000,
 
   // Test execution configuration
@@ -75,6 +76,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         // Reuse authentication state to avoid rate limiting
         // (same pattern as staging config)
+        // Note: This file is created by global-setup.ts before tests run
         storageState: './playwright/.auth/user.json',
       },
     },
