@@ -115,10 +115,20 @@ async function applyManualMigrations() {
         if (hasConcurrently) {
           console.log('   ⚠️  Migration contains CONCURRENTLY - running outside transaction');
 
-          // Execute statements outside transaction
-          await sql.unsafe(migrationSQL);
+          // Split into individual statements and execute separately
+          // This avoids implicit transaction wrapping by postgres library
+          const statements = migrationSQL
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && !s.startsWith('--'));
 
-          // Track migration separately
+          for (const statement of statements) {
+            if (statement.trim()) {
+              await sql.unsafe(statement);
+            }
+          }
+
+          // Track migration separately (also outside any transaction)
           await sql.unsafe(`
             INSERT INTO manual_migrations (migration_name)
             VALUES ($1)
