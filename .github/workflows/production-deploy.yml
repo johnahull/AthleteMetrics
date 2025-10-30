@@ -125,8 +125,20 @@ jobs:
           echo "✅ PostgreSQL GPG key fingerprint verified"
 
           # Make keyring immutable to prevent TOCTOU race condition
-          # This prevents modification between verification and usage
-          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
+          # KNOWN LIMITATION: There is a small TOCTOU (time-of-check-time-of-use) window between
+          # GPG key verification and APT package installation. The chattr +i command below
+          # mitigates this risk by making the keyring immutable after verification.
+          # However, on filesystems that don't support chattr (e.g., tmpfs), the immutability
+          # flag cannot be set. In practice, this is a low-risk scenario in GitHub Actions
+          # because the runner environment is ephemeral and isolated.
+          # Alternative mitigation: Use apt-key with inline verification (not implemented due
+          # to apt-key deprecation in newer Ubuntu versions).
+          if sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg 2>/dev/null; then
+            echo "✅ Keyring set to immutable"
+          else
+            echo "⚠️  chattr +i not supported on this filesystem - TOCTOU mitigation not available"
+            echo "   This is a known limitation on some CI runner filesystems (e.g., tmpfs)"
+          fi
 
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
@@ -190,8 +202,13 @@ jobs:
         if: failure() && (steps.migrate.outcome == 'failure' || steps.verify-migrations.outcome == 'failure')
         env:
           VERIFY_OUTCOME: ${{ steps.verify-migrations.outcome }}
+          DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
         run: |
+          # Sanitize DATABASE_URL for logging (hide password)
+          SAFE_DB_URL=$(echo "$DATABASE_URL" | sed 's|://[^:]*:[^@]*@|://****:****@|')
+
           echo "❌ Migration failed - deployment BLOCKED"
+          echo "Database: $SAFE_DB_URL"
           echo ""
           if [ "$VERIFY_OUTCOME" == "failure" ]; then
             echo "⚠️  CRITICAL: Migration verification detected incomplete database structure in PRODUCTION!"

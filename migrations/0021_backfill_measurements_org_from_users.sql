@@ -18,14 +18,21 @@ BEGIN
       SELECT uo.organization_id
       FROM user_organizations uo
       WHERE uo.user_id = m.user_id
-      ORDER BY uo.created_at ASC  -- Deterministic assignment: use earliest organization
+        -- CRITICAL: Only use organizations the user was part of at measurement time
+        -- This prevents multi-tenant data isolation violations
+        AND uo.created_at <= m.date
+      -- Use most recent organization assignment at time of measurement
+      ORDER BY uo.created_at DESC
       LIMIT 1
     )
     WHERE m.organization_id IS NULL
-      AND m.ctid IN (
-        SELECT m2.ctid
+      AND m.id IN (
+        -- Use id instead of ctid for consistency and to avoid race conditions
+        SELECT m2.id
         FROM measurements m2
         WHERE m2.organization_id IS NULL
+          -- Only process measurements that have a user_id
+          AND m2.user_id IS NOT NULL
         LIMIT 1000
       );
 

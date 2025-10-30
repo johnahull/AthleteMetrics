@@ -34,9 +34,13 @@ BEGIN
     FROM teams t
     WHERE m.team_id = t.id
       AND m.organization_id IS NULL
-      AND m.ctid IN (
-        SELECT m2.ctid
+      AND m.id IN (
+        -- Use explicit JOIN to ensure we only update measurements with valid teams
+        -- This prevents race condition where subquery returns measurements
+        -- with deleted teams that outer WHERE can't match
+        SELECT m2.id
         FROM measurements m2
+        INNER JOIN teams t2 ON m2.team_id = t2.id
         WHERE m2.organization_id IS NULL
         LIMIT 1000
       );
