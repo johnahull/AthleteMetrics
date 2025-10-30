@@ -207,8 +207,11 @@ test.describe('Athlete CRUD Tests', () => {
 
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
-    // Wait for athlete to appear and page to update
-    await page.waitForLoadState('networkidle');
+    // Wait for athlete to appear in list
+    await expect(async () => {
+      const athleteCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
+      expect(athleteCount).toBeGreaterThan(0);
+    }).toPass({ timeout: 5000 });
 
     // Get initial athlete count
     const initialCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -224,8 +227,11 @@ test.describe('Athlete CRUD Tests', () => {
       await confirmButton.first().click();
     }
 
-    // Wait for deletion to complete - wait for page to update
-    await page.waitForLoadState('networkidle');
+    // Wait for deletion to complete
+    await expect(async () => {
+      const currentCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
+      expect(currentCount).toBeLessThan(initialCount);
+    }).toPass({ timeout: 5000 });
 
     // Verify athlete count decreased
     const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -327,8 +333,8 @@ test.describe('Athlete CRUD Tests', () => {
     // Click "View" button for first athlete
     await page.click('[data-testid^="button-view-athlete-"]');
 
-    // Wait for navigation to profile page
-    await page.waitForLoadState('networkidle');
+    // Wait for navigation to profile page - wait for URL change
+    await page.waitForURL(/\/athlete\/[a-z0-9-]+/i, { timeout: 5000 });
 
     // Should be on athlete profile page
     expect(page.url()).toMatch(/\/athlete\/[a-z0-9-]+/i);
@@ -368,7 +374,7 @@ test.describe('Athlete CRUD Tests', () => {
       await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
       // Wait for athlete to appear in list
-      await page.waitForLoadState('networkidle');
+      await page.waitForSelector('[data-testid^="checkbox-athlete-"]', { timeout: 5000 });
     }
 
     // Get initial count
@@ -396,7 +402,10 @@ test.describe('Athlete CRUD Tests', () => {
       }
 
       // Wait for deletion to complete
-      await page.waitForLoadState('networkidle');
+      await expect(async () => {
+        const currentCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
+        expect(currentCount).toBeLessThan(initialCount);
+      }).toPass({ timeout: 5000 });
 
       // Verify athlete count decreased
       const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -444,8 +453,8 @@ test.describe('Athlete CRUD Tests', () => {
     const searchInput = page.locator('[data-testid="athlete-search"]');
     await searchInput.fill(uniqueName);
 
-    // Wait for search results to update - wait for network to settle
-    await page.waitForLoadState('networkidle');
+    // Wait for search results to update
+    await expect(page.locator(`text=${uniqueName}`)).toBeVisible({ timeout: 3000 });
 
     // Verify only the searched athlete appears
     const searchResults = await page.locator(`text=${uniqueName}`).count();
@@ -455,7 +464,10 @@ test.describe('Athlete CRUD Tests', () => {
     await searchInput.clear();
 
     // Wait for search to clear and all athletes to appear
-    await page.waitForLoadState('networkidle');
+    await expect(async () => {
+      const athleteCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
+      expect(athleteCount).toBeGreaterThan(0);
+    }).toPass({ timeout: 3000 });
 
     // Should show all athletes again
     const allAthletes = await page.locator('[data-testid^="checkbox-athlete-"]').count();

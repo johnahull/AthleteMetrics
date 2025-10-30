@@ -42,12 +42,11 @@ test.describe('Visual Regression Tests', () => {
 
   test('login page layout matches baseline', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for form to be fully loaded
-    await page.waitForSelector('input[name="username"]');
-    await page.waitForSelector('input[name="password"]');
-    await page.waitForSelector('button[type="submit"]');
+    await page.waitForSelector('input[name="username"]', { state: 'visible' });
+    await page.waitForSelector('input[name="password"]', { state: 'visible' });
+    await page.waitForSelector('button[type="submit"]', { state: 'visible' });
 
     // Take screenshot and compare to baseline
     await expect(page).toHaveScreenshot('login-page.png', {
@@ -62,8 +61,8 @@ test.describe('Visual Regression Tests', () => {
     await loginAsDefaultUser(page);
     await goToDashboard(page);
 
-    // Wait for dashboard to fully load (charts, cards, etc.)
-    await page.waitForLoadState('networkidle');
+    // Wait for dashboard main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Wait for charts to render (Canvas elements need time for async rendering)
     const hasCharts = await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() => {
@@ -88,8 +87,8 @@ test.describe('Visual Regression Tests', () => {
     await loginAsDefaultUser(page);
     await goToAthletes(page);
 
-    // Wait for athlete table to load
-    await page.waitForLoadState('networkidle');
+    // Wait for athlete table or empty state to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
     await page.waitForSelector('[data-testid^="checkbox-athlete-"], table, .athlete-list', { timeout: 5000 })
       .catch(() => console.log('No athletes found in list'));
 
@@ -127,8 +126,8 @@ test.describe('Visual Regression Tests', () => {
     await goToDataEntry(page);
 
     // Wait for measurement form to load
-    await page.waitForLoadState('networkidle');
-    await page.waitForSelector('[data-testid="athlete-select"], select, input');
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="athlete-select"], select, input', { state: 'visible' });
 
     // Take screenshot of measurement form
     await expect(page).toHaveScreenshot('measurement-entry-form.png', {
@@ -143,8 +142,8 @@ test.describe('Visual Regression Tests', () => {
     await goToImportExport(page);
 
     // Wait for import page to load
-    await page.waitForLoadState('networkidle');
-    await page.waitForSelector('[data-testid="csv-file-input"], input[type="file"]');
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="csv-file-input"], input[type="file"]', { state: 'visible' });
 
     // Take screenshot of import page
     await expect(page).toHaveScreenshot('csv-import-wizard-initial.png', {
@@ -159,7 +158,9 @@ test.describe('Visual Regression Tests', () => {
 
     // Navigate to analytics page
     await page.goto(`${STAGING_URL}/analytics`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for page to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Look for chart canvas elements
     const hasCharts = await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 })
@@ -189,7 +190,8 @@ test.describe('Visual Regression Tests', () => {
     await loginAsDefaultUser(page);
     await goToAthletes(page);
 
-    await page.waitForLoadState('networkidle');
+    // Wait for page to load in mobile view
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Take screenshot in mobile viewport
     await expect(page).toHaveScreenshot('athlete-list-mobile.png', {
@@ -206,7 +208,8 @@ test.describe('Visual Regression Tests', () => {
     await loginAsDefaultUser(page);
     await goToDashboard(page);
 
-    await page.waitForLoadState('networkidle');
+    // Wait for dashboard to load in tablet view
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Wait for charts to render in tablet viewport
     const hasCharts = await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() => {

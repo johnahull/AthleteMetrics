@@ -78,7 +78,8 @@ test.describe('Authentication Flow Tests', () => {
 
     // Navigate to dashboard
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    // Wait for dashboard page to load
+    await page.waitForSelector('h1, main, [role="main"]', { state: 'visible', timeout: 5000 });
 
     // Should be on dashboard (not redirected to login)
     expect(page.url()).toContain('/dashboard');
@@ -89,7 +90,8 @@ test.describe('Authentication Flow Tests', () => {
 
     // Refresh the page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    // Wait for dashboard to reload
+    await page.waitForSelector('h1, main, [role="main"]', { state: 'visible', timeout: 5000 });
 
     // Should still be on dashboard (session persisted)
     expect(page.url()).toContain('/dashboard');
@@ -103,7 +105,8 @@ test.describe('Authentication Flow Tests', () => {
   test('should redirect unauthorized users to login page', async ({ page }) => {
     // Try to access protected route without logging in
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    // Wait for redirect to complete
+    await page.waitForURL(/\/login/, { timeout: 5000 });
 
     // Should be redirected to login page
     expect(page.url()).toContain('/login');
@@ -111,13 +114,14 @@ test.describe('Authentication Flow Tests', () => {
 
   test('should validate empty username and password fields', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
+    // Wait for login form to be ready
+    await page.waitForSelector('[data-testid="button-login"]', { state: 'visible' });
 
     // Leave fields empty and try to submit
     await page.click('[data-testid="button-login"]');
 
-    // Wait for validation to complete
-    await page.waitForLoadState('networkidle');
+    // Wait for validation error to appear
+    await page.waitForSelector('text=/enter.*username.*password/i', { timeout: 3000 });
 
     // Should still be on login page
     expect(page.url()).toContain('/login');
@@ -129,7 +133,8 @@ test.describe('Authentication Flow Tests', () => {
 
   test('should disable login button during authentication', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
+    // Wait for login form to be ready
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Fill in credentials
     await page.fill('[data-testid="input-username"]', STAGING_USERNAME);
@@ -149,14 +154,15 @@ test.describe('Authentication Flow Tests', () => {
     // We'll accept either state as valid
     expect(isDisabledOrLoading || true).toBeTruthy(); // Soft assertion - timing dependent
 
-    // Wait for login to complete
-    await page.waitForLoadState('networkidle');
+    // Wait for login to complete - wait for redirect away from login page
+    await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 5000 });
   });
 
   test('should preserve login redirect after successful authentication', async ({ page }) => {
     // Try to access a specific protected route
     await page.goto(`${STAGING_URL}/analytics`);
-    await page.waitForLoadState('networkidle');
+    // Wait for redirect to login
+    await page.waitForURL(/\/login/, { timeout: 5000 });
 
     // Should be redirected to login
     expect(page.url()).toContain('/login');
