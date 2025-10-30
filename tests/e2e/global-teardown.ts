@@ -28,11 +28,26 @@ import { getEnvironmentConfig } from './config';
 // to prevent conflicts between staging and testing environments
 
 // Test data patterns for identifying test athletes
+// More specific patterns to avoid false positives with production data
 const TEST_NAME_PATTERNS = {
+  // Match E2E_Test* or E2ETest* patterns (preferred)
+  e2ePrefix: /^E2E_?Test/i,
+  // Legacy: Match Test* with timestamp (e.g., Test1703087654, TestAthlete1703087654)
   timestamp: /^Test\w*\d{10,}/,
+  // Legacy: Broad Test* prefix (less safe, but kept for backward compatibility)
   testPrefix: /^Test/,
+  // Email patterns
   testEmail: /test\d+@/,
-  testDomains: ['@test.com', '@example.com']
+  testDomains: ['@test.com', '@example.com'],
+  // Safe match: Require both E2E name pattern AND test email domain
+  safeMatch: (firstName: string, lastName: string, emails: string[]) => {
+    const hasE2EName = /^E2E/i.test(firstName) || /^E2E/i.test(lastName);
+    const hasTestEmail = emails?.some((email: string) =>
+      ['@test.com', '@example.com'].some(domain => email.includes(domain)) ||
+      /test\d+@/.test(email)
+    );
+    return hasE2EName && hasTestEmail;
+  }
 } as const;
 
 // Athlete response type from API
@@ -119,18 +134,36 @@ async function cleanupViaAPI(
 
     const athletes: AthleteResponse[] = await response.json();
 
-    // Filter test athletes (those created with "Test" prefix or test emails)
+    // Filter test athletes using safer pattern matching
+    // Priority: Use E2E prefix + test email (safest)
+    // Fallback: Use Test prefix with timestamp or test email patterns
     const testAthletes = athletes.filter((athlete: AthleteResponse) => {
-      const firstNameMatch = TEST_NAME_PATTERNS.testPrefix.test(athlete.firstName || '') ||
-                            TEST_NAME_PATTERNS.timestamp.test(athlete.firstName || '');
-      const lastNameMatch = TEST_NAME_PATTERNS.testPrefix.test(athlete.lastName || '') ||
-                           TEST_NAME_PATTERNS.timestamp.test(athlete.lastName || '');
+      // Safest: E2E prefix + test email domain
+      if (TEST_NAME_PATTERNS.safeMatch(
+        athlete.firstName || '',
+        athlete.lastName || '',
+        athlete.emails || []
+      )) {
+        return true;
+      }
+
+      // Fallback: Test prefix with timestamp (reasonably safe)
+      const timestampMatch = TEST_NAME_PATTERNS.timestamp.test(athlete.firstName || '') ||
+                            TEST_NAME_PATTERNS.timestamp.test(athlete.lastName || '');
+      if (timestampMatch) {
+        return true;
+      }
+
+      // Fallback: Test email patterns (less safe, but useful)
       const emailMatch = athlete.emails?.some((email: string) =>
         TEST_NAME_PATTERNS.testDomains.some(domain => email.includes(domain)) ||
         TEST_NAME_PATTERNS.testEmail.test(email)
       );
+      if (emailMatch) {
+        return true;
+      }
 
-      return firstNameMatch || lastNameMatch || emailMatch;
+      return false;
     });
 
     console.log(`  Found ${testAthletes.length} test athletes to clean up`);
@@ -178,6 +211,9 @@ async function cleanupDatabase(
   E2E_SECOND_ORG_NAME: string
 ) {
   console.log('🗑️  Cleaning up database resources...');
+
+  // Track critical failures that require manual intervention
+  const criticalFailures: string[] = [];
 
   // Strict localhost detection - only matches actual localhost hosts in postgresql:// URLs
   const isLocalhost = DATABASE_URL.match(/^postgresql:\/\/[^@]+@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/);
@@ -230,6 +266,7 @@ async function cleanupDatabase(
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.warn('    ⚠ Failed to delete sessions:', errorMsg);
+        criticalFailures.push(`Sessions: ${errorMsg}`);
         // Continue cleanup
       }
 
@@ -340,6 +377,7 @@ async function cleanupDatabase(
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.warn('    ⚠ Failed to delete organization:', errorMsg);
+      criticalFailures.push(`Organization deletion: ${errorMsg}`);
       // Don't throw - we've cleaned up what we could
     }
 
@@ -413,11 +451,25 @@ async function cleanupDatabase(
       // Don't fail teardown on verification errors
     }
 
+    // Check for critical failures and throw if any occurred
+    if (criticalFailures.length > 0) {
+      console.error('\n❌ Critical cleanup failures detected:');
+      criticalFailures.forEach(failure => console.error(`  - ${failure}`));
+      console.error('\n⚠️  Manual cleanup required to prevent test data accumulation');
+      console.error('  Database may have orphaned E2E test data');
+      // Throw error to alert CI/CD that manual intervention is needed
+      throw new Error(`Teardown failed with ${criticalFailures.length} critical failures - manual cleanup required`);
+    }
+
     console.log('  ✅ Database cleanup complete');
   } catch (error) {
     console.error('  ❌ Database cleanup failed:', error);
     console.error('  Test data may remain in database - manual cleanup may be required');
     // Don't throw - teardown failures shouldn't fail the test run
+    // UNLESS it's our intentional critical failures error from above
+    if (error instanceof Error && error.message.includes('manual cleanup required')) {
+      throw error;
+    }
   } finally {
     await client.end();
   }

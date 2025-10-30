@@ -33,11 +33,33 @@ const testAthlete = {
 };
 
 test.describe('Athlete CRUD Tests', () => {
+  // Track created athletes for cleanup
+  let createdAthleteIds: string[] = [];
+
+  // TODO: Replace waitForLoadState('networkidle') with specific element checks
+  // networkidle can be flaky if React Query refetches data after "idle" state
+  // Better approach: await page.waitForSelector('[data-testid="athletes-loaded"]')
+  // or use expect().toPass() to wait for stable element counts
 
   // Setup: Login before each test
   test.beforeEach(async ({ page }) => {
     await loginAsDefaultUser(page);
     await goToAthletes(page);
+    // Reset cleanup tracker
+    createdAthleteIds = [];
+  });
+
+  // Cleanup: Delete test athletes created during test
+  test.afterEach(async ({ page }) => {
+    // Clean up any athletes created in this test to prevent orphaned data
+    for (const athleteId of createdAthleteIds) {
+      try {
+        await page.request.delete(`${STAGING_URL}/api/athletes/${athleteId}`);
+      } catch (error) {
+        // Log but don't fail - global teardown will catch any stragglers
+        console.warn(`Failed to cleanup athlete ${athleteId}:`, error);
+      }
+    }
   });
 
   test('should successfully create a new athlete', async ({ page }) => {
@@ -58,8 +80,24 @@ test.describe('Athlete CRUD Tests', () => {
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', testAthlete.email);
 
+    // Listen for API response to capture athlete ID for cleanup
+    const responsePromise = page.waitForResponse(response =>
+      response.url().includes('/api/athletes') && response.request().method() === 'POST'
+    );
+
     // Submit the form
     await page.click('button[type="submit"]:has-text("Add Athlete")');
+
+    // Capture athlete ID from API response
+    try {
+      const response = await responsePromise;
+      const athlete = await response.json();
+      if (athlete?.id) {
+        createdAthleteIds.push(athlete.id);
+      }
+    } catch (error) {
+      console.warn('Failed to capture athlete ID for cleanup:', error);
+    }
 
     // Wait for modal to close
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
@@ -83,7 +121,22 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', testAthlete.email);
+
+    // Capture athlete ID for cleanup
+    const responsePromise = page.waitForResponse(response =>
+      response.url().includes('/api/athletes') && response.request().method() === 'POST'
+    );
+
     await page.click('button[type="submit"]:has-text("Add Athlete")');
+
+    try {
+      const response = await responsePromise;
+      const athlete = await response.json();
+      if (athlete?.id) createdAthleteIds.push(athlete.id);
+    } catch (error) {
+      console.warn('Failed to capture athlete ID for cleanup:', error);
+    }
+
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for athlete to appear in list
@@ -123,7 +176,22 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', testAthlete.email);
+
+    // Capture athlete ID for cleanup (though this test deletes it anyway)
+    const responsePromise = page.waitForResponse(response =>
+      response.url().includes('/api/athletes') && response.request().method() === 'POST'
+    );
+
     await page.click('button[type="submit"]:has-text("Add Athlete")');
+
+    try {
+      const response = await responsePromise;
+      const athlete = await response.json();
+      if (athlete?.id) createdAthleteIds.push(athlete.id);
+    } catch (error) {
+      console.warn('Failed to capture athlete ID for cleanup:', error);
+    }
+
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for athlete to appear and page to update
@@ -153,6 +221,11 @@ test.describe('Athlete CRUD Tests', () => {
     // Verify athlete no longer appears in list
     const deletedAthlete = await page.locator(`text=${testAthlete.firstName} ${testAthlete.lastName}`).count();
     expect(deletedAthlete).toBe(0);
+
+    // Remove deleted athlete from cleanup tracker (already deleted by test)
+    if (createdAthleteIds.length > 0) {
+      createdAthleteIds.pop();
+    }
   });
 
   test('should show validation errors for required fields', async ({ page }) => {
@@ -212,7 +285,22 @@ test.describe('Athlete CRUD Tests', () => {
       await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
       await page.click('[data-testid="button-add-email"]');
       await page.fill('[data-testid="input-email-0"]', testAthlete.email);
+
+      // Capture athlete ID for cleanup
+      const responsePromise = page.waitForResponse(response =>
+        response.url().includes('/api/athletes') && response.request().method() === 'POST'
+      );
+
       await page.click('button[type="submit"]:has-text("Add Athlete")');
+
+      try {
+        const response = await responsePromise;
+        const athlete = await response.json();
+        if (athlete?.id) createdAthleteIds.push(athlete.id);
+      } catch (error) {
+        console.warn('Failed to capture athlete ID for cleanup:', error);
+      }
+
       await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
       // Wait for athlete to appear in list
@@ -243,7 +331,22 @@ test.describe('Athlete CRUD Tests', () => {
       await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
       await page.click('[data-testid="button-add-email"]');
       await page.fill('[data-testid="input-email-0"]', `${timestamp}${i}@example.com`);
+
+      // Capture athlete ID for cleanup
+      const responsePromise = page.waitForResponse(response =>
+        response.url().includes('/api/athletes') && response.request().method() === 'POST'
+      );
+
       await page.click('button[type="submit"]:has-text("Add Athlete")');
+
+      try {
+        const response = await responsePromise;
+        const athlete = await response.json();
+        if (athlete?.id) createdAthleteIds.push(athlete.id);
+      } catch (error) {
+        console.warn('Failed to capture athlete ID for cleanup:', error);
+      }
+
       await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
       // Wait for athlete to appear in list
@@ -280,6 +383,9 @@ test.describe('Athlete CRUD Tests', () => {
       // Verify athlete count decreased
       const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
       expect(finalCount).toBeLessThan(initialCount);
+
+      // Clear cleanup tracker since athletes were bulk deleted
+      createdAthleteIds = [];
     }
   });
 
@@ -293,7 +399,22 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
     await page.fill('[data-testid="input-email-0"]', `search${timestamp}@example.com`);
+
+    // Capture athlete ID for cleanup
+    const responsePromise = page.waitForResponse(response =>
+      response.url().includes('/api/athletes') && response.request().method() === 'POST'
+    );
+
     await page.click('button[type="submit"]:has-text("Add Athlete")');
+
+    try {
+      const response = await responsePromise;
+      const athlete = await response.json();
+      if (athlete?.id) createdAthleteIds.push(athlete.id);
+    } catch (error) {
+      console.warn('Failed to capture athlete ID for cleanup:', error);
+    }
+
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
 
     // Wait for athlete to appear in list

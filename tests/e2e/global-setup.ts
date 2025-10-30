@@ -111,6 +111,18 @@ async function globalSetup(config: FullConfig) {
     );
   }
 
+  // Database URL validation - check for production patterns
+  if (DATABASE_URL) {
+    const PRODUCTION_DB_PATTERNS = [/prod/i, /production/i, /athletemetrics\.com/i];
+    if (PRODUCTION_DB_PATTERNS.some(pattern => pattern.test(DATABASE_URL))) {
+      throw new Error(
+        'E2E tests cannot run against production database. ' +
+        `Detected production pattern in DATABASE_URL. ` +
+        'Tests should only run against staging, testing, or local development databases.'
+      );
+    }
+  }
+
   // Verify credentials are provided
   if (!TARGET_USERNAME || !TARGET_PASSWORD) {
     throw new Error(
@@ -203,6 +215,20 @@ async function globalSetup(config: FullConfig) {
   const db = drizzle(client, { schema });
 
   try {
+    // Production-scale data check - verify database is not production
+    // Production typically has many organizations, staging/testing should have <50
+    console.log('  🔍 Verifying database is not production...');
+    const orgCount = await db.query.organizations.findMany();
+    if (orgCount.length > 50) {
+      console.warn(`⚠️  Database has ${orgCount.length} organizations - this may be production!`);
+      throw new Error(
+        `Database has ${orgCount.length} organizations - production databases typically have many organizations. ` +
+        'Refusing to run E2E tests to prevent data corruption. ' +
+        'If this is a legitimate staging/testing database, adjust the threshold in global-setup.ts'
+      );
+    }
+    console.log(`  ✓ Database organization count: ${orgCount.length} (safe threshold: <50)`);
+
     // Create or find E2E test organization
     console.log('  📦 Creating test organization...');
     let organization = await retryDatabaseOperation(

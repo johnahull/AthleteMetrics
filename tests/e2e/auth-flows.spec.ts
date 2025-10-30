@@ -23,6 +23,9 @@ const STAGING_USERNAME = process.env.STAGING_USERNAME || '';
 const STAGING_PASSWORD = process.env.STAGING_PASSWORD || '';
 
 test.describe('Authentication Flow Tests', () => {
+  // Isolate auth tests from storageState to prevent test interdependence
+  // Without this, logout test invalidates session cookie affecting all subsequent tests
+  test.use({ storageState: { cookies: [], origins: [] } });
 
   test('should successfully login with valid credentials and redirect to dashboard', async ({ page }) => {
     // Login using helper function
@@ -52,8 +55,8 @@ test.describe('Authentication Flow Tests', () => {
   });
 
   test('should successfully logout and redirect to login page', async ({ page }) => {
-    // Login first
-    await loginAsDefaultUser(page);
+    // Login first (explicit login since this test suite is isolated from storageState)
+    await loginWithCredentials(page, STAGING_USERNAME, STAGING_PASSWORD, true);
 
     // Verify we're logged in
     expect(page.url()).not.toContain('/login');
