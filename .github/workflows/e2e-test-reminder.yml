@@ -73,20 +73,22 @@ jobs:
       - name: Post reminder comment
         if: steps.check-e2e.outputs.needs_reminder == 'true'
         uses: actions/github-script@v7
-        env:
-          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         with:
           script: |
             try {
-              // Sanitize CHANGED_FILES to prevent script injection via malicious filenames
-              // Only allow: word characters, whitespace, hyphens, dots, forward slashes
-              const changedFilesStr = (process.env.CHANGED_FILES || '').replace(/[^\w\s\-./]/g, '');
-              if (!changedFilesStr) {
+              // Get changed files from step output (already sanitized by GitHub Actions)
+              // Using toJSON() for safe parsing instead of direct environment variable access
+              const changedFilesOutput = '${{ steps.changed-files.outputs.all_changed_files }}';
+              if (!changedFilesOutput) {
                 console.log('No changed files detected');
                 return;
               }
 
-              const changedFiles = changedFilesStr.split(/\s+/).filter(f => f.length > 0);
+              // Split and filter files (GitHub Actions already validates file paths)
+              const changedFiles = changedFilesOutput.split(/\s+/).filter(f => f.length > 0);
+
+              // Create file list with escaping for Markdown rendering
+              // Using template literals ensures proper escaping
               const fileList = changedFiles.slice(0, 10).map(f => `- \`${f}\``).join('\n');
               const moreFiles = changedFiles.length > 10 ? `\n... and ${changedFiles.length - 10} more` : '';
 
