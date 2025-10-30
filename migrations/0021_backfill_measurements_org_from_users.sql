@@ -18,6 +18,7 @@ BEGIN
       SELECT uo.organization_id
       FROM user_organizations uo
       WHERE uo.user_id = m.user_id
+      ORDER BY uo.created_at ASC  -- Deterministic assignment: use earliest organization
       LIMIT 1
     )
     WHERE m.organization_id IS NULL

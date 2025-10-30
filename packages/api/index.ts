@@ -18,9 +18,34 @@ if (!process.env.SESSION_SECRET) {
   process.exit(1);
 }
 
-if (process.env.SESSION_SECRET.length < 32) {
+const sessionSecret = process.env.SESSION_SECRET;
+
+// Length validation
+if (sessionSecret.length < 32) {
   console.error('❌ FATAL: SESSION_SECRET must be at least 32 characters long');
   console.error('   Generate a secure secret: openssl rand -hex 32');
+  process.exit(1);
+}
+
+// Entropy validation - check for weak patterns
+const weakPatterns = [
+  /^(.)\1+$/,           // Repeated character (e.g., "aaaaaaaaaa...")
+  /^(..)\1+$/,          // Repeated 2-char pattern (e.g., "ababababab...")
+  /^(.*)\1$/,           // String repeated twice (e.g., "abcabc")
+  /password|secret|test|dev|admin|default|change|temp/i  // Common weak words
+];
+
+if (weakPatterns.some(pattern => pattern.test(sessionSecret))) {
+  console.error('❌ FATAL: SESSION_SECRET contains weak pattern or common words');
+  console.error('   Your secret appears to be predictable or insecure');
+  console.error('   Generate a secure secret: openssl rand -hex 32');
+  process.exit(1);
+}
+
+// Production environment requires higher entropy (64+ characters)
+if (process.env.NODE_ENV === 'production' && sessionSecret.length < 64) {
+  console.error('❌ FATAL: Production SESSION_SECRET must be at least 64 characters long');
+  console.error('   Generate a secure production secret: openssl rand -hex 64');
   process.exit(1);
 }
 

@@ -21,15 +21,17 @@ export interface TestUser {
  * @throws Error if required environment variables are not set
  */
 export function getUserByRole(role: UserRole): TestUser {
+  // Get role-specific credentials - NO FALLBACKS to prevent security holes in RBAC tests
+  // Each role must have its own credentials to properly test authorization
   const users: Record<UserRole, TestUser> = {
     site_admin: {
-      username: process.env.E2E_SITE_ADMIN_USERNAME || process.env.STAGING_USERNAME || '',
-      password: process.env.E2E_SITE_ADMIN_PASSWORD || process.env.STAGING_PASSWORD || '',
+      username: process.env.E2E_SITE_ADMIN_USERNAME || '',
+      password: process.env.E2E_SITE_ADMIN_PASSWORD || '',
       role: 'site_admin',
     },
     org_admin: {
-      username: process.env.E2E_ORG_ADMIN_USERNAME || process.env.STAGING_USERNAME || '',
-      password: process.env.E2E_ORG_ADMIN_PASSWORD || process.env.STAGING_PASSWORD || '',
+      username: process.env.E2E_ORG_ADMIN_USERNAME || '',
+      password: process.env.E2E_ORG_ADMIN_PASSWORD || '',
       role: 'org_admin',
     },
     coach: {
