@@ -37,6 +37,9 @@ const TEST_USERS = {
 };
 
 test.describe('RBAC/Permissions Tests', () => {
+  // Configure these tests to run sequentially within each describe block
+  // to avoid race conditions with role-based data isolation
+  test.describe.configure({ mode: 'serial' });
 
   test.describe('Athlete Role Permissions', () => {
     test('athlete should only see their own data', async ({ page }) => {

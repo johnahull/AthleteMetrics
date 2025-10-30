@@ -20,8 +20,8 @@ export default defineConfig({
   timeout: 60 * 1000,
 
   // Test execution configuration
-  fullyParallel: false, // Run tests sequentially to avoid race conditions
-  workers: 1, // Single worker for staging tests
+  fullyParallel: true, // Run tests in parallel for faster execution
+  workers: process.env.CI ? 2 : 4, // 2 workers in CI (resource-constrained), 4 locally
 
   // Retry strategy:
   // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
