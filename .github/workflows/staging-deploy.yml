@@ -18,9 +18,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: athletemetrics_test
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -49,13 +49,13 @@ jobs:
       - name: Setup test database schema
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
           SESSION_SECRET: test-secret-key-for-ci
           ADMIN_USER: admin
           ADMIN_EMAIL: admin@test.com
@@ -260,7 +260,11 @@ jobs:
           name: e2e-test-results-${{ github.run_number }}
           path: |
             playwright-report/
+            !playwright-report/**/*.zip
+            !playwright-report/**/trace*
             test-results/
+            !test-results/**/*.zip
+            !test-results/**/trace*
           retention-days: 3
           compression-level: 6  # Default compression (0=none, 9=max)
 
