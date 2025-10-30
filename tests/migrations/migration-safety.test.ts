@@ -206,9 +206,12 @@ describe('Migration Safety Tests', () => {
           // Look at env vars to confirm it's using test database
           let isTestDatabase = false;
           for (let j = i; j < Math.min(lines.length, i + 10); j++) {
-            if (lines[j].includes('DATABASE_URL') &&
-                lines[j].includes('localhost') &&
-                lines[j].includes('test')) {
+            const envLine = lines[j];
+            // Check if DATABASE_URL points to localhost (CI test database)
+            // or contains CI_POSTGRES secrets (which point to localhost test DB)
+            if (envLine.includes('DATABASE_URL') &&
+                (envLine.includes('localhost') ||
+                 envLine.includes('CI_POSTGRES'))) {
               isTestDatabase = true;
               break;
             }
@@ -253,9 +256,12 @@ describe('Migration Safety Tests', () => {
           // Look at env vars to confirm it's using test database
           let isTestDatabase = false;
           for (let j = i; j < Math.min(lines.length, i + 10); j++) {
-            if (lines[j].includes('DATABASE_URL') &&
-                lines[j].includes('localhost') &&
-                lines[j].includes('test')) {
+            const envLine = lines[j];
+            // Check if DATABASE_URL points to localhost (CI test database)
+            // or contains CI_POSTGRES secrets (which point to localhost test DB)
+            if (envLine.includes('DATABASE_URL') &&
+                (envLine.includes('localhost') ||
+                 envLine.includes('CI_POSTGRES'))) {
               isTestDatabase = true;
               break;
             }

@@ -69,7 +69,7 @@ describe('Server Startup Validation', () => {
   describe('NODE_ENV validation', () => {
     it('should default to production and warn if NODE_ENV is not set', async () => {
       delete process.env.NODE_ENV;
-      process.env.SESSION_SECRET = 'a'.repeat(32);
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1';
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
@@ -87,7 +87,7 @@ describe('Server Startup Validation', () => {
 
     it('should start successfully when NODE_ENV is set to production', async () => {
       process.env.NODE_ENV = 'production';
-      process.env.SESSION_SECRET = 'a'.repeat(32);
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1';
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
@@ -109,7 +109,7 @@ describe('Server Startup Validation', () => {
 
     it('should start successfully when NODE_ENV is set to development', async () => {
       process.env.NODE_ENV = 'development';
-      process.env.SESSION_SECRET = 'a'.repeat(32);
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1';
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
@@ -174,7 +174,7 @@ describe('Server Startup Validation', () => {
 
     it('should accept SESSION_SECRET with exactly 32 characters', async () => {
       process.env.NODE_ENV = 'production';
-      process.env.SESSION_SECRET = 'a'.repeat(32);
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9';
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
@@ -193,7 +193,7 @@ describe('Server Startup Validation', () => {
 
     it('should accept SESSION_SECRET with more than 32 characters', async () => {
       process.env.NODE_ENV = 'production';
-      process.env.SESSION_SECRET = 'a'.repeat(64); // 64 characters (openssl rand -hex 32)
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1'; // 64 characters (hex)
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
@@ -241,7 +241,7 @@ describe('Server Startup Validation', () => {
 
     it('should pass validation with all required environment variables set', async () => {
       process.env.NODE_ENV = 'production';
-      process.env.SESSION_SECRET = 'a'.repeat(64);
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1';
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
