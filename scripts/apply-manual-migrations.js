@@ -9,7 +9,8 @@
  * as pure SQL migrations with separate tracking.
  *
  * Safety:
- * - Each migration runs in a transaction (auto-rollback on failure)
+ * - Migrations run in transactions when possible (auto-rollback on failure)
+ * - CONCURRENTLY operations execute outside transactions (PostgreSQL requirement)
  * - Idempotent - safe to run multiple times
  * - Tracks applied migrations in manual_migrations table
  *
@@ -108,23 +109,39 @@ async function applyManualMigrations() {
       try {
         const migrationSQL = readFileSync(sqlFile, 'utf8');
 
-        // Run migration and tracking insert in a transaction
-        await sql.begin(async sql => {
-          // Apply the migration SQL
+        // Check if migration contains CONCURRENTLY (cannot run in transaction)
+        const hasConcurrently = /\bCONCURRENTLY\b/i.test(migrationSQL);
+
+        if (hasConcurrently) {
+          console.log('   ⚠️  Migration contains CONCURRENTLY - running outside transaction');
+
+          // Execute statements outside transaction
           await sql.unsafe(migrationSQL);
 
-          // Record that this migration was applied
+          // Track migration separately
           await sql.unsafe(`
             INSERT INTO manual_migrations (migration_name)
             VALUES ($1)
           `, [migrationName]);
-        });
+        } else {
+          // Run migration and tracking insert in a transaction
+          await sql.begin(async sql => {
+            // Apply the migration SQL
+            await sql.unsafe(migrationSQL);
+
+            // Record that this migration was applied
+            await sql.unsafe(`
+              INSERT INTO manual_migrations (migration_name)
+              VALUES ($1)
+            `, [migrationName]);
+          });
+        }
 
         console.log(`✅ ${migrationName} applied successfully\n`);
         appliedCount++;
 
       } catch (migrationError) {
-        // Transaction automatically rolled back
+        // Transaction automatically rolled back (if in transaction)
         console.error(`\n❌ Failed to apply ${migrationName}\n`);
         console.error('Error details:');
         console.error(`  Message: ${migrationError.message}`);

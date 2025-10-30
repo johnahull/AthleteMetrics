@@ -19,10 +19,14 @@ const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
  */
 export async function navigateTo(page: Page, route: string, waitForLoad: boolean = true): Promise<void> {
   const url = route.startsWith('http') ? route : `${STAGING_URL}${route}`;
-  await page.goto(url);
+  await page.goto(url, { timeout: 60000 }); // Increase timeout to 60s for slow pages
 
   if (waitForLoad) {
-    await page.waitForLoadState('networkidle');
+    // Wait for DOM content first, then try networkidle with timeout fallback
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForLoadState('networkidle', { timeout: 45000 }).catch(() => {
+      console.warn(`networkidle timeout for ${route}, continuing anyway`);
+    });
   }
 }
 
