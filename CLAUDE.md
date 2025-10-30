@@ -141,8 +141,33 @@ When ENABLED:
 - `npm run db:push` - Push database schema changes to PostgreSQL
 
 ### Database Operations
-- `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database
-- Database migrations are handled through Drizzle Kit configuration in `drizzle.config.ts`
+- `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database (development only)
+- `npm run db:migrate` - Run drizzle migrations (0000-0013)
+- `npm run db:migrate:manual` - Run manual SQL migrations (0014-0021)
+- `npm run db:migrate:all` - Run all migrations (drizzle + manual)
+- `npm run db:validate` - Validate migration safety before applying
+
+#### Migration System Architecture
+
+This project uses a **dual migration system**:
+
+1. **Drizzle migrations (0000-0013)**: Applied via `npm run db:migrate`
+   - Uses drizzle-orm's migrate() function
+   - Requires both SQL files and snapshot JSON files
+   - Tracked in `drizzle.__drizzle_migrations` table
+
+2. **Manual SQL migrations (0014-0021)**: Applied via `npm run db:migrate:manual`
+   - Pure SQL migrations without drizzle snapshots
+   - Applied using scripts/apply-manual-migrations.js
+   - Tracked in `manual_migrations` table
+
+**Why two systems?** Migrations 0014-0021 were created without drizzle snapshot files and cannot be applied by drizzle's migrate() function. See `docs/MIGRATION_SYSTEM_REMEDIATION.md` for full details.
+
+**For new migrations**: Always use drizzle-kit to generate migrations with proper snapshots:
+```bash
+npm run db:generate  # Generate migration from schema changes
+npm run db:migrate   # Apply drizzle migrations
+```
 
 ## E2E Test Maintenance Policy
 
