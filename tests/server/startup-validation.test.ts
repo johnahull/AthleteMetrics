@@ -172,23 +172,24 @@ describe('Server Startup Validation', () => {
       );
     });
 
-    it('should accept SESSION_SECRET with exactly 32 characters', async () => {
+    it('should reject SESSION_SECRET with only 32 characters in production', async () => {
       process.env.NODE_ENV = 'production';
-      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9';
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e9'; // 32 chars - not enough for production
       process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
 
       try {
         await import('../../packages/api/index');
       } catch (error) {
-        // Server will attempt to start and may fail for other reasons
+        // Expected to fail
       }
 
-      // Should not have called exit due to SESSION_SECRET validation
-      if (mockExit.mock.calls.length > 0) {
-        expect(mockConsoleError).not.toHaveBeenCalledWith(
-          expect.stringContaining('SESSION_SECRET')
-        );
-      }
+      // Should have called exit due to insufficient SESSION_SECRET length for production
+      expect(mockExit).toHaveBeenCalledWith(1);
+
+      const errorCalls = mockConsoleError.mock.calls.map(call => call[0]);
+      expect(errorCalls).toContainEqual(
+        '❌ FATAL: Production SESSION_SECRET must be at least 64 characters long'
+      );
     });
 
     it('should accept SESSION_SECRET with more than 32 characters', async () => {
