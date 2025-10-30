@@ -19,18 +19,20 @@ import { goToAthletes } from './helpers/navigation';
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 
-// Generate unique test data to avoid conflicts
-const timestamp = Date.now();
-const testAthlete = {
-  firstName: `TestFirst${timestamp}`,
-  lastName: `TestLast${timestamp}`,
-  email: `test${timestamp}@example.com`,
-  birthDate: '2005-01-15', // YYYY-MM-DD format for HTML date input
-  birthYear: 2005,
-  school: 'Test High School',
-  sport: 'Soccer',
-  position: 'F'
-};
+// Helper to generate unique test data per test to avoid conflicts in parallel execution
+function generateTestAthlete() {
+  const timestamp = Date.now() + Math.floor(Math.random() * 10000);
+  return {
+    firstName: `TestFirst${timestamp}`,
+    lastName: `TestLast${timestamp}`,
+    email: `test${timestamp}@example.com`,
+    birthDate: '2005-01-15', // YYYY-MM-DD format for HTML date input
+    birthYear: 2005,
+    school: 'Test High School',
+    sport: 'Soccer',
+    position: 'F'
+  };
+}
 
 test.describe('Athlete CRUD Tests', () => {
   // Track created athletes for cleanup
@@ -63,6 +65,8 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully create a new athlete', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // Click "Add Athlete" button
     await page.click('[data-testid="add-athlete-button"]');
 
@@ -113,6 +117,8 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully edit an existing athlete', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // First, create an athlete to edit
     await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
@@ -168,6 +174,8 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully delete an athlete', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // First, create an athlete to delete
     await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
@@ -249,6 +257,8 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should show validation error for invalid email format', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // Click "Add Athlete" button
     await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
@@ -273,6 +283,8 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully view athlete profile', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // First, ensure there's at least one athlete
     const athleteCount = await page.locator('[data-testid^="button-view-athlete-"]').count();
 
@@ -322,6 +334,8 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully perform bulk delete operation', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // First, create multiple athletes
     for (let i = 0; i < 2; i++) {
       await page.click('[data-testid="add-athlete-button"]');
@@ -330,7 +344,7 @@ test.describe('Athlete CRUD Tests', () => {
       await page.fill('[data-testid="input-athlete-lastname"]', `${testAthlete.lastName}${i}`);
       await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
       await page.click('[data-testid="button-add-email"]');
-      await page.fill('[data-testid="input-email-0"]', `${timestamp}${i}@example.com`);
+      await page.fill('[data-testid="input-email-0"]', `${testAthlete.email.replace('@', `${i}@`)}`);
 
       // Capture athlete ID for cleanup
       const responsePromise = page.waitForResponse(response =>
@@ -390,15 +404,17 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully search and filter athletes', async ({ page }) => {
+    const testAthlete = generateTestAthlete();
+
     // First, create a test athlete with unique name
     await page.click('[data-testid="add-athlete-button"]');
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
-    const uniqueName = `UniqueSearchTest${timestamp}`;
+    const uniqueName = `UniqueSearchTest${testAthlete.firstName}`;
     await page.fill('[data-testid="input-athlete-firstname"]', uniqueName);
     await page.fill('[data-testid="input-athlete-lastname"]', 'SearchLastName');
     await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
     await page.click('[data-testid="button-add-email"]');
-    await page.fill('[data-testid="input-email-0"]', `search${timestamp}@example.com`);
+    await page.fill('[data-testid="input-email-0"]', testAthlete.email);
 
     // Capture athlete ID for cleanup
     const responsePromise = page.waitForResponse(response =>

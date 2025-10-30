@@ -66,12 +66,14 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForLoadState('networkidle');
 
     // Wait for charts to render (Canvas elements need time for async rendering)
-    await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() =>
-      console.debug('No charts found on dashboard')
-    );
-    // Wait for Chart.js animation to complete
-    // Cannot use selector wait as Canvas rendering is async and doesn't emit DOM events
-    await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
+    const hasCharts = await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() => {
+      console.debug('No charts found on dashboard');
+      return null;
+    });
+    // Only wait for animation if charts exist - reduced from fixed timeout to minimal delay
+    if (hasCharts) {
+      await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
+    }
 
     // Take screenshot of dashboard
     await expect(page).toHaveScreenshot('dashboard-overview.png', {
@@ -109,8 +111,7 @@ test.describe('Visual Regression Tests', () => {
     // Wait for modal to appear and animation to complete
     await page.waitForSelector('[data-testid="submit-athlete"], button:has-text("Save")', { state: 'visible' });
 
-    // Wait for CSS animation to complete (fade-in, slide-in transitions)
-    // Cannot use selector wait as CSS transitions don't emit detectable DOM events
+    // Reduced wait for CSS animation - modal is visible when submit button appears
     await page.waitForTimeout(CSS_TRANSITION_TIMEOUT);
 
     // Take screenshot of modal
@@ -161,12 +162,16 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForLoadState('networkidle');
 
     // Look for chart canvas elements
-    await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 })
-      .catch(() => console.log('No charts found on analytics page'));
+    const hasCharts = await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 })
+      .catch(() => {
+        console.log('No charts found on analytics page');
+        return null;
+      });
 
-    // Wait for charts to fully render (Chart.js uses Canvas with async rendering)
-    // Cannot use selector wait as Canvas rendering and Chart.js animations don't emit detectable DOM events
-    await page.waitForTimeout(CHART_RENDER_TIMEOUT);
+    // Only wait for chart rendering if charts exist
+    if (hasCharts) {
+      await page.waitForTimeout(CHART_RENDER_TIMEOUT);
+    }
 
     // Take screenshot of analytics page
     await expect(page).toHaveScreenshot('analytics-charts.png', {
@@ -204,12 +209,14 @@ test.describe('Visual Regression Tests', () => {
     await page.waitForLoadState('networkidle');
 
     // Wait for charts to render in tablet viewport
-    await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() =>
-      console.debug('No charts found on dashboard')
-    );
-    // Wait for Chart.js animation to complete
-    // Cannot use selector wait as Canvas rendering is async and doesn't emit DOM events
-    await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
+    const hasCharts = await page.waitForSelector('canvas, .chart, [class*="chart"]', { timeout: 5000 }).catch(() => {
+      console.debug('No charts found on dashboard');
+      return null;
+    });
+    // Only wait for animation if charts exist
+    if (hasCharts) {
+      await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
+    }
 
     // Take screenshot in tablet viewport
     await expect(page).toHaveScreenshot('dashboard-tablet.png', {
@@ -233,13 +240,15 @@ test.describe('Visual Regression Tests', () => {
       await darkModeToggle.click();
 
       // Wait for dark mode class to be applied to body/html
-      await page.waitForSelector('body.dark, html.dark, [data-theme="dark"]', { timeout: 2000 }).catch(() =>
-        console.debug('Dark mode class not detected on body/html')
-      );
+      const isDark = await page.waitForSelector('body.dark, html.dark, [data-theme="dark"]', { timeout: 2000 }).catch(() => {
+        console.debug('Dark mode class not detected on body/html');
+        return null;
+      });
 
-      // Wait for CSS transition to complete (color changes, background transitions)
-      // Cannot use selector wait as CSS color/background transitions don't emit detectable DOM events
-      await page.waitForTimeout(CSS_TRANSITION_TIMEOUT);
+      // Only wait for transition if dark mode was applied
+      if (isDark) {
+        await page.waitForTimeout(CSS_TRANSITION_TIMEOUT);
+      }
 
       // Take screenshot in dark mode
       await expect(page).toHaveScreenshot('dashboard-dark-mode.png', {
