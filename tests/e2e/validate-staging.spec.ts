@@ -55,7 +55,6 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
 
   test('should validate login page loads', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for React SPA to mount
     await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
@@ -72,7 +71,6 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
 
   test('should validate login credentials work', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for React SPA to mount
     await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
@@ -100,7 +98,6 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
   test('should validate basic page routes exist', async ({ page }) => {
     // Login first
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for React SPA to mount
     await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
@@ -108,7 +105,9 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
     await page.fill('#username, input[name="username"]', STAGING_USERNAME);
     await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+
+    // Wait for successful login redirect
+    await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 });
 
     // Test basic routes
     const routesToTest = [
@@ -145,7 +144,6 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
 
     // Login
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for React SPA to mount
     await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
@@ -153,13 +151,18 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
     await page.fill('#username, input[name="username"]', STAGING_USERNAME);
     await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+
+    // Wait for successful login redirect
+    await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 });
 
     // Navigate to dashboard
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
-    // Wait for DOM to be fully loaded to catch any delayed console errors
-    await page.waitForLoadState('load');
+
+    // Wait for dashboard to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
+
+    // Brief wait to catch any delayed console errors
+    await page.waitForTimeout(500);
 
     if (consoleErrors.length > 0) {
       console.warn('⚠ Console errors detected:', consoleErrors);
@@ -174,7 +177,6 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
   test('should validate API endpoints respond', async ({ page }) => {
     // Login first
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for React SPA to mount
     await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
@@ -182,7 +184,9 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
     await page.fill('#username, input[name="username"]', STAGING_USERNAME);
     await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+
+    // Wait for successful login redirect
+    await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 });
 
     const apiErrors: string[] = [];
 
@@ -195,9 +199,10 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
 
     // Navigate to a few pages to trigger API calls
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
+
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     if (apiErrors.length > 0) {
       console.warn('⚠ API errors detected:', apiErrors);

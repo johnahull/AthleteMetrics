@@ -26,8 +26,8 @@ async function checkConsoleErrors(page: Page, context: string) {
     }
   });
 
-  // Give a moment for any async console errors to appear
-  await page.waitForLoadState('networkidle');
+  // Brief wait for any async console errors to appear
+  await page.waitForTimeout(500);
 
   if (consoleErrors.length > 0) {
     console.warn(`Console errors on ${context}:`, consoleErrors);
@@ -53,8 +53,8 @@ async function checkNetworkErrors(page: Page) {
 async function login(page: Page) {
   await page.goto(`${STAGING_URL}/login`);
 
-  // Wait for page to load
-  await page.waitForLoadState('networkidle');
+  // Wait for login form to be visible
+  await page.waitForSelector('input[name="username"]', { state: 'visible' });
 
   // Fill in login form
   await page.fill('input[name="username"]', STAGING_USERNAME);
@@ -63,8 +63,8 @@ async function login(page: Page) {
   // Click login button
   await page.click('button[type="submit"]');
 
-  // Wait for navigation after login
-  await page.waitForLoadState('networkidle');
+  // Wait for navigation after login (URL should change away from /login)
+  await expect(page).not.toHaveURL(/\/login/);
 
   // Verify we're logged in (should redirect away from /login)
   const currentUrl = page.url();
@@ -89,9 +89,7 @@ async function logout(page: Page) {
     }
   }
 
-  await page.waitForLoadState('networkidle');
-
-  // Verify we're on login page
+  // Wait for redirect to login page
   await expect(page).toHaveURL(/\/login/);
 }
 
@@ -118,7 +116,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
 
     // Navigate to dashboard
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Verify page loaded
     await expect(page).toHaveURL(/\/dashboard/);
@@ -139,7 +139,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/teams`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/teams/);
 
@@ -158,7 +160,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/athletes/);
 
@@ -176,7 +180,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for page to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Try to find and click on an athlete link
     const athleteLinks = await page.locator('a[href^="/athletes/"]').count();
@@ -184,7 +190,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     if (athleteLinks > 0) {
       // Click first athlete link
       await page.click('a[href^="/athletes/"]:first-of-type');
-      await page.waitForLoadState('networkidle');
+
+      // Wait for profile page to load
+      await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
       // Verify we're on athlete profile page
       expect(page.url()).toContain('/athletes/');
@@ -206,7 +214,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/organizations`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/organizations/);
 
@@ -224,7 +234,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/user-management`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for page to load
+    await page.waitForSelector('main, [role="main"], h1', { state: 'visible' });
 
     // Check if we have access (may redirect if not admin)
     const currentUrl = page.url();
@@ -247,7 +259,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/data-entry`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/data-entry/);
 
@@ -265,15 +279,17 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/analytics`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/analytics/);
 
     const hasContent = await page.locator('main, [role="main"]').count() > 0;
     expect(hasContent).toBeTruthy();
 
-    // Wait for charts to potentially load
-    await page.waitForLoadState('networkidle');
+    // Wait for charts to render if they exist
+    await page.waitForTimeout(1000);
 
     // Check console for errors
     const errors = await checkConsoleErrors(page, 'Analytics');
@@ -286,15 +302,17 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/coach-analytics`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/coach-analytics/);
 
     const hasContent = await page.locator('main, [role="main"]').count() > 0;
     expect(hasContent).toBeTruthy();
 
-    // Wait for charts to potentially load
-    await page.waitForLoadState('networkidle');
+    // Wait for charts to render if they exist
+    await page.waitForTimeout(1000);
 
     // Check console for errors
     const errors = await checkConsoleErrors(page, 'Coach Analytics');
@@ -307,15 +325,17 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/athlete-analytics`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/athlete-analytics/);
 
     const hasContent = await page.locator('main, [role="main"]').count() > 0;
     expect(hasContent).toBeTruthy();
 
-    // Wait for charts to potentially load
-    await page.waitForLoadState('networkidle');
+    // Wait for charts to render if they exist
+    await page.waitForTimeout(1000);
 
     // Check console for errors
     const errors = await checkConsoleErrors(page, 'Athlete Analytics');
@@ -328,7 +348,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/import-export`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/import-export/);
 
@@ -346,7 +368,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/profile`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for main content to be visible
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     await expect(page).toHaveURL(/\/profile/);
 
@@ -364,7 +388,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/admin`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for page to load
+    await page.waitForSelector('main, [role="main"], h1', { state: 'visible' });
 
     const currentUrl = page.url();
 
@@ -396,7 +422,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
 
     for (const pageInfo of pagesToVisit) {
       await page.goto(`${STAGING_URL}${pageInfo.url}`);
-      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
       // Verify navigation worked
       expect(page.url()).toContain(pageInfo.url);
@@ -413,7 +441,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await login(page);
 
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for dashboard to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Look for organization selector (adjust selector based on actual implementation)
     const orgSelector = await page.locator('[data-testid="org-selector"], select[name="organization"]').count();
@@ -428,8 +458,8 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
         // Select second organization
         await page.selectOption('[data-testid="org-selector"], select[name="organization"]', { index: 1 });
 
-        // Wait for page to update
-        await page.waitForLoadState('networkidle');
+        // Wait for page to update with new context
+        await page.waitForTimeout(1000);
 
         // Verify no errors occurred
         const errors = await checkConsoleErrors(page, 'Organization Context Switch');
@@ -464,7 +494,9 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
 
     for (const pageUrl of pages) {
       await page.goto(`${STAGING_URL}${pageUrl}`);
-      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await page.waitForSelector('main, [role="main"]', { state: 'visible' });
     }
 
     // Report network errors if any
@@ -481,13 +513,17 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
 
     // Go to Teams page
     await page.goto(`${STAGING_URL}/teams`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for page to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Try to click "Add Team" button if it exists (but don't submit)
     const addTeamButton = await page.locator('button:has-text("Add Team")').count();
     if (addTeamButton > 0) {
       await page.click('button:has-text("Add Team")');
-      await page.waitForLoadState('networkidle');
+
+      // Wait for modal to appear
+      await page.waitForTimeout(500);
 
       // Verify modal/form opened
       const hasModal = await page.locator('[role="dialog"], .modal').count() > 0;
@@ -496,13 +532,15 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
       // Close modal if it opened (press Escape)
       if (hasModal) {
         await page.keyboard.press('Escape');
-        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(300);
       }
     }
 
     // Go to Data Entry page
     await page.goto(`${STAGING_URL}/data-entry`);
-    await page.waitForLoadState('networkidle');
+
+    // Wait for page to load
+    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
 
     // Test dropdown interactions without submitting
     const dropdowns = await page.locator('select').count();

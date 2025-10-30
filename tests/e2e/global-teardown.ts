@@ -113,16 +113,17 @@ async function cleanupViaAPI(
     // Login to environment
     console.log('  🔐 Logging in...');
     await page.goto(`${TARGET_URL}/login`);
-    await page.waitForLoadState('networkidle');
 
     // Wait for login form to be visible (React SPA needs time to mount)
-    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+    await page.waitForSelector('#username, input[name="username"]', { state: 'visible', timeout: 30000 });
 
     // Use ID selectors (testing env) with name fallback (staging env)
     await page.fill('#username, input[name="username"]', TARGET_USERNAME);
     await page.fill('#password, input[name="password"]', TARGET_PASSWORD);
     await page.click('button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+
+    // Wait for navigation away from login page
+    await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 });
 
     // Fetch all athletes
     const response = await page.request.get(`${TARGET_URL}/api/athletes`);
