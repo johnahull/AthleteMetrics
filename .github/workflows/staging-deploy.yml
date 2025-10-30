@@ -87,7 +87,12 @@ jobs:
 
           # Make keyring immutable to prevent TOCTOU race condition
           # This prevents modification between verification and usage
-          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
+          # Note: chattr may not be supported on all filesystems (e.g., tmpfs)
+          if sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg 2>/dev/null; then
+            echo "✅ Keyring set to immutable"
+          else
+            echo "⚠️  chattr +i not supported on this filesystem - skipping immutability flag"
+          fi
 
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
@@ -216,7 +221,8 @@ jobs:
           path: |
             playwright-report/
             test-results/
-          retention-days: 7
+          retention-days: 3
+          compression-level: 6  # Default compression (0=none, 9=max)
 
       - name: Report E2E test results
         if: always() && steps.e2e-tests.outcome != 'skipped'

@@ -33,6 +33,7 @@
  * - E2E_COACH_PASSWORD: Coach password (optional)
  * - E2E_ATHLETE_USERNAME: Athlete username (optional)
  * - E2E_ATHLETE_PASSWORD: Athlete password (optional)
+ * - E2E_DB_CONNECT_TIMEOUT: Database connection timeout in seconds (default: 60)
  */
 
 import { chromium, FullConfig } from '@playwright/test';
@@ -196,9 +197,14 @@ async function globalSetup(config: FullConfig) {
   // Connect to database
   // Strict localhost detection - only matches actual localhost hosts in postgresql:// URLs
   const isLocalhost = DATABASE_URL.match(/^postgresql:\/\/[^@]+@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/);
+
+  // Allow environment variable override for connection timeout
+  // Default: 60 seconds (sufficient for Railway/Neon cold starts)
+  const connectTimeout = parseInt(process.env.E2E_DB_CONNECT_TIMEOUT || '60', 10);
+
   const client = postgres(DATABASE_URL, {
     max: 1,
-    connect_timeout: 30, // 30 second timeout to prevent hanging on network issues
+    connect_timeout: connectTimeout, // Configurable timeout for cold starts on serverless databases
     idle_timeout: 10, // Close idle connections quickly in setup (short-lived script)
     ssl: isLocalhost ? false : 'require',
   });
@@ -315,31 +321,44 @@ async function globalSetup(config: FullConfig) {
     const createdUserIds: Record<string, string> = {};
 
     for (const userConfig of testUsers) {
-      // Check if user already exists
-      let user = await db.query.users.findFirst({
-        where: eq(schema.users.username, userConfig.username),
-      });
+      // Hash password
+      const hashedPassword = await bcrypt.hash(userConfig.password, BCRYPT_SALT_ROUNDS);
 
-      if (!user) {
-        // Hash password
-        const hashedPassword = await bcrypt.hash(userConfig.password, BCRYPT_SALT_ROUNDS);
+      // Use upsert pattern to handle race conditions when multiple test runners start simultaneously
+      // INSERT ... ON CONFLICT ensures atomic operation without check-then-act pattern
+      const [user] = await retryDatabaseOperation(
+        async () => {
+          const result = await db.insert(schema.users)
+            .values({
+              username: userConfig.username,
+              password: hashedPassword,
+              firstName: userConfig.firstName,
+              lastName: userConfig.lastName,
+              fullName: `${userConfig.firstName} ${userConfig.lastName}`,
+              emails: userConfig.emails,
+              isSiteAdmin: userConfig.isSiteAdmin,
+              isActive: true,
+            })
+            .onConflictDoUpdate({
+              target: schema.users.username,
+              set: {
+                password: hashedPassword,
+                firstName: userConfig.firstName,
+                lastName: userConfig.lastName,
+                fullName: `${userConfig.firstName} ${userConfig.lastName}`,
+                emails: userConfig.emails,
+                isSiteAdmin: userConfig.isSiteAdmin,
+                isActive: true,
+                updatedAt: new Date(),
+              },
+            })
+            .returning();
+          return result;
+        },
+        `Upsert user ${userConfig.username}`
+      );
 
-        // Create user
-        const [newUser] = await db.insert(schema.users).values({
-          username: userConfig.username,
-          password: hashedPassword,
-          firstName: userConfig.firstName,
-          lastName: userConfig.lastName,
-          fullName: `${userConfig.firstName} ${userConfig.lastName}`,
-          emails: userConfig.emails,
-          isSiteAdmin: userConfig.isSiteAdmin,
-          isActive: true,
-        }).returning();
-        user = newUser;
-        console.log(`    ✅ Created user: ${user.username} (${userConfig.role})`);
-      } else {
-        console.log(`    ✅ User already exists: ${user.username} (${userConfig.role})`);
-      }
+      console.log(`    ✅ User ready: ${user.username} (${userConfig.role})`);
 
       createdUserIds[userConfig.role] = user.id;
 
