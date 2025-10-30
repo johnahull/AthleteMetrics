@@ -13,22 +13,25 @@
  * CSS transition timeout for UI animations
  * Used for: Modal fade-in/out, color transitions, dropdown animations
  * Typical CSS transition duration: 200-300ms, reduced from 500ms to 300ms for faster tests
+ * CI environments get slightly longer timeout to account for resource constraints
  */
-export const CSS_TRANSITION_TIMEOUT = 300;
+export const CSS_TRANSITION_TIMEOUT = process.env.CI ? 400 : 300;
 
 /**
  * Chart.js animation timeout
  * Used for: Chart rendering with default Chart.js animation duration (1000ms)
  * Reduced from 1000ms to 500ms - prefer using waitForSelector over fixed timeout
+ * CI environments get 50% longer timeout for reliability
  */
-export const CHART_ANIMATION_TIMEOUT = 500;
+export const CHART_ANIMATION_TIMEOUT = process.env.CI ? 750 : 500;
 
 /**
  * Chart.js render timeout (animation + processing)
  * Used for: Charts with complex data or slower devices
  * Reduced from 2000ms to 1000ms - prefer using smart waits over fixed timeout
+ * CI environments get 50% longer timeout to prevent flakiness
  */
-export const CHART_RENDER_TIMEOUT = 1000;
+export const CHART_RENDER_TIMEOUT = process.env.CI ? 1500 : 1000;
 
 /**
  * Form validation feedback timeout

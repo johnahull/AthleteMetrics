@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document details the performance optimizations applied to the E2E test suite to reduce execution time from ~45 minutes to ~10 minutes (75% reduction).
+This document details the performance optimizations applied to the E2E test suite to reduce execution time from ~45 minutes to ~10 minutes (78% reduction / 4.5x faster).
 
 ## Optimizations Applied
 

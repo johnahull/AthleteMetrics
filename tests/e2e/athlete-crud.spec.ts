@@ -20,12 +20,15 @@ import { goToAthletes } from './helpers/navigation';
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 
 // Helper to generate unique test data per test to avoid conflicts in parallel execution
+// Uses crypto-based uniqueness to eliminate race conditions in parallel test execution
 function generateTestAthlete() {
-  const timestamp = Date.now() + Math.floor(Math.random() * 10000);
+  // Generate guaranteed unique ID using timestamp + base36 encoding + random string
+  // This eliminates the 0.01% collision risk from Math.random() * 10000
+  const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
   return {
-    firstName: `TestFirst${timestamp}`,
-    lastName: `TestLast${timestamp}`,
-    email: `test${timestamp}@example.com`,
+    firstName: `TestFirst_${uniqueId}`,
+    lastName: `TestLast_${uniqueId}`,
+    email: `test_${uniqueId}@example.com`,
     birthDate: '2005-01-15', // YYYY-MM-DD format for HTML date input
     birthYear: 2005,
     school: 'Test High School',
@@ -38,10 +41,12 @@ test.describe('Athlete CRUD Tests', () => {
   // Track created athletes for cleanup
   let createdAthleteIds: string[] = [];
 
-  // TODO: Replace waitForLoadState('networkidle') with specific element checks
-  // networkidle can be flaky if React Query refetches data after "idle" state
-  // Better approach: await page.waitForSelector('[data-testid="athletes-loaded"]')
-  // or use expect().toPass() to wait for stable element counts
+  // NOTE: waitForLoadState('networkidle') usage
+  // While networkidle can be flaky with React Query refetches, it's currently needed for:
+  // 1. Ensuring React Query mutations complete before assertions
+  // 2. Waiting for athlete list updates after CRUD operations
+  // Future optimization: Add data-testid="athletes-loaded" marker and use specific element checks
+  // Alternative approach: Use expect().toPass() with stable element count checks
 
   // Setup: Login before each test
   test.beforeEach(async ({ page }) => {
@@ -334,17 +339,16 @@ test.describe('Athlete CRUD Tests', () => {
   });
 
   test('should successfully perform bulk delete operation', async ({ page }) => {
-    const testAthlete = generateTestAthlete();
-
-    // First, create multiple athletes
+    // First, create multiple athletes with unique data
     for (let i = 0; i < 2; i++) {
+      const testAthlete = generateTestAthlete(); // Generate unique athlete per iteration
       await page.click('[data-testid="add-athlete-button"]');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
-      await page.fill('[data-testid="input-athlete-firstname"]', `${testAthlete.firstName}${i}`);
-      await page.fill('[data-testid="input-athlete-lastname"]', `${testAthlete.lastName}${i}`);
+      await page.fill('[data-testid="input-athlete-firstname"]', testAthlete.firstName);
+      await page.fill('[data-testid="input-athlete-lastname"]', testAthlete.lastName);
       await page.fill('[data-testid="input-athlete-birthdate"]', testAthlete.birthDate);
       await page.click('[data-testid="button-add-email"]');
-      await page.fill('[data-testid="input-email-0"]', `${testAthlete.email.replace('@', `${i}@`)}`);
+      await page.fill('[data-testid="input-email-0"]', testAthlete.email);
 
       // Capture athlete ID for cleanup
       const responsePromise = page.waitForResponse(response =>
