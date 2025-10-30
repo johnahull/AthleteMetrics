@@ -48,6 +48,7 @@ import * as schema from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import type { Role } from '@shared/role-types';
 import { retryDatabaseOperation } from './constants';
+import { getEnvironmentConfig } from './config';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -68,26 +69,17 @@ interface TestUserConfig {
 async function globalSetup(config: FullConfig) {
   console.log('\n🚀 Starting E2E Test Setup...\n');
 
-  // Auto-detect environment based on which environment variables are set
-  // Priority: TESTING_* > STAGING_*
-  const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
-  const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
-
-  // Environment-specific test data names to prevent conflicts between environments
-  const E2E_ORG_NAME = `E2E Test Organization (${ENV_NAME})`;
-  const E2E_TEAM_NAME = `E2E Test Team (${ENV_NAME})`;
-
-  const TARGET_URL = isTesting
-    ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
-    : (process.env.STAGING_URL || 'http://localhost:5000');
-
-  const TARGET_USERNAME = isTesting
-    ? (process.env.TESTING_USERNAME || '')
-    : (process.env.STAGING_USERNAME || '');
-
-  const TARGET_PASSWORD = isTesting
-    ? (process.env.TESTING_PASSWORD || '')
-    : (process.env.STAGING_PASSWORD || '');
+  // Use centralized environment detection to avoid duplication
+  const {
+    isTesting,
+    ENV_NAME,
+    E2E_ORG_NAME,
+    E2E_TEAM_NAME,
+    TARGET_URL,
+    TARGET_USERNAME,
+    TARGET_PASSWORD,
+    DATABASE_URL,
+  } = getEnvironmentConfig();
 
   console.log(`📍 Target Environment: ${ENV_NAME}`);
   console.log(`🌐 Target URL: ${TARGET_URL}`);
@@ -181,10 +173,6 @@ async function globalSetup(config: FullConfig) {
   }
 
   // Step 2: Database setup - create test organization and users
-  const DATABASE_URL = isTesting
-    ? process.env.TESTING_DATABASE_URL
-    : process.env.DATABASE_URL;
-
   if (!DATABASE_URL) {
     console.warn(`\n⚠️  ${ENV_NAME}_DATABASE_URL not set - skipping test data seeding`);
     console.warn(`   Tests will use existing ${ENV_NAME} data`);

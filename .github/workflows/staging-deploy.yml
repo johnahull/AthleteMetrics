@@ -86,12 +86,19 @@ jobs:
           echo "✅ PostgreSQL GPG key fingerprint verified"
 
           # Make keyring immutable to prevent TOCTOU race condition
-          # This prevents modification between verification and usage
-          # Note: chattr may not be supported on all filesystems (e.g., tmpfs)
+          # KNOWN LIMITATION: There is a small TOCTOU (time-of-check-time-of-use) window between
+          # GPG key verification and APT package installation. The chattr +i command below
+          # mitigates this risk by making the keyring immutable after verification.
+          # However, on filesystems that don't support chattr (e.g., tmpfs), the immutability
+          # flag cannot be set. In practice, this is a low-risk scenario in GitHub Actions
+          # because the runner environment is ephemeral and isolated.
+          # Alternative mitigation: Use apt-key with inline verification (not implemented due
+          # to apt-key deprecation in newer Ubuntu versions).
           if sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg 2>/dev/null; then
             echo "✅ Keyring set to immutable"
           else
-            echo "⚠️  chattr +i not supported on this filesystem - skipping immutability flag"
+            echo "⚠️  chattr +i not supported on this filesystem - TOCTOU mitigation not available"
+            echo "   This is a known limitation on some CI runner filesystems (e.g., tmpfs)"
           fi
 
           sudo apt-get update

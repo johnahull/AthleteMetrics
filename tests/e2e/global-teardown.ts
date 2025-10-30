@@ -22,6 +22,7 @@ import postgres from 'postgres';
 import { eq, or, like, inArray } from 'drizzle-orm';
 import * as schema from '@shared/schema';
 import { retryDatabaseOperation } from './constants';
+import { getEnvironmentConfig } from './config';
 
 // Organization names are environment-specific (defined in globalTeardown function)
 // to prevent conflicts between staging and testing environments
@@ -45,25 +46,24 @@ interface AthleteResponse {
 async function globalTeardown(config: FullConfig) {
   console.log('\n🧹 Starting E2E Test Teardown...\n');
 
-  // Auto-detect environment based on which environment variables are set
-  // Priority: TESTING_* > STAGING_*
-  const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
-  const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
-
-  // Environment-specific test data names to match global-setup.ts
-  const E2E_ORG_NAME = `E2E Test Organization (${ENV_NAME})`;
-  const E2E_SECOND_ORG_NAME = `E2E Test Organization 2 (${ENV_NAME})`;
+  // Use centralized environment detection to avoid duplication
+  const {
+    isTesting,
+    ENV_NAME,
+    E2E_ORG_NAME,
+    E2E_SECOND_ORG_NAME,
+    TARGET_URL,
+    TARGET_USERNAME,
+    TARGET_PASSWORD,
+    DATABASE_URL,
+  } = getEnvironmentConfig();
 
   console.log(`📍 Cleaning up ${ENV_NAME} environment`);
 
   // Clean up via API first (test athletes created during tests)
-  await cleanupViaAPI(isTesting, ENV_NAME);
+  await cleanupViaAPI(isTesting, ENV_NAME, TARGET_URL, TARGET_USERNAME, TARGET_PASSWORD);
 
   // Then clean up database resources created in setup
-  const DATABASE_URL = isTesting
-    ? process.env.TESTING_DATABASE_URL
-    : process.env.DATABASE_URL;
-
   if (DATABASE_URL) {
     await cleanupDatabase(DATABASE_URL, ENV_NAME, E2E_ORG_NAME, E2E_SECOND_ORG_NAME);
   } else {
@@ -76,20 +76,14 @@ async function globalTeardown(config: FullConfig) {
 /**
  * Clean up test athletes created during tests via API
  */
-async function cleanupViaAPI(isTesting: boolean, ENV_NAME: string) {
+async function cleanupViaAPI(
+  isTesting: boolean,
+  ENV_NAME: string,
+  TARGET_URL: string,
+  TARGET_USERNAME: string | undefined,
+  TARGET_PASSWORD: string | undefined
+) {
   console.log('🗑️  Cleaning up test athletes via API...');
-
-  const TARGET_URL = isTesting
-    ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
-    : (process.env.STAGING_URL || 'http://localhost:5000');
-
-  const TARGET_USERNAME = isTesting
-    ? process.env.TESTING_USERNAME
-    : process.env.STAGING_USERNAME;
-
-  const TARGET_PASSWORD = isTesting
-    ? process.env.TESTING_PASSWORD
-    : process.env.STAGING_PASSWORD;
 
   if (!TARGET_USERNAME || !TARGET_PASSWORD) {
     console.warn(`  ⚠️  ${ENV_NAME} credentials not set - skipping API cleanup`);

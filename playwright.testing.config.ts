@@ -71,7 +71,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Reuse authentication state to avoid rate limiting
+        // (same pattern as staging config)
+        storageState: './playwright/.auth/user.json',
+      },
     },
 
     // Uncomment to test on additional browsers:
