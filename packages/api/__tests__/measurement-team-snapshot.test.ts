@@ -24,11 +24,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { db } from '../db';
 import { organizations, teams, users, userTeams, measurements, userOrganizations } from '@shared/schema';
-import { DatabaseStorage } from '../storage';
+import { MeasurementService } from '../services/measurement-service';
 import { eq } from 'drizzle-orm';
 
 describe('Measurement Team Snapshot Feature', () => {
-  let storage: DatabaseStorage;
+  let measurementService: MeasurementService;
   let testOrgId: string;
   let testTeam1Id: string;
   let testTeam2Id: string;
@@ -36,7 +36,7 @@ describe('Measurement Team Snapshot Feature', () => {
   let testCoachId: string;
 
   beforeEach(async () => {
-    storage = new DatabaseStorage(db);
+    measurementService = new MeasurementService();
 
     // Create test organization
     const [org] = await db.insert(organizations).values({
@@ -131,7 +131,7 @@ describe('Measurement Team Snapshot Feature', () => {
     }
   });
 
-  describe('Unit Tests: storage.createMeasurement()', () => {
+  describe('Unit Tests: measurementService.createMeasurement()', () => {
     it('should populate team snapshot when teamId is explicitly provided', async () => {
       // Add athlete to team
       await db.insert(userTeams).values({
@@ -139,10 +139,11 @@ describe('Measurement Team Snapshot Feature', () => {
         teamId: testTeam1Id,
         season: '2024-Fall',
         isActive: true,
+        joinedAt: new Date('2024-09-01'), // Joined before measurement date
       });
 
       // Create measurement with explicit team
-      const measurement = await storage.createMeasurement(
+      const measurement = await measurementService.createMeasurement(
         {
           userId: testAthleteId,
           date: '2024-10-15',
@@ -169,10 +170,11 @@ describe('Measurement Team Snapshot Feature', () => {
         teamId: testTeam1Id,
         season: '2024-Fall',
         isActive: true,
+        joinedAt: new Date('2024-09-01'), // Joined before measurement date
       });
 
       // Create measurement WITHOUT teamId (should auto-assign)
-      const measurement = await storage.createMeasurement(
+      const measurement = await measurementService.createMeasurement(
         {
           userId: testAthleteId,
           date: '2024-10-15',
@@ -198,17 +200,19 @@ describe('Measurement Team Snapshot Feature', () => {
           teamId: testTeam1Id,
           season: '2024-Fall',
           isActive: true,
+          joinedAt: new Date('2024-09-01'), // Joined before measurement date
         },
         {
           userId: testAthleteId,
           teamId: testTeam2Id,
           season: '2024-Fall',
           isActive: true,
+          joinedAt: new Date('2024-09-01'), // Joined before measurement date
         },
       ]);
 
       // Create measurement WITHOUT teamId (cannot auto-assign)
-      const measurement = await storage.createMeasurement(
+      const measurement = await measurementService.createMeasurement(
         {
           userId: testAthleteId,
           date: '2024-10-15',
@@ -222,7 +226,7 @@ describe('Measurement Team Snapshot Feature', () => {
       expect(measurement.teamId).toBeNull();
       expect(measurement.teamNameSnapshot).toBeNull();
       expect(measurement.organizationId).toBeNull();
-      expect(measurement.season).toBeUndefined();
+      expect(measurement.season).toBeNull(); // Fixed: should be null not undefined
       expect(measurement.teamContextAuto).toBe(false);
     });
 
@@ -233,10 +237,11 @@ describe('Measurement Team Snapshot Feature', () => {
         teamId: testTeam1Id,
         season: '2024-Fall',
         isActive: true,
+        joinedAt: new Date('2024-09-01'), // Joined before measurement date
       });
 
       // Create measurement
-      const measurement = await storage.createMeasurement(
+      const measurement = await measurementService.createMeasurement(
         {
           userId: testAthleteId,
           date: '2024-10-15',
@@ -252,11 +257,14 @@ describe('Measurement Team Snapshot Feature', () => {
       const originalTeamName = measurement.teamNameSnapshot;
       const originalOrgId = measurement.organizationId;
 
+      // Delete user_teams entries first to satisfy FK constraint
+      await db.delete(userTeams).where(eq(userTeams.teamId, testTeam1Id));
+
       // Delete the team
       await db.delete(teams).where(eq(teams.id, testTeam1Id));
 
       // Fetch measurement again
-      const fetchedMeasurement = await storage.getMeasurement(measurement.id);
+      const fetchedMeasurement = await measurementService.getMeasurement(measurement.id);
 
       // Verify snapshot is preserved (no FK constraint, so values remain)
       expect(fetchedMeasurement?.teamId).toBe(originalTeamId);
@@ -271,10 +279,11 @@ describe('Measurement Team Snapshot Feature', () => {
         teamId: testTeam1Id,
         season: '2024-Fall',
         isActive: true,
+        joinedAt: new Date('2024-09-01'), // Joined before measurement date
       });
 
       // Create measurement
-      const measurement = await storage.createMeasurement(
+      const measurement = await measurementService.createMeasurement(
         {
           userId: testAthleteId,
           date: '2024-10-15',
@@ -294,7 +303,7 @@ describe('Measurement Team Snapshot Feature', () => {
         .where(eq(teams.id, testTeam1Id));
 
       // Fetch measurement again
-      const fetchedMeasurement = await storage.getMeasurement(measurement.id);
+      const fetchedMeasurement = await measurementService.getMeasurement(measurement.id);
 
       // Snapshot should preserve ORIGINAL name
       expect(fetchedMeasurement?.teamNameSnapshot).toBe('Team Alpha');

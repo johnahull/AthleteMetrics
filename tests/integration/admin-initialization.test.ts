@@ -14,6 +14,7 @@ import { db } from '../../packages/api/db';
 import { users, auditLogs } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import type { User } from '@shared/schema';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 // Mock vite module to prevent build directory errors
 vi.mock('../../packages/api/vite.js', () => ({
@@ -496,7 +497,7 @@ describe('Admin User Initialization', () => {
 
       // Tamper with both password and flag
       let user = await storage.getUserByUsername('test-admin');
-      const tamperedHash = await bcrypt.hash('TamperedPass999!', 10);
+      const tamperedHash = await bcrypt.hash('TamperedPass999!', BCRYPT_SALT_ROUNDS);
       await db.update(users)
         .set({
           password: tamperedHash,

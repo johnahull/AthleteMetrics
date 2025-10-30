@@ -58,6 +58,7 @@ export default function Login() {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
+                name="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -71,6 +72,7 @@ export default function Login() {
               <div className="relative">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

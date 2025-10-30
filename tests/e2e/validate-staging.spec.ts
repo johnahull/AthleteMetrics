@@ -1,28 +1,46 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Staging Environment Validation Test
+ * Environment Validation Test
  *
- * This is a lightweight test to validate that your staging environment
+ * This is a lightweight test to validate that your staging or testing environment
  * is properly configured before running the full E2E test suite.
  *
- * Run with: npx playwright test tests/e2e/validate-staging.spec.ts --config=playwright.staging.config.ts
+ * Run with:
+ *   - Staging: npx playwright test tests/e2e/validate-staging.spec.ts --config=playwright.staging.config.ts
+ *   - Testing: npx playwright test tests/e2e/validate-staging.spec.ts --config=playwright.testing.config.ts
+ *
+ * Auto-detects environment based on which environment variables are set:
+ *   - If TESTING_URL or TESTING_USERNAME is set → uses Testing environment
+ *   - Otherwise → uses Staging environment
  */
 
-const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
-const STAGING_USERNAME = process.env.STAGING_USERNAME || '';
-const STAGING_PASSWORD = process.env.STAGING_PASSWORD || '';
+// Auto-detect environment based on which environment variables are set
+const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
+const ENV_NAME = isTesting ? 'TESTING' : 'STAGING';
 
-test.describe('Staging Environment Validation', () => {
+const STAGING_URL = isTesting
+  ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
+  : (process.env.STAGING_URL || 'http://localhost:5000');
+
+const STAGING_USERNAME = isTesting
+  ? (process.env.TESTING_USERNAME || '')
+  : (process.env.STAGING_USERNAME || '');
+
+const STAGING_PASSWORD = isTesting
+  ? (process.env.TESTING_PASSWORD || '')
+  : (process.env.STAGING_PASSWORD || '');
+
+test.describe(`${ENV_NAME} Environment Validation`, () => {
   test('should validate environment variables are set', async () => {
-    expect(STAGING_URL, 'STAGING_URL must be set').toBeTruthy();
-    expect(STAGING_USERNAME, 'STAGING_USERNAME must be set').toBeTruthy();
-    expect(STAGING_PASSWORD, 'STAGING_PASSWORD must be set').toBeTruthy();
+    expect(STAGING_URL, `${ENV_NAME}_URL must be set`).toBeTruthy();
+    expect(STAGING_USERNAME, `${ENV_NAME}_USERNAME must be set`).toBeTruthy();
+    expect(STAGING_PASSWORD, `${ENV_NAME}_PASSWORD must be set`).toBeTruthy();
 
     console.log('✓ Environment variables configured');
-    console.log(`  STAGING_URL: ${STAGING_URL}`);
-    console.log(`  STAGING_USERNAME: ${STAGING_USERNAME}`);
-    console.log(`  STAGING_PASSWORD: ${'*'.repeat(STAGING_PASSWORD.length)}`);
+    console.log(`  ${ENV_NAME}_URL: ${STAGING_URL}`);
+    console.log(`  ${ENV_NAME}_USERNAME: ${STAGING_USERNAME}`);
+    console.log(`  ${ENV_NAME}_PASSWORD: ${'*'.repeat(STAGING_PASSWORD.length)}`);
   });
 
   test('should validate staging URL is accessible', async ({ page }) => {
@@ -39,9 +57,12 @@ test.describe('Staging Environment Validation', () => {
     await page.goto(`${STAGING_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    // Check for username and password inputs
-    const usernameInput = await page.locator('input[name="username"]').count();
-    const passwordInput = await page.locator('input[name="password"]').count();
+    // Wait for React SPA to mount
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    // Check for username and password inputs (use dual selectors for both environments)
+    const usernameInput = await page.locator('#username, input[name="username"]').count();
+    const passwordInput = await page.locator('#password, input[name="password"]').count();
 
     expect(usernameInput, 'Login page should have username input').toBeGreaterThan(0);
     expect(passwordInput, 'Login page should have password input').toBeGreaterThan(0);
@@ -53,15 +74,20 @@ test.describe('Staging Environment Validation', () => {
     await page.goto(`${STAGING_URL}/login`);
     await page.waitForLoadState('networkidle');
 
-    // Fill in credentials
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    // Wait for React SPA to mount
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    // Fill in credentials (use dual selectors for both environments)
+    await page.fill('#username, input[name="username"]', STAGING_USERNAME);
+    await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
 
     // Submit form
     await page.click('button[type="submit"]');
 
-    // Wait for navigation
-    await page.waitForLoadState('networkidle');
+    // Wait for client-side navigation away from login page (React SPA redirect)
+    await page.waitForURL(url => !url.pathname.includes('/login'), {
+      timeout: 10000
+    });
 
     // Verify we're not on login page anymore
     const currentUrl = page.url();
@@ -74,8 +100,13 @@ test.describe('Staging Environment Validation', () => {
   test('should validate basic page routes exist', async ({ page }) => {
     // Login first
     await page.goto(`${STAGING_URL}/login`);
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for React SPA to mount
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    await page.fill('#username, input[name="username"]', STAGING_USERNAME);
+    await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
@@ -114,17 +145,21 @@ test.describe('Staging Environment Validation', () => {
 
     // Login
     await page.goto(`${STAGING_URL}/login`);
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for React SPA to mount
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    await page.fill('#username, input[name="username"]', STAGING_USERNAME);
+    await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
     // Navigate to dashboard
     await page.goto(`${STAGING_URL}/dashboard`);
     await page.waitForLoadState('networkidle');
-
-    // Wait a moment for any async errors
-    await page.waitForTimeout(2000);
+    // Wait for DOM to be fully loaded to catch any delayed console errors
+    await page.waitForLoadState('load');
 
     if (consoleErrors.length > 0) {
       console.warn('⚠ Console errors detected:', consoleErrors);
@@ -139,8 +174,13 @@ test.describe('Staging Environment Validation', () => {
   test('should validate API endpoints respond', async ({ page }) => {
     // Login first
     await page.goto(`${STAGING_URL}/login`);
-    await page.fill('input[name="username"]', STAGING_USERNAME);
-    await page.fill('input[name="password"]', STAGING_PASSWORD);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for React SPA to mount
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    await page.fill('#username, input[name="username"]', STAGING_USERNAME);
+    await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForLoadState('networkidle');
 
@@ -169,16 +209,16 @@ test.describe('Staging Environment Validation', () => {
   });
 });
 
-test.describe('Staging Environment Summary', () => {
+test.describe(`${ENV_NAME} Environment Summary`, () => {
   test('print validation summary', async () => {
     console.log('\n═══════════════════════════════════════════════════');
-    console.log('Staging Environment Validation Summary');
+    console.log(`${ENV_NAME} Environment Validation Summary`);
     console.log('═══════════════════════════════════════════════════');
     console.log(`Environment: ${STAGING_URL}`);
     console.log(`Username: ${STAGING_USERNAME}`);
-    console.log('\nIf all tests passed, your staging environment is ready!');
+    console.log(`\nIf all tests passed, your ${ENV_NAME.toLowerCase()} environment is ready!`);
     console.log('Run the full E2E test suite with:');
-    console.log('  npm run test:staging');
+    console.log(isTesting ? '  npm run test:testing' : '  npm run test:staging');
     console.log('═══════════════════════════════════════════════════\n');
   });
 });

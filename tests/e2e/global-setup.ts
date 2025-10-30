@@ -1,0 +1,510 @@
+/**
+ * Global Setup for E2E Tests
+ *
+ * This script runs once before all E2E tests to:
+ * 1. Verify staging environment is accessible
+ * 2. Create a test organization in the database
+ * 3. Create test users with different roles
+ * 4. Assign users to the organization
+ * 5. Create test teams
+ *
+ * The setup is idempotent - it checks if resources exist before creating them.
+ *
+ * Environment Variables Required:
+ *
+ * For Staging Environment:
+ * - STAGING_URL: Staging environment URL (default: http://localhost:5000)
+ * - STAGING_USERNAME: Org admin username (primary test account)
+ * - STAGING_PASSWORD: Org admin password
+ * - DATABASE_URL: PostgreSQL connection string (optional, for test data setup)
+ *
+ * For Testing Environment:
+ * - TESTING_URL: Testing environment URL (default: https://athletemetrics-testing-testing.up.railway.app)
+ * - TESTING_USERNAME: Org admin username (primary test account)
+ * - TESTING_PASSWORD: Org admin password
+ * - TESTING_DATABASE_URL: PostgreSQL connection string (optional, for test data setup)
+ *
+ * Optional (for both environments):
+ * - E2E_SITE_ADMIN_USERNAME: Site admin username (for RBAC tests)
+ * - E2E_SITE_ADMIN_PASSWORD: Site admin password (for RBAC tests)
+ * - E2E_ORG_ADMIN_USERNAME: Second org admin username (for RBAC tests)
+ * - E2E_ORG_ADMIN_PASSWORD: Second org admin password (for RBAC tests)
+ * - E2E_COACH_USERNAME: Coach username (optional)
+ * - E2E_COACH_PASSWORD: Coach password (optional)
+ * - E2E_ATHLETE_USERNAME: Athlete username (optional)
+ * - E2E_ATHLETE_PASSWORD: Athlete password (optional)
+ * - E2E_DB_CONNECT_TIMEOUT: Database connection timeout in seconds (default: 60)
+ */
+
+import { chromium, FullConfig } from '@playwright/test';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import bcrypt from 'bcrypt';
+import { eq, and } from 'drizzle-orm';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import * as schema from '@shared/schema';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import type { Role } from '@shared/role-types';
+import { retryDatabaseOperation } from './constants';
+import { getEnvironmentConfig } from './config';
+
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const E2E_CONFIG_FILE = '.e2e-test-config.json';
+
+interface TestUserConfig {
+  username: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  isSiteAdmin: boolean;
+  emails: string[];
+}
+
+async function globalSetup(config: FullConfig) {
+  console.log('\n🚀 Starting E2E Test Setup...\n');
+
+  // Use centralized environment detection to avoid duplication
+  const {
+    isTesting,
+    ENV_NAME,
+    E2E_ORG_NAME,
+    E2E_TEAM_NAME,
+    TARGET_URL,
+    TARGET_USERNAME,
+    TARGET_PASSWORD,
+    DATABASE_URL,
+  } = getEnvironmentConfig();
+
+  console.log(`📍 Target Environment: ${ENV_NAME}`);
+  console.log(`🌐 Target URL: ${TARGET_URL}`);
+
+  // Validate URL format
+  if (!TARGET_URL.match(/^https?:\/\/.+/)) {
+    throw new Error(
+      `Invalid ${ENV_NAME}_URL format: "${TARGET_URL}". ` +
+      `Must be a valid HTTP or HTTPS URL (e.g., https://staging.example.com)`
+    );
+  }
+
+  // Production environment safety check - prevent tests from running against production
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'E2E tests cannot run in production environment (NODE_ENV=production). ' +
+      'Tests should only run against staging, testing, or local development environments.'
+    );
+  }
+
+  // Additional URL pattern validation to prevent tests from running against production domains
+  if (TARGET_URL.includes('athletemetrics.com') ||
+      TARGET_URL.includes('production') ||
+      TARGET_URL.match(/prod\./i)) {
+    throw new Error(
+      'E2E tests cannot run against production URLs. ' +
+      `Detected production URL pattern in: ${TARGET_URL}. ` +
+      'Tests should only run against staging, testing, or local development environments.'
+    );
+  }
+
+  // Database URL validation - check for production patterns
+  if (DATABASE_URL) {
+    const PRODUCTION_DB_PATTERNS = [/prod/i, /production/i, /athletemetrics\.com/i];
+    if (PRODUCTION_DB_PATTERNS.some(pattern => pattern.test(DATABASE_URL))) {
+      throw new Error(
+        'E2E tests cannot run against production database. ' +
+        `Detected production pattern in DATABASE_URL. ` +
+        'Tests should only run against staging, testing, or local development databases.'
+      );
+    }
+  }
+
+  // Verify credentials are provided
+  if (!TARGET_USERNAME || !TARGET_PASSWORD) {
+    throw new Error(
+      `${ENV_NAME}_USERNAME and ${ENV_NAME}_PASSWORD environment variables are required. ` +
+      'Please set these credentials for E2E test authentication.'
+    );
+  }
+
+  // Type assertions: after validation, we know these are strings
+  const username = TARGET_USERNAME as string;
+  const password = TARGET_PASSWORD as string;
+
+  // Step 1: Verify environment is accessible
+  console.log(`🔍 Verifying ${ENV_NAME} environment: ${TARGET_URL}`);
+  const browser = await chromium.launch();
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    const response = await page.goto(TARGET_URL);
+
+    if (!response || response.status() >= 400) {
+      throw new Error(`${ENV_NAME} environment not accessible: ${response?.status()}`);
+    }
+
+    console.log(`✅ ${ENV_NAME} environment is accessible`);
+
+    // Verify login credentials work
+    console.log('🔐 Verifying primary login credentials...');
+    await page.goto(`${TARGET_URL}/login`);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for login form to be visible (React SPA needs time to mount)
+    // Use ID selectors as fallback for environments without name attributes
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
+
+    // Use ID selectors (testing env) with name fallback (staging env)
+    await page.fill('#username, input[name="username"]', username);
+    await page.fill('#password, input[name="password"]', password);
+    await page.click('button[type="submit"]');
+
+    await page.waitForURL(url => !url.pathname.includes('/login'), {
+      timeout: 10000
+    });
+
+    if (page.url().includes('/login')) {
+      throw new Error('Login credentials are invalid');
+    }
+
+    console.log('✅ Primary login credentials verified');
+
+    // Save authentication state for test reuse (prevents rate limiting)
+    const authDir = join(__dirname, '../../playwright/.auth');
+    mkdirSync(authDir, { recursive: true });
+    const authFile = join(authDir, 'user.json');
+    await context.storageState({ path: authFile });
+    console.log('💾 Authentication state saved for test reuse');
+  } catch (error) {
+    console.error(`\n❌ ${ENV_NAME} environment verification failed:`, error);
+    throw error;
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+
+  // Step 2: Database setup - create test organization and users
+  if (!DATABASE_URL) {
+    console.warn(`\n⚠️  ${ENV_NAME}_DATABASE_URL not set - skipping test data seeding`);
+    console.warn(`   Tests will use existing ${ENV_NAME} data`);
+    console.log('\n✅ E2E Test Setup Complete (verification only)\n');
+    return;
+  }
+
+  console.log('\n📦 Setting up test data in database...');
+
+  // Connect to database
+  // Strict localhost detection - only matches actual localhost hosts in postgresql:// URLs
+  const isLocalhost = DATABASE_URL.match(/^postgresql:\/\/[^@]+@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/);
+
+  // Allow environment variable override for connection timeout
+  // Default: 60 seconds (sufficient for Railway/Neon cold starts)
+  const connectTimeout = parseInt(process.env.E2E_DB_CONNECT_TIMEOUT || '60', 10);
+
+  const client = postgres(DATABASE_URL, {
+    max: 1,
+    connect_timeout: connectTimeout, // Configurable timeout for cold starts on serverless databases
+    idle_timeout: 10, // Close idle connections quickly in setup (short-lived script)
+    ssl: isLocalhost ? false : 'require',
+  });
+  const db = drizzle(client, { schema });
+
+  try {
+    // Production-scale data check - verify database is not production
+    // Production typically has many organizations, staging/testing should have <50
+    console.log('  🔍 Verifying database is not production...');
+    const orgCount = await db.query.organizations.findMany();
+    if (orgCount.length > 50) {
+      console.warn(`⚠️  Database has ${orgCount.length} organizations - this may be production!`);
+      throw new Error(
+        `Database has ${orgCount.length} organizations - production databases typically have many organizations. ` +
+        'Refusing to run E2E tests to prevent data corruption. ' +
+        'If this is a legitimate staging/testing database, adjust the threshold in global-setup.ts'
+      );
+    }
+    console.log(`  ✓ Database organization count: ${orgCount.length} (safe threshold: <50)`);
+
+    // Create or find E2E test organization
+    console.log('  📦 Creating test organization...');
+    let organization = await retryDatabaseOperation(
+      async () => await db.query.organizations.findFirst({
+        where: eq(schema.organizations.name, E2E_ORG_NAME),
+      }),
+      'Find test organization'
+    );
+
+    if (!organization) {
+      const [newOrg] = await retryDatabaseOperation(
+        async () => (await db.insert(schema.organizations).values({
+          name: E2E_ORG_NAME,
+          description: `E2E Test Organization - Created by Playwright global setup (${new Date().toISOString()})`,
+          isActive: true,
+        }).returning()),
+        'Create test organization'
+      );
+      organization = newOrg;
+      console.log(`    ✅ Created organization: ${organization.name}`);
+    } else {
+      console.log(`    ✅ Organization already exists: ${organization.name}`);
+    }
+
+    // Create second organization for multi-org testing
+    console.log('  📦 Creating second test organization for multi-org tests...');
+    const E2E_SECOND_ORG_NAME = 'E2E Test Organization 2';
+    let secondOrganization = await db.query.organizations.findFirst({
+      where: eq(schema.organizations.name, E2E_SECOND_ORG_NAME),
+    });
+
+    if (!secondOrganization) {
+      const [newOrg] = await db.insert(schema.organizations).values({
+        name: E2E_SECOND_ORG_NAME,
+        description: `E2E Second Test Organization - For multi-org testing (${new Date().toISOString()})`,
+        isActive: true,
+      }).returning();
+      secondOrganization = newOrg;
+      console.log(`    ✅ Created second organization: ${secondOrganization.name}`);
+    } else {
+      console.log(`    ✅ Second organization already exists: ${secondOrganization.name}`);
+    }
+
+    // Create test users
+    console.log('  👥 Creating test users...');
+
+    const testUsers: TestUserConfig[] = [
+      {
+        username: username,
+        password: password,
+        firstName: 'E2E',
+        lastName: 'OrgAdmin',
+        role: 'org_admin',
+        isSiteAdmin: false,
+        emails: ['e2e-primary@test.com'],
+      },
+    ];
+
+    // Add optional RBAC test users if credentials are provided
+    if (process.env.E2E_SITE_ADMIN_USERNAME && process.env.E2E_SITE_ADMIN_PASSWORD) {
+      testUsers.push({
+        username: process.env.E2E_SITE_ADMIN_USERNAME,
+        password: process.env.E2E_SITE_ADMIN_PASSWORD,
+        firstName: 'E2E',
+        lastName: 'SiteAdmin',
+        role: 'site_admin',
+        isSiteAdmin: true,
+        emails: ['e2e-site-admin@test.com'],
+      });
+    }
+
+    if (process.env.E2E_ORG_ADMIN_USERNAME && process.env.E2E_ORG_ADMIN_PASSWORD) {
+      testUsers.push({
+        username: process.env.E2E_ORG_ADMIN_USERNAME,
+        password: process.env.E2E_ORG_ADMIN_PASSWORD,
+        firstName: 'E2E',
+        lastName: 'OrgAdmin2',
+        role: 'org_admin',
+        isSiteAdmin: false,
+        emails: ['e2e-org-admin-2@test.com'],
+      });
+    }
+
+    if (process.env.E2E_COACH_USERNAME && process.env.E2E_COACH_PASSWORD) {
+      testUsers.push({
+        username: process.env.E2E_COACH_USERNAME,
+        password: process.env.E2E_COACH_PASSWORD,
+        firstName: 'E2E',
+        lastName: 'Coach',
+        role: 'coach',
+        isSiteAdmin: false,
+        emails: ['e2e-coach@test.com'],
+      });
+    }
+
+    if (process.env.E2E_ATHLETE_USERNAME && process.env.E2E_ATHLETE_PASSWORD) {
+      testUsers.push({
+        username: process.env.E2E_ATHLETE_USERNAME,
+        password: process.env.E2E_ATHLETE_PASSWORD,
+        firstName: 'E2E',
+        lastName: 'Athlete',
+        role: 'athlete',
+        isSiteAdmin: false,
+        emails: ['e2e-athlete@test.com'],
+      });
+    }
+
+    const createdUserIds: Record<string, string> = {};
+
+    for (const userConfig of testUsers) {
+      // Hash password
+      const hashedPassword = await bcrypt.hash(userConfig.password, BCRYPT_SALT_ROUNDS);
+
+      // Use upsert pattern to handle race conditions when multiple test runners start simultaneously
+      // INSERT ... ON CONFLICT ensures atomic operation without check-then-act pattern
+      const [user] = await retryDatabaseOperation(
+        async () => {
+          const result = await db.insert(schema.users)
+            .values({
+              username: userConfig.username,
+              password: hashedPassword,
+              firstName: userConfig.firstName,
+              lastName: userConfig.lastName,
+              fullName: `${userConfig.firstName} ${userConfig.lastName}`,
+              emails: userConfig.emails,
+              isSiteAdmin: userConfig.isSiteAdmin,
+              isActive: true,
+            })
+            .onConflictDoUpdate({
+              target: schema.users.username,
+              set: {
+                password: hashedPassword,
+                firstName: userConfig.firstName,
+                lastName: userConfig.lastName,
+                fullName: `${userConfig.firstName} ${userConfig.lastName}`,
+                emails: userConfig.emails,
+                isSiteAdmin: userConfig.isSiteAdmin,
+                isActive: true,
+                updatedAt: new Date(),
+              },
+            })
+            .returning();
+          return result;
+        },
+        `Upsert user ${userConfig.username}`
+      );
+
+      console.log(`    ✅ User ready: ${user.username} (${userConfig.role})`);
+
+      createdUserIds[userConfig.role] = user.id;
+
+      // Assign non-site-admin users to organization with appropriate roles
+      if (!userConfig.isSiteAdmin) {
+        const existingAssignment = await db.query.userOrganizations.findFirst({
+          where: and(
+            eq(schema.userOrganizations.userId, user.id),
+            eq(schema.userOrganizations.organizationId, organization.id)
+          ),
+        });
+
+        if (!existingAssignment) {
+          await db.insert(schema.userOrganizations).values({
+            userId: user.id,
+            organizationId: organization.id,
+            role: userConfig.role,
+          });
+          console.log(`      ✅ Assigned to organization as ${userConfig.role}`);
+        } else {
+          console.log(`      ✅ Already assigned to organization`);
+        }
+
+        // For multi-org testing: assign coach to second organization as well
+        if (userConfig.role === 'coach') {
+          const existingSecondAssignment = await db.query.userOrganizations.findFirst({
+            where: and(
+              eq(schema.userOrganizations.userId, user.id),
+              eq(schema.userOrganizations.organizationId, secondOrganization.id)
+            ),
+          });
+
+          if (!existingSecondAssignment) {
+            await db.insert(schema.userOrganizations).values({
+              userId: user.id,
+              organizationId: secondOrganization.id,
+              role: 'coach',
+            });
+            console.log(`      ✅ Also assigned to second organization for multi-org testing`);
+          } else {
+            console.log(`      ✅ Already assigned to second organization`);
+          }
+        }
+      }
+    }
+
+    // Create test team
+    console.log('  🏈 Creating test team...');
+    let team = await db.query.teams.findFirst({
+      where: and(
+        eq(schema.teams.organizationId, organization.id),
+        eq(schema.teams.name, E2E_TEAM_NAME)
+      ),
+    });
+
+    if (!team) {
+      const [newTeam] = await db.insert(schema.teams).values({
+        organizationId: organization.id,
+        name: E2E_TEAM_NAME,
+        level: 'HS',
+        season: '2024-Fall',
+        isArchived: false,
+      }).returning();
+      team = newTeam;
+      console.log(`    ✅ Created team: ${team.name}`);
+    } else {
+      console.log(`    ✅ Team already exists: ${team.name}`);
+    }
+
+    // Assign coach and athlete to team (if they exist)
+    if (createdUserIds.coach && createdUserIds.athlete) {
+      console.log('  👥 Assigning users to team...');
+      const usersToAssignToTeam = [
+        { userId: createdUserIds.coach, role: 'coach' },
+        { userId: createdUserIds.athlete, role: 'athlete' },
+      ];
+
+      for (const { userId, role } of usersToAssignToTeam) {
+        const existingTeamMembership = await db.query.userTeams.findFirst({
+          where: and(
+            eq(schema.userTeams.userId, userId),
+            eq(schema.userTeams.teamId, team.id)
+          ),
+        });
+
+        if (!existingTeamMembership) {
+          await db.insert(schema.userTeams).values({
+            userId,
+            teamId: team.id,
+            season: '2024-Fall',
+            isActive: true,
+          });
+          console.log(`    ✅ Assigned ${role} to team`);
+        } else {
+          console.log(`    ✅ ${role} already assigned to team`);
+        }
+      }
+    }
+
+    // Write test configuration to JSON file for tests to read
+    // (process.env doesn't persist from global-setup to test workers)
+    const testConfig = {
+      organizationId: organization.id,
+      organizationName: organization.name,
+      secondOrganizationId: secondOrganization.id,
+      secondOrganizationName: secondOrganization.name,
+      teamId: team.id,
+      teamName: team.name,
+      timestamp: new Date().toISOString()
+    };
+
+    const configPath = join(__dirname, E2E_CONFIG_FILE);
+    writeFileSync(configPath, JSON.stringify(testConfig, null, 2));
+    console.log(`\n✅ Test configuration written to ${configPath}`);
+
+    console.log('\n✅ Test data setup complete');
+    console.log(`   Organization: ${organization.name} (${organization.id})`);
+    console.log(`   Team: ${team.name} (${team.id})`);
+    console.log(`   Users created: ${testUsers.length}`);
+
+    console.log('\n✅ E2E Test Setup Complete\n');
+  } catch (error) {
+    console.error('\n❌ Database setup failed:', error);
+    throw error;
+  } finally {
+    // Close database connection
+    await client.end();
+  }
+}
+
+export default globalSetup;

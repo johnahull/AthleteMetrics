@@ -662,7 +662,7 @@ export default function Athletes() {
           <Button
             onClick={() => setShowAddModal(true)}
             className="bg-primary hover:bg-blue-700"
-            data-testid="button-add-athlete"
+            data-testid="add-athlete-button"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Athlete
@@ -735,7 +735,7 @@ export default function Athletes() {
                   value={filters.search}
                   onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   className="pl-10"
-                  data-testid="input-search-athletes"
+                  data-testid="athlete-search"
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               </div>
@@ -1166,7 +1166,7 @@ export default function Athletes() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setEditingAthlete(athlete)}
-                            data-testid={`button-edit-athlete-${athlete.id}`}
+                            data-testid="edit-athlete"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -1242,7 +1242,7 @@ export default function Athletes() {
                             size="sm"
                             onClick={() => handleDeleteAthlete(athlete.id, athlete.fullName)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            data-testid={`button-delete-athlete-${athlete.id}`}
+                            data-testid="delete-athlete"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1325,7 +1325,7 @@ export default function Athletes() {
               onClick={handleBulkDelete}
               disabled={bulkDeleteMutation.isPending}
               className="text-white hover:bg-red-600 bg-red-700"
-              data-testid="button-bulk-delete"
+              data-testid="bulk-delete-button"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Bulk Delete

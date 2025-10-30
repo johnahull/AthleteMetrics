@@ -20,11 +20,16 @@ export default defineConfig({
   timeout: 60 * 1000,
 
   // Test execution configuration
-  fullyParallel: false, // Run tests sequentially to avoid race conditions
-  workers: 1, // Single worker for staging tests
+  fullyParallel: true, // Run tests in parallel for faster execution
+  workers: process.env.CI ? 2 : 4, // 2 workers in CI (resource-constrained), 4 locally
 
-  // Retry failed tests once (helps with flaky network issues)
-  retries: 1,
+  // Retry strategy:
+  // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
+  // - Local development: 0 retries to surface flaky tests early
+  // Rationale: Staging environment can have intermittent network issues or slow responses
+  // that don't indicate test failures. Retries help distinguish real failures from
+  // environmental flakiness while keeping local development strict for test quality.
+  retries: process.env.CI ? 1 : 0,
 
   // Reporter configuration
   reporter: [
@@ -64,7 +69,11 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Reuse authentication state to avoid rate limiting
+        storageState: './playwright/.auth/user.json',
+      },
     },
 
     // Uncomment to test on additional browsers:
@@ -97,9 +106,9 @@ export default defineConfig({
   // Whether to preserve output directory
   preserveOutput: 'failures-only',
 
-  // Global setup/teardown (if needed)
-  // globalSetup: require.resolve('./tests/e2e/global-setup.ts'),
-  // globalTeardown: require.resolve('./tests/e2e/global-teardown.ts'),
+  // Global setup/teardown
+  globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
 
   // Web server configuration (not used for staging - staging server should already be running)
   // webServer: undefined,

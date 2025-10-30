@@ -23,9 +23,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: athletemetrics_test
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -54,13 +54,13 @@ jobs:
       - name: Setup test database schema
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
           SESSION_SECRET: test-secret-key-for-ci
           ADMIN_USER: admin
           ADMIN_EMAIL: admin@test.com
@@ -125,8 +125,20 @@ jobs:
           echo "✅ PostgreSQL GPG key fingerprint verified"
 
           # Make keyring immutable to prevent TOCTOU race condition
-          # This prevents modification between verification and usage
-          sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg
+          # KNOWN LIMITATION: There is a small TOCTOU (time-of-check-time-of-use) window between
+          # GPG key verification and APT package installation. The chattr +i command below
+          # mitigates this risk by making the keyring immutable after verification.
+          # However, on filesystems that don't support chattr (e.g., tmpfs), the immutability
+          # flag cannot be set. In practice, this is a low-risk scenario in GitHub Actions
+          # because the runner environment is ephemeral and isolated.
+          # Alternative mitigation: Use apt-key with inline verification (not implemented due
+          # to apt-key deprecation in newer Ubuntu versions).
+          if sudo chattr +i /etc/apt/trusted.gpg.d/postgresql.gpg 2>/dev/null; then
+            echo "✅ Keyring set to immutable"
+          else
+            echo "⚠️  chattr +i not supported on this filesystem - TOCTOU mitigation not available"
+            echo "   This is a known limitation on some CI runner filesystems (e.g., tmpfs)"
+          fi
 
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
@@ -162,26 +174,66 @@ jobs:
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
           echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          echo ""
+          echo "📦 Running drizzle migrations (0000-0013)..."
           npm run db:migrate
-          echo "✅ Migrations completed successfully"
+          echo "✅ Drizzle migrations completed"
+          echo ""
+          echo "📦 Running manual SQL migrations (0014-0021)..."
+          npm run db:migrate:manual
+          echo "✅ Manual migrations completed"
+          echo ""
+          echo "✅ All migrations completed successfully"
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
+
+      - name: Verify migration completion
+        timeout-minutes: 5
+        id: verify-migrations
+        if: steps.migrate.outcome == 'success'
+        run: |
+          echo "🔍 Verifying all migrations applied correctly..."
+          node scripts/verify-migration-completion.js
+          echo "✅ Migration verification passed"
         env:
           DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
 
       - name: Handle migration failure
-        if: failure() && steps.migrate.outcome == 'failure'
+        if: failure() && (steps.migrate.outcome == 'failure' || steps.verify-migrations.outcome == 'failure')
+        env:
+          VERIFY_OUTCOME: ${{ steps.verify-migrations.outcome }}
+          DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
         run: |
+          # Sanitize DATABASE_URL for logging (hide password)
+          # Extract protocol and host, mask credentials
+          SAFE_DB_URL="${DATABASE_URL%%://*}://****:****@${DATABASE_URL##*@}"
+
           echo "❌ Migration failed - deployment BLOCKED"
+          echo "Database: $SAFE_DB_URL"
           echo ""
+          if [ "$VERIFY_OUTCOME" == "failure" ]; then
+            echo "⚠️  CRITICAL: Migration verification detected incomplete database structure in PRODUCTION!"
+            echo "   This usually means migrations were skipped due to existing schema."
+            echo ""
+            echo "🔧 Resolution steps (PRODUCTION - BE EXTREMELY CAREFUL):"
+            echo "1. Verify database backup exists before proceeding"
+            echo "2. Manually apply missing migrations from migrations/ folder"
+            echo "3. Run: railway run --environment production bash"
+            echo "4. Apply migrations: for f in migrations/*.sql; do psql \$DATABASE_URL -f \$f; done"
+            echo "5. Re-run this workflow"
+            echo ""
+          fi
           echo "⚠️  Manual intervention required:"
           echo "1. Check Railway logs for migration errors"
-          echo "2. Restore database from backup if needed"
-          echo "3. Review migration files for issues"
+          echo "2. Review verification output above"
+          echo "3. Ensure database backup is available"
+          echo "4. Review migration files for issues"
           echo ""
           echo "See docs/database-migration-rollback.md for detailed procedures"
           exit 1
 
       - name: Deploy to Railway Production
-        if: steps.migrate.outcome == 'success'
+        if: steps.migrate.outcome == 'success' && steps.verify-migrations.outcome == 'success'
         id: deploy
         run: |
           echo "🚀 Deploying to Railway Production..."

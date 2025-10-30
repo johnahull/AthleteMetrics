@@ -952,7 +952,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                     accept=".csv,.xlsx"
                     onChange={handleFileUpload}
                     className="hidden"
-                    data-testid="input-file-upload"
+                    data-testid="csv-file-input"
                     multiple
                   />
                 </div>
@@ -1317,7 +1317,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                       onClick={handleImport}
                       disabled={uploadFiles.length === 0 || importMutation.isPending || processingProgress !== null || batchProgress !== null}
                       className="flex-1"
-                      data-testid="button-import"
+                      data-testid="csv-confirm-import"
                     >
                       {batchProgress
                         ? `Processing Batch ${batchProgress.current}/${batchProgress.total}...`
@@ -1342,7 +1342,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                         onClick={() => setCancelImport(true)}
                         variant="outline"
                         className="px-4"
-                        data-testid="button-cancel-import"
+                        data-testid="csv-cancel-import"
                       >
                         Cancel
                       </Button>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Line } from "react-chartjs-2";
@@ -28,15 +29,37 @@ interface PerformanceChartProps {
 }
 
 export default function PerformanceChart({ organizationId }: PerformanceChartProps) {
-  const { data: measurements, isError, error } = useQuery({
-    queryKey: ["/api/measurements", organizationId],
+  const [timeRange, setTimeRange] = useState("thisyear");
+
+  const { data: trendsData, isError, error } = useQuery({
+    queryKey: ["/api/analytics/performance-trends", organizationId, timeRange],
     enabled: !!organizationId, // Only run query if organizationId is provided
     queryFn: async () => {
       if (!organizationId) {
         throw new Error("Organization ID is required to fetch performance data");
       }
 
-      const url = `/api/measurements?organizationId=${organizationId}`;
+      // Calculate date range based on timeRange
+      const now = new Date();
+      let dateFrom = "";
+
+      switch (timeRange) {
+        case "last30days":
+          dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case "last90days":
+          dateFrom = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case "thisyear":
+          dateFrom = new Date(now.getFullYear(), 0, 1).toISOString();
+          break;
+        case "last8weeks":
+        default:
+          dateFrom = new Date(now.getTime() - 8 * 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+      }
+
+      const url = `/api/analytics/performance-trends?organizationId=${organizationId}&dateFrom=${dateFrom}&metrics=FLY10_TIME,VERTICAL_JUMP`;
       const response = await fetch(url, {
         credentials: 'include'
       });
@@ -47,76 +70,44 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
     },
   });
 
-  // Process data for weekly trends
-  const processWeeklyData = (measurements: any[]) => {
-    if (!measurements || measurements.length === 0) return { labels: [], datasets: [] };
+  // Transform server-aggregated data into Chart.js format
+  const formatChartData = (data: any) => {
+    if (!data || !data.weeks || data.weeks.length === 0) {
+      return { labels: [], datasets: [] };
+    }
 
-    // Group by week and find best performances
-    const weeklyData = new Map();
-    
-    measurements.forEach(measurement => {
-      const date = new Date(measurement.date);
-      const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
-      const weekKey = weekStart.toISOString().split('T')[0];
-      
-      if (!weeklyData.has(weekKey)) {
-        weeklyData.set(weekKey, {
-          date: weekStart,
-          bestFly10: null,
-          bestVertical: null,
-        });
-      }
-      
-      const week = weeklyData.get(weekKey);
-      const value = parseFloat(measurement.value);
-      
-      if (measurement.metric === "FLY10_TIME") {
-        if (!week.bestFly10 || value < week.bestFly10) {
-          week.bestFly10 = value;
-        }
-      } else if (measurement.metric === "VERTICAL_JUMP") {
-        if (!week.bestVertical || value > week.bestVertical) {
-          week.bestVertical = value;
-        }
-      }
+    // Format week labels for display (e.g., "Jan 1" instead of "2025-01-01")
+    const labels = data.weeks.map((weekStr: string) => {
+      const date = new Date(weekStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
-
-    // Sort by date and prepare chart data
-    const sortedWeeks = Array.from(weeklyData.values())
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-      .slice(-8); // Last 8 weeks
-
-    const labels = sortedWeeks.map(week => 
-      week.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    );
-
-    const fly10Data = sortedWeeks.map(week => week.bestFly10);
-    const verticalData = sortedWeeks.map(week => week.bestVertical);
 
     return {
       labels,
       datasets: [
         {
           label: 'Best Fly-10 (s)',
-          data: fly10Data,
+          data: data.metrics.FLY10_TIME || [],
           borderColor: 'hsl(203.8863, 88.2845%, 53.1373%)',
           backgroundColor: 'hsla(203.8863, 88.2845%, 53.1373%, 0.1)',
           tension: 0.4,
           yAxisID: 'y',
+          spanGaps: true, // Connect points even if there are null values
         },
         {
           label: 'Best Vertical (in)',
-          data: verticalData,
+          data: data.metrics.VERTICAL_JUMP || [],
           borderColor: 'hsl(159.7826, 100%, 36.0784%)',
           backgroundColor: 'hsla(159.7826, 100%, 36.0784%, 0.1)',
           tension: 0.4,
           yAxisID: 'y1',
+          spanGaps: true, // Connect points even if there are null values
         },
       ],
     };
   };
 
-  const chartData = processWeeklyData((measurements as any[]) || []);
+  const chartData = formatChartData(trendsData);
 
   const options = {
     responsive: true,
@@ -180,7 +171,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Performance Trends</h3>
-          <Select defaultValue="last8weeks">
+          <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
@@ -188,6 +179,7 @@ export default function PerformanceChart({ organizationId }: PerformanceChartPro
               <SelectItem value="last8weeks">Last 8 Weeks</SelectItem>
               <SelectItem value="last30days">Last 30 Days</SelectItem>
               <SelectItem value="last90days">Last 90 Days</SelectItem>
+              <SelectItem value="thisyear">This Year</SelectItem>
             </SelectContent>
           </Select>
         </div>

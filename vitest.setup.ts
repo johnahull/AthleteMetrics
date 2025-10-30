@@ -19,7 +19,7 @@ afterEach(() => {
 
 // Mock environment variables for tests
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/athlete_performance_test';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/athletemetrics_test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret';
 process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin123456789!';

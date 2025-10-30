@@ -811,10 +811,10 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               >
                 Cancel
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={isPending}
-                data-testid="button-save-athlete"
+                data-testid="submit-athlete"
               >
                 {isPending ? "Saving..." : isEditing ? "Update Athlete" : "Add Athlete"}
               </Button>

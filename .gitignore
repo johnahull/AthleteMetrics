@@ -12,6 +12,7 @@ vite.config.ts.*
 .env.production
 .env.development
 .env.staging
+.env.testing
 
 # Database
 *.db
@@ -55,5 +56,15 @@ backups/
 
 # Playwright test artifacts
 test-results/
+test-results-testing/
 playwright-report/
+playwright-report-testing/
+playwright/.auth/
 screenshots/
+screenshots-testing/
+.e2e-test-config.json
+
+# Editor swap files
+*.swp
+*.swo
+*~

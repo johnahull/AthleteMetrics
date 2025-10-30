@@ -1,0 +1,6 @@
+firstName,lastName,email,birthDate,graduationYear,school,sport,position,gender
+MissingEmail,Test,,2006-01-01,2024,Test School,Soccer,F,Male
+John,,validemail@test.com,2006-01-01,2024,Test School,Soccer,F,Male
+,Smith,anothervalid@test.com,2006-01-01,2024,Test School,Soccer,F,Male
+Invalid,Email,not-an-email,2006-01-01,2024,Test School,Soccer,F,Male
+Bad,Date,baddate@test.com,invalid-date,2024,Test School,Soccer,F,Male

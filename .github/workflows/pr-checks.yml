@@ -34,6 +34,22 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
+          POSTGRES_MAX_CONNECTIONS: 100
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -41,12 +57,24 @@ jobs:
       - name: Setup project
         uses: ./.github/actions/setup
 
+      - name: Run database migrations
+        run: npm run db:push
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+
       - name: Run unit tests
         run: npm run test:unit
         env:
           NODE_ENV: test
           NODE_OPTIONS: --max-old-space-size=4096
           SESSION_SECRET: test-secret-key-for-ci
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+
+      - name: Cleanup test database
+        if: always()
+        run: ./scripts/ci-test-cleanup.sh
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
   integration-tests:
     name: Integration Tests
@@ -56,9 +84,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: athletemetrics_test
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -86,17 +114,23 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/athletemetrics_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
           SESSION_SECRET: test-secret-key-for-ci
           ADMIN_USER: admin
           ADMIN_EMAIL: admin@test.com
           ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+
+      - name: Cleanup test database
+        if: always()
+        run: ./scripts/ci-test-cleanup.sh
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
   build:
     name: Build Verification

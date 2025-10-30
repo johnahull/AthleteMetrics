@@ -21,6 +21,7 @@ import { db } from '../../packages/api/db';
 import { organizations, users, userOrganizations, teams, userTeams, measurements, auditLogs } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 // Mock vite module before importing registerRoutes
 vi.mock('../../packages/api/vite.js', () => ({
@@ -32,7 +33,7 @@ import { registerRoutes } from '../../packages/api/routes';
 
 // Helper function for password hashing
 async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
 
 // Test data

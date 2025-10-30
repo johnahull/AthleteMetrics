@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { BaseService } from "./base-service";
 import type { User } from "@shared/schema";
+import { INVITATION_PENDING_PASSWORD } from "@shared/schema";
 
 export interface LoginCredentials {
   username: string;
@@ -46,7 +47,7 @@ export class AuthService extends BaseService {
       }
 
       // Handle invitation pending state
-      if (user.password === "INVITATION_PENDING") {
+      if (user.password === INVITATION_PENDING_PASSWORD) {
         return { success: false, error: "Please complete your registration first" };
       }
 
