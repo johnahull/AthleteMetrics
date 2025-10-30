@@ -166,7 +166,8 @@ jobs:
           DATABASE_URL: ${{ secrets.RAILWAY_STAGING_PUBLIC_DATABASE_URL }}
         run: |
           # Sanitize DATABASE_URL for logging (hide password)
-          SAFE_DB_URL=$(echo "$DATABASE_URL" | sed 's|://[^:]*:[^@]*@|://****:****@|')
+          # Extract protocol and host, mask credentials
+          SAFE_DB_URL="${DATABASE_URL%%://*}://****:****@${DATABASE_URL##*@}"
 
           echo "❌ Migration failed - deployment BLOCKED"
           echo "Database: $SAFE_DB_URL"
