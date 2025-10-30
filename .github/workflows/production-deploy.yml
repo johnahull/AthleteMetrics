@@ -162,8 +162,16 @@ jobs:
         run: |
           echo "🔄 Running database migrations BEFORE deployment..."
           echo "⚠️  CRITICAL: Migrations must complete before deploying new code"
+          echo ""
+          echo "📦 Running drizzle migrations (0000-0013)..."
           npm run db:migrate
-          echo "✅ Migrations completed successfully"
+          echo "✅ Drizzle migrations completed"
+          echo ""
+          echo "📦 Running manual SQL migrations (0014-0021)..."
+          npm run db:migrate:manual
+          echo "✅ Manual migrations completed"
+          echo ""
+          echo "✅ All migrations completed successfully"
         env:
           DATABASE_URL: ${{ secrets.RAILWAY_PRODUCTION_PUBLIC_DATABASE_URL }}
 

@@ -59,12 +59,13 @@ const EXPECTED_STRUCTURE = {
     ],
   },
 
-  // Minimum number of migrations that should be tracked
-  // Note: The tracking table uses migration file names, not all SQL files get tracked
-  // We expect base schema (0000) + manual migrations that have been applied
-  // CURRENT STATE: Only 0000-0013 have snapshots and can be applied by drizzle
-  // TODO: Migrations 0014-0021 need snapshot files generated before they can be applied
-  minMigrationCount: 13, // Matches current staging/production state (0000-0012 + base schema)
+  // Total migrations expected across both systems:
+  // - Drizzle migrations (0000-0013): 13 migrations tracked in drizzle.__drizzle_migrations
+  // - Manual migrations (0014-0021): 8 migrations tracked in manual_migrations
+  // Total: 21 migrations
+  minDrizzleMigrationCount: 13, // Drizzle migrations with snapshots
+  minManualMigrationCount: 8,   // Manual SQL migrations without snapshots
+  minTotalMigrationCount: 21,   // Total across both systems
 };
 
 async function verifyColumns(client) {
@@ -144,8 +145,8 @@ async function verifyMigrationTracking(client) {
   console.log('\n🔍 Verifying migration tracking...');
   const issues = [];
 
-  // Check if tracking table exists
-  const trackingExists = await client.unsafe(`
+  // Check drizzle migrations tracking table
+  const drizzleTrackingExists = await client.unsafe(`
     SELECT EXISTS (
       SELECT FROM information_schema.tables
       WHERE table_schema = 'drizzle'
@@ -153,23 +154,62 @@ async function verifyMigrationTracking(client) {
     ) as exists
   `);
 
-  if (!trackingExists[0]?.exists) {
-    issues.push('❌ Migration tracking table (__drizzle_migrations) does not exist');
+  if (!drizzleTrackingExists[0]?.exists) {
+    issues.push('❌ Drizzle migration tracking table (__drizzle_migrations) does not exist');
     return issues;
   }
 
-  // Check migration count
-  const countResult = await client.unsafe(`
+  // Check drizzle migration count
+  const drizzleCountResult = await client.unsafe(`
     SELECT COUNT(*) as count
     FROM drizzle.__drizzle_migrations
   `);
 
-  const migrationCount = parseInt(countResult[0]?.count || 0);
+  const drizzleMigrationCount = parseInt(drizzleCountResult[0]?.count || 0);
 
-  if (migrationCount < EXPECTED_STRUCTURE.minMigrationCount) {
-    issues.push(`❌ Only ${migrationCount} migrations tracked (expected at least ${EXPECTED_STRUCTURE.minMigrationCount})`);
+  if (drizzleMigrationCount < EXPECTED_STRUCTURE.minDrizzleMigrationCount) {
+    issues.push(`❌ Only ${drizzleMigrationCount} drizzle migrations tracked (expected at least ${EXPECTED_STRUCTURE.minDrizzleMigrationCount})`);
   } else {
-    console.log(`   ✅ ${migrationCount} migrations tracked (>= ${EXPECTED_STRUCTURE.minMigrationCount} required)`);
+    console.log(`   ✅ Drizzle migrations: ${drizzleMigrationCount} tracked (>= ${EXPECTED_STRUCTURE.minDrizzleMigrationCount} required)`);
+  }
+
+  // Check manual migrations tracking table
+  const manualTrackingExists = await client.unsafe(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = 'manual_migrations'
+    ) as exists
+  `);
+
+  if (!manualTrackingExists[0]?.exists) {
+    // Manual migrations table doesn't exist yet - this is OK if migrations haven't been run
+    console.log('   ⚠️  Manual migration tracking table does not exist yet');
+    console.log('      This is normal if manual migrations have not been applied');
+    console.log('      Run: npm run db:migrate:manual');
+    return issues;
+  }
+
+  // Check manual migration count
+  const manualCountResult = await client.unsafe(`
+    SELECT COUNT(*) as count
+    FROM manual_migrations
+  `);
+
+  const manualMigrationCount = parseInt(manualCountResult[0]?.count || 0);
+
+  if (manualMigrationCount < EXPECTED_STRUCTURE.minManualMigrationCount) {
+    issues.push(`❌ Only ${manualMigrationCount} manual migrations tracked (expected at least ${EXPECTED_STRUCTURE.minManualMigrationCount})`);
+  } else {
+    console.log(`   ✅ Manual migrations: ${manualMigrationCount} tracked (>= ${EXPECTED_STRUCTURE.minManualMigrationCount} required)`);
+  }
+
+  // Check total migration count
+  const totalMigrationCount = drizzleMigrationCount + manualMigrationCount;
+  if (totalMigrationCount < EXPECTED_STRUCTURE.minTotalMigrationCount) {
+    issues.push(`❌ Total migrations: ${totalMigrationCount} (expected at least ${EXPECTED_STRUCTURE.minTotalMigrationCount})`);
+  } else {
+    console.log(`   ✅ Total migrations: ${totalMigrationCount} (>= ${EXPECTED_STRUCTURE.minTotalMigrationCount} required)`);
   }
 
   return issues;
