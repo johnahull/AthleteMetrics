@@ -30,9 +30,8 @@ export const TESTING_URL = process.env.TESTING_URL || 'https://athletemetrics-te
  *
  * @returns Configuration object with environment-specific values
  *
- * Note on credentials: TARGET_USERNAME and TARGET_PASSWORD fall back to empty strings
+ * Note on credentials: TARGET_USERNAME and TARGET_PASSWORD return undefined
  * when environment variables are not set. Callers should validate these values before use.
- * Empty strings are falsy when used with !! checks, allowing consumers to detect missing credentials.
  */
 export function getEnvironmentConfig() {
   const isTesting = !!process.env.TESTING_URL || !!process.env.TESTING_USERNAME;
@@ -49,13 +48,13 @@ export function getEnvironmentConfig() {
     TARGET_URL: isTesting
       ? (process.env.TESTING_URL || 'https://athletemetrics-testing-testing.up.railway.app')
       : (process.env.STAGING_URL || 'http://localhost:5000'),
-    // Credentials (fall back to empty strings - callers should validate before use)
+    // Credentials (return undefined when not set - callers should validate before use)
     TARGET_USERNAME: isTesting
-      ? (process.env.TESTING_USERNAME || '')
-      : (process.env.STAGING_USERNAME || ''),
+      ? process.env.TESTING_USERNAME
+      : process.env.STAGING_USERNAME,
     TARGET_PASSWORD: isTesting
-      ? (process.env.TESTING_PASSWORD || '')
-      : (process.env.STAGING_PASSWORD || ''),
+      ? process.env.TESTING_PASSWORD
+      : process.env.STAGING_PASSWORD,
     // Database URL
     DATABASE_URL: isTesting
       ? process.env.TESTING_DATABASE_URL

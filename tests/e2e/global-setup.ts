@@ -119,6 +119,10 @@ async function globalSetup(config: FullConfig) {
     );
   }
 
+  // Type assertions: after validation, we know these are strings
+  const username = TARGET_USERNAME as string;
+  const password = TARGET_PASSWORD as string;
+
   // Step 1: Verify environment is accessible
   console.log(`🔍 Verifying ${ENV_NAME} environment: ${TARGET_URL}`);
   const browser = await chromium.launch();
@@ -144,8 +148,8 @@ async function globalSetup(config: FullConfig) {
     await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
 
     // Use ID selectors (testing env) with name fallback (staging env)
-    await page.fill('#username, input[name="username"]', TARGET_USERNAME);
-    await page.fill('#password, input[name="password"]', TARGET_PASSWORD);
+    await page.fill('#username, input[name="username"]', username);
+    await page.fill('#password, input[name="password"]', password);
     await page.click('button[type="submit"]');
 
     await page.waitForURL(url => !url.pathname.includes('/login'), {
@@ -247,8 +251,8 @@ async function globalSetup(config: FullConfig) {
 
     const testUsers: TestUserConfig[] = [
       {
-        username: TARGET_USERNAME,
-        password: TARGET_PASSWORD,
+        username: username,
+        password: password,
         firstName: 'E2E',
         lastName: 'OrgAdmin',
         role: 'org_admin',
