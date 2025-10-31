@@ -730,6 +730,10 @@ export function TimeSeriesViolinChart({
           {/* Statistical legend items */}
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-500 rounded"></div>
+              <span>Distribution Shape</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-gray-700 rounded-full"></div>
               <span>Individual Athletes</span>
             </div>
