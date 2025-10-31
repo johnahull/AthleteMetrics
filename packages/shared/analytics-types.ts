@@ -151,6 +151,7 @@ export type ChartType =
   | 'multi_line'
   | 'box_swarm_combo'
   | 'time_series_box_swarm'
+  | 'time_series_violin'
   | 'violin_plot';
 
 export interface ChartConfiguration {

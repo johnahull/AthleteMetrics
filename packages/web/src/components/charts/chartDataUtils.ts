@@ -26,6 +26,7 @@ export function getChartDataForType(
     case 'multi_line':
     case 'connected_scatter':
     case 'time_series_box_swarm':
+    case 'time_series_violin':
       return trends || [];
     case 'radar_chart':
       // For radar charts, prefer multiMetric data but fall back to standard data
@@ -55,6 +56,7 @@ export function hasValidDataForChartType(
     case 'multi_line':
     case 'connected_scatter':
     case 'time_series_box_swarm':
+    case 'time_series_violin':
       return !!trends && trends.length > 0;
     case 'radar_chart':
       return (!!multiMetric && multiMetric.length > 0) || (!!data && data.length > 0);

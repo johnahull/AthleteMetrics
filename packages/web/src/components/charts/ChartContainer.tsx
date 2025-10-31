@@ -66,6 +66,7 @@ const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default:
 const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
+const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
 export type ExportFormat = 'csv' | 'png' | 'clipboard';
@@ -198,6 +199,7 @@ export function ChartContainer({
       case 'radar_chart':
       case 'box_swarm_combo':
       case 'time_series_box_swarm':
+      case 'time_series_violin':
       case 'violin_plot':
         return null;
       default:
@@ -267,7 +269,7 @@ export function ChartContainer({
 
   // Only show unsupported chart error for truly unsupported types
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
-  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'violin_plot'];
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'time_series_violin', 'violin_plot'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
@@ -441,6 +443,14 @@ export function ChartContainer({
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
                   <TimeSeriesBoxSwarmChart
+                    data={trends || []}
+                    config={chartConfig}
+                    statistics={statistics}
+                    selectedDates={selectedDates || []}
+                    metric={metric || ''}
+                  />
+                ) : chartType === 'time_series_violin' ? (
+                  <TimeSeriesViolinChart
                     data={trends || []}
                     config={chartConfig}
                     statistics={statistics}

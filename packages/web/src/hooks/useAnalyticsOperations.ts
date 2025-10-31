@@ -304,7 +304,9 @@ export function useChartConfiguration() {
         'swarm_plot': 'Swarm Plot',
         'connected_scatter': 'Connected Scatter',
         'multi_line': 'Multi Line',
-        'time_series_box_swarm': 'Time-Series Box + Swarm'
+        'time_series_box_swarm': 'Time-Series Box + Swarm',
+        'time_series_violin': 'Time-Series Violin',
+        'violin_plot': 'Violin Plot'
       };
       return chartTypeNames[chartType] || chartType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
