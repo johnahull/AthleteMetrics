@@ -387,6 +387,18 @@ When adding new E2E tests:
 6. Ensure tests pass locally before committing
 7. Update this README if adding new test categories
 
+## Deployment Verification
+
+After deploying to staging, verify the deployment with:
+
+```bash
+# Quick health check
+npm run test:staging:validate
+
+# Full E2E test suite
+npm run test:staging
+```
+
 ## Support
 
 For issues with E2E tests, check:
