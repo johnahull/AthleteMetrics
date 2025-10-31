@@ -34,7 +34,8 @@ const CHART_HEIGHT_VIOLIN = 'h-[910px]';   // Violin plots need vertical space f
 const CHART_HEIGHT_SCATTER = 'h-[910px]';  // Connected scatter plots with legend and annotations
 const CHART_HEIGHT_MULTI_LINE = 'h-[925px]'; // Multi-metric trend lines with separate Y-axes
 const CHART_HEIGHT_MULTI_GROUP = 'h-[1100px]'; // Multiple group comparisons need significant vertical space
-const CHART_HEIGHT_TIME_SERIES_VIOLIN = 'h-[1100px]'; // Time-series violin matches multi-group height for statistics table and distributions
+const CHART_HEIGHT_TIME_SERIES_VIOLIN_COLLAPSED = 'h-[886px]'; // Time-series violin collapsed (26% taller than default)
+const CHART_HEIGHT_TIME_SERIES_VIOLIN_EXPANDED = 'h-[1100px]'; // Time-series violin expanded for statistics table
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
@@ -120,6 +121,9 @@ export function ChartContainer({
   // Fullscreen state
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Time-series violin chart stats expansion state
+  const [isViolinStatsExpanded, setIsViolinStatsExpanded] = useState(false);
 
   // Ref for export (container element used by html2canvas)
   const containerRef = useRef<HTMLDivElement>(null);
@@ -324,7 +328,8 @@ export function ChartContainer({
   const isMultiGroup = selectedGroups && selectedGroups.length > 0;
   const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR
     : chartType === 'violin_plot' ? CHART_HEIGHT_VIOLIN
-    : chartType === 'time_series_violin' ? CHART_HEIGHT_TIME_SERIES_VIOLIN
+    : chartType === 'time_series_violin'
+      ? (isViolinStatsExpanded ? CHART_HEIGHT_TIME_SERIES_VIOLIN_EXPANDED : CHART_HEIGHT_TIME_SERIES_VIOLIN_COLLAPSED)
     : chartType === 'connected_scatter' ? CHART_HEIGHT_SCATTER
     : chartType === 'multi_line' ? CHART_HEIGHT_MULTI_LINE
     : (chartType === 'box_swarm_combo' || chartType === 'time_series_box_swarm')
@@ -332,7 +337,7 @@ export function ChartContainer({
     : CHART_HEIGHT_DEFAULT;
 
   return (
-    <Card className={`${className} ${cardHeight} flex flex-col`} ref={containerRef}>
+    <Card className={`${className} ${cardHeight} flex flex-col transition-all duration-300`} ref={containerRef}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
@@ -458,6 +463,7 @@ export function ChartContainer({
                     statistics={statistics}
                     selectedDates={selectedDates || []}
                     metric={metric || ''}
+                    onStatsExpandedChange={setIsViolinStatsExpanded}
                   />
                 ) : chartType === 'violin_plot' ? (
                   <ErrorBoundary>

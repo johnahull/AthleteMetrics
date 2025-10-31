@@ -60,6 +60,7 @@ interface TimeSeriesViolinChartProps {
   metric: string;
   config: ChartConfiguration;
   statistics?: Record<string, StatisticalSummary>;
+  onStatsExpandedChange?: (expanded: boolean) => void;
 }
 
 export function TimeSeriesViolinChart({
@@ -67,7 +68,8 @@ export function TimeSeriesViolinChart({
   selectedDates,
   metric,
   config,
-  statistics
+  statistics,
+  onStatsExpandedChange
 }: TimeSeriesViolinChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -763,7 +765,11 @@ export function TimeSeriesViolinChart({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsStatsExpanded(!isStatsExpanded)}
+            onClick={() => {
+              const newValue = !isStatsExpanded;
+              setIsStatsExpanded(newValue);
+              onStatsExpandedChange?.(newValue);
+            }}
             className="flex items-center justify-between w-full p-3 h-auto text-sm font-medium bg-gray-50 rounded-lg border hover:bg-gray-100 mb-3"
             aria-expanded={isStatsExpanded}
           >
