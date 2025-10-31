@@ -53,6 +53,7 @@ const SwarmChart = React.lazy(() => import('./SwarmChart').then(m => ({ default:
 const ConnectedScatterChart = React.lazy(() => import('./ConnectedScatterChart').then(m => ({ default: m.ConnectedScatterChart })));
 const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ default: m.MultiLineChart })));
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
+const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
 // Constants
@@ -71,6 +72,7 @@ const ZOOM_SUPPORTED_CHARTS: ChartType[] = [
   'connected_scatter',
   'swarm_plot',
   'time_series_box_swarm',
+  'time_series_violin',
   'violin_plot'
 ];
 
@@ -333,6 +335,20 @@ export function FullscreenChartDialog({
         }
         return (
           <TimeSeriesBoxSwarmChart
+            data={trends!}
+            config={fullscreenConfig}
+            statistics={statistics}
+            selectedDates={selectedDates || []}
+            metric={metric || ''}
+          />
+        );
+
+      case 'time_series_violin':
+        if (!trends || trends.length === 0) {
+          return <div className="flex items-center justify-center h-full text-muted-foreground">No trend data available for time-series violin chart</div>;
+        }
+        return (
+          <TimeSeriesViolinChart
             data={trends!}
             config={fullscreenConfig}
             statistics={statistics}

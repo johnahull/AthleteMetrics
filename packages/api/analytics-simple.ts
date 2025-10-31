@@ -99,7 +99,7 @@ export class AnalyticsService {
         if (timeframeType === 'best') {
           baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart', 'violin_plot');
         } else {
-          baseCharts.push('time_series_box_swarm', 'line_chart');
+          baseCharts.push('time_series_box_swarm', 'time_series_violin', 'line_chart');
         }
       } else if (metricCount === 2) {
         if (timeframeType === 'best') {
@@ -121,7 +121,7 @@ export class AnalyticsService {
           // For multi-group analysis with 1 metric and best timeframe, exclude distribution and bar_chart
           baseCharts.push('box_swarm_combo', 'violin_plot');
         } else {
-          baseCharts.push('time_series_box_swarm', 'line_chart');
+          baseCharts.push('time_series_box_swarm', 'time_series_violin', 'line_chart');
         }
       } else if (metricCount === 2) {
         if (timeframeType === 'best') {
