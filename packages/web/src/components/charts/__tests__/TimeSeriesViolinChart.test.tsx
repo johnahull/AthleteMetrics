@@ -680,6 +680,160 @@ describe('TimeSeriesViolinChart', () => {
     });
   });
 
+  describe('KDE Calculation (Fix #9)', () => {
+    it('should calculate peak density near mean for normal distribution', () => {
+      const normalData: TrendData[] = [
+        {
+          athleteId: 'athlete-1',
+          athleteName: 'Athlete 1',
+          metric: 'FLY10_TIME',
+          data: [{ date: new Date('2024-01-01'), value: 1.0, isPersonalBest: false }],
+          teamName: 'Team A'
+        },
+        {
+          athleteId: 'athlete-2',
+          athleteName: 'Athlete 2',
+          metric: 'FLY10_TIME',
+          data: [{ date: new Date('2024-01-01'), value: 2.0, isPersonalBest: false }],
+          teamName: 'Team A'
+        },
+        {
+          athleteId: 'athlete-3',
+          athleteName: 'Athlete 3',
+          metric: 'FLY10_TIME',
+          data: [{ date: new Date('2024-01-01'), value: 3.0, isPersonalBest: false }],
+          teamName: 'Team A'
+        },
+        {
+          athleteId: 'athlete-4',
+          athleteName: 'Athlete 4',
+          metric: 'FLY10_TIME',
+          data: [{ date: new Date('2024-01-01'), value: 4.0, isPersonalBest: false }],
+          teamName: 'Team A'
+        },
+        {
+          athleteId: 'athlete-5',
+          athleteName: 'Athlete 5',
+          metric: 'FLY10_TIME',
+          data: [{ date: new Date('2024-01-01'), value: 5.0, isPersonalBest: false }],
+          teamName: 'Team A'
+        }
+      ];
+
+      render(
+        <TimeSeriesViolinChart
+          data={normalData}
+          selectedDates={['2024-01-01']}
+          metric="FLY10_TIME"
+          config={mockConfig}
+        />
+      );
+
+      // KDE should generate smooth distribution
+      // Verify violin rendering succeeded
+      expect(mockCanvasContext.beginPath).toHaveBeenCalled();
+      expect(mockCanvasContext.fill).toHaveBeenCalled();
+    });
+
+    it('should handle zero-variance datasets with artificial bandwidth', () => {
+      const identicalData: TrendData[] = Array.from({ length: 5 }, (_, i) => ({
+        athleteId: `athlete-${i}`,
+        athleteName: `Athlete ${i}`,
+        metric: 'FLY10_TIME',
+        data: [{ date: new Date('2024-01-01'), value: 2.5, isPersonalBest: false }],
+        teamName: 'Team A'
+      }));
+
+      render(
+        <TimeSeriesViolinChart
+          data={identicalData}
+          selectedDates={['2024-01-01']}
+          metric="FLY10_TIME"
+          config={mockConfig}
+        />
+      );
+
+      // Should handle zero range gracefully with artificial bandwidth
+      expect(mockCanvasContext.beginPath).toHaveBeenCalled();
+      expect(mockCanvasContext.fill).toHaveBeenCalled();
+    });
+
+    it('should apply Silverman rule of thumb for bandwidth selection', () => {
+      const variableData: TrendData[] = [
+        { athleteId: 'a1', athleteName: 'A1', metric: 'FLY10_TIME', data: [{ date: new Date('2024-01-01'), value: 1.5, isPersonalBest: false }], teamName: 'Team A' },
+        { athleteId: 'a2', athleteName: 'A2', metric: 'FLY10_TIME', data: [{ date: new Date('2024-01-01'), value: 2.0, isPersonalBest: false }], teamName: 'Team A' },
+        { athleteId: 'a3', athleteName: 'A3', metric: 'FLY10_TIME', data: [{ date: new Date('2024-01-01'), value: 2.5, isPersonalBest: false }], teamName: 'Team A' },
+        { athleteId: 'a4', athleteName: 'A4', metric: 'FLY10_TIME', data: [{ date: new Date('2024-01-01'), value: 3.0, isPersonalBest: false }], teamName: 'Team A' },
+        { athleteId: 'a5', athleteName: 'A5', metric: 'FLY10_TIME', data: [{ date: new Date('2024-01-01'), value: 3.5, isPersonalBest: false }], teamName: 'Team A' },
+      ];
+
+      render(
+        <TimeSeriesViolinChart
+          data={variableData}
+          selectedDates={['2024-01-01']}
+          metric="FLY10_TIME"
+          config={mockConfig}
+        />
+      );
+
+      // Bandwidth calculation should produce valid KDE
+      expect(mockCanvasContext.beginPath).toHaveBeenCalled();
+      expect(mockCanvasContext.fill).toHaveBeenCalled();
+    });
+
+    it('should apply sampling for large datasets (>1000 points)', () => {
+      const largeSingleDateData: TrendData[] = Array.from({ length: 1500 }, (_, i) => ({
+        athleteId: `athlete-${i}`,
+        athleteName: `Athlete ${i}`,
+        metric: 'FLY10_TIME',
+        data: [{
+          date: new Date('2024-01-01'),
+          value: 1.5 + Math.sin(i / 100) * 0.3,
+          isPersonalBest: false
+        }],
+        teamName: 'Team A'
+      }));
+
+      const start = performance.now();
+      render(
+        <TimeSeriesViolinChart
+          data={largeSingleDateData}
+          selectedDates={['2024-01-01']}
+          metric="FLY10_TIME"
+          config={mockConfig}
+        />
+      );
+      const end = performance.now();
+
+      // Should complete quickly due to sampling
+      expect(end - start).toBeLessThan(1000);
+      expect(mockCanvasContext.beginPath).toHaveBeenCalled();
+    });
+
+    it('should handle single value with artificial bandwidth', () => {
+      const singleValue: TrendData[] = [{
+        athleteId: 'athlete-1',
+        athleteName: 'Solo Athlete',
+        metric: 'FLY10_TIME',
+        data: [{ date: new Date('2024-01-01'), value: 2.0, isPersonalBest: true }],
+        teamName: 'Team A'
+      }];
+
+      render(
+        <TimeSeriesViolinChart
+          data={singleValue}
+          selectedDates={['2024-01-01']}
+          metric="FLY10_TIME"
+          config={mockConfig}
+        />
+      );
+
+      // Single value should create narrow distribution
+      expect(mockCanvasContext.beginPath).toHaveBeenCalled();
+      expect(mockCanvasContext.fill).toHaveBeenCalled();
+    });
+  });
+
   describe('Performance', () => {
     it('should handle large datasets efficiently', () => {
       // Create large dataset

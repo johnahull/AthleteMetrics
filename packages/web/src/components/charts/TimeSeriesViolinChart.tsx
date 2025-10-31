@@ -83,6 +83,10 @@ export function TimeSeriesViolinChart({
     isPersonalBest?: boolean;
   } | null>(null);
 
+  // Canvas dimensions for coordinate calculations
+  const [canvasWidth, setCanvasWidth] = useState(0);
+  const [canvasHeight, setCanvasHeight] = useState(TIME_SERIES_VIOLIN_CONFIG.CANVAS_HEIGHT);
+
   // Kernel Density Estimation for violin shape
   const calculateKDE = useCallback((values: number[]): Array<{ x: number; y: number }> => {
     if (values.length === 0) return [];
@@ -228,7 +232,11 @@ export function TimeSeriesViolinChart({
 
         return {
           date: dateStr,
-          dateLabel: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          dateLabel: new Date(dateStr).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          }),
           athletes,
           values,
           stats: { min, max, q1, median, q3, mean, count, std },
@@ -255,6 +263,47 @@ export function TimeSeriesViolinChart({
     return ((unsignedHash % 1000) / 1000 - 0.5) * range;
   }
 
+  // Pre-calculate athlete point coordinates for efficient mouse hover (Fix #1)
+  const coordinateMap = useMemo(() => {
+    if (!processedData || processedData.length === 0 || canvasWidth === 0) return [];
+
+    const padding = TIME_SERIES_VIOLIN_CONFIG.CHART_PADDING;
+    const displayWidth = canvasWidth;
+    const displayHeight = TIME_SERIES_VIOLIN_CONFIG.CANVAS_HEIGHT;
+    const chartWidth = displayWidth - 2 * padding;
+    const chartHeight = displayHeight - 2 * padding;
+    const groupWidth = chartWidth / processedData.length;
+
+    const allValues = processedData.flatMap(d => d.values);
+    const dataMin = Math.min(...allValues);
+    const dataMax = Math.max(...allValues);
+    const dataRange = dataMax - dataMin || 1;
+
+    const rangePadding = dataRange * TIME_SERIES_VIOLIN_CONFIG.Y_AXIS_PADDING_PERCENT;
+    const globalMin = dataMin - rangePadding;
+    const globalMax = dataMax + rangePadding;
+    const valueRange = globalMax - globalMin;
+
+    const valueToY = (value: number) => {
+      return padding + chartHeight - ((value - globalMin) / valueRange) * chartHeight;
+    };
+
+    return processedData.flatMap((dateData, dateIndex) => {
+      const centerX = padding + dateIndex * groupWidth + groupWidth / 2;
+      const jitterRange = groupWidth * TIME_SERIES_VIOLIN_CONFIG.JITTER_RANGE_FACTOR;
+
+      return dateData.athletes.map(athlete => ({
+        athleteId: athlete.athleteId,
+        x: centerX + generateJitter(athlete.athleteId, jitterRange),
+        y: valueToY(athlete.value),
+        athleteName: athlete.athleteName,
+        value: athlete.value,
+        date: dateData.dateLabel,
+        isPersonalBest: athlete.isPersonalBest
+      }));
+    });
+  }, [processedData, canvasWidth]);
+
   // Custom drawing logic
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -280,6 +329,10 @@ export function TimeSeriesViolinChart({
         canvas.style.height = `${TIME_SERIES_VIOLIN_CONFIG.CANVAS_HEIGHT}px`;
 
         ctx.scale(dpr, dpr);
+
+        // Update canvas dimensions for coordinate map calculation
+        setCanvasWidth(containerWidth);
+        setCanvasHeight(TIME_SERIES_VIOLIN_CONFIG.CANVAS_HEIGHT);
       }
 
       // Clear canvas
@@ -364,7 +417,8 @@ export function TimeSeriesViolinChart({
             ctx.beginPath();
             ctx.arc(x, y, TIME_SERIES_VIOLIN_CONFIG.POINT_RADIUS, 0, 2 * Math.PI);
             ctx.fill();
-            ctx.strokeStyle = athlete.isPersonalBest ? TIME_SERIES_VIOLIN_CONFIG.PERSONAL_BEST_COLOR : '#ffffff';
+            // Fix #7: Use darker gold for better contrast on personal bests
+            ctx.strokeStyle = athlete.isPersonalBest ? '#B8860B' : '#ffffff';
             ctx.lineWidth = TIME_SERIES_VIOLIN_CONFIG.POINT_BORDER_WIDTH;
             ctx.stroke();
             ctx.restore();
@@ -442,10 +496,10 @@ export function TimeSeriesViolinChart({
           ctx.stroke();
         }
 
-        // Mean point (red)
+        // Mean point (Fix #8: purple instead of red to avoid confusion with median line)
         const meanY = valueToY(stats.mean);
         if (isFinite(meanY)) {
-          ctx.fillStyle = '#ff0000';
+          ctx.fillStyle = '#8B5CF6';
           ctx.beginPath();
           ctx.arc(centerX, meanY, 3, 0, 2 * Math.PI);
           ctx.fill();
@@ -519,69 +573,37 @@ export function TimeSeriesViolinChart({
     };
   }, []);
 
-  // Handle mouse hover
+  // Handle mouse hover - optimized with pre-calculated coordinates (Fix #1)
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || processedData.length === 0) return;
+    if (!canvas || coordinateMap.length === 0) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      const padding = TIME_SERIES_VIOLIN_CONFIG.CHART_PADDING;
-      const displayWidth = canvas.clientWidth;
-      const displayHeight = TIME_SERIES_VIOLIN_CONFIG.CANVAS_HEIGHT;
-      const chartWidth = displayWidth - 2 * padding;
-      const chartHeight = displayHeight - 2 * padding;
-      const groupWidth = chartWidth / processedData.length;
-
-      const allValues = processedData.flatMap(d => d.values);
-      const dataMin = Math.min(...allValues);
-      const dataMax = Math.max(...allValues);
-      const dataRange = dataMax - dataMin || 1;
-
-      const rangePadding = dataRange * TIME_SERIES_VIOLIN_CONFIG.Y_AXIS_PADDING_PERCENT;
-      const globalMin = dataMin - rangePadding;
-      const globalMax = dataMax + rangePadding;
-      const valueRange = globalMax - globalMin;
-
-      const valueToY = (value: number) => {
-        return padding + chartHeight - ((value - globalMin) / valueRange) * chartHeight;
-      };
-
-      let foundAthlete: typeof tooltip = null;
       const hoverThreshold = TIME_SERIES_VIOLIN_CONFIG.HOVER_THRESHOLD;
 
-      for (const [dateIndex, dateData] of processedData.entries()) {
-        const centerX = padding + dateIndex * groupWidth + groupWidth / 2;
+      // O(n) search through pre-calculated coordinates instead of O(n×m) recalculation
+      const found = coordinateMap.find(point => {
+        const distance = Math.sqrt(Math.pow(mouseX - point.x, 2) + Math.pow(mouseY - point.y, 2));
+        return distance <= hoverThreshold;
+      });
 
-        for (const athlete of dateData.athletes) {
-          const jitterRange = groupWidth * TIME_SERIES_VIOLIN_CONFIG.JITTER_RANGE_FACTOR;
-          const jitter = generateJitter(athlete.athleteId, jitterRange);
-          const x = centerX + jitter;
-          const y = valueToY(athlete.value);
-
-          const distance = Math.sqrt(Math.pow(mouseX - x, 2) + Math.pow(mouseY - y, 2));
-
-          if (distance <= hoverThreshold) {
-            foundAthlete = {
-              visible: true,
-              x: mouseX,
-              y: mouseY,
-              athleteName: athlete.athleteName,
-              value: athlete.value,
-              date: dateData.dateLabel,
-              isPersonalBest: athlete.isPersonalBest
-            };
-            break;
-          }
-        }
-
-        if (foundAthlete) break;
+      if (found) {
+        setTooltip({
+          visible: true,
+          x: mouseX,
+          y: mouseY,
+          athleteName: found.athleteName,
+          value: found.value,
+          date: found.date,
+          isPersonalBest: found.isPersonalBest
+        });
+      } else {
+        setTooltip(null);
       }
-
-      setTooltip(foundAthlete);
     };
 
     const handleMouseLeave = () => {
@@ -595,7 +617,7 @@ export function TimeSeriesViolinChart({
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [processedData]);
+  }, [coordinateMap]);
 
   const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
 
@@ -656,58 +678,77 @@ export function TimeSeriesViolinChart({
       <div className="relative">
         <canvas
           ref={canvasRef}
-          className="w-full h-auto border rounded"
+          role="img"
+          aria-label={`Time-series violin chart showing ${metricConfig?.label} distribution across ${selectedDates.length} dates with ${processedData.reduce((sum, d) => sum + d.athletes.length, 0)} total measurements`}
+          tabIndex={0}
+          className="w-full h-auto border rounded focus:ring-2 focus:ring-blue-500"
           style={{ height: `${TIME_SERIES_VIOLIN_CONFIG.CANVAS_HEIGHT}px` }}
         />
 
-        {/* Tooltip */}
-        {tooltip && tooltip.visible && (
-          <div
-            className="absolute z-50 bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-sm pointer-events-none"
-            style={{
-              left: `${tooltip.x}px`,
-              top: `${tooltip.y - 10}px`,
-              transform: 'translate(-50%, -100%)',
-            }}
-          >
-            <div className="font-semibold">{tooltip.athleteName}</div>
-            <div className="text-xs text-gray-300">{tooltip.date}</div>
-            <div className="mt-1">
-              <span className="font-bold">
-                {isFly10Metric(metric)
-                  ? formatFly10Dual(tooltip.value, 'time-first')
-                  : `${tooltip.value.toFixed(2)}${metricConfig?.unit || ''}`}
-              </span>
-              {tooltip.isPersonalBest && <span className="ml-2">⭐</span>}
-            </div>
-          </div>
-        )}
+        {/* Tooltip with boundary detection (Fix #3) */}
+        {tooltip && tooltip.visible && (() => {
+          const tooltipX = Math.max(50, Math.min(tooltip.x, canvasWidth - 50));
+          const tooltipHeight = 80; // Approximate tooltip height
+          const tooltipY = Math.max(tooltipHeight + 20, tooltip.y - 10);
 
-        {/* Legend */}
-        <div className="mt-4 flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-500 rounded"></div>
-            <span>Distribution Shape</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-blue-500 rounded-full opacity-50"></div>
-            <span>Individual Athletes</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: TIME_SERIES_VIOLIN_CONFIG.PERSONAL_BEST_COLOR }}></div>
-            <span>Personal Best</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0.5 bg-red-600"></div>
-            <span>Median</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0.5 bg-orange-500 border-dashed border-t-2 border-orange-500"></div>
-            <span>Quartiles (Q1, Q3)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            <span>Mean</span>
+          return (
+            <div
+              className="absolute z-50 bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-sm pointer-events-none"
+              style={{
+                left: `${tooltipX}px`,
+                top: `${tooltipY}px`,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <div className="font-semibold">{tooltip.athleteName}</div>
+              <div className="text-xs text-gray-300">{tooltip.date}</div>
+              <div className="mt-1">
+                <span className="font-bold">
+                  {isFly10Metric(metric)
+                    ? formatFly10Dual(tooltip.value, 'time-first')
+                    : `${tooltip.value.toFixed(2)}${metricConfig?.unit || ''}`}
+                </span>
+                {tooltip.isPersonalBest && <span className="ml-2">⭐</span>}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Legend with date-specific colors (Fix #4) */}
+        <div className="mt-4">
+          {/* Date-specific colors */}
+          {processedData.length > 1 && (
+            <div className="flex flex-wrap gap-4 text-sm mb-2">
+              {processedData.map((dateData, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{ backgroundColor: dateData.color }}></div>
+                  <span>{dateData.dateLabel}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Statistical legend items */}
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-700 rounded-full"></div>
+              <span>Individual Athletes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: TIME_SERIES_VIOLIN_CONFIG.PERSONAL_BEST_COLOR }}></div>
+              <span>Personal Best</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-0.5 bg-red-600"></div>
+              <span>Median</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-0.5 bg-orange-500 border-dashed border-t-2 border-orange-500"></div>
+              <span>Quartiles (Q1, Q3)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+              <span>Mean</span>
+            </div>
           </div>
         </div>
       </div>
@@ -748,10 +789,10 @@ export function TimeSeriesViolinChart({
                 </div>
               ))}
 
-              {/* Mean row */}
+              {/* Mean row (Fix #8: purple color) */}
               <div className="font-medium text-right pr-4">Mean</div>
               {processedData.map((dateData, index) => (
-                <div key={index} className="text-lg font-bold text-red-600 text-center">
+                <div key={index} className="text-lg font-bold text-purple-600 text-center">
                   {dateData.stats.mean.toFixed(2)}{metricConfig.unit}
                 </div>
               ))}
@@ -761,6 +802,22 @@ export function TimeSeriesViolinChart({
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-yellow-600 text-center">
                   {dateData.stats.median.toFixed(2)}{metricConfig.unit}
+                </div>
+              ))}
+
+              {/* Q1 row (Fix #5) */}
+              <div className="font-medium text-right pr-4">Q1 (25th %ile)</div>
+              {processedData.map((dateData, index) => (
+                <div key={index} className="text-lg font-bold text-orange-500 text-center">
+                  {dateData.stats.q1.toFixed(2)}{metricConfig.unit}
+                </div>
+              ))}
+
+              {/* Q3 row (Fix #5) */}
+              <div className="font-medium text-right pr-4">Q3 (75th %ile)</div>
+              {processedData.map((dateData, index) => (
+                <div key={index} className="text-lg font-bold text-orange-500 text-center">
+                  {dateData.stats.q3.toFixed(2)}{metricConfig.unit}
                 </div>
               ))}
 
