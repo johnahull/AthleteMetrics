@@ -308,7 +308,7 @@ export function TimeSeriesViolinChart({
         const maxDensity = Math.max(...dateData.density.map(d => d.y).filter(y => isFinite(y)));
 
         // Draw violin shape
-        ctx.fillStyle = dateData.color + '40';
+        ctx.fillStyle = dateData.color + 'C0'; // Use 75% opacity (C0 in hex) to match outline color
         ctx.strokeStyle = dateData.color;
         ctx.lineWidth = 2;
 

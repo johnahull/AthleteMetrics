@@ -34,6 +34,7 @@ const CHART_HEIGHT_VIOLIN = 'h-[910px]';   // Violin plots need vertical space f
 const CHART_HEIGHT_SCATTER = 'h-[910px]';  // Connected scatter plots with legend and annotations
 const CHART_HEIGHT_MULTI_LINE = 'h-[925px]'; // Multi-metric trend lines with separate Y-axes
 const CHART_HEIGHT_MULTI_GROUP = 'h-[1100px]'; // Multiple group comparisons need significant vertical space
+const CHART_HEIGHT_TIME_SERIES_VIOLIN = 'h-[805px]'; // Time-series violin (15% taller than default for statistics table)
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;
@@ -323,6 +324,7 @@ export function ChartContainer({
   const isMultiGroup = selectedGroups && selectedGroups.length > 0;
   const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR
     : chartType === 'violin_plot' ? CHART_HEIGHT_VIOLIN
+    : chartType === 'time_series_violin' ? CHART_HEIGHT_TIME_SERIES_VIOLIN
     : chartType === 'connected_scatter' ? CHART_HEIGHT_SCATTER
     : chartType === 'multi_line' ? CHART_HEIGHT_MULTI_LINE
     : (chartType === 'box_swarm_combo' || chartType === 'time_series_box_swarm')
