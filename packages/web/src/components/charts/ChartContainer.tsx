@@ -34,7 +34,7 @@ const CHART_HEIGHT_VIOLIN = 'h-[910px]';   // Violin plots need vertical space f
 const CHART_HEIGHT_SCATTER = 'h-[910px]';  // Connected scatter plots with legend and annotations
 const CHART_HEIGHT_MULTI_LINE = 'h-[925px]'; // Multi-metric trend lines with separate Y-axes
 const CHART_HEIGHT_MULTI_GROUP = 'h-[1100px]'; // Multiple group comparisons need significant vertical space
-const CHART_HEIGHT_TIME_SERIES_VIOLIN = 'h-[805px]'; // Time-series violin (15% taller than default for statistics table)
+const CHART_HEIGHT_TIME_SERIES_VIOLIN = 'h-[886px]'; // Time-series violin (26% taller than default for statistics table)
 
 // Union type for all possible chart data types
 type ChartDataType = ChartDataPoint[] | TrendData[] | MultiMetricData[] | null;

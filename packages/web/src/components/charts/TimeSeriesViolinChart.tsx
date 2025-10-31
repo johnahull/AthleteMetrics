@@ -49,6 +49,11 @@ function percentile(arr: number[], p: number): number {
   return arr[lower] * (upper - index) + arr[upper] * (index - lower);
 }
 
+function getDateColor(index: number): string {
+  const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+  return colors[index % colors.length];
+}
+
 interface TimeSeriesViolinChartProps {
   data: TrendData[];
   selectedDates: string[];
@@ -228,7 +233,7 @@ export function TimeSeriesViolinChart({
           values,
           stats: { min, max, q1, median, q3, mean, count, std },
           density,
-          color: `hsl(${index * 360 / selectedDates.length}, 70%, 50%)`
+          color: getDateColor(index)
         };
       }).filter((d): d is NonNullable<typeof d> => d !== null);
     } catch (error) {
@@ -308,7 +313,7 @@ export function TimeSeriesViolinChart({
         const maxDensity = Math.max(...dateData.density.map(d => d.y).filter(y => isFinite(y)));
 
         // Draw violin shape
-        ctx.fillStyle = dateData.color + 'C0'; // Use 75% opacity (C0 in hex) to match outline color
+        ctx.fillStyle = dateData.color + '40'; // Semi-transparent (25% opacity) to match ViolinChart
         ctx.strokeStyle = dateData.color;
         ctx.lineWidth = 2;
 
