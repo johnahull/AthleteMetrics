@@ -10,13 +10,13 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import type { 
-  ChartDataPoint, 
-  ChartConfiguration, 
-  StatisticalSummary 
+import type {
+  ChartDataPoint,
+  ChartConfiguration,
+  StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 
 // Register Chart.js components
 ChartJS.register(
@@ -41,6 +41,8 @@ export const DistributionChart = React.memo(function DistributionChart({
   statistics,
   highlightAthlete
 }: DistributionChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   // Transform data for histogram visualization
   const distributionData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -82,10 +84,11 @@ export const DistributionChart = React.memo(function DistributionChart({
       `${bin.min.toFixed(2)} - ${bin.max.toFixed(2)}`
     );
 
-    const unit = METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    
+    const config = getMetricConfig(primaryMetric);
+    const unit = config?.unit || '';
+
     const datasets = [{
-      label: `${METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.label || primaryMetric} Distribution`,
+      label: `${config?.label || primaryMetric} Distribution`,
       data: bins.map(bin => bin.count),
       backgroundColor: 'rgba(59, 130, 246, 0.6)',
       borderColor: 'rgba(59, 130, 246, 1)',
@@ -239,8 +242,8 @@ export const DistributionChart = React.memo(function DistributionChart({
       x: {
         title: {
           display: true,
-          text: `${distributionData?.primaryMetric ? 
-            METRIC_CONFIG[distributionData.primaryMetric as keyof typeof METRIC_CONFIG]?.label : 
+          text: `${distributionData?.primaryMetric ?
+            getMetricConfig(distributionData.primaryMetric)?.label :
             'Value'} (${distributionData?.unit})`
         },
         ticks: {

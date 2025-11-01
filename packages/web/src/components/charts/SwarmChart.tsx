@@ -14,7 +14,7 @@ import type {
   ChartConfiguration, 
   StatisticalSummary 
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
@@ -40,6 +40,8 @@ export function SwarmChart({
   statistics, 
   highlightAthlete 
 }: SwarmChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   // Transform data for swarm plot
   const swarmData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -143,8 +145,8 @@ export function SwarmChart({
       });
     }
 
-    const unit = METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const metricLabel = METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.label || primaryMetric;
+    const unit = getMetricConfig(primaryMetric)?.unit || '';
+    const metricLabel = getMetricConfig(primaryMetric)?.label || primaryMetric;
 
     return {
       datasets,
@@ -203,7 +205,7 @@ export function SwarmChart({
             const rank = allValues.filter(v => v < point.y).length;
 
             // For "lower is better" metrics, invert percentile so high percentile = better performance
-            const metricConfig = swarmData?.primaryMetric ? METRIC_CONFIG[swarmData.primaryMetric as keyof typeof METRIC_CONFIG] : null;
+            const metricConfig = swarmData?.primaryMetric ? getMetricConfig(swarmData.primaryMetric) : null;
             const rawPercentile = allValues.length > 0 ? (rank / allValues.length) * 100 : 0;
             const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
 

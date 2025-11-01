@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { CHART_CONFIG } from '@/constants/chart-config';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { TrendData } from '@shared/analytics-types';
 import {
   groupDataByDate,
@@ -10,6 +9,7 @@ import {
 } from '../utils/timeSeriesDataProcessor';
 import { generateBoxPlotDatasets } from '../utils/boxPlotDatasetGenerator';
 import { generateSwarmPlotDatasets } from '../utils/swarmPlotDatasetGenerator';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 
 interface UseTimeSeriesChartDataParams {
   data: TrendData[];
@@ -24,6 +24,8 @@ export function useTimeSeriesChartData({
   metric,
   showAthleteNames
 }: UseTimeSeriesChartDataParams) {
+  const { getMetricConfig } = useMetricConfig();
+
   return useMemo(() => {
     if (!data || data.length === 0 || selectedDates.length === 0) {
       return {
@@ -32,7 +34,7 @@ export function useTimeSeriesChartData({
       };
     }
 
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const metricConfig = getMetricConfig(metric);
     const unit = metricConfig?.unit || '';
 
     // Sort selected dates chronologically

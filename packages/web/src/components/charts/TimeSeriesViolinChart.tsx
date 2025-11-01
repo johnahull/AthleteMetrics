@@ -5,8 +5,8 @@
 
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
 import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
@@ -71,6 +71,7 @@ export function TimeSeriesViolinChart({
   statistics,
   onStatsExpandedChange
 }: TimeSeriesViolinChartProps) {
+  const { getMetricConfig } = useMetricConfig();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [resizeKey, setResizeKey] = useState(0);
@@ -621,7 +622,7 @@ export function TimeSeriesViolinChart({
     };
   }, [coordinateMap]);
 
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  const metricConfig = getMetricConfig(metric);
 
   if (error) {
     return (

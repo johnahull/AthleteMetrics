@@ -17,7 +17,7 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { AthleteSelector } from './components/AthleteSelector';
 import {
   ATHLETE_COLORS,
@@ -100,6 +100,8 @@ export function MultiLineChart({
   isLoading = false,
   dataDebounceDelay = 200
 }: MultiLineChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   // Validate chart data
   const dataValidation = validateChartData(data);
   logValidationResult('MultiLineChart', dataValidation);
@@ -239,7 +241,7 @@ export function MultiLineChart({
         });
 
         const isHighlighted = athlete.athleteId === highlightAthlete;
-        const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+        const metricLabel = getMetricConfig(metric)?.label || metric;
 
         // Color strategy based on analysis type
         let borderColor: string;
@@ -337,8 +339,8 @@ export function MultiLineChart({
 
             if (!athlete) return [];
 
-            const metric = multiLineData?.metrics.find(m => 
-              (METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m) === metricName
+            const metric = multiLineData?.metrics.find(m =>
+              (getMetricConfig(m)?.label || m) === metricName
             );
 
             if (!metric) return [];
@@ -351,7 +353,7 @@ export function MultiLineChart({
             });
 
             if (point) {
-              const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+              const unit = getMetricConfig(metric)?.unit || '';
               // Show dual format for FLY10_TIME
               if (isFly10Metric(metric)) {
                 return [`Actual: ${formatFly10Dual(point.value, 'time-first')}`];
@@ -497,9 +499,10 @@ export function MultiLineChart({
           >
             <div className="grid grid-cols-1 gap-2">
               {multiLineData.metrics.map((metric, index) => {
-                const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-                const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
-                const isLowerBetter = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
+                const metricConfig = getMetricConfig(metric);
+                const unit = metricConfig?.unit || '';
+                const label = metricConfig?.label || metric;
+                const isLowerBetter = metricConfig?.lowerIsBetter;
                 const style = getMetricStyle(index);
 
                 return (

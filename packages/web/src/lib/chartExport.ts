@@ -15,16 +15,24 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 export type ExportFormat = 'csv' | 'png' | 'clipboard';
 
 /**
+ * Optional metric label map for dynamic metric labels
+ * Maps metric codes to their display labels (respects custom labels)
+ */
+export type MetricLabelMap = Record<string, string>;
+
+/**
  * Export analytics data as CSV
+ * @param metricLabelMap Optional map of metric codes to custom labels (for org-level label overrides)
  */
 export function exportAnalyticsDataAsCSV(
   analyticsData: AnalyticsResponse,
   chartType: string,
-  metrics: { primary: string; additional: string[] }
+  metrics: { primary: string; additional: string[] },
+  metricLabelMap?: MetricLabelMap
 ): void {
   const timestamp = new Date().toISOString().split('T')[0];
   const metricLabels = [metrics.primary, ...metrics.additional]
-    .map(m => METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
+    .map(m => metricLabelMap?.[m] || METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
     .join('_');
 
   const filename = `analytics_${chartType}_${metricLabels}_${timestamp}.csv`;
@@ -32,15 +40,15 @@ export function exportAnalyticsDataAsCSV(
   // Determine which data structure to export based on what's available
   if (analyticsData.data && analyticsData.data.length > 0) {
     // Export chart data points
-    const csvData = convertChartDataPointsToCSV(analyticsData.data);
+    const csvData = convertChartDataPointsToCSV(analyticsData.data, metricLabelMap);
     downloadCSV(csvData, filename);
   } else if (analyticsData.trends && analyticsData.trends.length > 0) {
     // Export trend data
-    const csvData = convertTrendDataToCSV(analyticsData.trends);
+    const csvData = convertTrendDataToCSV(analyticsData.trends, metricLabelMap);
     downloadCSV(csvData, filename);
   } else if (analyticsData.multiMetric && analyticsData.multiMetric.length > 0) {
     // Export multi-metric data
-    const csvData = convertMultiMetricDataToCSV(analyticsData.multiMetric);
+    const csvData = convertMultiMetricDataToCSV(analyticsData.multiMetric, metricLabelMap);
     downloadCSV(csvData, filename);
   } else {
     console.warn('No data available to export');
@@ -49,13 +57,14 @@ export function exportAnalyticsDataAsCSV(
 
 /**
  * Convert ChartDataPoint[] to CSV
+ * @param metricLabelMap Optional map for custom metric labels
  */
-function convertChartDataPointsToCSV(data: ChartDataPoint[]): string {
+function convertChartDataPointsToCSV(data: ChartDataPoint[], metricLabelMap?: MetricLabelMap): string {
   const rows = data.map(point => ({
     'Athlete ID': point.athleteId,
     'Athlete Name': point.athleteName,
     'Team': point.teamName || '',
-    'Metric': point.metric,
+    'Metric': metricLabelMap?.[point.metric] || METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG]?.label || point.metric,
     'Value': point.value,
     'Date': point.date instanceof Date
       ? point.date.toISOString().split('T')[0]
@@ -68,8 +77,9 @@ function convertChartDataPointsToCSV(data: ChartDataPoint[]): string {
 
 /**
  * Convert TrendData[] to CSV
+ * @param metricLabelMap Optional map for custom metric labels
  */
-function convertTrendDataToCSV(trends: TrendData[]): string {
+function convertTrendDataToCSV(trends: TrendData[], metricLabelMap?: MetricLabelMap): string {
   const rows: any[] = [];
 
   trends.forEach(trend => {
@@ -78,7 +88,7 @@ function convertTrendDataToCSV(trends: TrendData[]): string {
         'Athlete ID': trend.athleteId,
         'Athlete Name': trend.athleteName,
         'Team': trend.teamName || '',
-        'Metric': trend.metric,
+        'Metric': metricLabelMap?.[trend.metric] || METRIC_CONFIG[trend.metric as keyof typeof METRIC_CONFIG]?.label || trend.metric,
         'Value': point.value,
         'Date': point.date instanceof Date
           ? point.date.toISOString().split('T')[0]
@@ -94,8 +104,9 @@ function convertTrendDataToCSV(trends: TrendData[]): string {
  * Convert MultiMetricData[] to CSV
  * Note: MultiMetricData structure only includes athleteId, athleteName, and metrics.
  * It does not include team information, unlike ChartDataPoint and TrendData.
+ * @param metricLabelMap Optional map for custom metric labels
  */
-function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[]): string {
+function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[], metricLabelMap?: MetricLabelMap): string {
   const rows: any[] = [];
 
   multiMetric.forEach(athlete => {
@@ -104,9 +115,9 @@ function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[]): string {
       'Athlete Name': athlete.athleteName
     };
 
-    // Add each metric as a column
+    // Add each metric as a column using custom labels if provided
     Object.entries(athlete.metrics).forEach(([metric, value]) => {
-      const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+      const metricLabel = metricLabelMap?.[metric] || METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
       row[metricLabel] = value;
     });
 
@@ -276,15 +287,17 @@ function sanitizeFilename(filename: string): string {
 
 /**
  * Generate appropriate filename for export
+ * @param metricLabelMap Optional map for custom metric labels
  */
 export function generateExportFilename(
   chartType: string,
   metrics: { primary: string; additional: string[] },
-  format: ExportFormat
+  format: ExportFormat,
+  metricLabelMap?: MetricLabelMap
 ): string {
   const timestamp = new Date().toISOString().split('T')[0];
   const metricLabels = [metrics.primary, ...metrics.additional]
-    .map(m => METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
+    .map(m => metricLabelMap?.[m] || METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
     .join('_');
 
   const chartTypeName = chartType.replace(/_/g, '-');

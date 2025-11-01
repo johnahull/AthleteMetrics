@@ -15,19 +15,28 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 
 // Helper function to get the best performance value based on metric type
-function getBestPerformanceValue(metric: string, values: number[]): number {
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+function getBestPerformanceValue(
+  metric: string,
+  values: number[],
+  getMetricConfig: (code: string) => { lowerIsBetter: boolean } | null
+): number {
+  const metricConfig = getMetricConfig(metric);
   // For time-based metrics (lower is better), use min. For performance metrics (higher is better), use max.
   return metricConfig?.lowerIsBetter ? Math.min(...values) : Math.max(...values);
 }
 
 // Helper function to get the best performing athlete based on metric type
-function getBestPerformingAthlete(metric: string, athletes: any[], values: number[]) {
-  const bestValue = getBestPerformanceValue(metric, values);
+function getBestPerformingAthlete(
+  metric: string,
+  athletes: any[],
+  values: number[],
+  getMetricConfig: (code: string) => { lowerIsBetter: boolean } | null
+) {
+  const bestValue = getBestPerformanceValue(metric, values, getMetricConfig);
   return athletes.find(a => a.value === bestValue);
 }
 
@@ -48,19 +57,21 @@ interface BarChartProps {
   highlightAthlete?: string;
 }
 
-export function BarChart({ 
-  data, 
-  config, 
-  statistics, 
-  highlightAthlete 
+export function BarChart({
+  data,
+  config,
+  statistics,
+  highlightAthlete
 }: BarChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   // Transform data for bar chart
   const barData = useMemo(() => {
     if (!data || data.length === 0) return null;
 
     const metrics = Object.keys(statistics || {});
     const primaryMetric = metrics[0];
-    
+
     if (!primaryMetric) return null;
 
     // Use the filtered data as-is (backend already provides best measurements per athlete)
@@ -71,7 +82,7 @@ export function BarChart({
     }, {} as Record<string, ChartDataPoint>);
 
     const firstMetric = data[0]?.metric;
-    const metricConfig = firstMetric ? METRIC_CONFIG[firstMetric as keyof typeof METRIC_CONFIG] : null;
+    const metricConfig = firstMetric ? getMetricConfig(firstMetric) : null;
 
     const sortedAthletes = Object.values(athleteData)
       .sort((a, b) => {
@@ -106,9 +117,10 @@ export function BarChart({
         'rgba(16, 185, 129, 1)' : 'rgba(59, 130, 246, 1)'
     );
 
-    const unit = METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const label = METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.label || primaryMetric;
-    const isLowerBetter = METRIC_CONFIG[primaryMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
+    const config = getMetricConfig(primaryMetric);
+    const unit = config?.unit || '';
+    const label = config?.label || primaryMetric;
+    const isLowerBetter = config?.lowerIsBetter;
 
     return {
       labels,
@@ -239,10 +251,10 @@ export function BarChart({
         <div>
           <div className="font-medium">Best Performance</div>
           <div className="text-lg font-bold text-green-600">
-            {getBestPerformanceValue(barData.primaryMetric, barData.datasets[0].data).toFixed(2)}{barData.unit}
+            {getBestPerformanceValue(barData.primaryMetric, barData.datasets[0].data, getMetricConfig).toFixed(2)}{barData.unit}
           </div>
           <div className="text-xs text-muted-foreground">
-            {getBestPerformingAthlete(barData.primaryMetric, barData.athletes, barData.datasets[0].data)?.athleteName}
+            {getBestPerformingAthlete(barData.primaryMetric, barData.athletes, barData.datasets[0].data, getMetricConfig)?.athleteName}
           </div>
         </div>
         
