@@ -15,6 +15,17 @@ import { insertMeasurementSchema, insertAthleteSchema, Gender, type InsertMeasur
 import { Save } from "lucide-react";
 import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
 import { AthleteSelector } from "@/components/ui/athlete-selector";
+import { useAuth } from "@/lib/auth";
+import { useOrganizationMetrics, useSiteMetrics } from "@/lib/metrics-api";
+import { z } from "zod";
+
+// Create dynamic measurement schema that accepts any metric string
+// Backend will validate against org-enabled metrics
+const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
+  metric: z.string().min(1, "Metric is required"),
+});
+
+type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
 
 // Type guards for safer runtime checking
 function hasTeamsProperty(athlete: any): athlete is Athlete & { teams: Array<{ id: string; name: string }> } {
@@ -29,6 +40,7 @@ export default function MeasurementForm() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user, organizationContext, userOrganizations } = useAuth();
 
   const { data: athletes } = useQuery({
     queryKey: ["/api/athletes"],
@@ -38,12 +50,39 @@ export default function MeasurementForm() {
     queryKey: ["/api/teams"],
   });
 
-  const form = useForm<InsertMeasurement>({
-    resolver: zodResolver(insertMeasurementSchema),
+  // Determine which organization to fetch metrics for
+  const currentOrgId = organizationContext || userOrganizations?.[0]?.organizationId;
+
+  // Fetch organization-enabled metrics (or all site metrics for site admins without org context)
+  const { data: orgMetrics } = useOrganizationMetrics(
+    currentOrgId || "",
+    true // enabledOnly
+  );
+  const { data: siteMetrics } = useSiteMetrics(false); // Fallback for site admins
+
+  // Use org-enabled metrics if available, otherwise fall back to site metrics
+  const availableMetrics = currentOrgId && orgMetrics
+    ? orgMetrics.filter(om => om.isEnabled).map(om => ({
+        code: om.metricCode,
+        label: om.customLabel || om.siteMetric.label,
+        unit: om.siteMetric.unit,
+        lowerIsBetter: om.siteMetric.lowerIsBetter,
+      }))
+    : siteMetrics?.map(sm => ({
+        code: sm.code,
+        label: sm.label,
+        unit: sm.unit,
+        lowerIsBetter: sm.lowerIsBetter,
+      })) || [];
+
+  const firstMetricCode = availableMetrics[0]?.code || "FLY10_TIME";
+
+  const form = useForm<DynamicInsertMeasurement>({
+    resolver: zodResolver(dynamicMeasurementSchema),
     defaultValues: {
       userId: "",
       date: new Date().toISOString().split('T')[0],
-      metric: "FLY10_TIME",
+      metric: firstMetricCode,
       value: 0,
       flyInDistance: undefined,
       notes: "",
@@ -65,6 +104,7 @@ export default function MeasurementForm() {
   });
 
   // Use consolidated state management hook
+  // Type assertion since DynamicInsertMeasurement is compatible with InsertMeasurement
   const {
     selectedAthlete,
     activeTeams,
@@ -75,10 +115,10 @@ export default function MeasurementForm() {
     fetchActiveTeams,
     resetTeamState,
     cleanup
-  } = useMeasurementForm(form);
+  } = useMeasurementForm(form as any);
 
   const createMeasurementMutation = useMutation({
-    mutationFn: async (data: InsertMeasurement) => {
+    mutationFn: async (data: DynamicInsertMeasurement) => {
       // Backend will set submittedBy automatically based on session
       const response = await apiRequest("POST", "/api/measurements", data);
       return response.json();
@@ -93,7 +133,7 @@ export default function MeasurementForm() {
       form.reset({
         userId: "",
         date: new Date().toISOString().split('T')[0],
-        metric: "FLY10_TIME",
+        metric: firstMetricCode,
         value: 0,
         flyInDistance: undefined,
         notes: "",
@@ -146,7 +186,8 @@ export default function MeasurementForm() {
 
   const metric = form.watch("metric");
   const date = form.watch("date");
-  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : metric === "TOP_SPEED" ? "mph" : "s";
+  // Get unit from metric config dynamically
+  const units = availableMetrics.find(m => m.code === metric)?.unit || "";
 
   // Watch for date changes and refetch active teams
   useEffect(() => {
@@ -160,7 +201,7 @@ export default function MeasurementForm() {
     return cleanup;
   }, [cleanup]);
 
-  const onSubmit = (data: InsertMeasurement) => {
+  const onSubmit = (data: DynamicInsertMeasurement) => {
     if (!selectedAthlete) {
       toast({
         title: "Error",
@@ -188,7 +229,7 @@ export default function MeasurementForm() {
     form.reset({
       userId: "",
       date: new Date().toISOString().split('T')[0],
-      metric: "FLY10_TIME",
+      metric: firstMetricCode,
       value: 0,
       flyInDistance: undefined,
       notes: "",
@@ -283,14 +324,17 @@ export default function MeasurementForm() {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="FLY10_TIME">10-Yard Fly Time</SelectItem>
-                    <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                    <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
-                    <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
-                    <SelectItem value="T_TEST">T-Test</SelectItem>
-                    <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
-                    <SelectItem value="RSI">Reactive Strength Index</SelectItem>
-                    <SelectItem value="TOP_SPEED">Top Speed</SelectItem>
+                    {availableMetrics.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No metrics available
+                      </div>
+                    ) : (
+                      availableMetrics.map((m) => (
+                        <SelectItem key={m.code} value={m.code}>
+                          {m.label}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
                 <FormMessage />

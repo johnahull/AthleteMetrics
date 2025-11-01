@@ -107,12 +107,12 @@ export async function deleteSiteMetric(code: string): Promise<void> {
 }
 
 /**
- * Fetch organization metrics
+ * Fetch organization metrics (joined with site metrics)
  */
 export async function fetchOrganizationMetrics(
   organizationId: string,
   enabledOnly = false
-): Promise<OrganizationMetric[]> {
+): Promise<(OrganizationMetric & { siteMetric: SiteMetric })[]> {
   const params = new URLSearchParams();
   if (enabledOnly) {
     params.append('enabledOnly', 'true');
