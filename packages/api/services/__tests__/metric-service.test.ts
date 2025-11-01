@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { MetricService } from '../metric-service';
 import { db } from '../../db';
-import { siteMetrics, organizationMetrics, organizations, users, measurements } from '@shared/schema';
-import { eq, and } from 'drizzle-orm';
+import { siteMetrics, organizationMetrics, organizations, users, measurements, auditLogs } from '@shared/schema';
+import { eq, and, or } from 'drizzle-orm';
 
 describe('MetricService', () => {
   let metricService: MetricService;
@@ -15,8 +15,10 @@ describe('MetricService', () => {
   beforeAll(async () => {
     // Safety check: prevent running tests against production database
     const dbUrl = process.env.DATABASE_URL || '';
-    if (!dbUrl.includes('test') && !dbUrl.includes('localhost')) {
-      throw new Error('DATABASE_URL must include "test" or "localhost" for safety. Running tests against production is forbidden.');
+    const allowTestDb = process.env.ALLOW_TEST_DATABASE === 'true';
+
+    if (!dbUrl.includes('test') && !dbUrl.includes('localhost') && !allowTestDb) {
+      throw new Error('DATABASE_URL must include "test" or "localhost" for safety. Running tests against production is forbidden. Set ALLOW_TEST_DATABASE=true for known testing databases.');
     }
   });
 
@@ -96,6 +98,16 @@ describe('MetricService', () => {
         await db.delete(organizationMetrics).where(eq(organizationMetrics.metricCode, testMetricCode));
         // Delete site metric
         await db.delete(siteMetrics).where(eq(siteMetrics.code, testMetricCode));
+      }
+      // Delete audit logs before deleting users (foreign key constraint)
+      if (siteAdminUserId || orgAdminUserId || regularUserId) {
+        await db.delete(auditLogs).where(
+          or(
+            siteAdminUserId ? eq(auditLogs.userId, siteAdminUserId) : undefined,
+            orgAdminUserId ? eq(auditLogs.userId, orgAdminUserId) : undefined,
+            regularUserId ? eq(auditLogs.userId, regularUserId) : undefined
+          )
+        );
       }
       if (siteAdminUserId) {
         await db.delete(users).where(eq(users.id, siteAdminUserId));
