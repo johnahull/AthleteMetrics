@@ -3,7 +3,7 @@
  * Site-level metrics (site admin only) and organization-level metric enablement
  */
 
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { MetricService } from "../services/metric-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
@@ -44,7 +44,7 @@ export function registerMetricRoutes(app: Express) {
   // Get all site metrics
   app.get("/api/metrics", requireAuth, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.session.user!.id;
       const includeInactive = req.query.includeInactive === 'true';
 
       const metrics = await metricService.getSiteMetrics(userId, { includeInactive });
@@ -75,7 +75,7 @@ export function registerMetricRoutes(app: Express) {
   // Create new site metric (site admin only)
   app.post("/api/metrics", metricCreateLimiter, requireSiteAdmin, async (req, res) => {
     try {
-      const userId = req.session.userId!;
+      const userId = req.session.user!.id;
       const validatedData = insertSiteMetricSchema.parse(req.body);
 
       const metric = await metricService.createSiteMetric(validatedData, userId);
@@ -95,7 +95,7 @@ export function registerMetricRoutes(app: Express) {
   app.patch("/api/metrics/:code", metricModifyLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const { code } = req.params;
-      const userId = req.session.userId!;
+      const userId = req.session.user!.id;
       const validatedData = updateSiteMetricSchema.parse(req.body);
 
       const metric = await metricService.updateSiteMetric(code, validatedData, userId);
@@ -116,7 +116,7 @@ export function registerMetricRoutes(app: Express) {
     try {
       const { code } = req.params;
       const { isActive } = req.body;
-      const userId = req.session.userId!;
+      const userId = req.session.user!.id;
 
       if (typeof isActive !== 'boolean') {
         return res.status(400).json({ message: "isActive must be a boolean" });
@@ -139,7 +139,7 @@ export function registerMetricRoutes(app: Express) {
   app.delete("/api/metrics/:code", metricModifyLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const { code } = req.params;
-      const userId = req.session.userId!;
+      const userId = req.session.user!.id;
 
       await metricService.deleteSiteMetric(code, userId);
       res.status(204).send();
@@ -167,7 +167,7 @@ export function registerMetricRoutes(app: Express) {
   app.get("/api/organizations/:organizationId/metrics", requireAuth, async (req, res) => {
     try {
       const { organizationId } = req.params;
-      const userId = req.session.userId!;
+      const userId = req.session.user!.id;
       const enabledOnly = req.query.enabledOnly === 'true';
 
       const metrics = await metricService.getOrganizationMetrics(
@@ -193,10 +193,10 @@ export function registerMetricRoutes(app: Express) {
     metricModifyLimiter,
     requireAuth,
     requireOrganizationAccess,
-    async (req, res) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, code } = req.params;
-        const userId = req.session.userId!;
+        const userId = req.session.user!.id;
 
         const metric = await metricService.enableMetricForOrganization(organizationId, code, userId);
         res.json(metric);
@@ -222,10 +222,10 @@ export function registerMetricRoutes(app: Express) {
     metricModifyLimiter,
     requireAuth,
     requireOrganizationAccess,
-    async (req, res) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, code } = req.params;
-        const userId = req.session.userId!;
+        const userId = req.session.user!.id;
 
         const metric = await metricService.disableMetricForOrganization(organizationId, code, userId);
         res.json(metric);
@@ -241,10 +241,10 @@ export function registerMetricRoutes(app: Express) {
     metricModifyLimiter,
     requireAuth,
     requireOrganizationAccess,
-    async (req, res) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, code } = req.params;
-        const userId = req.session.userId!;
+        const userId = req.session.user!.id;
         const validatedData = updateOrganizationMetricSchema.parse(req.body);
 
         const metric = await metricService.updateOrganizationMetric(
@@ -267,11 +267,11 @@ export function registerMetricRoutes(app: Express) {
     metricModifyLimiter,
     requireAuth,
     requireOrganizationAccess,
-    async (req, res) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { metricCodes } = req.body;
-        const userId = req.session.userId!;
+        const userId = req.session.user!.id;
 
         if (!Array.isArray(metricCodes)) {
           return res.status(400).json({ message: "metricCodes must be an array" });

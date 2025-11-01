@@ -1,17 +1,18 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
-import { 
-  BarChart3, 
-  Building2, 
-  LayoutDashboard, 
-  UserCog, 
-  Users, 
-  UsersRound, 
-  PlusCircle, 
-  FileCheck, 
+import {
+  BarChart3,
+  Building2,
+  LayoutDashboard,
+  UserCog,
+  Users,
+  UsersRound,
+  PlusCircle,
+  FileCheck,
   FileText,
-  TrendingUp
+  TrendingUp,
+  Settings
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -25,7 +26,8 @@ const NAVIGATION_CONFIGS = {
     default: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
-      { name: "User Management", href: "/user-management", icon: UserCog }
+      { name: "User Management", href: "/user-management", icon: UserCog },
+      { name: "Metrics", href: "/metrics", icon: Settings }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
