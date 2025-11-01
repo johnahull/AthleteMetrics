@@ -382,7 +382,31 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   }
 };
 
-// Metric units and labels
+// Dynamic metric configuration interface
+// This replaces the hardcoded METRIC_CONFIG with API-fetched data
+export interface DynamicMetricConfig {
+  code: string;
+  label: string;
+  category?: string;
+  unit: string;
+  lowerIsBetter: boolean;
+  color?: string;
+  icon?: string;
+  description?: string;
+  isActive: boolean;
+  isSystemDefault: boolean;
+}
+
+// Organization-specific metric configuration
+export interface OrganizationMetricConfig extends DynamicMetricConfig {
+  isEnabled: boolean;
+  customLabel?: string;
+  displayOrder?: number;
+}
+
+// Legacy: Metric units and labels (DEPRECATED - use API-fetched metrics instead)
+// Kept for backward compatibility during migration
+// TODO: Remove after all components updated to use dynamic metrics
 export const METRIC_CONFIG = {
   FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', lowerIsBetter: true },
   VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', lowerIsBetter: false },
