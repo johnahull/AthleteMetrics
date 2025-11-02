@@ -315,12 +315,17 @@ export default function OrganizationMetricsCard({
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Switch
-                      checked={isEnabled}
-                      onCheckedChange={(checked) => handleToggle(metric, checked)}
-                      disabled={isToggleDisabled}
-                      data-testid={`toggle-metric-${metric.code}`}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={isEnabled}
+                        onCheckedChange={(checked) => handleToggle(metric, checked)}
+                        disabled={isToggleDisabled}
+                        data-testid={`toggle-metric-${metric.code}`}
+                      />
+                      <span className="text-xs" style={{ color: isToggleDisabled ? 'red' : 'green' }}>
+                        [{isToggleDisabled ? 'DIS' : 'EN'}]
+                      </span>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
