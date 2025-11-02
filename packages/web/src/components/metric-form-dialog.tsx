@@ -151,7 +151,7 @@ export default function MetricFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" data-testid="metric-form-dialog">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="metric-form-dialog">
         <DialogHeader>
           <DialogTitle data-testid="metric-form-title">
             {isEditMode ? "Edit Metric" : "Add New Metric"}
