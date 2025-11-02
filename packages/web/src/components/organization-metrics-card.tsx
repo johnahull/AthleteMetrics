@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,15 @@ export default function OrganizationMetricsCard({
   const { toast } = useToast();
   const [editingMetric, setEditingMetric] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState("");
+
+  // Show debug info on mount
+  useEffect(() => {
+    toast({
+      title: "Debug: Metrics Card Loaded",
+      description: `canEdit: ${canEdit}, orgId: ${organizationId.substring(0, 8)}...`,
+      duration: 5000,
+    });
+  }, []);
 
   // Fetch all site metrics (active only)
   const { data: siteMetrics, isLoading: loadingSite } = useSiteMetrics(false);
@@ -204,6 +213,10 @@ export default function OrganizationMetricsCard({
         <CardDescription>
           Enable metrics for your organization and customize display labels
         </CardDescription>
+        {/* Debug info */}
+        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+          <strong>Debug:</strong> canEdit={String(canEdit)}, enablePending={String(enableMutation.isPending)}, disablePending={String(disableMutation.isPending)}
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
