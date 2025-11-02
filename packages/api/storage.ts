@@ -3079,7 +3079,10 @@ export class DatabaseStorage implements IStorage {
     organizationId: string,
     filters?: { enabledOnly?: boolean }
   ): Promise<(OrganizationMetric & { siteMetric: SiteMetric })[]> {
-    const conditions = [eq(organizationMetrics.organizationId, organizationId)];
+    const conditions = [
+      eq(organizationMetrics.organizationId, organizationId),
+      eq(siteMetrics.isActive, true) // Only return metrics that are active at site level
+    ];
 
     if (filters?.enabledOnly) {
       conditions.push(eq(organizationMetrics.isEnabled, true));
