@@ -151,7 +151,7 @@ export default function MetricFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="metric-form-dialog">
+      <DialogContent className="max-w-2xl" data-testid="metric-form-dialog">
         <DialogHeader>
           <DialogTitle data-testid="metric-form-title">
             {isEditMode ? "Edit Metric" : "Add New Metric"}
@@ -163,8 +163,10 @@ export default function MetricFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Scrollable form container */}
+        <div className="max-h-[60vh] overflow-y-auto pr-2">
+          <Form {...form}>
+            <form id="metric-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {/* Code field */}
             <FormField
               control={form.control}
@@ -305,33 +307,35 @@ export default function MetricFormDialog({
                 </FormItem>
               )}
             />
+            </form>
+          </Form>
+        </div>
 
-            {/* Form actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                data-testid="cancel-metric-button"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  createMetricMutation.isPending || updateMetricMutation.isPending
-                }
-                data-testid="save-metric-button"
-              >
-                {createMetricMutation.isPending || updateMetricMutation.isPending
-                  ? "Saving..."
-                  : isEditMode
-                    ? "Update Metric"
-                    : "Create Metric"}
-              </Button>
-            </div>
-          </form>
-        </Form>
+        {/* Form actions - fixed at bottom */}
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            data-testid="cancel-metric-button"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="metric-form"
+            disabled={
+              createMetricMutation.isPending || updateMetricMutation.isPending
+            }
+            data-testid="save-metric-button"
+          >
+            {createMetricMutation.isPending || updateMetricMutation.isPending
+              ? "Saving..."
+              : isEditMode
+                ? "Update Metric"
+                : "Create Metric"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
