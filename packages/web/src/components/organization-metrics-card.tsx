@@ -86,7 +86,13 @@ export default function OrganizationMetricsCard({
   };
 
   const handleToggle = async (metric: SiteMetric, enabled: boolean) => {
-    console.log('[MetricsCard] Toggle clicked:', { metric: metric.code, enabled, canEdit });
+    console.log('[MetricsCard] Toggle clicked:', {
+      metric: metric.code,
+      enabled,
+      canEdit,
+      enablePending: enableMutation.isPending,
+      disablePending: disableMutation.isPending
+    });
 
     if (!canEdit) {
       console.log('[MetricsCard] Toggle blocked: canEdit is false');
@@ -96,20 +102,22 @@ export default function OrganizationMetricsCard({
     try {
       if (enabled) {
         console.log('[MetricsCard] Enabling metric:', metric.code);
-        await enableMutation.mutateAsync({
+        const result = await enableMutation.mutateAsync({
           organizationId,
           metricCode: metric.code,
         });
+        console.log('[MetricsCard] Enable success:', result);
         toast({
           title: "Metric enabled",
           description: `${metric.label} is now available for your organization.`,
         });
       } else {
         console.log('[MetricsCard] Disabling metric:', metric.code);
-        await disableMutation.mutateAsync({
+        const result = await disableMutation.mutateAsync({
           organizationId,
           metricCode: metric.code,
         });
+        console.log('[MetricsCard] Disable success:', result);
         toast({
           title: "Metric disabled",
           description: `${metric.label} has been disabled for your organization.`,
@@ -117,10 +125,20 @@ export default function OrganizationMetricsCard({
       }
     } catch (error) {
       console.error('[MetricsCard] Toggle error:', error);
+      console.error('[MetricsCard] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        raw: error
+      });
       toast({
         title: "Failed to update metric",
         description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
+      });
+    } finally {
+      console.log('[MetricsCard] Toggle complete - mutation states:', {
+        enablePending: enableMutation.isPending,
+        disablePending: disableMutation.isPending
       });
     }
   };
