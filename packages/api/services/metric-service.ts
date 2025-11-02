@@ -158,14 +158,10 @@ export class MetricService extends BaseService {
         throw new Error("Unauthorized: Only site administrators can toggle metric status");
       }
 
-      // Check if metric exists and is not a system default
+      // Check if metric exists
       const metric = await this.storage.getSiteMetric(code);
       if (!metric) {
         throw new Error(`Metric with code ${code} not found`);
-      }
-
-      if (metric.isSystemDefault && !isActive) {
-        throw new Error(`Cannot disable system default metric: ${code}`);
       }
 
       // Update status

@@ -357,11 +357,14 @@ describe('MetricService', () => {
       ).rejects.toThrow('Unauthorized: Only site administrators can toggle metric status');
     });
 
-    it('should prevent disabling system default metrics', async () => {
+    it('should allow disabling system default metrics', async () => {
       // FLY10_TIME is a system default from migration
-      await expect(
-        metricService.toggleSiteMetricStatus('FLY10_TIME', false, siteAdminUserId)
-      ).rejects.toThrow('Cannot disable system default metric: FLY10_TIME');
+      // Site admins should be able to deactivate any metric, including system defaults
+      const result = await metricService.toggleSiteMetricStatus('FLY10_TIME', false, siteAdminUserId);
+      expect(result.isActive).toBe(false);
+
+      // Re-enable for other tests
+      await metricService.toggleSiteMetricStatus('FLY10_TIME', true, siteAdminUserId);
     });
   });
 
