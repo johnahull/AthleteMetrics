@@ -192,7 +192,7 @@ export function registerMetricRoutes(app: Express) {
   app.post("/api/organizations/:organizationId/metrics/:code/enable",
     metricModifyLimiter,
     requireAuth,
-    requireOrganizationAccess,
+    requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
         const { organizationId, code } = req.params;
@@ -221,7 +221,7 @@ export function registerMetricRoutes(app: Express) {
   app.post("/api/organizations/:organizationId/metrics/:code/disable",
     metricModifyLimiter,
     requireAuth,
-    requireOrganizationAccess,
+    requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
         const { organizationId, code } = req.params;
@@ -240,7 +240,7 @@ export function registerMetricRoutes(app: Express) {
   app.patch("/api/organizations/:organizationId/metrics/:code",
     metricModifyLimiter,
     requireAuth,
-    requireOrganizationAccess,
+    requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
         const { organizationId, code } = req.params;
@@ -266,7 +266,7 @@ export function registerMetricRoutes(app: Express) {
   app.post("/api/organizations/:organizationId/metrics/bulk-enable",
     metricModifyLimiter,
     requireAuth,
-    requireOrganizationAccess,
+    requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
