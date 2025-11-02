@@ -69,10 +69,16 @@ export default function OrganizationMetricsCard({
   };
 
   const handleToggle = async (metric: SiteMetric, enabled: boolean) => {
-    if (!canEdit) return;
+    console.log('[MetricsCard] Toggle clicked:', { metric: metric.code, enabled, canEdit });
+
+    if (!canEdit) {
+      console.log('[MetricsCard] Toggle blocked: canEdit is false');
+      return;
+    }
 
     try {
       if (enabled) {
+        console.log('[MetricsCard] Enabling metric:', metric.code);
         await enableMutation.mutateAsync({
           organizationId,
           metricCode: metric.code,
@@ -82,6 +88,7 @@ export default function OrganizationMetricsCard({
           description: `${metric.label} is now available for your organization.`,
         });
       } else {
+        console.log('[MetricsCard] Disabling metric:', metric.code);
         await disableMutation.mutateAsync({
           organizationId,
           metricCode: metric.code,
@@ -92,6 +99,7 @@ export default function OrganizationMetricsCard({
         });
       }
     } catch (error) {
+      console.error('[MetricsCard] Toggle error:', error);
       toast({
         title: "Failed to update metric",
         description: error instanceof Error ? error.message : "An error occurred",
