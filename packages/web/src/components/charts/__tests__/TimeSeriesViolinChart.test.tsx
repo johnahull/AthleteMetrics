@@ -12,13 +12,22 @@ import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/
 // Mock useMetricConfig hook
 vi.mock('@/hooks/use-metric-config', () => ({
   useMetricConfig: () => ({
-    getMetricConfig: (code: string) => ({
-      code,
-      label: code,
-      unit: 's',
-      category: 'Speed',
-      displayOrder: 1,
-    }),
+    getMetricConfig: (code: string) => {
+      const metricMap: Record<string, { label: string; unit: string; lowerIsBetter?: boolean }> = {
+        'FLY10_TIME': { label: '10-Yard Fly Time', unit: 's', lowerIsBetter: true },
+        'VERTICAL_JUMP': { label: 'Vertical Jump', unit: 'in', lowerIsBetter: false },
+        'DASH_40YD': { label: '40-Yard Dash', unit: 's', lowerIsBetter: true },
+      };
+      const metric = metricMap[code] || { label: code, unit: 's', lowerIsBetter: true };
+      return {
+        code,
+        label: metric.label,
+        unit: metric.unit,
+        category: 'Speed',
+        displayOrder: 1,
+        lowerIsBetter: metric.lowerIsBetter,
+      };
+    },
   }),
 }));
 

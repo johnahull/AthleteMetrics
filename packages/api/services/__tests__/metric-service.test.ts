@@ -86,6 +86,25 @@ describe('MetricService', () => {
       decimalPrecision: 3,
       createdBy: siteAdminUserId,
     });
+
+    // Create FLY10_TIME as a system default metric for tests that reference it
+    // Check if it doesn't already exist (could be from migration)
+    const existingFly10 = await db.select().from(siteMetrics).where(eq(siteMetrics.code, 'FLY10_TIME')).limit(1);
+    if (existingFly10.length === 0) {
+      await db.insert(siteMetrics).values({
+        code: 'FLY10_TIME',
+        label: '10-Yard Fly Time',
+        category: 'Speed',
+        unit: 's',
+        lowerIsBetter: true,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 1,
+        description: 'Time to cover 10 yards from flying start',
+        decimalPrecision: 2,
+        createdBy: siteAdminUserId,
+      });
+    }
   });
 
   afterEach(async () => {
