@@ -84,19 +84,28 @@ export class MetricService extends BaseService {
       const metric = await this.storage.createSiteMetric(validatedData, requestingUserId);
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'metric_created',
-        resourceType: 'site_metric',
-        resourceId: metric.code,
-        details: JSON.stringify({
-          code: metric.code,
-          label: metric.label,
-          category: metric.category,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'metric_created',
+          resourceType: 'site_metric',
+          resourceId: metric.code,
+          details: JSON.stringify({
+            code: metric.code,
+            label: metric.label,
+            category: metric.category,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        // Log audit failure but don't fail the operation
+        console.error('CRITICAL: Failed to create audit log for metric_created:', {
+          error: auditError,
+          userId: requestingUserId,
+          resourceId: metric.code,
+        });
+      }
 
       return metric;
     } catch (error) {
@@ -125,17 +134,25 @@ export class MetricService extends BaseService {
       const metric = await this.storage.updateSiteMetric(code, validatedData);
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'metric_updated',
-        resourceType: 'site_metric',
-        resourceId: code,
-        details: JSON.stringify({
-          changes: validatedData,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'metric_updated',
+          resourceType: 'site_metric',
+          resourceId: code,
+          details: JSON.stringify({
+            changes: validatedData,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for metric_updated:', {
+          error: auditError,
+          userId: requestingUserId,
+          resourceId: code,
+        });
+      }
 
       return metric;
     } catch (error) {
@@ -168,19 +185,28 @@ export class MetricService extends BaseService {
       const updated = await this.storage.toggleSiteMetricStatus(code, isActive);
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: isActive ? 'metric_enabled' : 'metric_disabled',
-        resourceType: 'site_metric',
-        resourceId: code,
-        details: JSON.stringify({
-          code,
-          label: metric.label,
-          isActive,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: isActive ? 'metric_enabled' : 'metric_disabled',
+          resourceType: 'site_metric',
+          resourceId: code,
+          details: JSON.stringify({
+            code,
+            label: metric.label,
+            isActive,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for metric status toggle:', {
+          error: auditError,
+          userId: requestingUserId,
+          resourceId: code,
+          action: isActive ? 'metric_enabled' : 'metric_disabled',
+        });
+      }
 
       return updated;
     } catch (error) {
@@ -209,19 +235,27 @@ export class MetricService extends BaseService {
       await this.storage.deleteSiteMetric(code);
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'metric_deleted',
-        resourceType: 'site_metric',
-        resourceId: code,
-        details: JSON.stringify({
-          code,
-          label: metric.label,
-          category: metric.category,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'metric_deleted',
+          resourceType: 'site_metric',
+          resourceId: code,
+          details: JSON.stringify({
+            code,
+            label: metric.label,
+            category: metric.category,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for metric_deleted:', {
+          error: auditError,
+          userId: requestingUserId,
+          resourceId: code,
+        });
+      }
     } catch (error) {
       return this.handleError(error, "MetricService.deleteSiteMetric");
     }
@@ -295,18 +329,27 @@ export class MetricService extends BaseService {
       const orgMetric = await this.storage.enableMetricForOrganization(organizationId, metricCode);
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'org_metric_enabled',
-        resourceType: 'organization',
-        resourceId: organizationId,
-        details: JSON.stringify({
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_metric_enabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            metricCode,
+            metricLabel: metric.label,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for org_metric_enabled:', {
+          error: auditError,
+          userId: requestingUserId,
+          organizationId,
           metricCode,
-          metricLabel: metric.label,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+        });
+      }
 
       return orgMetric;
     } catch (error) {
@@ -344,18 +387,27 @@ export class MetricService extends BaseService {
       const metric = await this.storage.getSiteMetric(metricCode);
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'org_metric_disabled',
-        resourceType: 'organization',
-        resourceId: organizationId,
-        details: JSON.stringify({
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_metric_disabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            metricCode,
+            metricLabel: metric?.label || metricCode,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for org_metric_disabled:', {
+          error: auditError,
+          userId: requestingUserId,
+          organizationId,
           metricCode,
-          metricLabel: metric?.label || metricCode,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+        });
+      }
 
       return orgMetric;
     } catch (error) {
@@ -395,18 +447,27 @@ export class MetricService extends BaseService {
       );
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'org_metric_updated',
-        resourceType: 'organization',
-        resourceId: organizationId,
-        details: JSON.stringify({
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_metric_updated',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            metricCode,
+            changes: data,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for org_metric_updated:', {
+          error: auditError,
+          userId: requestingUserId,
+          organizationId,
           metricCode,
-          changes: data,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+        });
+      }
 
       return orgMetric;
     } catch (error) {
@@ -437,36 +498,34 @@ export class MetricService extends BaseService {
         }
       }
 
-      // Verify all metrics exist and are active
-      for (const code of metricCodes) {
-        const metric = await this.storage.getSiteMetric(code);
-        if (!metric) {
-          throw new Error(`Metric with code ${code} not found`);
-        }
-        if (!metric.isActive) {
-          throw new Error(`Metric ${code} is not active`);
-        }
-      }
-
-      // Bulk enable
+      // Bulk enable (validation and transaction handling in storage layer)
       const results = await this.storage.bulkEnableMetricsForOrganization(
         organizationId,
         metricCodes
       );
 
       // Audit log
-      await this.storage.createAuditLog({
-        userId: requestingUserId,
-        action: 'org_metrics_bulk_enabled',
-        resourceType: 'organization',
-        resourceId: organizationId,
-        details: JSON.stringify({
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_metrics_bulk_enabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            metricCodes,
+            count: metricCodes.length,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for org_metrics_bulk_enabled:', {
+          error: auditError,
+          userId: requestingUserId,
+          organizationId,
           metricCodes,
-          count: metricCodes.length,
-        }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => console.error('Failed to create audit log:', err));
+        });
+      }
 
       return results;
     } catch (error) {

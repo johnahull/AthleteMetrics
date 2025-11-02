@@ -2986,19 +2986,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSiteMetric(metric: InsertSiteMetric, createdBy: string): Promise<SiteMetric> {
-    const [created] = await db
-      .insert(siteMetrics)
-      .values({
-        ...metric,
-        // Convert numeric validation values to strings for decimal columns
-        validationMin: metric.validationMin !== undefined ? String(metric.validationMin) : undefined,
-        validationMax: metric.validationMax !== undefined ? String(metric.validationMax) : undefined,
-        createdBy,
-        createdAt: new Date(),
-      })
-      .returning();
+    try {
+      const [created] = await db
+        .insert(siteMetrics)
+        .values({
+          ...metric,
+          // Convert numeric validation values to strings for decimal columns
+          validationMin: metric.validationMin !== undefined ? String(metric.validationMin) : undefined,
+          validationMax: metric.validationMax !== undefined ? String(metric.validationMax) : undefined,
+          createdBy,
+          createdAt: new Date(),
+        })
+        .returning();
 
-    return created;
+      return created;
+    } catch (error: any) {
+      // Handle unique constraint violation (duplicate metric code)
+      if (error.code === '23505') {
+        throw new Error(`Metric with code ${metric.code} already exists`);
+      }
+      throw error;
+    }
   }
 
   async updateSiteMetric(code: string, metric: Partial<UpdateSiteMetric>): Promise<SiteMetric> {
@@ -3188,14 +3196,76 @@ export class DatabaseStorage implements IStorage {
     organizationId: string,
     metricCodes: string[]
   ): Promise<OrganizationMetric[]> {
-    const results: OrganizationMetric[] = [];
+    // Use transaction to ensure atomicity
+    return await db.transaction(async (tx: any) => {
+      // Validate all metrics exist and are active in a single query
+      const activeMetrics = await tx
+        .select()
+        .from(siteMetrics)
+        .where(
+          and(
+            inArray(siteMetrics.code, metricCodes),
+            eq(siteMetrics.isActive, true)
+          )
+        );
 
-    for (const metricCode of metricCodes) {
-      const result = await this.enableMetricForOrganization(organizationId, metricCode);
-      results.push(result);
-    }
+      // Check if all requested metrics were found and are active
+      if (activeMetrics.length !== metricCodes.length) {
+        const foundCodes = activeMetrics.map((m: any) => m.code);
+        const missingCodes = metricCodes.filter(code => !foundCodes.includes(code));
+        throw new Error(
+          `Some metrics are not found or not active: ${missingCodes.join(', ')}`
+        );
+      }
 
-    return results;
+      // Enable each metric (upsert to handle existing records)
+      const results: OrganizationMetric[] = [];
+      for (const metricCode of metricCodes) {
+        // Check if already exists
+        const [existing] = await tx
+          .select()
+          .from(organizationMetrics)
+          .where(
+            and(
+              eq(organizationMetrics.organizationId, organizationId),
+              eq(organizationMetrics.metricCode, metricCode)
+            )
+          )
+          .limit(1);
+
+        if (existing) {
+          // Update to enabled if it exists
+          const [updated] = await tx
+            .update(organizationMetrics)
+            .set({
+              isEnabled: true,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(organizationMetrics.organizationId, organizationId),
+                eq(organizationMetrics.metricCode, metricCode)
+              )
+            )
+            .returning();
+          results.push(updated);
+        } else {
+          // Create new entry
+          const [created] = await tx
+            .insert(organizationMetrics)
+            .values({
+              organizationId,
+              metricCode,
+              isEnabled: true,
+              createdAt: new Date(),
+            })
+            .returning();
+          results.push(created);
+        }
+      }
+
+      return results;
+    });
   }
 
 }

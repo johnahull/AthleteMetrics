@@ -90,36 +90,77 @@ describe('MetricService', () => {
 
   afterEach(async () => {
     // Cleanup: delete test data in reverse dependency order
+    // Continue cleanup even if individual deletions fail
+    const errors: Error[] = [];
+
     try {
       if (testMetricCode) {
         // Delete measurements first
-        await db.delete(measurements).where(eq(measurements.metric, testMetricCode));
+        try {
+          await db.delete(measurements).where(eq(measurements.metric, testMetricCode));
+        } catch (err) {
+          errors.push(err as Error);
+        }
         // Delete organization metrics
-        await db.delete(organizationMetrics).where(eq(organizationMetrics.metricCode, testMetricCode));
+        try {
+          await db.delete(organizationMetrics).where(eq(organizationMetrics.metricCode, testMetricCode));
+        } catch (err) {
+          errors.push(err as Error);
+        }
         // Delete site metric
-        await db.delete(siteMetrics).where(eq(siteMetrics.code, testMetricCode));
+        try {
+          await db.delete(siteMetrics).where(eq(siteMetrics.code, testMetricCode));
+        } catch (err) {
+          errors.push(err as Error);
+        }
       }
       // Delete audit logs before deleting users (foreign key constraint)
       if (siteAdminUserId || orgAdminUserId || regularUserId) {
-        await db.delete(auditLogs).where(
-          or(
-            siteAdminUserId ? eq(auditLogs.userId, siteAdminUserId) : undefined,
-            orgAdminUserId ? eq(auditLogs.userId, orgAdminUserId) : undefined,
-            regularUserId ? eq(auditLogs.userId, regularUserId) : undefined
-          )
-        );
+        try {
+          await db.delete(auditLogs).where(
+            or(
+              siteAdminUserId ? eq(auditLogs.userId, siteAdminUserId) : undefined,
+              orgAdminUserId ? eq(auditLogs.userId, orgAdminUserId) : undefined,
+              regularUserId ? eq(auditLogs.userId, regularUserId) : undefined
+            )
+          );
+        } catch (err) {
+          errors.push(err as Error);
+        }
       }
       if (siteAdminUserId) {
-        await db.delete(users).where(eq(users.id, siteAdminUserId));
+        try {
+          await db.delete(users).where(eq(users.id, siteAdminUserId));
+        } catch (err) {
+          errors.push(err as Error);
+        }
       }
       if (orgAdminUserId) {
-        await db.delete(users).where(eq(users.id, orgAdminUserId));
+        try {
+          await db.delete(users).where(eq(users.id, orgAdminUserId));
+        } catch (err) {
+          errors.push(err as Error);
+        }
       }
       if (regularUserId) {
-        await db.delete(users).where(eq(users.id, regularUserId));
+        try {
+          await db.delete(users).where(eq(users.id, regularUserId));
+        } catch (err) {
+          errors.push(err as Error);
+        }
       }
       if (testOrgId) {
-        await db.delete(organizations).where(eq(organizations.id, testOrgId));
+        try {
+          await db.delete(organizations).where(eq(organizations.id, testOrgId));
+        } catch (err) {
+          errors.push(err as Error);
+        }
+      }
+
+      // If any errors occurred, log them all
+      if (errors.length > 0) {
+        console.error('Test cleanup had errors:', errors);
+        throw new Error(`Test cleanup failed with ${errors.length} error(s)`);
       }
     } catch (error) {
       console.error('Test cleanup failed:', error);

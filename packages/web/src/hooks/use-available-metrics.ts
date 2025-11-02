@@ -94,7 +94,9 @@ export function useAvailableMetrics(): {
   return {
     metrics,
     isLoading: loadingOrg || loadingSite,
-    error: (errorOrg || errorSite) as Error | null,
+    error: (errorOrg || errorSite)
+      ? new Error((errorOrg || errorSite)?.message || 'Failed to fetch metrics')
+      : null,
   };
 }
 

@@ -198,6 +198,16 @@ export function registerMetricRoutes(app: Express) {
         const { organizationId, code } = req.params;
         const userId = req.session.user!.id;
 
+        // Validate organizationId format (UUID)
+        if (!organizationId.match(/^[a-f0-9-]{36}$/i)) {
+          return res.status(400).json({ message: "Invalid organization ID format" });
+        }
+
+        // Validate metric code format (uppercase alphanumeric + underscores)
+        if (!code.match(/^[A-Z0-9_]+$/)) {
+          return res.status(400).json({ message: "Invalid metric code format" });
+        }
+
         const metric = await metricService.enableMetricForOrganization(organizationId, code, userId);
         res.json(metric);
       } catch (error) {
@@ -227,6 +237,16 @@ export function registerMetricRoutes(app: Express) {
         const { organizationId, code } = req.params;
         const userId = req.session.user!.id;
 
+        // Validate organizationId format (UUID)
+        if (!organizationId.match(/^[a-f0-9-]{36}$/i)) {
+          return res.status(400).json({ message: "Invalid organization ID format" });
+        }
+
+        // Validate metric code format (uppercase alphanumeric + underscores)
+        if (!code.match(/^[A-Z0-9_]+$/)) {
+          return res.status(400).json({ message: "Invalid metric code format" });
+        }
+
         const metric = await metricService.disableMetricForOrganization(organizationId, code, userId);
         res.json(metric);
       } catch (error) {
@@ -245,6 +265,17 @@ export function registerMetricRoutes(app: Express) {
       try {
         const { organizationId, code } = req.params;
         const userId = req.session.user!.id;
+
+        // Validate organizationId format (UUID)
+        if (!organizationId.match(/^[a-f0-9-]{36}$/i)) {
+          return res.status(400).json({ message: "Invalid organization ID format" });
+        }
+
+        // Validate metric code format (uppercase alphanumeric + underscores)
+        if (!code.match(/^[A-Z0-9_]+$/)) {
+          return res.status(400).json({ message: "Invalid metric code format" });
+        }
+
         const validatedData = updateOrganizationMetricSchema.parse(req.body);
 
         const metric = await metricService.updateOrganizationMetric(
@@ -273,8 +304,22 @@ export function registerMetricRoutes(app: Express) {
         const { metricCodes } = req.body;
         const userId = req.session.user!.id;
 
+        // Validate organizationId format (UUID)
+        if (!organizationId.match(/^[a-f0-9-]{36}$/i)) {
+          return res.status(400).json({ message: "Invalid organization ID format" });
+        }
+
         if (!Array.isArray(metricCodes)) {
           return res.status(400).json({ message: "metricCodes must be an array" });
+        }
+
+        // Validate each metric code format
+        for (const code of metricCodes) {
+          if (typeof code !== 'string' || !code.match(/^[A-Z0-9_]+$/)) {
+            return res.status(400).json({
+              message: `Invalid metric code format: ${code}`
+            });
+          }
         }
 
         const metrics = await metricService.bulkEnableMetricsForOrganization(
