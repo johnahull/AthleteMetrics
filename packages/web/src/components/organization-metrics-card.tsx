@@ -239,8 +239,23 @@ export default function OrganizationMetricsCard({
           Enable metrics for your organization and customize display labels
         </CardDescription>
         {/* Debug info */}
-        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-          <strong>Debug:</strong> canEdit={String(canEdit)}, enablePending={String(enableMutation.isPending)}, disablePending={String(disableMutation.isPending)}
+        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs flex items-center justify-between">
+          <div>
+            <strong>Debug:</strong> canEdit={String(canEdit)}, enablePending={String(enableMutation.isPending)}, disablePending={String(disableMutation.isPending)}
+          </div>
+          {(enableMutation.isPending || disableMutation.isPending) && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                enableMutation.reset();
+                disableMutation.reset();
+                toast({ title: "Mutations reset", description: "Toggles should work now" });
+              }}
+            >
+              Reset Stuck Mutations
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>
