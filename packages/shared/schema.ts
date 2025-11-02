@@ -137,6 +137,84 @@ export const organizationMetrics = pgTable("organization_metrics", {
   orgEnabledIdx: index("org_metrics_org_enabled_idx").on(table.organizationId, table.isEnabled),
 }));
 
+// Site-level benchmark definitions (master catalog)
+export const siteBenchmarks = pgTable("site_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
+  // Athlete attribute filters (NULL = applies to all)
+  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Other"
+  ageMin: integer("age_min"),
+  ageMax: integer("age_max"),
+  position: varchar("position", { length: 50 }),
+  level: varchar("level", { length: 50 }),
+  // Control flags
+  isSystemDefault: boolean("is_system_default").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  displayOrder: integer("display_order"),
+  // Display settings
+  color: varchar("color", { length: 20 }),
+  icon: varchar("icon", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  metricIdx: index("site_benchmarks_metric_idx").on(table.metricCode),
+  activeIdx: index("site_benchmarks_active_idx").on(table.isActive),
+  metricActiveIdx: index("site_benchmarks_metric_active_idx").on(table.metricCode, table.isActive),
+}));
+
+// Organization-specific custom benchmarks
+export const customBenchmarks = pgTable("custom_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(),
+  // Athlete attribute filters
+  gender: varchar("gender", { length: 20 }),
+  ageMin: integer("age_min"),
+  ageMax: integer("age_max"),
+  position: varchar("position", { length: 50 }),
+  level: varchar("level", { length: 50 }),
+  // Control flags
+  isActive: boolean("is_active").default(true).notNull(),
+  displayOrder: integer("display_order"),
+  // Display settings
+  color: varchar("color", { length: 20 }),
+  icon: varchar("icon", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  orgIdx: index("custom_benchmarks_org_idx").on(table.organizationId),
+  metricIdx: index("custom_benchmarks_metric_idx").on(table.metricCode),
+  orgActiveIdx: index("custom_benchmarks_org_active_idx").on(table.organizationId, table.isActive),
+}));
+
+// Organization-level benchmark enablement
+export const organizationBenchmarks = pgTable("organization_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  benchmarkId: varchar("benchmark_id").notNull(),
+  benchmarkType: varchar("benchmark_type", { length: 10 }).notNull(), // 'site' or 'custom'
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  customName: varchar("custom_name", { length: 100 }),
+  displayOrder: integer("display_order"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueOrgBenchmark: unique().on(table.organizationId, table.benchmarkId, table.benchmarkType),
+  orgIdx: index("org_benchmarks_org_idx").on(table.organizationId),
+  orgEnabledIdx: index("org_benchmarks_org_enabled_idx").on(table.organizationId, table.isEnabled),
+  benchmarkIdx: index("org_benchmarks_benchmark_idx").on(table.benchmarkId, table.benchmarkType),
+}));
+
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   // Historical reference fields - NO foreign key constraints
@@ -624,6 +702,136 @@ export const updateOrganizationMetricSchema = z.object({
   customLabel: z.string().max(100).optional(),
 });
 
+// Benchmark Schemas
+export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  metricCode: z.string().min(1, "Metric code is required").max(50),
+  name: z.string().min(1, "Benchmark name is required").max(100),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive("Benchmark value must be positive"),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().min(0).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const updateSiteBenchmarkSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive().optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().min(0).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true,
+  updatedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  metricCode: z.string().min(1, "Metric code is required").max(50),
+  name: z.string().min(1, "Benchmark name is required").max(100),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive("Benchmark value must be positive"),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().min(0).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const updateCustomBenchmarkSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive().optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().min(0).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const insertOrganizationBenchmarkSchema = createInsertSchema(organizationBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  benchmarkId: z.string().min(1, "Benchmark ID is required"),
+  benchmarkType: z.enum(['site', 'custom']),
+  isEnabled: z.boolean().default(true),
+  customName: z.string().max(100).optional(),
+  displayOrder: z.number().int().optional(),
+});
+
+export const updateOrganizationBenchmarkSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  customName: z.string().max(100).optional(),
+  displayOrder: z.number().int().optional(),
+});
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -689,6 +897,18 @@ export type UpdateSiteMetric = z.infer<typeof updateSiteMetricSchema>;
 export type InsertOrganizationMetric = z.infer<typeof insertOrganizationMetricSchema>;
 export type OrganizationMetric = typeof organizationMetrics.$inferSelect;
 export type UpdateOrganizationMetric = z.infer<typeof updateOrganizationMetricSchema>;
+
+export type InsertSiteBenchmark = z.infer<typeof insertSiteBenchmarkSchema>;
+export type SiteBenchmark = typeof siteBenchmarks.$inferSelect;
+export type UpdateSiteBenchmark = z.infer<typeof updateSiteBenchmarkSchema>;
+
+export type InsertCustomBenchmark = z.infer<typeof insertCustomBenchmarkSchema>;
+export type CustomBenchmark = typeof customBenchmarks.$inferSelect;
+export type UpdateCustomBenchmark = z.infer<typeof updateCustomBenchmarkSchema>;
+
+export type InsertOrganizationBenchmark = z.infer<typeof insertOrganizationBenchmarkSchema>;
+export type OrganizationBenchmark = typeof organizationBenchmarks.$inferSelect;
+export type UpdateOrganizationBenchmark = z.infer<typeof updateOrganizationBenchmarkSchema>;
 
 // Enums
 export const MetricType = {
