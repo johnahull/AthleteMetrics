@@ -16,7 +16,7 @@ import { Save } from "lucide-react";
 import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
 import { AthleteSelector } from "@/components/ui/athlete-selector";
 import { useAuth } from "@/lib/auth";
-import { useOrganizationMetrics, useSiteMetrics } from "@/lib/metrics-api";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { z } from "zod";
 
 // Create dynamic measurement schema that accepts any metric string
@@ -50,30 +50,8 @@ export default function MeasurementForm() {
     queryKey: ["/api/teams"],
   });
 
-  // Determine which organization to fetch metrics for
-  const currentOrgId = organizationContext || userOrganizations?.[0]?.organizationId;
-
-  // Fetch organization-enabled metrics (or all site metrics for site admins without org context)
-  const { data: orgMetrics } = useOrganizationMetrics(
-    currentOrgId || "",
-    true // enabledOnly
-  );
-  const { data: siteMetrics } = useSiteMetrics(false); // Fallback for site admins
-
-  // Use org-enabled metrics if available, otherwise fall back to site metrics
-  const availableMetrics = currentOrgId && orgMetrics
-    ? orgMetrics.filter(om => om.isEnabled).map(om => ({
-        code: om.metricCode,
-        label: om.customLabel || om.siteMetric.label,
-        unit: om.siteMetric.unit,
-        lowerIsBetter: om.siteMetric.lowerIsBetter,
-      }))
-    : siteMetrics?.map(sm => ({
-        code: sm.code,
-        label: sm.label,
-        unit: sm.unit,
-        lowerIsBetter: sm.lowerIsBetter,
-      })) || [];
+  // Get available metrics using centralized hook (filters by active+enabled)
+  const { metrics: availableMetrics } = useAvailableMetrics();
 
   const firstMetricCode = availableMetrics[0]?.code || "FLY10_TIME";
 

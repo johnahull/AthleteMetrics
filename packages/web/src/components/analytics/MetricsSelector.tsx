@@ -14,8 +14,7 @@ import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
 import type { MetricSelection, AnalysisType, DynamicMetricConfig } from '@shared/analytics-types';
 import { MetricIndicator } from './MetricIndicator';
-import { useAuth } from '@/lib/auth';
-import { useOrganizationMetrics, useSiteMetrics } from '@/lib/metrics-api';
+import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 
 // Mutually exclusive metrics - selecting one prevents selecting the other
 // FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
@@ -69,45 +68,21 @@ export function MetricsSelector({
   metricsAvailability = {},
   maxMetricCount
 }: MetricsSelectorProps) {
-  const { organizationContext, userOrganizations } = useAuth();
-
-  // Determine which organization to fetch metrics for
-  const currentOrgId = organizationContext || userOrganizations?.[0]?.organizationId;
-
-  // Fetch organization-enabled metrics (or all site metrics for site admins without org context)
-  const { data: orgMetrics } = useOrganizationMetrics(
-    currentOrgId || "",
-    true // enabledOnly
-  );
-  const { data: siteMetrics } = useSiteMetrics(false); // Fallback for site admins
+  // Get available metrics using centralized hook (filters by active+enabled)
+  const { metrics: availableMetricsList } = useAvailableMetrics();
 
   // Build dynamic metric configs
   const dynamicMetrics = useMemo((): DynamicMetricConfig[] => {
-    if (currentOrgId && orgMetrics) {
-      return orgMetrics
-        .filter(om => om.isEnabled)
-        .map(om => ({
-          code: om.metricCode,
-          label: om.customLabel || om.siteMetric.label,
-          category: om.siteMetric.category || undefined,
-          unit: om.siteMetric.unit || '',
-          lowerIsBetter: om.siteMetric.lowerIsBetter,
-          isActive: om.siteMetric.isActive,
-          isSystemDefault: om.siteMetric.isSystemDefault,
-        }));
-    } else if (siteMetrics) {
-      return siteMetrics.map(sm => ({
-        code: sm.code,
-        label: sm.label,
-        category: sm.category || undefined,
-        unit: sm.unit || '',
-        lowerIsBetter: sm.lowerIsBetter,
-        isActive: sm.isActive,
-        isSystemDefault: sm.isSystemDefault,
-      }));
-    }
-    return [];
-  }, [currentOrgId, orgMetrics, siteMetrics]);
+    return availableMetricsList.map(m => ({
+      code: m.code,
+      label: m.label,
+      category: m.category,
+      unit: m.unit,
+      lowerIsBetter: m.lowerIsBetter,
+      isActive: true, // Already filtered by hook
+      isSystemDefault: false, // Not exposed by hook, but not needed for display
+    }));
+  }, [availableMetricsList]);
 
   const availableMetrics = dynamicMetrics.map(m => m.code);
   const metricConfigMap = useMemo(
