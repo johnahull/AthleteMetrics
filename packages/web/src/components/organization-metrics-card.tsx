@@ -94,6 +94,13 @@ export default function OrganizationMetricsCard({
       disablePending: disableMutation.isPending
     });
 
+    // Visible toast to show click was detected
+    toast({
+      title: "Toggle Clicked",
+      description: `Metric: ${metric.code}, Action: ${enabled ? 'Enable' : 'Disable'}`,
+      duration: 2000,
+    });
+
     if (!canEdit) {
       console.log('[MetricsCard] Toggle blocked: canEdit is false');
       return;
