@@ -9,6 +9,19 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vites
 import { TimeSeriesViolinChart } from '../TimeSeriesViolinChart';
 import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/analytics-types';
 
+// Mock useMetricConfig hook
+vi.mock('@/hooks/use-metric-config', () => ({
+  useMetricConfig: () => ({
+    getMetricConfig: (code: string) => ({
+      code,
+      label: code,
+      unit: 's',
+      category: 'Speed',
+      displayOrder: 1,
+    }),
+  }),
+}));
+
 // Mock canvas context
 const mockCanvasContext = {
   fillRect: vi.fn(),

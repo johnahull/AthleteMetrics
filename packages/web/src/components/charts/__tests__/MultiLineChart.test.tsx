@@ -14,6 +14,19 @@ vi.mock('@/hooks/useDebounce', () => ({
   useDebounce: vi.fn((value: any) => value) // Return immediately without debouncing
 }));
 
+// Mock useMetricConfig hook
+vi.mock('@/hooks/use-metric-config', () => ({
+  useMetricConfig: () => ({
+    getMetricConfig: (code: string) => ({
+      code,
+      label: code,
+      unit: 's',
+      category: 'Speed',
+      displayOrder: 1,
+    }),
+  }),
+}));
+
 // Mock useAthleteSelection hook
 vi.mock('@/hooks/useAthleteSelection', () => ({
   useAthleteSelection: vi.fn(() => ({

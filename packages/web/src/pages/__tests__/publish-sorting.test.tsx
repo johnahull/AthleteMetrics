@@ -4,6 +4,27 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Publish from '../publish';
 
+// Mock useAuth hook
+vi.mock('@/lib/auth', () => ({
+  useAuth: () => ({
+    user: { id: 'test-user', username: 'testuser', isSiteAdmin: true },
+    isAuthenticated: true,
+  }),
+}));
+
+// Mock useMetricConfig hook
+vi.mock('@/hooks/use-metric-config', () => ({
+  useMetricConfig: () => ({
+    getMetricConfig: (code: string) => ({
+      code,
+      label: code,
+      unit: 's',
+      category: 'Speed',
+      displayOrder: 1,
+    }),
+  }),
+}));
+
 // Mock measurements for sorting tests
 const mockMeasurements = [
   {
