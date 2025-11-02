@@ -27,7 +27,7 @@ const NAVIGATION_CONFIGS = {
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
-      { name: "Metrics", href: "/metrics", icon: Settings }
+      { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },

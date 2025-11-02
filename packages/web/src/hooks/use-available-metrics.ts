@@ -39,9 +39,11 @@ export function useAvailableMetrics(): {
   const { organizationContext, userOrganizations } = useAuth();
 
   // Determine current organization ID
+  // Note: currentOrgId may be undefined during initial load when userOrganizations is still loading
   const currentOrgId = organizationContext || userOrganizations?.[0]?.organizationId;
 
   // Fetch organization metrics (active site metrics + org-enabled only)
+  // The hook already handles empty orgId gracefully with enabled: !!organizationId
   const {
     data: orgMetrics,
     isLoading: loadingOrg,
@@ -60,6 +62,11 @@ export function useAvailableMetrics(): {
 
   // Build available metrics list
   const metrics = useMemo((): AvailableMetric[] => {
+    // Return empty array if still loading and no data available yet
+    if ((loadingOrg || loadingSite) && !orgMetrics && !siteMetrics) {
+      return [];
+    }
+
     // Use org metrics if available (already filtered by backend for active+enabled)
     if (currentOrgId && orgMetrics) {
       return orgMetrics
@@ -89,7 +96,7 @@ export function useAvailableMetrics(): {
     }
 
     return [];
-  }, [currentOrgId, orgMetrics, siteMetrics]);
+  }, [currentOrgId, orgMetrics, siteMetrics, loadingOrg, loadingSite]);
 
   return {
     metrics,
