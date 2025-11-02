@@ -190,23 +190,21 @@ export default function MetricsManagementPage() {
                           <Edit className="h-4 w-4" />
                         </Button>
 
-                        {!metric.isSystemDefault && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            data-testid={`toggle-metric-${metric.code}`}
-                            onClick={() => {
-                              setSelectedMetric(metric);
-                              setToggleDialogOpen(true);
-                            }}
-                          >
-                            {metric.isActive ? (
-                              <PowerOff className="h-4 w-4" />
-                            ) : (
-                              <Power className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`toggle-metric-${metric.code}`}
+                          onClick={() => {
+                            setSelectedMetric(metric);
+                            setToggleDialogOpen(true);
+                          }}
+                        >
+                          {metric.isActive ? (
+                            <PowerOff className="h-4 w-4" />
+                          ) : (
+                            <Power className="h-4 w-4" />
+                          )}
+                        </Button>
 
                         <Button
                           variant="ghost"
