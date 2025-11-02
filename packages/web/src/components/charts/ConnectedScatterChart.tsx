@@ -20,7 +20,7 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -110,9 +110,9 @@ interface ConnectedScatterChartProps {
 }
 
 // Performance quadrant labels based on metric types
-function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
-  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
-  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
+function getPerformanceQuadrantLabels(xMetric: string, yMetric: string, getMetricConfig: (code: string) => { label: string; unit: string; lowerIsBetter: boolean; category?: string } | null) {
+  const xConfig = getMetricConfig(xMetric);
+  const yConfig = getMetricConfig(yMetric);
 
   const xLowerIsBetter = xConfig?.lowerIsBetter || false;
   const yLowerIsBetter = yConfig?.lowerIsBetter || false;
@@ -213,6 +213,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   onAthleteSelectionChange,
   maxAthletes = 10
 }: ConnectedScatterChartProps) {
+  const { getMetricConfig } = useMetricConfig();
   const [showGroupAverage, setShowGroupAverage] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
 
@@ -367,10 +368,10 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       });
     }
 
-    const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
-    const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+    const xUnit = getMetricConfig(xMetric)?.unit || '';
+    const yUnit = getMetricConfig(yMetric)?.unit || '';
+    const xLabel = getMetricConfig(xMetric)?.label || xMetric;
+    const yLabel = getMetricConfig(yMetric)?.label || yMetric;
 
     return {
       datasets,
@@ -465,7 +466,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
           const xMean = statistics?.[scatterData.xMetric]?.mean || 0;
           const yMean = statistics?.[scatterData.yMetric]?.mean || 0;
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
 
           // Calculate chart bounds for full background coverage
           const allPoints = scatterData.datasets.map((dataset: any) => dataset.data).flat();
@@ -646,7 +647,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
 
       {/* Quadrant Legend */}
       {showQuadrants && scatterData && (() => {
-        const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+        const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
 
         const quadrantLegend = [
           {
@@ -750,9 +751,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
                   const xImprovement = xLastValue - xFirstValue;
                   const yImprovement = yLastValue - yFirstValue;
                   
-                  const xBetter = METRIC_CONFIG[scatterData.xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ? 
+                  const xBetter = getMetricConfig(scatterData.xMetric)?.lowerIsBetter ? 
                     xImprovement < 0 : xImprovement > 0;
-                  const yBetter = METRIC_CONFIG[scatterData.yMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter ? 
+                  const yBetter = getMetricConfig(scatterData.yMetric)?.lowerIsBetter ? 
                     yImprovement < 0 : yImprovement > 0;
                   
                   if (xBetter && yBetter) return '↗️ Improving Both';

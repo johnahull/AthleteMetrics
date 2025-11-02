@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { validateUsername } from "@shared/username-validation";
+import OrganizationMetricsCard from "@/components/organization-metrics-card";
 
 // Mock components and types (replace with actual imports if available)
 const LoadingSpinner = ({ text }: { text: string }) => (
@@ -1018,6 +1019,11 @@ export default function OrganizationProfile() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Metrics Configuration Section - Visible to Site Admins and Org Admins */}
+      {(user?.isSiteAdmin || isOrgAdmin) && (
+        <OrganizationMetricsCard organizationId={id!} canEdit={canEdit} />
       )}
 
     </div>

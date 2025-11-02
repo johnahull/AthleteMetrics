@@ -1,7 +1,11 @@
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  siteMetrics, organizationMetrics,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
+  type SiteMetric, type OrganizationMetric,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
+  type InsertSiteMetric, type InsertOrganizationMetric,
+  type UpdateSiteMetric, type UpdateOrganizationMetric,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -204,6 +208,22 @@ export interface IStorage {
   // Audit Logging
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]>;
+
+  // Site Metrics (Master Metric Catalog)
+  getSiteMetrics(filters?: { includeInactive?: boolean }): Promise<SiteMetric[]>;
+  getSiteMetric(code: string): Promise<SiteMetric | undefined>;
+  createSiteMetric(metric: InsertSiteMetric, createdBy: string): Promise<SiteMetric>;
+  updateSiteMetric(code: string, metric: Partial<UpdateSiteMetric>): Promise<SiteMetric>;
+  toggleSiteMetricStatus(code: string, isActive: boolean): Promise<SiteMetric>;
+  deleteSiteMetric(code: string): Promise<void>;
+
+  // Organization Metrics (Org-level metric enablement)
+  getOrganizationMetrics(organizationId: string, filters?: { enabledOnly?: boolean }): Promise<(OrganizationMetric & { siteMetric: SiteMetric })[]>;
+  getOrganizationMetric(organizationId: string, metricCode: string): Promise<OrganizationMetric | undefined>;
+  enableMetricForOrganization(organizationId: string, metricCode: string): Promise<OrganizationMetric>;
+  disableMetricForOrganization(organizationId: string, metricCode: string): Promise<OrganizationMetric>;
+  updateOrganizationMetric(organizationId: string, metricCode: string, data: Partial<UpdateOrganizationMetric>): Promise<OrganizationMetric>;
+  bulkEnableMetricsForOrganization(organizationId: string, metricCodes: string[]): Promise<OrganizationMetric[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2933,6 +2953,319 @@ export class DatabaseStorage implements IStorage {
 
     // Start async cleanup (non-blocking)
     attemptCleanup(1);
+  }
+
+  // ========================================================================
+  // SITE METRICS (Master Metric Catalog)
+  // ========================================================================
+
+  async getSiteMetrics(filters?: { includeInactive?: boolean }): Promise<SiteMetric[]> {
+    const conditions = [];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(siteMetrics.isActive, true));
+    }
+
+    const results = await db
+      .select()
+      .from(siteMetrics)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(siteMetrics.displayOrder), asc(siteMetrics.label));
+
+    return results;
+  }
+
+  async getSiteMetric(code: string): Promise<SiteMetric | undefined> {
+    const [metric] = await db
+      .select()
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, code))
+      .limit(1);
+
+    return metric;
+  }
+
+  async createSiteMetric(metric: InsertSiteMetric, createdBy: string): Promise<SiteMetric> {
+    try {
+      const [created] = await db
+        .insert(siteMetrics)
+        .values({
+          ...metric,
+          // Convert numeric validation values to strings for decimal columns
+          validationMin: metric.validationMin !== undefined ? String(metric.validationMin) : undefined,
+          validationMax: metric.validationMax !== undefined ? String(metric.validationMax) : undefined,
+          createdBy,
+          createdAt: new Date(),
+        })
+        .returning();
+
+      return created;
+    } catch (error: any) {
+      // Handle unique constraint violation (duplicate metric code)
+      if (error.code === '23505') {
+        throw new Error(`Metric with code ${metric.code} already exists`);
+      }
+      throw error;
+    }
+  }
+
+  async updateSiteMetric(code: string, metric: Partial<UpdateSiteMetric>): Promise<SiteMetric> {
+    const [updated] = await db
+      .update(siteMetrics)
+      .set({
+        ...metric,
+        // Convert numeric validation values to strings for decimal columns
+        validationMin: metric.validationMin !== undefined ? String(metric.validationMin) : undefined,
+        validationMax: metric.validationMax !== undefined ? String(metric.validationMax) : undefined,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteMetrics.code, code))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site metric with code ${code} not found`);
+    }
+
+    return updated;
+  }
+
+  async toggleSiteMetricStatus(code: string, isActive: boolean): Promise<SiteMetric> {
+    const [updated] = await db
+      .update(siteMetrics)
+      .set({
+        isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteMetrics.code, code))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site metric with code ${code} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteSiteMetric(code: string): Promise<void> {
+    // Check if metric is a system default (cannot be deleted)
+    const [metric] = await db
+      .select()
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, code))
+      .limit(1);
+
+    if (!metric) {
+      throw new Error(`Site metric with code ${code} not found`);
+    }
+
+    if (metric.isSystemDefault) {
+      throw new Error(`Cannot delete system default metric: ${code}`);
+    }
+
+    // Check if metric is used in any measurements
+    const [measurementCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(measurements)
+      .where(eq(measurements.metric, code));
+
+    if (measurementCount.count > 0) {
+      throw new Error(
+        `Cannot delete metric ${code}: ${measurementCount.count} measurement(s) exist. ` +
+        `Disable the metric instead to hide it from new measurements.`
+      );
+    }
+
+    // Delete the metric (this will cascade to organization_metrics)
+    await db.delete(siteMetrics).where(eq(siteMetrics.code, code));
+  }
+
+  // ========================================================================
+  // ORGANIZATION METRICS (Org-level metric enablement)
+  // ========================================================================
+
+  async getOrganizationMetrics(
+    organizationId: string,
+    filters?: { enabledOnly?: boolean }
+  ): Promise<(OrganizationMetric & { siteMetric: SiteMetric })[]> {
+    const conditions = [
+      eq(organizationMetrics.organizationId, organizationId),
+      eq(siteMetrics.isActive, true) // Only return metrics that are active at site level
+    ];
+
+    if (filters?.enabledOnly) {
+      conditions.push(eq(organizationMetrics.isEnabled, true));
+    }
+
+    const results = await db
+      .select()
+      .from(organizationMetrics)
+      .innerJoin(siteMetrics, eq(organizationMetrics.metricCode, siteMetrics.code))
+      .where(and(...conditions))
+      .orderBy(
+        asc(organizationMetrics.displayOrder),
+        asc(siteMetrics.displayOrder),
+        asc(siteMetrics.label)
+      );
+
+    return results.map(row => ({
+      ...row.organization_metrics,
+      siteMetric: row.site_metrics,
+    }));
+  }
+
+  async getOrganizationMetric(
+    organizationId: string,
+    metricCode: string
+  ): Promise<OrganizationMetric | undefined> {
+    const [result] = await db
+      .select()
+      .from(organizationMetrics)
+      .where(
+        and(
+          eq(organizationMetrics.organizationId, organizationId),
+          eq(organizationMetrics.metricCode, metricCode)
+        )
+      )
+      .limit(1);
+
+    return result;
+  }
+
+  async enableMetricForOrganization(
+    organizationId: string,
+    metricCode: string
+  ): Promise<OrganizationMetric> {
+    // Check if already exists
+    const existing = await this.getOrganizationMetric(organizationId, metricCode);
+
+    if (existing) {
+      // Update to enabled if it exists
+      return this.updateOrganizationMetric(organizationId, metricCode, { isEnabled: true });
+    }
+
+    // Create new entry
+    const [created] = await db
+      .insert(organizationMetrics)
+      .values({
+        organizationId,
+        metricCode,
+        isEnabled: true,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async disableMetricForOrganization(
+    organizationId: string,
+    metricCode: string
+  ): Promise<OrganizationMetric> {
+    return this.updateOrganizationMetric(organizationId, metricCode, { isEnabled: false });
+  }
+
+  async updateOrganizationMetric(
+    organizationId: string,
+    metricCode: string,
+    data: Partial<UpdateOrganizationMetric>
+  ): Promise<OrganizationMetric> {
+    const [updated] = await db
+      .update(organizationMetrics)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationMetrics.organizationId, organizationId),
+          eq(organizationMetrics.metricCode, metricCode)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(
+        `Organization metric not found for org ${organizationId} and metric ${metricCode}`
+      );
+    }
+
+    return updated;
+  }
+
+  async bulkEnableMetricsForOrganization(
+    organizationId: string,
+    metricCodes: string[]
+  ): Promise<OrganizationMetric[]> {
+    // Use transaction to ensure atomicity
+    return await db.transaction(async (tx: any) => {
+      // Validate all metrics exist and are active in a single query
+      const activeMetrics = await tx
+        .select()
+        .from(siteMetrics)
+        .where(
+          and(
+            inArray(siteMetrics.code, metricCodes),
+            eq(siteMetrics.isActive, true)
+          )
+        );
+
+      // Check if all requested metrics were found and are active
+      if (activeMetrics.length !== metricCodes.length) {
+        const foundCodes = activeMetrics.map((m: any) => m.code);
+        const missingCodes = metricCodes.filter(code => !foundCodes.includes(code));
+        throw new Error(
+          `Some metrics are not found or not active: ${missingCodes.join(', ')}`
+        );
+      }
+
+      // Enable each metric (upsert to handle existing records)
+      const results: OrganizationMetric[] = [];
+      for (const metricCode of metricCodes) {
+        // Check if already exists
+        const [existing] = await tx
+          .select()
+          .from(organizationMetrics)
+          .where(
+            and(
+              eq(organizationMetrics.organizationId, organizationId),
+              eq(organizationMetrics.metricCode, metricCode)
+            )
+          )
+          .limit(1);
+
+        if (existing) {
+          // Update to enabled if it exists
+          const [updated] = await tx
+            .update(organizationMetrics)
+            .set({
+              isEnabled: true,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(organizationMetrics.organizationId, organizationId),
+                eq(organizationMetrics.metricCode, metricCode)
+              )
+            )
+            .returning();
+          results.push(updated);
+        } else {
+          // Create new entry
+          const [created] = await tx
+            .insert(organizationMetrics)
+            .values({
+              organizationId,
+              metricCode,
+              isEnabled: true,
+              createdAt: new Date(),
+            })
+            .returning();
+          results.push(created);
+        }
+      }
+
+      return results;
+    });
   }
 
 }

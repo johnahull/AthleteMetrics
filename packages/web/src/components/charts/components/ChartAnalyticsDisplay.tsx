@@ -6,8 +6,8 @@
  */
 
 import React from 'react';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import PerformanceQuadrantOverlay from './PerformanceQuadrantOverlay';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 
 interface Analytics {
   correlation: number;
@@ -42,6 +42,7 @@ export const ChartAnalyticsDisplay = React.memo(function ChartAnalyticsDisplay({
   highlightAthlete,
   className = ''
 }: ChartAnalyticsDisplayProps) {
+  const { getMetricConfig } = useMetricConfig();
   if (!analytics) return null;
 
   return (
@@ -76,7 +77,7 @@ export const ChartAnalyticsDisplay = React.memo(function ChartAnalyticsDisplay({
             {`${analytics.xImprovement > 0 ? '+' : ''}${analytics.xImprovement.toFixed(3)}${xUnit ? `${xUnit}/day` : '/day'}`}
           </div>
           <div className="text-xs text-muted-foreground">
-            {METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
+            {getMetricConfig(xMetric)?.lowerIsBetter
               ? (analytics.xImprovement < 0 ? '📈 Improving' : '📉 Declining')
               : (analytics.xImprovement > 0 ? '📈 Improving' : '📉 Declining')
             }
@@ -89,7 +90,7 @@ export const ChartAnalyticsDisplay = React.memo(function ChartAnalyticsDisplay({
             {`${analytics.yImprovement > 0 ? '+' : ''}${analytics.yImprovement.toFixed(3)}${yUnit ? `${yUnit}/day` : '/day'}`}
           </div>
           <div className="text-xs text-muted-foreground">
-            {METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.lowerIsBetter
+            {getMetricConfig(yMetric)?.lowerIsBetter
               ? (analytics.yImprovement < 0 ? '📈 Improving' : '📉 Declining')
               : (analytics.yImprovement > 0 ? '📈 Improving' : '📉 Declining')
             }

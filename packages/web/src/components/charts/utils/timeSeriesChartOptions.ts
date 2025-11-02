@@ -1,14 +1,14 @@
 import type { ChartOptions } from 'chart.js';
 import { CHART_CONFIG } from '@/constants/chart-config';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { ChartConfiguration } from '@shared/analytics-types';
 
 export function createTimeSeriesChartOptions(
   config: ChartConfiguration,
   metric: string,
-  labels: string[]
+  labels: string[],
+  getMetricConfig: (code: string) => { label: string; unit: string; lowerIsBetter: boolean; category: string } | null
 ): ChartOptions<'scatter'> {
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  const metricConfig = getMetricConfig(metric);
   const unit = metricConfig?.unit || '';
   const metricLabel = metricConfig?.label || metric;
 

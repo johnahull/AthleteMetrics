@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { z } from "zod";
 
 interface AthleteMeasurementFormProps {
   athleteId: string;
@@ -17,16 +19,29 @@ interface AthleteMeasurementFormProps {
   onSuccess?: () => void;
 }
 
+// Create dynamic measurement schema that accepts any metric string
+// Backend will validate against org-enabled metrics
+const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
+  metric: z.string().min(1, "Metric is required"),
+});
+
+type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
+
 export default function AthleteMeasurementForm({ athleteId, athleteName, onSuccess }: AthleteMeasurementFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const form = useForm<InsertMeasurement>({
-    resolver: zodResolver(insertMeasurementSchema),
+  // Get available metrics using centralized hook (filters by active+enabled)
+  const { metrics: availableMetrics } = useAvailableMetrics();
+
+  const firstMetricCode = availableMetrics[0]?.code || "FLY10_TIME";
+
+  const form = useForm<DynamicInsertMeasurement>({
+    resolver: zodResolver(dynamicMeasurementSchema),
     defaultValues: {
       userId: athleteId,
       date: new Date().toISOString().split('T')[0],
-      metric: "FLY10_TIME",
+      metric: firstMetricCode,
       value: 0,
       flyInDistance: undefined,
       notes: "",
@@ -34,7 +49,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   });
 
   const createMeasurementMutation = useMutation({
-    mutationFn: async (data: InsertMeasurement) => {
+    mutationFn: async (data: DynamicInsertMeasurement) => {
       const response = await apiRequest("POST", "/api/measurements", data);
       return response.json();
     },
@@ -49,7 +64,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
       form.reset({
         userId: athleteId,
         date: new Date().toISOString().split('T')[0],
-        metric: "FLY10_TIME",
+        metric: firstMetricCode,
         value: 0,
         flyInDistance: undefined,
         notes: "",
@@ -66,9 +81,10 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   });
 
   const metric = form.watch("metric");
-  const units = metric === "VERTICAL_JUMP" ? "in" : metric === "RSI" ? "" : metric === "TOP_SPEED" ? "mph" : "s";
+  // Get unit from metric config dynamically
+  const units = availableMetrics.find(m => m.code === metric)?.unit || "";
 
-  const onSubmit = (data: InsertMeasurement) => {
+  const onSubmit = (data: DynamicInsertMeasurement) => {
     createMeasurementMutation.mutate({
       ...data,
       userId: athleteId,
@@ -115,8 +131,8 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                   <FormLabel>
                     Metric <span className="text-red-500">*</span>
                   </FormLabel>
-                  <Select 
-                    value={field.value} 
+                  <Select
+                    value={field.value}
                     onValueChange={field.onChange}
                     disabled={createMeasurementMutation.isPending}
                   >
@@ -126,14 +142,17 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="FLY10_TIME">10-Yard Fly Time</SelectItem>
-                      <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                      <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
-                      <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
-                      <SelectItem value="T_TEST">T-Test</SelectItem>
-                      <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
-                      <SelectItem value="RSI">Reactive Strength Index</SelectItem>
-                      <SelectItem value="TOP_SPEED">Top Speed</SelectItem>
+                      {availableMetrics.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No metrics available
+                        </div>
+                      ) : (
+                        availableMetrics.map((m) => (
+                          <SelectItem key={m.code} value={m.code}>
+                            {m.label}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />

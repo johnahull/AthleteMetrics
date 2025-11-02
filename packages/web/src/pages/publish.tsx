@@ -18,8 +18,15 @@ import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metr
 import { Gender } from "@shared/schema";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
 export default function Publish() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Get available metrics using centralized hook (filters by active+enabled)
+  const { metrics: availableMetrics } = useAvailableMetrics();
+
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
     birthYearFrom: "",
@@ -38,9 +45,6 @@ export default function Publish() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
@@ -427,21 +431,25 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Metric <span className="text-red-500">*</span>
               </label>
-              <Select 
-                value={filters.metric} 
+              <Select
+                value={filters.metric}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, metric: value }))}
               >
                 <SelectTrigger data-testid="select-metric">
                   <SelectValue placeholder="Select metric..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
-                  <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                  <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
-                  <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
-                  <SelectItem value="T_TEST">T-Test</SelectItem>
-                  <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
-                  <SelectItem value="RSI">Reactive Strength Index</SelectItem>
+                  {availableMetrics.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No metrics available
+                    </div>
+                  ) : (
+                    availableMetrics.map((m) => (
+                      <SelectItem key={m.code} value={m.code}>
+                        {m.label}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

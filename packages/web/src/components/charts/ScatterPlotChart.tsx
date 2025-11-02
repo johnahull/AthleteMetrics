@@ -23,7 +23,7 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber } from '@shared/utils/number-conversion';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
@@ -107,9 +107,9 @@ function calculateRegression(points: ScatterPoint[]): RegressionResult | null {
 }
 
 // Performance quadrant labels based on metric types
-function getPerformanceQuadrantLabels(xMetric: string, yMetric: string) {
-  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
-  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
+function getPerformanceQuadrantLabels(xMetric: string, yMetric: string, getMetricConfig: (code: string) => { label: string; unit: string; lowerIsBetter: boolean; category?: string } | null) {
+  const xConfig = getMetricConfig(xMetric);
+  const yConfig = getMetricConfig(yMetric);
 
   const xLowerIsBetter = xConfig?.lowerIsBetter || false;
   const yLowerIsBetter = yConfig?.lowerIsBetter || false;
@@ -216,6 +216,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   highlightAthlete,
   showAthleteNames = false
 }: ScatterPlotChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   const monitor = usePerformanceMonitor('ScatterPlotChart');
   const chartRef = useRef<any>(null);
   const namesRenderedRef = useRef<boolean>(false);
@@ -403,10 +405,10 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       });
     }
 
-    const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
-    const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+    const xUnit = getMetricConfig(xMetric)?.unit || '';
+    const yUnit = getMetricConfig(yMetric)?.unit || '';
+    const xLabel = getMetricConfig(xMetric)?.label || xMetric;
+    const yLabel = getMetricConfig(yMetric)?.label || yMetric;
 
     return {
       datasets,
@@ -516,7 +518,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         annotations: (() => {
           const xMean = scatterData.validatedStats[scatterData.xMetric]?.mean || 0;
           const yMean = scatterData.validatedStats[scatterData.yMetric]?.mean || 0;
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
 
           // Calculate chart bounds for full background coverage
           const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
@@ -721,7 +723,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   const quadrantLegend = useMemo(() => {
     if (!scatterData || !showQuadrants) return null;
 
-    const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
+    const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
     const colorMap = {
       green: { bg: CHART_CONFIG.COLORS.QUADRANTS.ELITE, border: 'rgba(16, 185, 129, 0.3)' },
       yellow: { bg: CHART_CONFIG.COLORS.QUADRANTS.GOOD, border: 'rgba(245, 158, 11, 0.3)' },

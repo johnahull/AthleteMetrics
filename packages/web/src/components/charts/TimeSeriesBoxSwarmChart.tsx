@@ -18,7 +18,7 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { TIME_SERIES_CHART_CONSTANTS, ATHLETE_COLORS, BOX_PLOT_COLORS, PERSONAL_BEST } from './constants/timeSeriesChartConstants';
 import { calculateBoxPlotStatistics, safeParseDate, generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelCollisions } from './utils/labelCollisionResolver';
@@ -57,6 +57,8 @@ export function TimeSeriesBoxSwarmChart({
   statistics,
   showAthleteNames = false
 }: TimeSeriesBoxSwarmProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   const chartRef = useRef<any>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
 
@@ -69,7 +71,7 @@ export function TimeSeriesBoxSwarmChart({
       };
     }
 
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const metricConfig = getMetricConfig(metric);
     const unit = metricConfig?.unit || '';
 
     // Sort selected dates chronologically
@@ -289,7 +291,7 @@ export function TimeSeriesBoxSwarmChart({
   }, [data, selectedDates, metric]);
 
   const chartOptions = useMemo(() => {
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const metricConfig = getMetricConfig(metric);
     const unit = metricConfig?.unit || '';
     const metricLabel = metricConfig?.label || metric;
 
