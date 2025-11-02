@@ -51,6 +51,14 @@ export default function OrganizationMetricsCard({
 
   const isLoading = loadingSite || loadingOrg;
 
+  // Debug logging for toggle disabled state
+  console.log('[MetricsCard] State:', {
+    canEdit,
+    enablePending: enableMutation.isPending,
+    disablePending: disableMutation.isPending,
+    organizationId
+  });
+
   // Get org metric data for a given site metric code
   const getOrgMetric = (code: string): OrganizationMetric | undefined => {
     return orgMetrics?.find((om) => om.metricCode === code);
@@ -213,6 +221,19 @@ export default function OrganizationMetricsCard({
               const isEnabled = isMetricEnabled(metric.code);
               const customLabelValue = getCustomLabel(metric.code);
               const isEditing = editingMetric === metric.code;
+              const isToggleDisabled = !canEdit || enableMutation.isPending || disableMutation.isPending;
+
+              // Debug logging per metric
+              if (metric.code === 'DASH_10YD') {
+                console.log('[MetricsCard] DASH_10YD toggle state:', {
+                  isEnabled,
+                  isToggleDisabled,
+                  canEdit,
+                  enablePending: enableMutation.isPending,
+                  disablePending: disableMutation.isPending,
+                  isSystemDefault: metric.isSystemDefault
+                });
+              }
 
               return (
                 <TableRow
@@ -284,7 +305,7 @@ export default function OrganizationMetricsCard({
                     <Switch
                       checked={isEnabled}
                       onCheckedChange={(checked) => handleToggle(metric, checked)}
-                      disabled={!canEdit || enableMutation.isPending || disableMutation.isPending}
+                      disabled={isToggleDisabled}
                       data-testid={`toggle-metric-${metric.code}`}
                     />
                   </TableCell>
