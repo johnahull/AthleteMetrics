@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,15 +36,6 @@ export default function OrganizationMetricsCard({
   const [editingMetric, setEditingMetric] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState("");
 
-  // Show debug info on mount
-  useEffect(() => {
-    toast({
-      title: "Debug: Metrics Card Loaded",
-      description: `canEdit: ${canEdit}, orgId: ${organizationId.substring(0, 8)}...`,
-      duration: 5000,
-    });
-  }, []);
-
   // Fetch all site metrics (active only)
   const { data: siteMetrics, isLoading: loadingSite } = useSiteMetrics(false);
 
@@ -59,14 +50,6 @@ export default function OrganizationMetricsCard({
   const updateMutation = useUpdateOrganizationMetric();
 
   const isLoading = loadingSite || loadingOrg;
-
-  // Debug logging for toggle disabled state
-  console.log('[MetricsCard] State:', {
-    canEdit,
-    enablePending: enableMutation.isPending,
-    disablePending: disableMutation.isPending,
-    organizationId
-  });
 
   // Get org metric data for a given site metric code
   const getOrgMetric = (code: string): OrganizationMetric | undefined => {
@@ -86,66 +69,33 @@ export default function OrganizationMetricsCard({
   };
 
   const handleToggle = async (metric: SiteMetric, enabled: boolean) => {
-    console.log('[MetricsCard] Toggle clicked:', {
-      metric: metric.code,
-      enabled,
-      canEdit,
-      enablePending: enableMutation.isPending,
-      disablePending: disableMutation.isPending
-    });
-
-    // Visible toast to show click was detected
-    toast({
-      title: "Toggle Clicked",
-      description: `Metric: ${metric.code}, Action: ${enabled ? 'Enable' : 'Disable'}`,
-      duration: 2000,
-    });
-
-    if (!canEdit) {
-      console.log('[MetricsCard] Toggle blocked: canEdit is false');
-      return;
-    }
+    if (!canEdit) return;
 
     try {
       if (enabled) {
-        console.log('[MetricsCard] Enabling metric:', metric.code);
-        const result = await enableMutation.mutateAsync({
+        await enableMutation.mutateAsync({
           organizationId,
           metricCode: metric.code,
         });
-        console.log('[MetricsCard] Enable success:', result);
         toast({
           title: "Metric enabled",
           description: `${metric.label} is now available for your organization.`,
         });
       } else {
-        console.log('[MetricsCard] Disabling metric:', metric.code);
-        const result = await disableMutation.mutateAsync({
+        await disableMutation.mutateAsync({
           organizationId,
           metricCode: metric.code,
         });
-        console.log('[MetricsCard] Disable success:', result);
         toast({
           title: "Metric disabled",
           description: `${metric.label} has been disabled for your organization.`,
         });
       }
     } catch (error) {
-      console.error('[MetricsCard] Toggle error:', error);
-      console.error('[MetricsCard] Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        raw: error
-      });
       toast({
         title: "Failed to update metric",
         description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
-      });
-    } finally {
-      console.log('[MetricsCard] Toggle complete - mutation states:', {
-        enablePending: enableMutation.isPending,
-        disablePending: disableMutation.isPending
       });
     }
   };
@@ -238,25 +188,6 @@ export default function OrganizationMetricsCard({
         <CardDescription>
           Enable metrics for your organization and customize display labels
         </CardDescription>
-        {/* Debug info */}
-        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs flex items-center justify-between">
-          <div>
-            <strong>Debug:</strong> canEdit={String(canEdit)}, enablePending={String(enableMutation.isPending)}, disablePending={String(disableMutation.isPending)}
-          </div>
-          {(enableMutation.isPending || disableMutation.isPending) && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => {
-                enableMutation.reset();
-                disableMutation.reset();
-                toast({ title: "Mutations reset", description: "Toggles should work now" });
-              }}
-            >
-              Reset Stuck Mutations
-            </Button>
-          )}
-        </div>
       </CardHeader>
       <CardContent>
         <Table>
@@ -274,19 +205,6 @@ export default function OrganizationMetricsCard({
               const isEnabled = isMetricEnabled(metric.code);
               const customLabelValue = getCustomLabel(metric.code);
               const isEditing = editingMetric === metric.code;
-              const isToggleDisabled = !canEdit || enableMutation.isPending || disableMutation.isPending;
-
-              // Debug logging per metric
-              if (metric.code === 'DASH_10YD') {
-                console.log('[MetricsCard] DASH_10YD toggle state:', {
-                  isEnabled,
-                  isToggleDisabled,
-                  canEdit,
-                  enablePending: enableMutation.isPending,
-                  disablePending: disableMutation.isPending,
-                  isSystemDefault: metric.isSystemDefault
-                });
-              }
 
               return (
                 <TableRow
@@ -355,17 +273,12 @@ export default function OrganizationMetricsCard({
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={isEnabled}
-                        onCheckedChange={(checked) => handleToggle(metric, checked)}
-                        disabled={isToggleDisabled}
-                        data-testid={`toggle-metric-${metric.code}`}
-                      />
-                      <span className="text-xs" style={{ color: isToggleDisabled ? 'red' : 'green' }}>
-                        [{isToggleDisabled ? 'DIS' : 'EN'}]
-                      </span>
-                    </div>
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => handleToggle(metric, checked)}
+                      disabled={!canEdit || enableMutation.isPending || disableMutation.isPending}
+                      data-testid={`toggle-metric-${metric.code}`}
+                    />
                   </TableCell>
                 </TableRow>
               );

@@ -296,11 +296,7 @@ export function useEnableMetricForOrganization() {
     mutationFn: ({ organizationId, metricCode }: { organizationId: string; metricCode: string }) =>
       enableMetricForOrganization(organizationId, metricCode),
     onSuccess: (_, variables) => {
-      console.log('[useEnableMetric] Success, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['organizationMetrics', variables.organizationId] });
-    },
-    onError: (error) => {
-      console.error('[useEnableMetric] Error:', error);
     },
   });
 }
@@ -315,11 +311,7 @@ export function useDisableMetricForOrganization() {
     mutationFn: ({ organizationId, metricCode }: { organizationId: string; metricCode: string }) =>
       disableMetricForOrganization(organizationId, metricCode),
     onSuccess: (_, variables) => {
-      console.log('[useDisableMetric] Success, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['organizationMetrics', variables.organizationId] });
-    },
-    onError: (error) => {
-      console.error('[useDisableMetric] Error:', error);
     },
   });
 }
