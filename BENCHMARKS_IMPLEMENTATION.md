@@ -70,37 +70,39 @@ Each item follows: Write failing test → Write minimal code → Refactor → Co
 
 **File:** `packages/api/__tests__/benchmark-storage.test.ts`
 
-### Site Benchmarks CRUD (6 cycles)
+### Site Benchmarks CRUD (6 cycles) ✅ COMPLETE
 
 - [x] **Cycle 1:** `createSiteBenchmark()` inserts and returns benchmark
   - [x] ❌ Write failing test
   - [x] ✅ Implement `createSiteBenchmark()` in `storage.ts`
   - [x] 🔄 Refactor (not needed - code clean)
 
-- [ ] **Cycle 2:** `getSiteBenchmark(id)` returns benchmark or null
-  - [ ] ❌ Write failing test
-  - [ ] ✅ Implement `getSiteBenchmark()`
-  - [ ] 🔄 Refactor
+- [x] **Cycle 2:** `getSiteBenchmark(id)` returns benchmark or null
+  - [x] ❌ Write failing test
+  - [x] ✅ Implement `getSiteBenchmark()`
+  - [x] 🔄 Refactor (not needed)
 
-- [ ] **Cycle 3:** `getAllSiteBenchmarks()` returns all active benchmarks
-  - [ ] ❌ Write failing test
-  - [ ] ✅ Implement with `WHERE is_active = true`
-  - [ ] 🔄 Refactor
+- [x] **Cycle 3:** `getSiteBenchmarks()` returns all active benchmarks
+  - [x] ❌ Write failing test
+  - [x] ✅ Implement with `WHERE is_active = true`
+  - [x] 🔄 Refactor (not needed)
 
-- [ ] **Cycle 4:** `updateSiteBenchmark()` updates fields
-  - [ ] ❌ Write failing test
-  - [ ] ✅ Implement update method
-  - [ ] 🔄 Refactor
+- [x] **Cycle 4:** `updateSiteBenchmark()` updates fields
+  - [x] ❌ Write failing test
+  - [x] ✅ Implement update method
+  - [x] 🔄 Refactor (not needed)
 
-- [ ] **Cycle 5:** `deleteSiteBenchmark()` deletes benchmark
-  - [ ] ❌ Write failing test
-  - [ ] ✅ Implement delete method
-  - [ ] 🔄 Refactor
+- [x] **Cycle 5:** `deleteSiteBenchmark()` deletes benchmark
+  - [x] ❌ Write failing test
+  - [x] ✅ Implement delete method with system default check
+  - [x] 🔄 Refactor (not needed)
 
-- [ ] **Cycle 6:** `toggleSiteBenchmarkStatus()` flips is_active
-  - [ ] ❌ Write failing test
-  - [ ] ✅ Implement toggle method
-  - [ ] 🔄 Refactor
+- [x] **Cycle 6:** `toggleSiteBenchmarkStatus()` flips is_active
+  - [x] ❌ Write failing test
+  - [x] ✅ Implement toggle method
+  - [x] 🔄 Refactor (not needed)
+
+**Result:** 9/9 tests passing for site benchmarks CRUD
 
 ### Custom Benchmarks CRUD (5 cycles)
 
@@ -622,14 +624,14 @@ Each item follows: Write failing test → Write minimal code → Refactor → Co
 
 - **Phase 1:** 10/10 complete (100%) ✅
 - **Phase 2:** 5/5 cycles complete (100%) ✅
-- **Phase 3:** 1/19 cycles complete (5%)
+- **Phase 3:** 6/19 cycles complete (32%) - Site Benchmarks CRUD ✅
 - **Phase 4:** 0/19 cycles complete (0%)
 - **Phase 5:** 0/16 cycles complete (0%)
 - **Phase 6:** 0/5 cycles complete (0%)
 - **Phase 7:** 0/17 cycles complete (0%)
 - **Phase 8:** 0/18 tests complete (0%)
 
-**Total Progress:** 16/109 items complete (14.7%)
+**Total Progress:** 21/109 items complete (19.3%)
 
 ---
 

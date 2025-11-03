@@ -3276,6 +3276,32 @@ export class DatabaseStorage implements IStorage {
   // SITE BENCHMARKS (Master benchmark catalog)
   // ========================================================================
 
+  async getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]> {
+    const conditions = [];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(siteBenchmarks.isActive, true));
+    }
+
+    const results = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(siteBenchmarks.displayOrder), asc(siteBenchmarks.name));
+
+    return results;
+  }
+
+  async getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined> {
+    const [benchmark] = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(eq(siteBenchmarks.id, id))
+      .limit(1);
+
+    return benchmark;
+  }
+
   async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
     const [created] = await db
       .insert(siteBenchmarks)
@@ -3289,6 +3315,62 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return created;
+  }
+
+  async updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark> {
+    const [updated] = await db
+      .update(siteBenchmarks)
+      .set({
+        ...benchmark,
+        // Convert numeric value to string for decimal column
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? String(benchmark.benchmarkValue) : undefined,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteBenchmarks.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site benchmark with id ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark> {
+    const [updated] = await db
+      .update(siteBenchmarks)
+      .set({
+        isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteBenchmarks.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site benchmark with id ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteSiteBenchmark(id: string): Promise<void> {
+    // Check if benchmark is a system default (cannot be deleted)
+    const [benchmark] = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(eq(siteBenchmarks.id, id))
+      .limit(1);
+
+    if (!benchmark) {
+      throw new Error(`Site benchmark with id ${id} not found`);
+    }
+
+    if (benchmark.isSystemDefault) {
+      throw new Error(`Cannot delete system default benchmark: ${id}`);
+    }
+
+    // Delete the benchmark (this will cascade to organization_benchmarks)
+    await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, id));
   }
 
 }

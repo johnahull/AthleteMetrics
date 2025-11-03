@@ -102,5 +102,154 @@ describe('Benchmark Storage', () => {
 
       createdBenchmarkIds.push(created.id);
     });
+
+    // Cycle 2: getSiteBenchmark(id) returns benchmark or null
+    it('should get a site benchmark by id', async () => {
+      // Create a benchmark first
+      const created = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Test Benchmark',
+        benchmarkValue: 1.50,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      const fetched = await storage.getSiteBenchmark(created.id);
+
+      expect(fetched).toBeDefined();
+      expect(fetched?.id).toBe(created.id);
+      expect(fetched?.name).toBe('Test Benchmark');
+    });
+
+    it('should return undefined for non-existent benchmark', async () => {
+      const result = await storage.getSiteBenchmark('non-existent-id');
+      expect(result).toBeUndefined();
+    });
+
+    // Cycle 3: getAllSiteBenchmarks() returns all active benchmarks
+    it('should get all active site benchmarks', async () => {
+      // Create multiple benchmarks
+      const created1 = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Benchmark 1',
+        benchmarkValue: 1.00,
+        isActive: true,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created1.id);
+
+      const created2 = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Benchmark 2',
+        benchmarkValue: 1.50,
+        isActive: false, // Inactive
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created2.id);
+
+      const activeBenchmarks = await storage.getSiteBenchmarks();
+
+      const ourBenchmarks = activeBenchmarks.filter(b =>
+        b.id === created1.id || b.id === created2.id
+      );
+
+      expect(ourBenchmarks.length).toBe(1); // Only active one
+      expect(ourBenchmarks[0].id).toBe(created1.id);
+    });
+
+    it('should get all site benchmarks including inactive when requested', async () => {
+      const created1 = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Active Benchmark',
+        benchmarkValue: 1.00,
+        isActive: true,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created1.id);
+
+      const created2 = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Inactive Benchmark',
+        benchmarkValue: 1.50,
+        isActive: false,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created2.id);
+
+      const allBenchmarks = await storage.getSiteBenchmarks({ includeInactive: true });
+
+      const ourBenchmarks = allBenchmarks.filter(b =>
+        b.id === created1.id || b.id === created2.id
+      );
+
+      expect(ourBenchmarks.length).toBe(2); // Both active and inactive
+    });
+
+    // Cycle 4: updateSiteBenchmark() updates fields
+    it('should update a site benchmark', async () => {
+      const created = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Original Name',
+        benchmarkValue: 1.00,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      const updated = await storage.updateSiteBenchmark(created.id, {
+        name: 'Updated Name',
+        benchmarkValue: 2.00,
+        description: 'Updated description',
+      });
+
+      expect(updated.name).toBe('Updated Name');
+      expect(updated.benchmarkValue).toBe('2.000');
+      expect(updated.description).toBe('Updated description');
+      expect(updated.updatedAt).toBeDefined();
+    });
+
+    // Cycle 5: deleteSiteBenchmark() deletes benchmark
+    it('should delete a site benchmark', async () => {
+      const created = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'To Be Deleted',
+        benchmarkValue: 1.00,
+        isSystemDefault: false,
+      }, siteAdminUserId);
+
+      await storage.deleteSiteBenchmark(created.id);
+
+      const fetched = await storage.getSiteBenchmark(created.id);
+      expect(fetched).toBeUndefined();
+    });
+
+    it('should not delete system default benchmarks', async () => {
+      const created = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'System Default',
+        benchmarkValue: 1.00,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      // Manually set as system default
+      await db.update(siteBenchmarks)
+        .set({ isSystemDefault: true })
+        .where(eq(siteBenchmarks.id, created.id));
+
+      await expect(storage.deleteSiteBenchmark(created.id))
+        .rejects.toThrow('Cannot delete system default benchmark');
+    });
+
+    // Cycle 6: toggleSiteBenchmarkStatus() flips is_active
+    it('should toggle site benchmark active status', async () => {
+      const created = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Toggle Test',
+        benchmarkValue: 1.00,
+        isActive: true,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      // Toggle to inactive
+      const toggled = await storage.toggleSiteBenchmarkStatus(created.id, false);
+      expect(toggled.isActive).toBe(false);
+
+      // Toggle back to active
+      const toggledAgain = await storage.toggleSiteBenchmarkStatus(created.id, true);
+      expect(toggledAgain.isActive).toBe(true);
+    });
   });
 });
