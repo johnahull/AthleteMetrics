@@ -1,11 +1,15 @@
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
+  siteBenchmarks, customBenchmarks, organizationBenchmarks,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
+  type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   type InsertSiteMetric, type InsertOrganizationMetric,
+  type InsertSiteBenchmark, type InsertCustomBenchmark, type InsertOrganizationBenchmark,
   type UpdateSiteMetric, type UpdateOrganizationMetric,
+  type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -3266,6 +3270,25 @@ export class DatabaseStorage implements IStorage {
 
       return results;
     });
+  }
+
+  // ========================================================================
+  // SITE BENCHMARKS (Master benchmark catalog)
+  // ========================================================================
+
+  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
+    const [created] = await db
+      .insert(siteBenchmarks)
+      .values({
+        ...benchmark,
+        // Convert numeric values to strings for decimal columns
+        benchmarkValue: String(benchmark.benchmarkValue),
+        createdBy,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
   }
 
 }

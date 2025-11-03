@@ -68,14 +68,14 @@ Each item follows: Write failing test → Write minimal code → Refactor → Co
 
 ## Phase 3: Storage Layer (19 TDD Cycles)
 
-**File:** `packages/api/__tests__/storage-benchmarks.test.ts`
+**File:** `packages/api/__tests__/benchmark-storage.test.ts`
 
 ### Site Benchmarks CRUD (6 cycles)
 
-- [ ] **Cycle 1:** `createSiteBenchmark()` inserts and returns benchmark
-  - [ ] ❌ Write failing test
-  - [ ] ✅ Implement `createSiteBenchmark()` in `storage.ts`
-  - [ ] 🔄 Refactor
+- [x] **Cycle 1:** `createSiteBenchmark()` inserts and returns benchmark
+  - [x] ❌ Write failing test
+  - [x] ✅ Implement `createSiteBenchmark()` in `storage.ts`
+  - [x] 🔄 Refactor (not needed - code clean)
 
 - [ ] **Cycle 2:** `getSiteBenchmark(id)` returns benchmark or null
   - [ ] ❌ Write failing test
@@ -622,14 +622,14 @@ Each item follows: Write failing test → Write minimal code → Refactor → Co
 
 - **Phase 1:** 10/10 complete (100%) ✅
 - **Phase 2:** 5/5 cycles complete (100%) ✅
-- **Phase 3:** 0/19 cycles complete (0%)
+- **Phase 3:** 1/19 cycles complete (5%)
 - **Phase 4:** 0/19 cycles complete (0%)
 - **Phase 5:** 0/16 cycles complete (0%)
 - **Phase 6:** 0/5 cycles complete (0%)
 - **Phase 7:** 0/17 cycles complete (0%)
 - **Phase 8:** 0/18 tests complete (0%)
 
-**Total Progress:** 15/109 items complete (13.8%)
+**Total Progress:** 16/109 items complete (14.7%)
 
 ---
 
