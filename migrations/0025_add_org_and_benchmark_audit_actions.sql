@@ -1,13 +1,13 @@
--- Migration 0025: Add organization update and benchmark management audit log actions
--- Description: Extends audit_logs CHECK constraints to support organization updates and benchmark management
+-- Migration 0025: Add organization update audit log action
+-- Description: Extends audit_logs CHECK constraints to support organization_updated action
 -- Created: 2025-11-03
 -- Dependencies: 0023_add_metric_audit_actions.sql, 0024_add_benchmarks_system.sql
+-- Note: Benchmark audit actions were already added in migration 0024
 
--- Drop existing CHECK constraints
+-- Drop existing CHECK constraint
 ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
-ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_resource_type_valid;
 
--- Recreate action constraint with organization update and benchmark actions
+-- Recreate action constraint with organization_updated action
 ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
   -- Organization actions
   'organization_created', 'organization_updated', 'organization_deactivated', 'organization_reactivated',
@@ -28,19 +28,11 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
   -- Metric management actions
   'metric_created', 'metric_updated', 'metric_enabled', 'metric_disabled', 'metric_deleted',
   'org_metric_enabled', 'org_metric_disabled', 'org_metric_updated', 'org_metrics_bulk_enabled',
-  -- Benchmark management actions (NEW in 0025)
+  -- Benchmark management actions (added in migration 0024)
   'benchmark_created', 'benchmark_updated', 'benchmark_deleted', 'benchmark_enabled', 'benchmark_disabled',
   'custom_benchmark_created', 'custom_benchmark_updated', 'custom_benchmark_deleted',
-  'org_benchmark_enabled', 'org_benchmark_disabled'
+  'org_benchmark_enabled', 'org_benchmark_disabled', 'org_benchmark_updated'
 ));
 
--- Recreate resource_type constraint with benchmark types
-ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
-  'organization', 'user', 'team', 'measurement', 'invitation', 'session', 'site_metric',
-  -- Benchmark resource types (NEW in 0025)
-  'site_benchmark', 'custom_benchmark', 'organization_benchmark'
-));
-
--- Add comments for documentation
-COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS 'Valid audit log actions including organization updates and benchmark management (updated in migration 0025)';
-COMMENT ON CONSTRAINT audit_logs_resource_type_valid ON audit_logs IS 'Valid resource types including benchmark types (updated in migration 0025)';
+-- Add comment for documentation
+COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS 'Valid audit log actions including organization_updated action (updated in migration 0025)';

@@ -34,12 +34,32 @@ const benchmarkCreateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: { message: "Too many benchmark creation attempts" },
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Force enable in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
+  keyGenerator: (req) => {
+    const userId = req.session?.user?.id;
+    const ip = req.ip || 'unknown';
+    return userId ? `${ip}-${userId}` : ip;
+  },
 });
 
 const benchmarkModifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 50,
   message: { message: "Too many benchmark modification attempts" },
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Force enable in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
+  keyGenerator: (req) => {
+    const userId = req.session?.user?.id;
+    const ip = req.ip || 'unknown';
+    return userId ? `${ip}-${userId}` : ip;
+  },
 });
 
 export function registerBenchmarkRoutes(app: Express) {
@@ -84,7 +104,12 @@ export function registerBenchmarkRoutes(app: Express) {
       const userId = req.session.user!.id;
       const validatedData = insertSiteBenchmarkSchema.parse(req.body);
 
-      const benchmark = await benchmarkService.createSiteBenchmark(validatedData, userId);
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      const benchmark = await benchmarkService.createSiteBenchmark(validatedData, userId, context);
       res.status(201).json(benchmark);
     } catch (error) {
       console.error("POST /api/benchmarks error:", error);
@@ -104,7 +129,12 @@ export function registerBenchmarkRoutes(app: Express) {
       const userId = req.session.user!.id;
       const validatedData = updateSiteBenchmarkSchema.parse(req.body);
 
-      const benchmark = await benchmarkService.updateSiteBenchmark(id, validatedData, userId);
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      const benchmark = await benchmarkService.updateSiteBenchmark(id, validatedData, userId, context);
       res.json(benchmark);
     } catch (error) {
       console.error("PATCH /api/benchmarks/:id error:", error);
@@ -128,7 +158,12 @@ export function registerBenchmarkRoutes(app: Express) {
         return res.status(400).json({ message: "isActive must be a boolean" });
       }
 
-      const benchmark = await benchmarkService.toggleSiteBenchmarkStatus(id, isActive, userId);
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      const benchmark = await benchmarkService.toggleSiteBenchmarkStatus(id, isActive, userId, context);
       res.json(benchmark);
     } catch (error) {
       console.error("PATCH /api/benchmarks/:id/status error:", error);
@@ -142,7 +177,12 @@ export function registerBenchmarkRoutes(app: Express) {
       const { id } = req.params;
       const userId = req.session.user!.id;
 
-      await benchmarkService.deleteSiteBenchmark(id, userId);
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      await benchmarkService.deleteSiteBenchmark(id, userId, context);
       res.status(204).send();
     } catch (error) {
       console.error("DELETE /api/benchmarks/:id error:", error);
@@ -204,7 +244,12 @@ export function registerBenchmarkRoutes(app: Express) {
           organizationId,
         });
 
-        const benchmark = await benchmarkService.createCustomBenchmark(validatedData, userId);
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
+        const benchmark = await benchmarkService.createCustomBenchmark(validatedData, userId, context);
         res.status(201).json(benchmark);
       } catch (error) {
         console.error("POST /api/organizations/:id/benchmarks/custom error:", error);
@@ -229,11 +274,17 @@ export function registerBenchmarkRoutes(app: Express) {
         const userId = req.session.user!.id;
         const validatedData = updateCustomBenchmarkSchema.parse(req.body);
 
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
         const benchmark = await benchmarkService.updateCustomBenchmark(
           organizationId,
           id,
           validatedData,
-          userId
+          userId,
+          context
         );
         res.json(benchmark);
       } catch (error) {
@@ -258,7 +309,12 @@ export function registerBenchmarkRoutes(app: Express) {
         const { organizationId, id } = req.params;
         const userId = req.session.user!.id;
 
-        await benchmarkService.deleteCustomBenchmark(organizationId, id, userId);
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
+        await benchmarkService.deleteCustomBenchmark(organizationId, id, userId, context);
         res.status(204).send();
       } catch (error) {
         console.error("DELETE /api/organizations/:id/benchmarks/custom/:id error:", error);
@@ -316,11 +372,17 @@ export function registerBenchmarkRoutes(app: Express) {
           return res.status(400).json({ message: "benchmarkType must be 'site' or 'custom'" });
         }
 
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
         const enabled = await benchmarkService.enableBenchmarkForOrg(
           organizationId,
           id,
           benchmarkType,
-          userId
+          userId,
+          context
         );
 
         res.status(201).json(enabled);
@@ -346,10 +408,16 @@ export function registerBenchmarkRoutes(app: Express) {
         const { organizationId, id } = req.params;
         const userId = req.session.user!.id;
 
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
         const disabled = await benchmarkService.disableBenchmarkForOrg(
           organizationId,
           id,
-          userId
+          userId,
+          context
         );
 
         res.json(disabled);

@@ -352,6 +352,8 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   userOrganizations: many(userOrganizations),
   invitations: many(invitations),
   organizationMetrics: many(organizationMetrics),
+  customBenchmarks: many(customBenchmarks),
+  organizationBenchmarks: many(organizationBenchmarks),
 }));
 
 export const siteMetricsRelations = relations(siteMetrics, ({ one, many }) => ({
@@ -462,6 +464,41 @@ export const emailVerificationTokensRelations = relations(emailVerificationToken
   user: one(users, {
     fields: [emailVerificationTokens.userId],
     references: [users.id],
+  }),
+}));
+
+export const siteBenchmarksRelations = relations(siteBenchmarks, ({ one, many }) => ({
+  metric: one(siteMetrics, {
+    fields: [siteBenchmarks.metricCode],
+    references: [siteMetrics.code],
+  }),
+  createdBy: one(users, {
+    fields: [siteBenchmarks.createdBy],
+    references: [users.id],
+  }),
+  organizationBenchmarks: many(organizationBenchmarks),
+}));
+
+export const customBenchmarksRelations = relations(customBenchmarks, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [customBenchmarks.organizationId],
+    references: [organizations.id],
+  }),
+  metric: one(siteMetrics, {
+    fields: [customBenchmarks.metricCode],
+    references: [siteMetrics.code],
+  }),
+  createdBy: one(users, {
+    fields: [customBenchmarks.createdBy],
+    references: [users.id],
+  }),
+  organizationBenchmarks: many(organizationBenchmarks),
+}));
+
+export const organizationBenchmarksRelations = relations(organizationBenchmarks, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationBenchmarks.organizationId],
+    references: [organizations.id],
   }),
 }));
 
@@ -741,8 +778,8 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   benchmarkValue: z.number().positive("Benchmark value must be positive"),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
   gender: z.enum(['Male', 'Female', 'Other']).optional(),
-  ageMin: z.number().int().min(0).optional(),
-  ageMax: z.number().int().min(0).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().default(true),
@@ -765,8 +802,8 @@ export const updateSiteBenchmarkSchema = z.object({
   benchmarkValue: z.number().positive().optional(),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
   gender: z.enum(['Male', 'Female', 'Other']).optional(),
-  ageMin: z.number().int().min(0).optional(),
-  ageMax: z.number().int().min(0).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().optional(),
@@ -796,8 +833,8 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
   benchmarkValue: z.number().positive("Benchmark value must be positive"),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
   gender: z.enum(['Male', 'Female', 'Other']).optional(),
-  ageMin: z.number().int().min(0).optional(),
-  ageMax: z.number().int().min(0).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().default(true),
@@ -820,8 +857,8 @@ export const updateCustomBenchmarkSchema = z.object({
   benchmarkValue: z.number().positive().optional(),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
   gender: z.enum(['Male', 'Female', 'Other']).optional(),
-  ageMin: z.number().int().min(0).optional(),
-  ageMax: z.number().int().min(0).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().optional(),
@@ -947,7 +984,7 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   // Athlete filters
   ageMin: number | null;
   ageMax: number | null;
-  gender: 'male' | 'female' | 'other' | null;
+  gender: 'Male' | 'Female' | 'Other' | null;
   position: string | null;
   level: 'college' | 'high_school' | 'club' | null;
   // Status (from site benchmarks only, custom benchmarks don't have isActive)

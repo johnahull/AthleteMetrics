@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS site_benchmarks (
   ),
   CONSTRAINT site_benchmarks_gender_valid CHECK (
     gender IS NULL OR gender IN ('Male', 'Female', 'Other')
+  ),
+  CONSTRAINT site_benchmarks_value_positive CHECK (
+    benchmark_value > 0
   )
 );
 
@@ -117,6 +120,9 @@ CREATE TABLE IF NOT EXISTS custom_benchmarks (
   ),
   CONSTRAINT custom_benchmarks_gender_valid CHECK (
     gender IS NULL OR gender IN ('Male', 'Female', 'Other')
+  ),
+  CONSTRAINT custom_benchmarks_value_positive CHECK (
+    benchmark_value > 0
   )
 );
 
@@ -162,6 +168,11 @@ CREATE TABLE IF NOT EXISTS organization_benchmarks (
 CREATE INDEX IF NOT EXISTS org_benchmarks_org_idx ON organization_benchmarks(organization_id);
 CREATE INDEX IF NOT EXISTS org_benchmarks_org_enabled_idx ON organization_benchmarks(organization_id, is_enabled);
 CREATE INDEX IF NOT EXISTS org_benchmarks_benchmark_idx ON organization_benchmarks(benchmark_id, benchmark_type);
+
+-- Unique constraint for display_order per organization (allows NULL)
+CREATE UNIQUE INDEX IF NOT EXISTS org_benchmarks_display_order_unique
+ON organization_benchmarks(organization_id, display_order)
+WHERE display_order IS NOT NULL;
 
 -- Add comments for documentation
 COMMENT ON TABLE organization_benchmarks IS 'Organization-level benchmark enablement (org opt-in to site/custom benchmarks)';
@@ -257,6 +268,28 @@ COMMENT ON CONSTRAINT audit_logs_resource_type_valid ON audit_logs IS 'Valid res
 -- Migration complete
 DO $$
 BEGIN
+  -- Create trigger function for cascading deletes on polymorphic relationship
+  -- This ensures referential integrity for organization_benchmarks.benchmark_id
+  CREATE OR REPLACE FUNCTION cleanup_org_benchmarks()
+  RETURNS TRIGGER AS $trigger$
+  BEGIN
+    DELETE FROM organization_benchmarks
+    WHERE benchmark_id = OLD.id
+    AND benchmark_type = TG_ARGV[0];
+    RETURN OLD;
+  END;
+  $trigger$ LANGUAGE plpgsql;
+
+  -- Create triggers for cascading deletes from site_benchmarks
+  CREATE TRIGGER cleanup_org_benchmarks_site
+  AFTER DELETE ON site_benchmarks
+  FOR EACH ROW EXECUTE FUNCTION cleanup_org_benchmarks('site');
+
+  -- Create triggers for cascading deletes from custom_benchmarks
+  CREATE TRIGGER cleanup_org_benchmarks_custom
+  AFTER DELETE ON custom_benchmarks
+  FOR EACH ROW EXECUTE FUNCTION cleanup_org_benchmarks('custom');
+
   RAISE NOTICE '=================================================================';
   RAISE NOTICE 'Migration 0024 complete: Benchmarks system initialized';
   RAISE NOTICE '- Created site_benchmarks table (master benchmark catalog)';
@@ -265,5 +298,6 @@ BEGIN
   RAISE NOTICE '- Added benchmarks_enabled and allow_custom_benchmarks to organizations';
   RAISE NOTICE '- Seeded 6 example benchmarks as system defaults';
   RAISE NOTICE '- Updated audit_logs constraints for benchmark actions';
+  RAISE NOTICE '- Added polymorphic FK triggers for referential integrity';
   RAISE NOTICE '=================================================================';
 END $$;

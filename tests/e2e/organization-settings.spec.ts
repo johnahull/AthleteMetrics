@@ -99,7 +99,7 @@ test.describe('Organization Settings Tests', () => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
       // Navigate to settings
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Verify page header
@@ -126,7 +126,7 @@ test.describe('Organization Settings Tests', () => {
     test('should update organization name successfully', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Get current name
@@ -159,7 +159,7 @@ test.describe('Organization Settings Tests', () => {
     test('should update description and location (optional fields)', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Update description
@@ -193,7 +193,7 @@ test.describe('Organization Settings Tests', () => {
     test('should display "No changes" toast when saving without modifications', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Click save without making any changes
@@ -209,7 +209,7 @@ test.describe('Organization Settings Tests', () => {
     test('should enable/disable benchmarks feature toggle', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Find benchmarks enabled switch
@@ -243,7 +243,7 @@ test.describe('Organization Settings Tests', () => {
     test('should disable custom benchmarks toggle when benchmarks feature is OFF', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Ensure benchmarks feature is OFF
@@ -270,7 +270,7 @@ test.describe('Organization Settings Tests', () => {
     test('should enable custom benchmarks toggle when benchmarks feature is ON', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Ensure benchmarks feature is ON
@@ -312,7 +312,7 @@ test.describe('Organization Settings Tests', () => {
     test('should prevent enabling custom benchmarks without benchmarks feature', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Turn OFF benchmarks feature
@@ -346,7 +346,7 @@ test.describe('Organization Settings Tests', () => {
     test('should toggle organization active status', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Find active status switch
@@ -382,7 +382,7 @@ test.describe('Organization Settings Tests', () => {
     test('should navigate back when cancel button is clicked', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
 
-      await page.goto(`${STAGING_URL}/organizations/${testOrgId}/settings`);
+      await page.goto(`${TESTING_URL}/organizations/${testOrgId}/settings`);
       await page.waitForLoadState('networkidle');
 
       // Click cancel button

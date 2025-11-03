@@ -26,6 +26,11 @@ export interface BenchmarkFilters {
   includeInactive?: boolean;
 }
 
+export interface RequestContext {
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 export class BenchmarkService extends BaseService {
   // ========================================================================
   // SITE BENCHMARKS (Site Admin Only)
@@ -39,7 +44,8 @@ export class BenchmarkService extends BaseService {
    */
   async createSiteBenchmark(
     benchmarkData: InsertSiteBenchmark,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<SiteBenchmark> {
     try {
       // Cycle 1: Verify site admin permission
@@ -71,8 +77,8 @@ export class BenchmarkService extends BaseService {
             metricCode: benchmark.metricCode,
             benchmarkValue: benchmark.benchmarkValue,
           }),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -91,7 +97,8 @@ export class BenchmarkService extends BaseService {
   async updateSiteBenchmark(
     benchmarkId: string,
     benchmarkData: Partial<UpdateSiteBenchmark>,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<SiteBenchmark> {
     try {
       // Cycle 4: Verify site admin permission
@@ -115,8 +122,8 @@ export class BenchmarkService extends BaseService {
           resourceType: 'site_benchmark',
           resourceId: benchmarkId,
           details: JSON.stringify(benchmarkData),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -134,7 +141,8 @@ export class BenchmarkService extends BaseService {
    */
   async deleteSiteBenchmark(
     benchmarkId: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<void> {
     try {
       // Verify site admin permission
@@ -163,8 +171,8 @@ export class BenchmarkService extends BaseService {
           resourceType: 'site_benchmark',
           resourceId: benchmarkId,
           details: JSON.stringify({ name: benchmark.name }),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -181,7 +189,8 @@ export class BenchmarkService extends BaseService {
   async toggleSiteBenchmarkStatus(
     benchmarkId: string,
     isActive: boolean,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<SiteBenchmark> {
     try {
       // Cycle 6: Verify site admin permission
@@ -200,8 +209,8 @@ export class BenchmarkService extends BaseService {
           resourceType: 'site_benchmark',
           resourceId: benchmarkId,
           details: JSON.stringify({ isActive }),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -254,7 +263,8 @@ export class BenchmarkService extends BaseService {
    */
   async createCustomBenchmark(
     benchmarkData: InsertCustomBenchmark,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<CustomBenchmark> {
     try {
       // Cycle 7: Verify org admin OR site admin permission
@@ -304,8 +314,8 @@ export class BenchmarkService extends BaseService {
             organizationId: benchmark.organizationId,
             benchmarkValue: benchmark.benchmarkValue,
           }),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -325,7 +335,8 @@ export class BenchmarkService extends BaseService {
     organizationId: string,
     benchmarkId: string,
     benchmarkData: Partial<UpdateCustomBenchmark>,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<CustomBenchmark> {
     try {
       // Cycle 10: Verify owner org admin OR site admin permission
@@ -356,8 +367,8 @@ export class BenchmarkService extends BaseService {
           resourceType: 'custom_benchmark',
           resourceId: benchmarkId,
           details: JSON.stringify(benchmarkData),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -376,7 +387,8 @@ export class BenchmarkService extends BaseService {
   async deleteCustomBenchmark(
     organizationId: string,
     benchmarkId: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<void> {
     try {
       // Cycle 11: Verify owner org admin OR site admin permission
@@ -459,7 +471,8 @@ export class BenchmarkService extends BaseService {
     organizationId: string,
     benchmarkId: string,
     benchmarkType: 'site' | 'custom',
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<OrganizationBenchmark> {
     try {
       // Cycle 12: Verify org admin OR site admin permission
@@ -499,8 +512,8 @@ export class BenchmarkService extends BaseService {
             benchmarkId,
             benchmarkType,
           }),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
@@ -519,7 +532,8 @@ export class BenchmarkService extends BaseService {
   async disableBenchmarkForOrg(
     organizationId: string,
     benchmarkId: string,
-    requestingUserId: string
+    requestingUserId: string,
+    context?: RequestContext
   ): Promise<OrganizationBenchmark> {
     try {
       // Cycle 14: Verify org admin OR site admin permission
@@ -548,8 +562,8 @@ export class BenchmarkService extends BaseService {
             organizationId,
             benchmarkId,
           }),
-          ipAddress: null,
-          userAgent: null,
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
