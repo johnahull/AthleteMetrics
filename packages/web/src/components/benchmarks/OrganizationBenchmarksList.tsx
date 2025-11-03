@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { useOrganizationBenchmarks, useSiteBenchmarks, useCustomBenchmarks } from "@/lib/benchmarks-api";
+import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Plus, Search, Filter, Settings } from "lucide-react";
+import { Plus, Search, Filter, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BenchmarkCatalog } from "./BenchmarkCatalog";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
 import { BenchmarkFilters } from "./BenchmarkFilters";
-import type { OrganizationBenchmark } from "@shared/schema";
+import { Link } from "wouter";
+import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 
 interface OrganizationBenchmarksListProps {
   organizationId: string;
@@ -26,15 +27,49 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
     level?: string;
   }>({});
 
-  // Fetch enabled benchmarks for this organization
+  // Fetch enabled benchmarks for this organization with full details
   const { data: orgBenchmarks, isLoading, error } = useOrganizationBenchmarks(
     organizationId,
     false // only active
   );
 
-  // TODO: API needs to return joined benchmark details
-  // For now, just use org benchmarks as-is
-  const filteredBenchmarks = orgBenchmarks;
+  // Filter benchmarks by search query and filters
+  const filteredBenchmarks = orgBenchmarks?.filter((benchmark) => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch =
+        benchmark.name.toLowerCase().includes(query) ||
+        benchmark.metricCode.toLowerCase().includes(query) ||
+        benchmark.description?.toLowerCase().includes(query);
+      if (!matchesSearch) return false;
+    }
+
+    // Metric code filter
+    if (filters.metricCode && benchmark.metricCode !== filters.metricCode) {
+      return false;
+    }
+
+    // Gender filter
+    if (filters.gender && benchmark.gender !== filters.gender) {
+      return false;
+    }
+
+    // Age filter
+    if (filters.ageMin !== undefined && benchmark.ageMax !== null && benchmark.ageMax < filters.ageMin) {
+      return false;
+    }
+    if (filters.ageMax !== undefined && benchmark.ageMin !== null && benchmark.ageMin > filters.ageMax) {
+      return false;
+    }
+
+    // Level filter
+    if (filters.level && benchmark.level !== filters.level) {
+      return false;
+    }
+
+    return true;
+  });
 
   if (error) {
     return (
@@ -63,10 +98,18 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
             Manage enabled benchmarks for your organization
           </p>
         </div>
-        <Button onClick={() => setShowCatalog(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Browse Catalog
-        </Button>
+        <div className="flex gap-2">
+          <Link href={`/organizations/${organizationId}/custom-benchmarks`}>
+            <Button variant="outline">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Custom Benchmarks
+            </Button>
+          </Link>
+          <Button onClick={() => setShowCatalog(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Browse Catalog
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -120,15 +163,57 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-lg font-semibold">
-                        {benchmark.customName || benchmark.benchmarkId}
+                        {benchmark.customName || benchmark.name}
                       </h3>
                       <Badge variant="secondary">
                         {benchmark.benchmarkType === "site" ? "Site" : "Custom"}
                       </Badge>
+                      {benchmark.isActive === false && (
+                        <Badge variant="outline">Inactive</Badge>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Benchmark ID: {benchmark.benchmarkId}
-                    </p>
+                    {benchmark.description && (
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {benchmark.description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      <div>
+                        <span className="font-medium">Metric:</span>{" "}
+                        <span className="text-muted-foreground">{benchmark.metricCode}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Target:</span>{" "}
+                        <span className="text-muted-foreground">
+                          {benchmark.comparisonOperator === "lte" && "≤ "}
+                          {benchmark.comparisonOperator === "gte" && "≥ "}
+                          {benchmark.comparisonOperator === "eq" && "= "}
+                          {benchmark.benchmarkValue}
+                        </span>
+                      </div>
+                      {(benchmark.ageMin !== null || benchmark.ageMax !== null) && (
+                        <div>
+                          <span className="font-medium">Age:</span>{" "}
+                          <span className="text-muted-foreground">
+                            {benchmark.ageMin || "Any"} - {benchmark.ageMax || "Any"}
+                          </span>
+                        </div>
+                      )}
+                      {benchmark.gender && (
+                        <div>
+                          <span className="font-medium">Gender:</span>{" "}
+                          <span className="text-muted-foreground capitalize">{benchmark.gender}</span>
+                        </div>
+                      )}
+                      {benchmark.level && (
+                        <div>
+                          <span className="font-medium">Level:</span>{" "}
+                          <span className="text-muted-foreground capitalize">
+                            {benchmark.level.replace('_', ' ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="ml-4">
                     <BenchmarkEnablementToggle

@@ -239,6 +239,7 @@ export interface IStorage {
 
   // Custom Benchmarks (Org-specific benchmarks)
   getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]>;
+  getCustomBenchmark(id: string): Promise<CustomBenchmark | undefined>;
   createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark>;
   updateCustomBenchmark(organizationId: string, benchmarkId: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark>;
   deleteCustomBenchmark(organizationId: string, benchmarkId: string): Promise<void>;
@@ -3410,6 +3411,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(customBenchmarks.displayOrder), asc(customBenchmarks.name));
 
     return results;
+  }
+
+  async getCustomBenchmark(id: string): Promise<CustomBenchmark | undefined> {
+    const result = await db
+      .select()
+      .from(customBenchmarks)
+      .where(eq(customBenchmarks.id, id))
+      .limit(1);
+
+    return result[0];
   }
 
   async createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark> {

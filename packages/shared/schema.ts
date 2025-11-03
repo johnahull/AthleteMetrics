@@ -913,6 +913,24 @@ export type InsertOrganizationBenchmark = z.infer<typeof insertOrganizationBench
 export type OrganizationBenchmark = typeof organizationBenchmarks.$inferSelect;
 export type UpdateOrganizationBenchmark = z.infer<typeof updateOrganizationBenchmarkSchema>;
 
+// Enriched type for organization benchmarks with full benchmark details
+export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
+  // Benchmark details (from either site_benchmarks or custom_benchmarks)
+  name: string;
+  metricCode: string;
+  description: string | null;
+  benchmarkValue: number;
+  comparisonOperator: 'lte' | 'gte' | 'eq';
+  // Athlete filters
+  ageMin: number | null;
+  ageMax: number | null;
+  gender: 'male' | 'female' | 'other' | null;
+  position: string | null;
+  level: 'college' | 'high_school' | 'club' | null;
+  // Status (from site benchmarks only, custom benchmarks don't have isActive)
+  isActive?: boolean;
+};
+
 // Enums
 export const MetricType = {
   FLY10_TIME: "FLY10_TIME",

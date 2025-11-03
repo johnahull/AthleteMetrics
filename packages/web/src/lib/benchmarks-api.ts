@@ -12,6 +12,7 @@ import type {
   InsertCustomBenchmark,
   UpdateCustomBenchmark,
   OrganizationBenchmark,
+  OrganizationBenchmarkWithDetails,
 } from "@shared/schema";
 
 // ============================================================================
@@ -198,12 +199,12 @@ export async function deleteCustomBenchmark(organizationId: string, benchmarkId:
 // ============================================================================
 
 /**
- * Fetch enabled benchmarks for organization
+ * Fetch enabled benchmarks for organization with full benchmark details
  */
 export async function fetchOrganizationBenchmarks(
   organizationId: string,
   includeInactive = false
-): Promise<OrganizationBenchmark[]> {
+): Promise<OrganizationBenchmarkWithDetails[]> {
   const params = new URLSearchParams();
   if (includeInactive) {
     params.append('includeInactive', 'true');
