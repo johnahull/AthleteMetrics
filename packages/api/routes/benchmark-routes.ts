@@ -40,33 +40,38 @@ function sanitizeError(error: unknown, fallback: string): string {
  */
 function handleBenchmarkError(res: Response, error: unknown, operation: string): void {
   if (!(error instanceof Error)) {
-    return res.status(500).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+    res.status(500).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+    return;
   }
 
   const errorMessage = error.message.toLowerCase();
 
   // 403 - Permission denied
   if (errorMessage.includes('unauthorized') || errorMessage.includes('permission denied') || errorMessage.includes('not allowed')) {
-    return res.status(403).json({ message: error.message });
+    res.status(403).json({ message: error.message });
+    return;
   }
 
   // 404 - Not found
   if (errorMessage.includes('not found')) {
-    return res.status(404).json({ message: error.message });
+    res.status(404).json({ message: error.message });
+    return;
   }
 
   // 409 - Conflict (duplicate, cannot delete, constraint violation)
   if (errorMessage.includes('already exists') || errorMessage.includes('cannot delete') || errorMessage.includes('system default')) {
-    return res.status(409).json({ message: error.message });
+    res.status(409).json({ message: error.message });
+    return;
   }
 
   // 400 - Validation errors (including Zod parse errors)
   if (error.name === 'ZodError' || errorMessage.includes('invalid') || errorMessage.includes('must be')) {
-    return res.status(400).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+    res.status(400).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+    return;
   }
 
   // 500 - Unexpected errors
-  return res.status(500).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+  res.status(500).json({ message: sanitizeError(error, `Failed to ${operation}`) });
 }
 
 // Rate limiters
@@ -74,7 +79,7 @@ const benchmarkCreateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: { message: "Too many benchmark creation attempts" },
-  skip: (req) => {
+  skip: (req): boolean => {
     // Strict production enforcement - no bypass allowed
     if (process.env.NODE_ENV === 'production') return false;
     // Allow bypass in test environment
@@ -82,7 +87,7 @@ const benchmarkCreateLimiter = rateLimit({
     // Development/staging can bypass with explicit flag
     return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
-  keyGenerator: (req) => {
+  keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
     const ip = req.ip || 'unknown';
     return userId ? `${ip}-${userId}` : ip;
@@ -93,7 +98,7 @@ const benchmarkModifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 50,
   message: { message: "Too many benchmark modification attempts" },
-  skip: (req) => {
+  skip: (req): boolean => {
     // Strict production enforcement - no bypass allowed
     if (process.env.NODE_ENV === 'production') return false;
     // Allow bypass in test environment
@@ -101,7 +106,7 @@ const benchmarkModifyLimiter = rateLimit({
     // Development/staging can bypass with explicit flag
     return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
-  keyGenerator: (req) => {
+  keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
     const ip = req.ip || 'unknown';
     return userId ? `${ip}-${userId}` : ip;

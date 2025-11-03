@@ -233,6 +233,7 @@ export interface IStorage {
   // Site Benchmarks (Master Benchmark Catalog)
   getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]>;
   getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
+  getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]>;
   createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
   updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark>;
   toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark>;
@@ -249,7 +250,7 @@ export interface IStorage {
   getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]>;
   getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]>;
   enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
-  disableBenchmarkForOrg(organizationId: string, benchmarkId: string): Promise<OrganizationBenchmark>;
+  disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
 }
 
 export class DatabaseStorage implements IStorage {
