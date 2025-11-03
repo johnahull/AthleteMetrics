@@ -637,7 +637,7 @@ describe('Benchmark Service', () => {
       await storage.enableBenchmarkForOrg(testOrgId, siteBenchmarkId, 'site');
 
       await expect(
-        benchmarkService.disableBenchmarkForOrg(testOrgId, siteBenchmarkId, regularUserId)
+        benchmarkService.disableBenchmarkForOrg(testOrgId, siteBenchmarkId, 'site', regularUserId)
       ).rejects.toThrow('Unauthorized');
     });
 
@@ -648,6 +648,7 @@ describe('Benchmark Service', () => {
       const disabled = await benchmarkService.disableBenchmarkForOrg(
         testOrgId,
         siteBenchmarkId,
+        'site',
         orgAdminUserId
       );
 
@@ -662,6 +663,7 @@ describe('Benchmark Service', () => {
       const disabled = await benchmarkService.disableBenchmarkForOrg(
         testOrgId,
         customBenchmarkId,
+        'custom',
         siteAdminUserId
       );
 

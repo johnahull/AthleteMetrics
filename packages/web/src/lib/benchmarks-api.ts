@@ -244,10 +244,15 @@ export async function enableBenchmarkForOrganization(
  */
 export async function disableBenchmarkForOrganization(
   organizationId: string,
-  benchmarkId: string
+  benchmarkId: string,
+  benchmarkType: 'site' | 'custom'
 ): Promise<OrganizationBenchmark> {
   const response = await fetch(`/api/organizations/${organizationId}/benchmarks/${benchmarkId}/disable`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ benchmarkType }),
   });
 
   if (!response.ok) {
@@ -488,8 +493,16 @@ export function useDisableBenchmarkForOrganization() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ organizationId, benchmarkId }: { organizationId: string; benchmarkId: string }) =>
-      disableBenchmarkForOrganization(organizationId, benchmarkId),
+    mutationFn: ({
+      organizationId,
+      benchmarkId,
+      benchmarkType
+    }: {
+      organizationId: string;
+      benchmarkId: string;
+      benchmarkType: 'site' | 'custom';
+    }) =>
+      disableBenchmarkForOrganization(organizationId, benchmarkId, benchmarkType),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['organizationBenchmarks', variables.organizationId] });
     },

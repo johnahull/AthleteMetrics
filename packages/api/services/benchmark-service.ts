@@ -595,6 +595,7 @@ export class BenchmarkService extends BaseService {
   async disableBenchmarkForOrg(
     organizationId: string,
     benchmarkId: string,
+    benchmarkType: 'site' | 'custom',
     requestingUserId: string,
     context?: RequestContext
   ): Promise<OrganizationBenchmark> {
@@ -612,7 +613,7 @@ export class BenchmarkService extends BaseService {
       }
 
       // Disable benchmark
-      const disabled = await this.storage.disableBenchmarkForOrg(organizationId, benchmarkId);
+      const disabled = await this.storage.disableBenchmarkForOrg(organizationId, benchmarkId, benchmarkType);
 
       // Create audit log
       try {

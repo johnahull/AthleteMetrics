@@ -3,8 +3,9 @@
  *
  * This migration adds performance optimizations for the benchmarks feature:
  * 1. Optimized polymorphic lookup index for organization_benchmarks
- * 2. Composite filter index for custom_benchmarks (matching site_benchmarks pattern)
- * 3. Remove redundant index on organization_benchmarks
+ * 2. Remove redundant index on organization_benchmarks
+ *
+ * Note: custom_benchmarks_filters_idx was already added in migration 0024
  *
  * Safety: Idempotent, uses IF EXISTS/IF NOT EXISTS
  * Rollback: See rollback section at bottom
@@ -32,21 +33,7 @@ ON organization_benchmarks(benchmark_type, benchmark_id)
 INCLUDE (organization_id, is_enabled, custom_name);
 
 -- ===========================================================================
--- OPTIMIZATION 2: Custom Benchmarks Filter Index
--- ===========================================================================
---
--- Custom benchmarks lack the composite INCLUDE index that site_benchmarks have.
--- This causes slower filtering queries when evaluating athlete benchmarks.
---
--- Query pattern: Filter by organization + metric + athlete attributes (gender, level, age)
--- This index matches the pattern already used in site_benchmarks (line 60-63 of 0024 migration)
-
-CREATE INDEX IF NOT EXISTS custom_benchmarks_filters_idx
-ON custom_benchmarks(organization_id, metric_code, gender, level)
-INCLUDE (age_min, age_max, position, is_active);
-
--- ===========================================================================
--- OPTIMIZATION 3: Remove Redundant Index
+-- OPTIMIZATION 2: Remove Redundant Index
 -- ===========================================================================
 --
 -- Index org_benchmarks_org_idx on (organization_id) is redundant because:
@@ -78,5 +65,4 @@ DROP INDEX IF EXISTS org_benchmarks_org_idx;
 -- ===========================================================================
 --
 -- DROP INDEX IF EXISTS org_benchmarks_type_id_idx;
--- DROP INDEX IF EXISTS custom_benchmarks_filters_idx;
 -- CREATE INDEX IF NOT EXISTS org_benchmarks_org_idx ON organization_benchmarks(organization_id);

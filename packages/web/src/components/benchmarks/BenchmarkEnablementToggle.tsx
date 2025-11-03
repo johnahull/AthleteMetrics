@@ -38,6 +38,7 @@ export function BenchmarkEnablementToggle({
         await disableMutation.mutateAsync({
           organizationId,
           benchmarkId,
+          benchmarkType,
         });
         toast({
           title: "Benchmark Disabled",

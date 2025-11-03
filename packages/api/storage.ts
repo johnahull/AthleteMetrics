@@ -3669,7 +3669,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async disableBenchmarkForOrg(organizationId: string, benchmarkId: string): Promise<OrganizationBenchmark> {
+  async disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
     const [updated] = await db
       .update(organizationBenchmarks)
       .set({
@@ -3679,7 +3679,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(organizationBenchmarks.organizationId, organizationId),
-          eq(organizationBenchmarks.benchmarkId, benchmarkId)
+          eq(organizationBenchmarks.benchmarkId, benchmarkId),
+          eq(organizationBenchmarks.benchmarkType, benchmarkType)
         )
       )
       .returning();
@@ -3691,7 +3692,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateOrganizationBenchmarkSettings(organizationId: string, benchmarkId: string, settings: Partial<UpdateOrganizationBenchmark>): Promise<OrganizationBenchmark> {
+  async updateOrganizationBenchmarkSettings(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom', settings: Partial<UpdateOrganizationBenchmark>): Promise<OrganizationBenchmark> {
     const [updated] = await db
       .update(organizationBenchmarks)
       .set({
@@ -3701,7 +3702,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(organizationBenchmarks.organizationId, organizationId),
-          eq(organizationBenchmarks.benchmarkId, benchmarkId)
+          eq(organizationBenchmarks.benchmarkId, benchmarkId),
+          eq(organizationBenchmarks.benchmarkType, benchmarkType)
         )
       )
       .returning();

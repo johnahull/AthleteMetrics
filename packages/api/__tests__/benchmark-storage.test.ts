@@ -503,7 +503,7 @@ describe('Benchmark Storage', () => {
       await storage.enableBenchmarkForOrg(testOrgId, siteBenchmark.id, 'site');
 
       // Then disable
-      const disabled = await storage.disableBenchmarkForOrg(testOrgId, siteBenchmark.id);
+      const disabled = await storage.disableBenchmarkForOrg(testOrgId, siteBenchmark.id, 'site');
 
       expect(disabled.isEnabled).toBe(false);
       expect(disabled.benchmarkId).toBe(siteBenchmark.id);
@@ -526,7 +526,7 @@ describe('Benchmark Storage', () => {
 
       await storage.enableBenchmarkForOrg(testOrgId, siteBenchmark1.id, 'site');
       const enabled2 = await storage.enableBenchmarkForOrg(testOrgId, siteBenchmark2.id, 'site');
-      await storage.disableBenchmarkForOrg(testOrgId, siteBenchmark2.id);
+      await storage.disableBenchmarkForOrg(testOrgId, siteBenchmark2.id, 'site');
 
       const orgBenchmarks = await storage.getOrganizationBenchmarks(testOrgId);
       const ourBenchmarks = orgBenchmarks.filter(b =>

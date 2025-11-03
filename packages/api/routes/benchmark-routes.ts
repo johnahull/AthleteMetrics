@@ -436,7 +436,12 @@ export function registerBenchmarkRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { organizationId, id } = req.params;
+        const { benchmarkType } = req.body;
         const userId = req.session.user!.id;
+
+        if (!benchmarkType || !['site', 'custom'].includes(benchmarkType)) {
+          return res.status(400).json({ message: "benchmarkType must be 'site' or 'custom'" });
+        }
 
         const context = {
           ipAddress: req.ip,
@@ -446,6 +451,7 @@ export function registerBenchmarkRoutes(app: Express) {
         const disabled = await benchmarkService.disableBenchmarkForOrg(
           organizationId,
           id,
+          benchmarkType,
           userId,
           context
         );
