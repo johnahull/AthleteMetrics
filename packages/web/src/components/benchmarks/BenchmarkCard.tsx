@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToggleSiteBenchmarkStatus, useDeleteSiteBenchmark } from "@/lib/benchmarks-api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useMetricConfig } from "@/hooks/use-metric-config";
 import { Edit, Trash2, Target } from "lucide-react";
 import { BenchmarkDeleteDialog } from "./BenchmarkDeleteDialog";
 import type { SiteBenchmark } from "@shared/schema";
@@ -19,6 +20,7 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { getMetricConfig } = useMetricConfig();
 
   const toggleStatusMutation = useToggleSiteBenchmarkStatus();
   const deleteMutation = useDeleteSiteBenchmark();
@@ -58,6 +60,10 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
       });
     }
   };
+
+  // Get metric config for unit display
+  const metricConfig = getMetricConfig(benchmark.metricCode);
+  const unit = metricConfig?.unit || '';
 
   // Format comparison operator for display
   const operatorLabel = {
@@ -114,7 +120,10 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
           <div className="bg-muted p-3 rounded-md">
             <div className="text-sm font-medium mb-1">Target Value</div>
             <div className="flex justify-between items-center">
-              <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+                {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+              </div>
               <span className="text-xs text-muted-foreground">{operatorLabel}</span>
             </div>
           </div>

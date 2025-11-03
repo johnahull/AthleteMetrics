@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
+import { useMetricConfig } from "@/hooks/use-metric-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ interface OrganizationBenchmarksListProps {
 export function OrganizationBenchmarksList({ organizationId }: OrganizationBenchmarksListProps) {
   const [showCatalog, setShowCatalog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const { getMetricConfig } = useMetricConfig();
   const [filters, setFilters] = useState<{
     metricCode?: string;
     gender?: string;
@@ -156,7 +158,9 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
         </Card>
       ) : (
         <div className="grid gap-4">
-          {filteredBenchmarks.map((benchmark) => (
+          {filteredBenchmarks.map((benchmark) => {
+            const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
+            return (
             <Card key={benchmark.id}>
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
@@ -188,7 +192,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                           {benchmark.comparisonOperator === "lte" && "≤ "}
                           {benchmark.comparisonOperator === "gte" && "≥ "}
                           {benchmark.comparisonOperator === "eq" && "= "}
-                          {benchmark.benchmarkValue}
+                          {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
                         </span>
                       </div>
                       {(benchmark.ageMin !== null || benchmark.ageMax !== null) && (
@@ -226,7 +230,8 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useDeleteCustomBenchmark } from "@/lib/benchmarks-api";
 import { useToast } from "@/hooks/use-toast";
+import { useMetricConfig } from "@/hooks/use-metric-config";
 import { Edit, Trash2, Target } from "lucide-react";
 import { CustomBenchmarkDeleteDialog } from "./CustomBenchmarkDeleteDialog";
 import type { CustomBenchmark } from "@shared/schema";
@@ -21,6 +22,7 @@ export function CustomBenchmarkCard({
 }: CustomBenchmarkCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { toast } = useToast();
+  const { getMetricConfig } = useMetricConfig();
 
   const deleteMutation = useDeleteCustomBenchmark();
 
@@ -43,6 +45,10 @@ export function CustomBenchmarkCard({
       });
     }
   };
+
+  // Get metric config for unit display
+  const metricConfig = getMetricConfig(benchmark.metricCode);
+  const unit = metricConfig?.unit || '';
 
   // Format comparison operator for display
   const operatorLabel = {
@@ -97,7 +103,10 @@ export function CustomBenchmarkCard({
           <div className="bg-muted p-3 rounded-md">
             <div className="text-sm font-medium mb-1">Target Value</div>
             <div className="flex justify-between items-center">
-              <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+                {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+              </div>
               <span className="text-xs text-muted-foreground">{operatorLabel}</span>
             </div>
           </div>

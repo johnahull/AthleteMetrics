@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSiteBenchmarks, useCustomBenchmarks, useOrganizationBenchmarks } from "@/lib/benchmarks-api";
+import { useMetricConfig } from "@/hooks/use-metric-config";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ interface BenchmarkCatalogProps {
 
 export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCatalogProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const { getMetricConfig } = useMetricConfig();
 
   // Fetch all available benchmarks
   const { data: siteBenchmarks, isLoading: loadingSite } = useSiteBenchmarks(false);
@@ -115,7 +117,9 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredSiteBenchmarks.map((benchmark) => (
+                {filteredSiteBenchmarks.map((benchmark) => {
+                  const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
+                  return (
                   <Card key={benchmark.id}>
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start">
@@ -132,7 +136,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                           )}
                           <div className="flex gap-2 flex-wrap">
                             <Badge variant="outline">
-                              Target: {benchmark.benchmarkValue}
+                              Target: {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
                             </Badge>
                             {benchmark.gender && (
                               <Badge variant="secondary">Gender: {benchmark.gender}</Badge>
@@ -155,7 +159,8 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
           </TabsContent>
@@ -172,7 +177,9 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredCustomBenchmarks.map((benchmark) => (
+                {filteredCustomBenchmarks.map((benchmark) => {
+                  const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
+                  return (
                   <Card key={benchmark.id}>
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start">
@@ -190,7 +197,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                           )}
                           <div className="flex gap-2 flex-wrap">
                             <Badge variant="outline">
-                              Target: {benchmark.benchmarkValue}
+                              Target: {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
                             </Badge>
                             {benchmark.gender && (
                               <Badge variant="secondary">Gender: {benchmark.gender}</Badge>
@@ -213,7 +220,8 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
           </TabsContent>
