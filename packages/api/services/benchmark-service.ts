@@ -419,8 +419,8 @@ export class BenchmarkService extends BaseService {
             resourceType: 'custom_benchmark',
             resourceId: benchmarkId,
             details: JSON.stringify({ name: benchmark.name, organizationId }),
-            ipAddress: null,
-            userAgent: null,
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
           });
         } catch (auditError) {
           console.error('Failed to create audit log:', auditError);
@@ -713,14 +713,14 @@ export class BenchmarkService extends BaseService {
         .filter(ob => ob.benchmarkType === 'custom' && ob.isEnabled)
         .map(ob => ob.benchmarkId);
 
-      const siteBenchmarks = await Promise.all(
-        siteBenchmarkIds.map(id => this.storage.getSiteBenchmark(id))
-      );
+      const siteBenchmarks = siteBenchmarkIds.length > 0
+        ? await this.storage.getSiteBenchmarksByIds(siteBenchmarkIds)
+        : [];
       const customBenchmarks = await this.storage.getCustomBenchmarksForOrg(organizationId);
 
       // Combine all benchmarks
       const allBenchmarks = [
-        ...siteBenchmarks.filter(b => b !== undefined),
+        ...siteBenchmarks,
         ...customBenchmarks.filter(b => customBenchmarkIds.includes(b.id))
       ];
 

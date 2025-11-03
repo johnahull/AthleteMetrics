@@ -265,7 +265,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                         <FormLabel>Comparison</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger data-testid="comparison-operator-select">
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>

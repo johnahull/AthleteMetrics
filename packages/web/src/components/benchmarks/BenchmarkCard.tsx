@@ -166,6 +166,7 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
               variant="outline"
               size="sm"
               onClick={() => onEdit(benchmark)}
+              data-testid="edit-benchmark-button"
             >
               <Edit className="h-4 w-4" />
             </Button>
@@ -175,6 +176,7 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
               onClick={() => setShowDeleteDialog(true)}
               disabled={benchmark.isSystemDefault}
               title={benchmark.isSystemDefault ? "Cannot delete system defaults" : "Delete benchmark"}
+              data-testid="delete-benchmark-button"
             >
               <Trash2 className="h-4 w-4" />
             </Button>

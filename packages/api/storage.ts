@@ -3329,6 +3329,17 @@ export class DatabaseStorage implements IStorage {
     return benchmark;
   }
 
+  async getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]> {
+    if (ids.length === 0) return [];
+
+    const benchmarks = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(inArray(siteBenchmarks.id, ids));
+
+    return benchmarks;
+  }
+
   async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
     const [created] = await db
       .insert(siteBenchmarks)

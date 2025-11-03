@@ -7,7 +7,7 @@
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { BenchmarkService } from "../services/benchmark-service";
-import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
+import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireAthleteAccess } from "../middleware";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
@@ -214,7 +214,10 @@ export function registerBenchmarkRoutes(app: Express) {
   // ========================================================================
 
   // Get custom benchmarks for organization
-  app.get("/api/organizations/:organizationId/benchmarks/custom", requireAuth, async (req, res) => {
+  app.get("/api/organizations/:organizationId/benchmarks/custom",
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req, res) => {
     try {
       const { organizationId } = req.params;
       const userId = req.session.user!.id;
@@ -342,7 +345,10 @@ export function registerBenchmarkRoutes(app: Express) {
   // ========================================================================
 
   // Get enabled benchmarks for organization
-  app.get("/api/organizations/:organizationId/benchmarks", requireAuth, async (req, res) => {
+  app.get("/api/organizations/:organizationId/benchmarks",
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req, res) => {
     try {
       const { organizationId } = req.params;
       const userId = req.session.user!.id;
@@ -444,6 +450,8 @@ export function registerBenchmarkRoutes(app: Express) {
   // Get athlete benchmark status
   app.get("/api/organizations/:organizationId/athletes/:athleteId/benchmark-status",
     requireAuth,
+    requireOrganizationAccess(),
+    requireAthleteAccess('read'),
     async (req, res) => {
       try {
         const { organizationId, athleteId } = req.params;

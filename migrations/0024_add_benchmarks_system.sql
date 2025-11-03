@@ -133,6 +133,11 @@ CREATE INDEX IF NOT EXISTS custom_benchmarks_org_idx ON custom_benchmarks(organi
 CREATE INDEX IF NOT EXISTS custom_benchmarks_metric_idx ON custom_benchmarks(metric_code);
 CREATE INDEX IF NOT EXISTS custom_benchmarks_org_active_idx ON custom_benchmarks(organization_id, is_active);
 
+-- Composite index for custom benchmark filtering (matches site_benchmarks pattern)
+CREATE INDEX IF NOT EXISTS custom_benchmarks_filters_idx
+ON custom_benchmarks(organization_id, metric_code, gender, level)
+INCLUDE (age_min, age_max, position, is_active);
+
 -- Add comments for documentation
 COMMENT ON TABLE custom_benchmarks IS 'Organization-specific custom benchmarks created by org admins';
 COMMENT ON COLUMN custom_benchmarks.organization_id IS 'Organization that owns this custom benchmark';

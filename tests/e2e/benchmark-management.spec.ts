@@ -245,7 +245,10 @@ test.describe('Benchmark Management - Site Admin Tests', () => {
 
     // Search for "Alpha"
     await page.fill('input[placeholder*="Search"]', 'Alpha');
-    await page.waitForTimeout(500); // Debounce delay
+    await page.waitForResponse(response =>
+      response.url().includes('/api/benchmarks') &&
+      response.request().method() === 'GET'
+    );
 
     // Should see benchmark1, not benchmark2
     await expect(page.locator(`text=${benchmark1.name}`)).toBeVisible();
@@ -253,7 +256,10 @@ test.describe('Benchmark Management - Site Admin Tests', () => {
 
     // Clear search
     await page.fill('input[placeholder*="Search"]', '');
-    await page.waitForTimeout(500);
+    await page.waitForResponse(response =>
+      response.url().includes('/api/benchmarks') &&
+      response.request().method() === 'GET'
+    );
 
     // Should see both
     await expect(page.locator(`text=${benchmark1.name}`)).toBeVisible();

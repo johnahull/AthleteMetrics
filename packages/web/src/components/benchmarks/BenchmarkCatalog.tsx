@@ -120,7 +120,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                 {filteredSiteBenchmarks.map((benchmark) => {
                   const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
                   return (
-                  <Card key={benchmark.id}>
+                  <Card key={benchmark.id} data-benchmark-id={benchmark.id}>
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -180,7 +180,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                 {filteredCustomBenchmarks.map((benchmark) => {
                   const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
                   return (
-                  <Card key={benchmark.id}>
+                  <Card key={benchmark.id} data-benchmark-id={benchmark.id}>
                     <CardContent className="pt-4">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
