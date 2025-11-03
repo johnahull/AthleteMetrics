@@ -413,15 +413,97 @@ test.describe('Benchmark Management - Custom Benchmarks Tests', () => {
   });
 
   test('should show error when custom benchmarks not allowed', async ({ page }) => {
-    // This test would require an org with allowCustomBenchmarks=false
-    // Skip for now or implement with proper test org setup
-    test.skip();
+    if (!testOrgId) test.skip();
+
+    // Disable custom benchmarks for the organization
+    await page.request.patch(`${STAGING_URL}/api/organizations/${testOrgId}`, {
+      data: {
+        allowCustomBenchmarks: false,
+      },
+    });
+
+    // Try to create a custom benchmark
+    const testBenchmark = generateTestBenchmark();
+    const response = await page.request.post(
+      `${STAGING_URL}/api/organizations/${testOrgId}/benchmarks/custom`,
+      {
+        data: {
+          metricCode: testBenchmark.metricCode,
+          name: `Custom ${testBenchmark.name}`,
+          benchmarkValue: testBenchmark.benchmarkValue,
+          comparisonOperator: 'lte',
+          isActive: true,
+        },
+      }
+    );
+
+    // Should return 403 Forbidden
+    expect(response.status()).toBe(403);
+    const errorData = await response.json();
+    expect(errorData.message).toContain('not allowed');
+
+    // Re-enable custom benchmarks for cleanup
+    await page.request.patch(`${STAGING_URL}/api/organizations/${testOrgId}`, {
+      data: {
+        allowCustomBenchmarks: true,
+      },
+    });
   });
 
-  test('should only allow owner to modify custom benchmark', async ({ page }) => {
-    // This test would require multi-user setup
-    // Skip for now
-    test.skip();
+  test('should prevent cross-org custom benchmark access', async ({ page }) => {
+    if (!testOrgId) test.skip();
+
+    // Create a custom benchmark for the test organization
+    const testBenchmark = generateTestBenchmark();
+    testBenchmark.name = `Custom ${testBenchmark.name}`;
+
+    const createResponse = await page.request.post(
+      `${STAGING_URL}/api/organizations/${testOrgId}/benchmarks/custom`,
+      {
+        data: {
+          metricCode: testBenchmark.metricCode,
+          name: testBenchmark.name,
+          benchmarkValue: testBenchmark.benchmarkValue,
+          comparisonOperator: 'lte',
+          isActive: true,
+        },
+      }
+    );
+    const createdBenchmark = await createResponse.json();
+    createdBenchmarkIds.push(createdBenchmark.id);
+
+    // Get list of all organizations
+    const orgsResponse = await page.request.get(`${STAGING_URL}/api/organizations`);
+    const orgs = await orgsResponse.json();
+
+    // Find a different organization (not testOrgId)
+    const otherOrg = orgs.find((org: any) => org.id !== testOrgId);
+
+    if (otherOrg) {
+      // Try to access the custom benchmark from a different organization
+      // This should fail because custom benchmarks are organization-specific
+      const accessResponse = await page.request.get(
+        `${STAGING_URL}/api/organizations/${otherOrg.id}/benchmarks/custom`
+      );
+
+      // The request might succeed (200) if user has access to otherOrg,
+      // but the benchmark list should NOT include the test benchmark
+      if (accessResponse.ok()) {
+        const otherOrgBenchmarks = await accessResponse.json();
+        const hasCrossOrgBenchmark = otherOrgBenchmarks.some(
+          (b: any) => b.id === createdBenchmark.id
+        );
+        expect(hasCrossOrgBenchmark).toBe(false);
+      } else {
+        // If user doesn't have access to otherOrg, should get 403
+        expect(accessResponse.status()).toBe(403);
+      }
+    }
+  });
+
+  test.skip('should only allow owner to modify custom benchmark', async ({ page }) => {
+    // This test would require multi-user setup with different credentials
+    // Skip for now as it requires authentication with a different user account
   });
 
   test('should display custom benchmarks in list', async ({ page }) => {
@@ -545,9 +627,34 @@ test.describe('Benchmark Management - Enablement Tests', () => {
   });
 
   test('should show error when benchmarks not enabled for org', async ({ page }) => {
-    // This requires an org with benchmarksEnabled=false
-    // Skip for now
-    test.skip();
+    if (!testOrgId || !testBenchmarkId) test.skip();
+
+    // Disable benchmarks feature for the organization
+    await page.request.patch(`${STAGING_URL}/api/organizations/${testOrgId}`, {
+      data: {
+        benchmarksEnabled: false,
+      },
+    });
+
+    // Try to enable a benchmark for this organization
+    const response = await page.request.post(
+      `${STAGING_URL}/api/organizations/${testOrgId}/benchmarks/${testBenchmarkId}/enable`,
+      {
+        data: { benchmarkType: 'site' },
+      }
+    );
+
+    // Should return 403 Forbidden
+    expect(response.status()).toBe(403);
+    const errorData = await response.json();
+    expect(errorData.message).toContain('not enabled');
+
+    // Re-enable benchmarks feature for cleanup and other tests
+    await page.request.patch(`${STAGING_URL}/api/organizations/${testOrgId}`, {
+      data: {
+        benchmarksEnabled: true,
+      },
+    });
   });
 
   test('should display enabled benchmarks list', async ({ page }) => {

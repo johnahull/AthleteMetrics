@@ -82,6 +82,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return benchmark;
@@ -127,6 +136,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return updated;
@@ -176,6 +194,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
     } catch (error) {
       return this.handleError(error, "BenchmarkService.deleteSiteBenchmark");
@@ -214,6 +241,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return updated;
@@ -319,6 +355,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return benchmark;
@@ -372,6 +417,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return updated;
@@ -517,6 +571,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return enabled;
@@ -567,6 +630,15 @@ export class BenchmarkService extends BaseService {
         });
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
+
+        // Security alert in production for audit log failures
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure', {
+            operation: 'audit_log_failure',
+            userId: requestingUserId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+        }
       }
 
       return disabled;

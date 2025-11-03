@@ -62,13 +62,29 @@ const benchmarkModifyLimiter = rateLimit({
   },
 });
 
+const benchmarkReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  message: { message: "Too many benchmark requests" },
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Force enable in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
+  keyGenerator: (req) => {
+    const userId = req.session?.user?.id;
+    const ip = req.ip || 'unknown';
+    return userId ? `${ip}-${userId}` : ip;
+  },
+});
+
 export function registerBenchmarkRoutes(app: Express) {
   // ========================================================================
   // SITE BENCHMARKS (Site Admin Only)
   // ========================================================================
 
   // Get all site benchmarks
-  app.get("/api/benchmarks", requireAuth, async (req, res) => {
+  app.get("/api/benchmarks", benchmarkReadLimiter, requireAuth, async (req, res) => {
     try {
       const userId = req.session.user!.id;
       const includeInactive = req.query.includeInactive === 'true';
@@ -86,18 +102,14 @@ export function registerBenchmarkRoutes(app: Express) {
     try {
       const { id } = req.params;
       const userId = req.session.user!.id;
+
+      // Security: Check admin status first to prevent timing attacks
+      const isSiteAdmin = await benchmarkService.isSiteAdmin(userId);
       const benchmark = await benchmarkService.getSiteBenchmark(id);
 
-      if (!benchmark) {
-        return res.status(404).json({ message: "Benchmark not found" });
-      }
-
       // Non-site-admins can only view active benchmarks
-      if (!benchmark.isActive) {
-        const isSiteAdmin = await benchmarkService.isSiteAdmin(userId);
-        if (!isSiteAdmin) {
-          return res.status(404).json({ message: "Benchmark not found" });
-        }
+      if (!benchmark || (!benchmark.isActive && !isSiteAdmin)) {
+        return res.status(404).json({ message: "Benchmark not found" });
       }
 
       res.json(benchmark);
@@ -215,6 +227,7 @@ export function registerBenchmarkRoutes(app: Express) {
 
   // Get custom benchmarks for organization
   app.get("/api/organizations/:organizationId/benchmarks/custom",
+    benchmarkReadLimiter,
     requireAuth,
     requireOrganizationAccess(),
     async (req, res) => {
@@ -251,9 +264,11 @@ export function registerBenchmarkRoutes(app: Express) {
         const { organizationId } = req.params;
         const userId = req.session.user!.id;
 
+        // Security: Extract organizationId from body and discard it, use only URL param
+        const { organizationId: _bodyOrgId, ...bodyData } = req.body;
         const validatedData = insertCustomBenchmarkSchema.parse({
-          ...req.body,
-          organizationId,
+          ...bodyData,
+          organizationId, // Only use URL param organizationId
         });
 
         const context = {
@@ -346,6 +361,7 @@ export function registerBenchmarkRoutes(app: Express) {
 
   // Get enabled benchmarks for organization
   app.get("/api/organizations/:organizationId/benchmarks",
+    benchmarkReadLimiter,
     requireAuth,
     requireOrganizationAccess(),
     async (req, res) => {
@@ -449,6 +465,7 @@ export function registerBenchmarkRoutes(app: Express) {
 
   // Get athlete benchmark status
   app.get("/api/organizations/:organizationId/athletes/:athleteId/benchmark-status",
+    benchmarkReadLimiter,
     requireAuth,
     requireOrganizationAccess(),
     requireAthleteAccess('read'),
