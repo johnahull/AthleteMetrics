@@ -823,4 +823,55 @@ describe('Benchmark Storage', () => {
       expect(applicable.some(b => b.id === mismatchBenchmark.id)).toBe(false);
     });
   });
+
+  // Cascade Delete Tests
+  describe('Cascade Deletes', () => {
+    test('deleting site benchmark should cascade to organization_benchmarks via trigger', async () => {
+      // Create a site benchmark
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Test Cascade Delete',
+        benchmarkValue: 1.5,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable it for an organization
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Verify enablement exists
+      const beforeDelete = await storage.getOrganizationBenchmarks(testOrgId);
+      expect(beforeDelete.some(b => b.benchmarkId === benchmark.id)).toBe(true);
+
+      // Delete the site benchmark
+      await storage.deleteSiteBenchmark(benchmark.id);
+
+      // Verify the organization_benchmarks record was also deleted via trigger
+      const afterDelete = await storage.getOrganizationBenchmarks(testOrgId);
+      expect(afterDelete.some(b => b.benchmarkId === benchmark.id)).toBe(false);
+    });
+
+    test('deleting custom benchmark should cascade to organization_benchmarks via trigger', async () => {
+      // Create a custom benchmark
+      const benchmark = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Test Cascade Delete Custom',
+        benchmarkValue: 2.0,
+      }, orgAdminUserId);
+
+      // Enable it for the organization
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'custom');
+
+      // Verify enablement exists
+      const beforeDelete = await storage.getOrganizationBenchmarks(testOrgId);
+      expect(beforeDelete.some(b => b.benchmarkId === benchmark.id)).toBe(true);
+
+      // Delete the custom benchmark
+      await storage.deleteCustomBenchmark(benchmark.id);
+
+      // Verify the organization_benchmarks record was also deleted via trigger
+      const afterDelete = await storage.getOrganizationBenchmarks(testOrgId);
+      expect(afterDelete.some(b => b.benchmarkId === benchmark.id)).toBe(false);
+    });
+  });
 });

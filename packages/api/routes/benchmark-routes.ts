@@ -35,8 +35,11 @@ const benchmarkCreateLimiter = rateLimit({
   limit: 10,
   message: { message: "Too many benchmark creation attempts" },
   skip: (req) => {
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) return false; // Force enable in production
+    // Strict production enforcement - no bypass allowed
+    if (process.env.NODE_ENV === 'production') return false;
+    // Allow bypass in test environment
+    if (process.env.NODE_ENV === 'test') return true;
+    // Development/staging can bypass with explicit flag
     return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
   keyGenerator: (req) => {
@@ -51,8 +54,11 @@ const benchmarkModifyLimiter = rateLimit({
   limit: 50,
   message: { message: "Too many benchmark modification attempts" },
   skip: (req) => {
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) return false; // Force enable in production
+    // Strict production enforcement - no bypass allowed
+    if (process.env.NODE_ENV === 'production') return false;
+    // Allow bypass in test environment
+    if (process.env.NODE_ENV === 'test') return true;
+    // Development/staging can bypass with explicit flag
     return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
   keyGenerator: (req) => {
@@ -67,8 +73,11 @@ const benchmarkReadLimiter = rateLimit({
   limit: 100,
   message: { message: "Too many benchmark requests" },
   skip: (req) => {
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) return false; // Force enable in production
+    // Strict production enforcement - no bypass allowed
+    if (process.env.NODE_ENV === 'production') return false;
+    // Allow bypass in test environment
+    if (process.env.NODE_ENV === 'test') return true;
+    // Development/staging can bypass with explicit flag
     return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
   keyGenerator: (req) => {

@@ -3601,6 +3601,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
+    // Validate that the benchmark exists before creating FK relationship
+    if (benchmarkType === 'site') {
+      const benchmark = await this.getSiteBenchmark(benchmarkId);
+      if (!benchmark) {
+        throw new Error(`Site benchmark not found: ${benchmarkId}`);
+      }
+    } else {
+      const benchmark = await this.getCustomBenchmark(benchmarkId);
+      if (!benchmark) {
+        throw new Error(`Custom benchmark not found: ${benchmarkId}`);
+      }
+    }
+
     // Check if already exists
     const [existing] = await db
       .select()
@@ -3716,6 +3729,9 @@ export class DatabaseStorage implements IStorage {
       }
 
       // Age filter: (ageMin IS NULL OR ageMin <= age) AND (ageMax IS NULL OR ageMax >= age)
+      // Business Rule: If athlete age is undefined/NULL (no birth year), age-constrained
+      // benchmarks will NOT match. Only benchmarks with NULL age bounds will match.
+      // This ensures we don't compare athletes without age data against age-specific targets.
       if (athleteAttributes.age !== undefined) {
         conditions.push(
           or(

@@ -306,7 +306,7 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
   'metric_created', 'metric_updated', 'metric_enabled', 'metric_disabled', 'metric_deleted',
   'org_metric_enabled', 'org_metric_disabled', 'org_metric_updated', 'org_metrics_bulk_enabled',
   -- Benchmark management actions (NEW in 0024)
-  'benchmark_created', 'benchmark_updated', 'benchmark_enabled', 'benchmark_disabled', 'benchmark_deleted',
+  'benchmark_created', 'benchmark_updated', 'benchmark_deleted', 'benchmark_enabled', 'benchmark_disabled',
   'custom_benchmark_created', 'custom_benchmark_updated', 'custom_benchmark_deleted',
   'org_benchmark_enabled', 'org_benchmark_disabled', 'org_benchmark_updated'
 ));
