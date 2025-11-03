@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { BenchmarkService } from '../benchmark-service';
 import { storage } from '../../storage';
 import { db } from '../../db';
-import { siteBenchmarks, customBenchmarks, siteMetrics, organizations, users, auditLogs } from '@shared/schema';
+import { siteBenchmarks, customBenchmarks, siteMetrics, organizations, users, auditLogs, measurements } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 
 describe('Benchmark Service', () => {
@@ -667,6 +667,236 @@ describe('Benchmark Service', () => {
 
       expect(disabled).toBeDefined();
       expect(disabled.isEnabled).toBe(false);
+    });
+  });
+
+  describe('Evaluation Logic', () => {
+    // Cycle 15: evaluateBenchmark() returns true for met 'lte' benchmark
+    it('should return true when athlete value meets lte benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(0.95, 1.00, 'lte');
+      expect(result).toBe(true);
+    });
+
+    it('should return false when athlete value does not meet lte benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(1.05, 1.00, 'lte');
+      expect(result).toBe(false);
+    });
+
+    it('should return true when athlete value equals lte benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(1.00, 1.00, 'lte');
+      expect(result).toBe(true);
+    });
+
+    // Cycle 16: evaluateBenchmark() returns true for met 'gte' benchmark
+    it('should return true when athlete value meets gte benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(35, 30, 'gte');
+      expect(result).toBe(true);
+    });
+
+    it('should return false when athlete value does not meet gte benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(25, 30, 'gte');
+      expect(result).toBe(false);
+    });
+
+    it('should return true when athlete value equals gte benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(30, 30, 'gte');
+      expect(result).toBe(true);
+    });
+
+    // Cycle 17: evaluateBenchmark() handles 'eq' operator
+    it('should return true when athlete value equals eq benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(100, 100, 'eq');
+      expect(result).toBe(true);
+    });
+
+    it('should return false when athlete value does not equal eq benchmark', () => {
+      const result = benchmarkService.evaluateBenchmark(99, 100, 'eq');
+      expect(result).toBe(false);
+    });
+
+    it('should throw error for invalid comparison operator', () => {
+      expect(() => {
+        benchmarkService.evaluateBenchmark(100, 100, 'invalid' as any);
+      }).toThrow('Invalid comparison operator');
+    });
+
+    // Cycle 18: getBenchmarkProgress() calculates percentage correctly
+    it('should calculate progress percentage for lte benchmark (lower is better)', () => {
+      // Benchmark: 1.00, Athlete: 0.90 (10% better)
+      const progress = benchmarkService.getBenchmarkProgress(0.90, 1.00, 'lte');
+      expect(progress).toBeCloseTo(111.11, 1); // 111.11% of goal (11.11% better than target)
+    });
+
+    it('should calculate progress percentage for gte benchmark (higher is better)', () => {
+      // Benchmark: 30 inches, Athlete: 33 inches (10% better)
+      const progress = benchmarkService.getBenchmarkProgress(33, 30, 'gte');
+      expect(progress).toBeCloseTo(110, 1); // 110% of goal
+    });
+
+    it('should return 100 for exactly meeting benchmark', () => {
+      const progressLte = benchmarkService.getBenchmarkProgress(1.00, 1.00, 'lte');
+      const progressGte = benchmarkService.getBenchmarkProgress(30, 30, 'gte');
+      expect(progressLte).toBe(100);
+      expect(progressGte).toBe(100);
+    });
+
+    it('should return percentage below 100 for not meeting benchmark', () => {
+      // Benchmark: 1.00, Athlete: 1.10 (10% worse)
+      const progress = benchmarkService.getBenchmarkProgress(1.10, 1.00, 'lte');
+      expect(progress).toBeCloseTo(90.9, 1); // ~90.9% of goal
+    });
+
+    it('should handle eq operator for progress calculation', () => {
+      const progressMet = benchmarkService.getBenchmarkProgress(100, 100, 'eq');
+      const progressNotMet = benchmarkService.getBenchmarkProgress(95, 100, 'eq');
+      expect(progressMet).toBe(100);
+      expect(progressNotMet).toBe(0);
+    });
+
+    // Cycle 19: getAthleteBenchmarkStatus() returns met/unmet for all applicable benchmarks
+    it('should return benchmark status for athlete with met benchmarks', async () => {
+      // Create a site benchmark for FLY10_TIME with lte operator
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Elite Speed Benchmark',
+        benchmarkValue: 1.00,
+        comparisonOperator: 'lte',
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable benchmark for org
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Create athlete with birth year for age calculation
+      const [athlete] = await db.insert(users).values({
+        username: `athlete${Date.now()}`,
+        emails: ['athlete@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Fast',
+        lastName: 'Athlete',
+        fullName: 'Fast Athlete',
+        isSiteAdmin: false,
+        birthYear: 2000,
+      }).returning();
+
+      // Add athlete to org
+      await storage.addUserToOrganization(athlete.id, testOrgId, 'athlete');
+
+      // Create measurement that meets benchmark (0.95 <= 1.00)
+      const measurement = await storage.createMeasurement({
+        userId: athlete.id,
+        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+        metric: testMetricCode,
+        value: 0.95,
+      }, siteAdminUserId);
+
+      const status = await benchmarkService.getAthleteBenchmarkStatus(athlete.id, testOrgId);
+
+      expect(status).toBeDefined();
+      expect(status.length).toBeGreaterThan(0);
+      const benchmarkStatus = status.find(s => s.benchmarkId === benchmark.id);
+      expect(benchmarkStatus).toBeDefined();
+      expect(benchmarkStatus?.isMet).toBe(true);
+      expect(benchmarkStatus?.athleteValue).toBe(0.95);
+      expect(benchmarkStatus?.progress).toBeGreaterThanOrEqual(100);
+
+      // Cleanup - delete in correct order
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await storage.removeUserFromOrganization(athlete.id, testOrgId, false).catch(() => {});
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
+
+    it('should return benchmark status with unmet benchmarks', async () => {
+      // Create a site benchmark for FLY10_TIME with lte operator
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Very Elite Speed',
+        benchmarkValue: 0.85,
+        comparisonOperator: 'lte',
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable benchmark for org
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Create athlete with birth year
+      const [athlete] = await db.insert(users).values({
+        username: `athleteslow${Date.now()}`,
+        emails: ['athleteslow@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Slow',
+        lastName: 'Athlete',
+        fullName: 'Slow Athlete',
+        isSiteAdmin: false,
+        birthYear: 2000,
+      }).returning();
+
+      // Add athlete to org
+      await storage.addUserToOrganization(athlete.id, testOrgId, 'athlete');
+
+      // Create measurement that does NOT meet benchmark (1.00 > 0.85)
+      const measurement = await storage.createMeasurement({
+        userId: athlete.id,
+        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
+        metric: testMetricCode,
+        value: 1.00,
+      }, siteAdminUserId);
+
+      const status = await benchmarkService.getAthleteBenchmarkStatus(athlete.id, testOrgId);
+
+      expect(status).toBeDefined();
+      expect(status.length).toBeGreaterThan(0);
+      const benchmarkStatus = status.find(s => s.benchmarkId === benchmark.id);
+      expect(benchmarkStatus).toBeDefined();
+      expect(benchmarkStatus?.isMet).toBe(false);
+      expect(benchmarkStatus?.athleteValue).toBe(1.00);
+      expect(benchmarkStatus?.progress).toBeLessThan(100);
+
+      // Cleanup - delete in correct order
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await storage.removeUserFromOrganization(athlete.id, testOrgId, false).catch(() => {});
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
+
+    it('should only return benchmarks applicable to athlete filters', async () => {
+      // Create benchmark with age filter (ageMin: 18, ageMax: 22)
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'College Age Benchmark',
+        benchmarkValue: 1.00,
+        comparisonOperator: 'lte',
+        ageMin: 18,
+        ageMax: 22,
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable benchmark for org
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Create athlete with age outside filter (age 25, birthDate format)
+      const [athlete] = await db.insert(users).values({
+        username: `athleteold${Date.now()}`,
+        emails: ['athleteold@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Old',
+        lastName: 'Athlete',
+        fullName: 'Old Athlete',
+        isSiteAdmin: false,
+        birthDate: '1999-01-01', // ~25 years old (string format, not Date object)
+      }).returning();
+
+      // Add athlete to org
+      await storage.addUserToOrganization(athlete.id, testOrgId, 'athlete');
+
+      const status = await benchmarkService.getAthleteBenchmarkStatus(athlete.id, testOrgId);
+
+      // Should not include the age-filtered benchmark
+      const benchmarkStatus = status.find(s => s.benchmarkId === benchmark.id);
+      expect(benchmarkStatus).toBeUndefined();
+
+      // Cleanup - delete in correct order
+      await storage.removeUserFromOrganization(athlete.id, testOrgId, false).catch(() => {});
+      await db.delete(users).where(eq(users.id, athlete.id));
     });
   });
 });

@@ -586,4 +586,206 @@ export class BenchmarkService extends BaseService {
       return this.handleError(error, "BenchmarkService.getOrganizationBenchmarks");
     }
   }
+
+  // ========================================================================
+  // EVALUATION LOGIC (Cycles 15-19)
+  // ========================================================================
+
+  /**
+   * Evaluate if an athlete's value meets a benchmark
+   * Cycle 15: Handles 'lte' operator (lower is better)
+   * Cycle 16: Handles 'gte' operator (higher is better)
+   * Cycle 17: Handles 'eq' operator (exact match)
+   */
+  evaluateBenchmark(
+    athleteValue: number,
+    benchmarkValue: number,
+    operator: 'lte' | 'gte' | 'eq'
+  ): boolean {
+    switch (operator) {
+      case 'lte':
+        return athleteValue <= benchmarkValue;
+      case 'gte':
+        return athleteValue >= benchmarkValue;
+      case 'eq':
+        return athleteValue === benchmarkValue;
+      default:
+        throw new Error(`Invalid comparison operator: ${operator}`);
+    }
+  }
+
+  /**
+   * Calculate progress percentage towards a benchmark
+   * Cycle 18: Calculates percentage for lte/gte/eq operators
+   * Returns 100 for exactly meeting goal, >100 for exceeding, <100 for not meeting
+   */
+  getBenchmarkProgress(
+    athleteValue: number,
+    benchmarkValue: number,
+    operator: 'lte' | 'gte' | 'eq'
+  ): number {
+    if (operator === 'eq') {
+      // For exact match, return 100 if met, 0 if not met
+      return athleteValue === benchmarkValue ? 100 : 0;
+    }
+
+    if (benchmarkValue === 0) {
+      // Avoid division by zero
+      return athleteValue === 0 ? 100 : 0;
+    }
+
+    if (operator === 'lte') {
+      // Lower is better: progress = (benchmarkValue / athleteValue) * 100
+      // If athlete is 0.90 and benchmark is 1.00: (1.00 / 0.90) * 100 = 111.1%
+      // If athlete is 1.10 and benchmark is 1.00: (1.00 / 1.10) * 100 = 90.9%
+      return (benchmarkValue / athleteValue) * 100;
+    } else {
+      // gte: Higher is better: progress = (athleteValue / benchmarkValue) * 100
+      // If athlete is 33 and benchmark is 30: (33 / 30) * 100 = 110%
+      // If athlete is 27 and benchmark is 30: (27 / 30) * 100 = 90%
+      return (athleteValue / benchmarkValue) * 100;
+    }
+  }
+
+  /**
+   * Get benchmark status for an athlete
+   * Cycle 19: Returns met/unmet status for all applicable benchmarks
+   * Filters benchmarks by athlete attributes (age, gender, position, level)
+   */
+  async getAthleteBenchmarkStatus(
+    athleteId: string,
+    organizationId: string
+  ): Promise<Array<{
+    benchmarkId: string;
+    benchmarkName: string;
+    metricCode: string;
+    benchmarkValue: number;
+    comparisonOperator: 'lte' | 'gte' | 'eq';
+    athleteValue: number | null;
+    isMet: boolean;
+    progress: number;
+  }>> {
+    try {
+      // Get athlete details
+      const athlete = await this.storage.getUser(athleteId);
+      if (!athlete) {
+        throw new Error(`Athlete with id ${athleteId} not found`);
+      }
+
+      // Calculate athlete age if birthDate is available
+      let athleteAge: number | null = null;
+      if (athlete.birthDate) {
+        const today = new Date();
+        const birthDate = new Date(athlete.birthDate);
+        athleteAge = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          athleteAge--;
+        }
+      }
+
+      // Get all enabled benchmarks for the organization
+      const orgBenchmarks = await this.storage.getOrganizationBenchmarks(organizationId);
+
+      // Get site and custom benchmarks
+      const siteBenchmarkIds = orgBenchmarks
+        .filter(ob => ob.benchmarkType === 'site' && ob.isEnabled)
+        .map(ob => ob.benchmarkId);
+      const customBenchmarkIds = orgBenchmarks
+        .filter(ob => ob.benchmarkType === 'custom' && ob.isEnabled)
+        .map(ob => ob.benchmarkId);
+
+      const siteBenchmarks = await Promise.all(
+        siteBenchmarkIds.map(id => this.storage.getSiteBenchmark(id))
+      );
+      const customBenchmarks = await this.storage.getCustomBenchmarksForOrg(organizationId);
+
+      // Combine all benchmarks
+      const allBenchmarks = [
+        ...siteBenchmarks.filter(b => b !== undefined),
+        ...customBenchmarks.filter(b => customBenchmarkIds.includes(b.id))
+      ];
+
+      // Filter benchmarks by athlete attributes
+      const applicableBenchmarks = allBenchmarks.filter(benchmark => {
+        // Age filter
+        if (benchmark.ageMin !== null && athleteAge !== null && athleteAge < benchmark.ageMin) {
+          return false;
+        }
+        if (benchmark.ageMax !== null && athleteAge !== null && athleteAge > benchmark.ageMax) {
+          return false;
+        }
+
+        // Gender filter
+        if (benchmark.gender !== null && athlete.gender !== null && benchmark.gender !== athlete.gender) {
+          return false;
+        }
+
+        // Position filter (athlete.position is array)
+        if (benchmark.position !== null && athlete.position && athlete.position.length > 0) {
+          if (!athlete.position.includes(benchmark.position)) {
+            return false;
+          }
+        }
+
+        // Level filter (athlete.level is single value)
+        if (benchmark.level !== null && athlete.level !== null && benchmark.level !== athlete.level) {
+          return false;
+        }
+
+        return true;
+      });
+
+      // Get latest measurements for each metric
+      const measurements = await this.storage.getMeasurements({ userId: athleteId });
+
+      // Group measurements by metric and get latest for each
+      const latestMeasurements = new Map<string, number>();
+      for (const measurement of measurements) {
+        const existing = latestMeasurements.get(measurement.metric);
+        if (!existing) {
+          // Parse value from decimal string to number
+          const value = typeof measurement.value === 'string'
+            ? parseFloat(measurement.value)
+            : measurement.value;
+          latestMeasurements.set(measurement.metric, value);
+        }
+        // Assuming measurements are already sorted by date (newest first)
+      }
+
+      // Evaluate each benchmark
+      const status = applicableBenchmarks.map(benchmark => {
+        const athleteValue = latestMeasurements.get(benchmark.metricCode) ?? null;
+
+        let isMet = false;
+        let progress = 0;
+
+        if (athleteValue !== null) {
+          const benchmarkValue = typeof benchmark.benchmarkValue === 'string'
+            ? parseFloat(benchmark.benchmarkValue)
+            : benchmark.benchmarkValue;
+
+          isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator);
+          progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator);
+        }
+
+        return {
+          benchmarkId: benchmark.id,
+          benchmarkName: benchmark.name,
+          metricCode: benchmark.metricCode,
+          benchmarkValue: typeof benchmark.benchmarkValue === 'string'
+            ? parseFloat(benchmark.benchmarkValue)
+            : benchmark.benchmarkValue,
+          comparisonOperator: benchmark.comparisonOperator,
+          athleteValue,
+          isMet,
+          progress,
+        };
+      });
+
+      return status;
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.getAthleteBenchmarkStatus");
+    }
+  }
 }
