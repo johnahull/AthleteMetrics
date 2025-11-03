@@ -152,14 +152,16 @@ export function registerBenchmarkRoutes(app: Express) {
   });
 
   // Get specific site benchmark
-  app.get("/api/benchmarks/:id", requireAuth, async (req, res) => {
+  app.get("/api/benchmarks/:id", benchmarkReadLimiter, requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const userId = req.session.user!.id;
 
-      // Security: Check admin status first to prevent timing attacks
-      const isSiteAdmin = await benchmarkService.isSiteAdmin(userId);
-      const benchmark = await benchmarkService.getSiteBenchmark(id);
+      // Security: Fetch both in parallel to prevent timing attacks
+      const [isSiteAdmin, benchmark] = await Promise.all([
+        benchmarkService.isSiteAdmin(userId),
+        benchmarkService.getSiteBenchmark(id)
+      ]);
 
       // Non-site-admins can only view active benchmarks
       if (!benchmark || (!benchmark.isActive && !isSiteAdmin)) {

@@ -83,13 +83,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 
@@ -137,13 +138,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 
@@ -195,13 +197,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
     } catch (error) {
@@ -242,13 +245,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 
@@ -356,13 +360,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 
@@ -418,13 +423,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 
@@ -572,13 +578,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 
@@ -632,13 +639,14 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security alert in production for audit log failures
+        // Security: Block operation in production if audit log fails
         if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure', {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
             userId: requestingUserId,
             error: auditError instanceof Error ? auditError.message : 'Unknown error',
           });
+          throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
 

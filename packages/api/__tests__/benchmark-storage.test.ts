@@ -827,8 +827,9 @@ describe('Benchmark Storage', () => {
 
   // Cascade Delete Tests
   describe('Cascade Deletes', () => {
-    // Skip these tests as they require manual SQL migrations (triggers) which are not applied by drizzle-kit push
-    test.skip('deleting site benchmark should cascade to organization_benchmarks via trigger', async () => {
+    // These tests verify PostgreSQL triggers from migration 0024_add_benchmarks_system.sql
+    // Triggers have been applied to test database
+    test('deleting site benchmark should cascade to organization_benchmarks via trigger', async () => {
       // Create a site benchmark
       const benchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
@@ -852,7 +853,7 @@ describe('Benchmark Storage', () => {
       expect(afterDelete.some(b => b.benchmarkId === benchmark.id)).toBe(false);
     });
 
-    test.skip('deleting custom benchmark should cascade to organization_benchmarks via trigger', async () => {
+    test('deleting custom benchmark should cascade to organization_benchmarks via trigger', async () => {
       // Create a custom benchmark
       const benchmark = await storage.createCustomBenchmark({
         organizationId: testOrgId,
