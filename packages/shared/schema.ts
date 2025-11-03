@@ -12,6 +12,9 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   location: text("location"),
   isActive: boolean("is_active").default(true).notNull(),
+  // Benchmark feature flags (added in migration 0024)
+  benchmarksEnabled: boolean("benchmarks_enabled").default(false).notNull(),
+  allowCustomBenchmarks: boolean("allow_custom_benchmarks").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

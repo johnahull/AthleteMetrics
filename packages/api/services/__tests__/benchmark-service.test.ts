@@ -282,4 +282,263 @@ describe('Benchmark Service', () => {
       expect(toggled.isActive).toBe(false);
     });
   });
+
+  describe('Org Admin Operations', () => {
+    // Cycle 7: createCustomBenchmark() requires org admin OR site admin
+    it('should throw error if regular user tries to create custom benchmark', async () => {
+      const benchmarkData = {
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Team Custom',
+        benchmarkValue: 1.10,
+      };
+
+      await expect(
+        benchmarkService.createCustomBenchmark(benchmarkData, regularUserId)
+      ).rejects.toThrow('Unauthorized');
+    });
+
+    it('should allow org admin to create custom benchmark', async () => {
+      const benchmarkData = {
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Team Custom',
+        benchmarkValue: 1.10,
+      };
+
+      const created = await benchmarkService.createCustomBenchmark(benchmarkData, orgAdminUserId);
+
+      expect(created).toBeDefined();
+      expect(created.name).toBe('Team Custom');
+      expect(created.organizationId).toBe(testOrgId);
+      createdBenchmarkIds.push(created.id);
+    });
+
+    it('should allow site admin to create custom benchmark', async () => {
+      const benchmarkData = {
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Site Admin Custom',
+        benchmarkValue: 1.10,
+      };
+
+      const created = await benchmarkService.createCustomBenchmark(benchmarkData, siteAdminUserId);
+
+      expect(created).toBeDefined();
+      expect(created.organizationId).toBe(testOrgId);
+      createdBenchmarkIds.push(created.id);
+    });
+
+    // Cycle 8: createCustomBenchmark() fails if allow_custom_benchmarks = false
+    it('should throw error if custom benchmarks are not allowed for organization', async () => {
+      // Disable custom benchmarks for org
+      await db.update(organizations)
+        .set({ allowCustomBenchmarks: false })
+        .where(eq(organizations.id, testOrgId));
+
+      const benchmarkData = {
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Disallowed Custom',
+        benchmarkValue: 1.10,
+      };
+
+      await expect(
+        benchmarkService.createCustomBenchmark(benchmarkData, orgAdminUserId)
+      ).rejects.toThrow('not allowed');
+
+      // Re-enable for other tests
+      await db.update(organizations)
+        .set({ allowCustomBenchmarks: true })
+        .where(eq(organizations.id, testOrgId));
+    });
+
+    it('should allow custom benchmark creation when feature is enabled', async () => {
+      const benchmarkData = {
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Allowed Custom',
+        benchmarkValue: 1.10,
+      };
+
+      const created = await benchmarkService.createCustomBenchmark(benchmarkData, orgAdminUserId);
+
+      expect(created).toBeDefined();
+      createdBenchmarkIds.push(created.id);
+    });
+
+    // Cycle 9: createCustomBenchmark() creates audit log
+    it('should create audit log when custom benchmark is created', async () => {
+      const benchmarkData = {
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Audited Custom',
+        benchmarkValue: 1.10,
+      };
+
+      const created = await benchmarkService.createCustomBenchmark(benchmarkData, orgAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      // Query audit logs to verify
+      const logs = await db.select().from(auditLogs)
+        .where(eq(auditLogs.userId, orgAdminUserId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(1);
+
+      expect(logs.length).toBeGreaterThan(0);
+      const latestLog = logs[0];
+      expect(latestLog.action).toBe('custom_benchmark_created');
+      expect(latestLog.resourceType).toBe('custom_benchmark');
+      expect(latestLog.resourceId).toBe(created.id);
+    });
+
+    // Cycle 10: updateCustomBenchmark() only allows owner org or site admin
+    it('should throw error if non-owner org admin tries to update custom benchmark', async () => {
+      // Create benchmark for testOrg
+      const created = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Protected Custom',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      // Create another org and admin
+      const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const [otherOrg] = await db.insert(organizations).values({
+        name: `Other Org ${uniqueSuffix}`,
+        benchmarksEnabled: true,
+        allowCustomBenchmarks: true,
+      }).returning();
+
+      const [otherAdmin] = await db.insert(users).values({
+        username: `otheradmin${uniqueSuffix}`,
+        emails: ['otheradmin@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Other',
+        lastName: 'Admin',
+        fullName: 'Other Admin',
+        isSiteAdmin: false,
+      }).returning();
+
+      await storage.addUserToOrganization(otherAdmin.id, otherOrg.id, 'org_admin');
+
+      await expect(
+        benchmarkService.updateCustomBenchmark(created.organizationId, created.id, { name: 'Hacked' }, otherAdmin.id)
+      ).rejects.toThrow('Unauthorized');
+
+      // Cleanup
+      await storage.removeUserFromOrganization(otherAdmin.id, otherOrg.id, false).catch(() => {});
+      await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+      await db.delete(users).where(eq(users.id, otherAdmin.id));
+    });
+
+    it('should allow owner org admin to update custom benchmark', async () => {
+      const created = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Original Custom Name',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      const updated = await benchmarkService.updateCustomBenchmark(
+        testOrgId,
+        created.id,
+        { name: 'Updated Custom Name' },
+        orgAdminUserId
+      );
+
+      expect(updated.name).toBe('Updated Custom Name');
+    });
+
+    it('should allow site admin to update any custom benchmark', async () => {
+      const created = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Original Name',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      const updated = await benchmarkService.updateCustomBenchmark(
+        testOrgId,
+        created.id,
+        { name: 'Site Admin Updated' },
+        siteAdminUserId
+      );
+
+      expect(updated.name).toBe('Site Admin Updated');
+    });
+
+    // Cycle 11: deleteCustomBenchmark() only allows owner org or site admin
+    it('should throw error if non-owner org admin tries to delete custom benchmark', async () => {
+      const created = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Protected from Deletion',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+      createdBenchmarkIds.push(created.id);
+
+      // Create another org and admin
+      const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const [otherOrg] = await db.insert(organizations).values({
+        name: `Other Org ${uniqueSuffix}`,
+      }).returning();
+
+      const [otherAdmin] = await db.insert(users).values({
+        username: `otheradmin${uniqueSuffix}`,
+        emails: ['otheradmin@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Other',
+        lastName: 'Admin',
+        fullName: 'Other Admin',
+        isSiteAdmin: false,
+      }).returning();
+
+      await storage.addUserToOrganization(otherAdmin.id, otherOrg.id, 'org_admin');
+
+      await expect(
+        benchmarkService.deleteCustomBenchmark(created.organizationId, created.id, otherAdmin.id)
+      ).rejects.toThrow('Unauthorized');
+
+      // Cleanup
+      await storage.removeUserFromOrganization(otherAdmin.id, otherOrg.id, false).catch(() => {});
+      await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+      await db.delete(users).where(eq(users.id, otherAdmin.id));
+
+      // Verify benchmark still exists
+      const fetched = await storage.getCustomBenchmarksForOrg(testOrgId);
+      expect(fetched.some(b => b.id === created.id)).toBe(true);
+    });
+
+    it('should allow owner org admin to delete custom benchmark', async () => {
+      const created = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'To Be Deleted By Org Admin',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+
+      await benchmarkService.deleteCustomBenchmark(testOrgId, created.id, orgAdminUserId);
+
+      const benchmarks = await storage.getCustomBenchmarksForOrg(testOrgId);
+      expect(benchmarks.some(b => b.id === created.id)).toBe(false);
+    });
+
+    it('should allow site admin to delete any custom benchmark', async () => {
+      const created = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'To Be Deleted By Site Admin',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+
+      await benchmarkService.deleteCustomBenchmark(testOrgId, created.id, siteAdminUserId);
+
+      const benchmarks = await storage.getCustomBenchmarksForOrg(testOrgId);
+      expect(benchmarks.some(b => b.id === created.id)).toBe(false);
+    });
+  });
 });
