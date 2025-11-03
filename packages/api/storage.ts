@@ -3373,6 +3373,305 @@ export class DatabaseStorage implements IStorage {
     await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, id));
   }
 
+  // ========================================================================
+  // CUSTOM BENCHMARKS (Org-created benchmarks)
+  // ========================================================================
+
+  async getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]> {
+    const conditions = [eq(customBenchmarks.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(customBenchmarks.isActive, true));
+    }
+
+    const results = await db
+      .select()
+      .from(customBenchmarks)
+      .where(and(...conditions))
+      .orderBy(asc(customBenchmarks.displayOrder), asc(customBenchmarks.name));
+
+    return results;
+  }
+
+  async createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark> {
+    const [created] = await db
+      .insert(customBenchmarks)
+      .values({
+        ...benchmark,
+        // Convert numeric value to string for decimal column
+        benchmarkValue: String(benchmark.benchmarkValue),
+        createdBy,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async updateCustomBenchmark(organizationId: string, id: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark> {
+    const [updated] = await db
+      .update(customBenchmarks)
+      .set({
+        ...benchmark,
+        // Convert numeric value to string for decimal column
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? String(benchmark.benchmarkValue) : undefined,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(customBenchmarks.id, id),
+          eq(customBenchmarks.organizationId, organizationId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Custom benchmark with id ${id} not found for organization ${organizationId}`);
+    }
+
+    return updated;
+  }
+
+  async deleteCustomBenchmark(organizationId: string, id: string): Promise<void> {
+    const result = await db
+      .delete(customBenchmarks)
+      .where(
+        and(
+          eq(customBenchmarks.id, id),
+          eq(customBenchmarks.organizationId, organizationId)
+        )
+      )
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Custom benchmark with id ${id} not found for organization ${organizationId}`);
+    }
+  }
+
+  // Organization Benchmarks Enablement
+
+  async getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]> {
+    const conditions = [eq(organizationBenchmarks.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(organizationBenchmarks.isEnabled, true));
+    }
+
+    return await db
+      .select()
+      .from(organizationBenchmarks)
+      .where(and(...conditions))
+      .orderBy(asc(organizationBenchmarks.createdAt));
+  }
+
+  async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
+    // Check if already exists
+    const [existing] = await db
+      .select()
+      .from(organizationBenchmarks)
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.benchmarkId, benchmarkId),
+          eq(organizationBenchmarks.benchmarkType, benchmarkType)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      // If already exists, just update to enabled
+      const [updated] = await db
+        .update(organizationBenchmarks)
+        .set({
+          isEnabled: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(organizationBenchmarks.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    // Create new enablement record
+    const [created] = await db
+      .insert(organizationBenchmarks)
+      .values({
+        organizationId,
+        benchmarkId,
+        benchmarkType,
+        isEnabled: true,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async disableBenchmarkForOrg(organizationId: string, benchmarkId: string): Promise<OrganizationBenchmark> {
+    const [updated] = await db
+      .update(organizationBenchmarks)
+      .set({
+        isEnabled: false,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.benchmarkId, benchmarkId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Organization benchmark not found for organization ${organizationId} and benchmark ${benchmarkId}`);
+    }
+
+    return updated;
+  }
+
+  async updateOrganizationBenchmarkSettings(organizationId: string, benchmarkId: string, settings: Partial<UpdateOrganizationBenchmark>): Promise<OrganizationBenchmark> {
+    const [updated] = await db
+      .update(organizationBenchmarks)
+      .set({
+        ...settings,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.benchmarkId, benchmarkId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Organization benchmark not found for organization ${organizationId} and benchmark ${benchmarkId}`);
+    }
+
+    return updated;
+  }
+
+  // Evaluation Queries
+
+  async getApplicableBenchmarks(
+    organizationId: string,
+    metricCode: string,
+    athleteAttributes: {
+      gender?: string;
+      age?: number;
+      position?: string;
+      level?: string;
+    }
+  ): Promise<(SiteBenchmark | CustomBenchmark)[]> {
+    // Build filter conditions for athlete attributes
+    const buildAttributeFilters = (tableName: typeof siteBenchmarks | typeof customBenchmarks) => {
+      const conditions: SQL[] = [
+        eq(tableName.metricCode, metricCode),
+        eq(tableName.isActive, true)
+      ];
+
+      // Gender filter: NULL OR matches
+      if (athleteAttributes.gender) {
+        conditions.push(
+          or(
+            isNull(tableName.gender),
+            eq(tableName.gender, athleteAttributes.gender)
+          )!
+        );
+      }
+
+      // Age filter: (ageMin IS NULL OR ageMin <= age) AND (ageMax IS NULL OR ageMax >= age)
+      if (athleteAttributes.age !== undefined) {
+        conditions.push(
+          or(
+            isNull(tableName.ageMin),
+            lte(tableName.ageMin, athleteAttributes.age)
+          )!
+        );
+        conditions.push(
+          or(
+            isNull(tableName.ageMax),
+            gte(tableName.ageMax, athleteAttributes.age)
+          )!
+        );
+      }
+
+      // Position filter: NULL OR matches
+      if (athleteAttributes.position) {
+        conditions.push(
+          or(
+            isNull(tableName.position),
+            eq(tableName.position, athleteAttributes.position)
+          )!
+        );
+      }
+
+      // Level filter: NULL OR matches
+      if (athleteAttributes.level) {
+        conditions.push(
+          or(
+            isNull(tableName.level),
+            eq(tableName.level, athleteAttributes.level)
+          )!
+        );
+      }
+
+      return conditions;
+    };
+
+    // Get enabled site benchmarks for this organization
+    const enabledSiteBenchmarks = await db
+      .select({
+        benchmark: siteBenchmarks,
+        orgBenchmark: organizationBenchmarks
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(
+        siteBenchmarks,
+        and(
+          eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
+          eq(organizationBenchmarks.benchmarkType, 'site')
+        )
+      )
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.isEnabled, true),
+          ...buildAttributeFilters(siteBenchmarks)
+        )
+      );
+
+    // Get enabled custom benchmarks for this organization
+    const enabledCustomBenchmarks = await db
+      .select({
+        benchmark: customBenchmarks,
+        orgBenchmark: organizationBenchmarks
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(
+        customBenchmarks,
+        and(
+          eq(organizationBenchmarks.benchmarkId, customBenchmarks.id),
+          eq(organizationBenchmarks.benchmarkType, 'custom')
+        )
+      )
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.isEnabled, true),
+          eq(customBenchmarks.organizationId, organizationId), // Security: ensure custom benchmark belongs to org
+          ...buildAttributeFilters(customBenchmarks)
+        )
+      );
+
+    // Combine results (UNION)
+    const allBenchmarks = [
+      ...enabledSiteBenchmarks.map(row => row.benchmark),
+      ...enabledCustomBenchmarks.map(row => row.benchmark)
+    ];
+
+    return allBenchmarks;
+  }
+
 }
 
 export const storage = new DatabaseStorage();
