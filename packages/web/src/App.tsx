@@ -27,6 +27,7 @@ const UserManagement = React.lazy(() => import("./pages/user-management"));
 const Profile = React.lazy(() => import("./pages/profile"));
 const UserProfile = React.lazy(() => import("./pages/user-profile"));
 const OrganizationProfile = React.lazy(() => import("./pages/organization-profile"));
+const OrganizationSettings = React.lazy(() => import("./pages/organization-settings"));
 const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
 const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
@@ -65,6 +66,11 @@ function Router() {
       <Route path="/athletes">
         <RouteWrapper loadingText="Loading Athletes...">
           <Athletes />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id/settings">
+        <RouteWrapper loadingText="Loading Organization Settings...">
+          <OrganizationSettings />
         </RouteWrapper>
       </Route>
       <Route path="/organizations/:id">

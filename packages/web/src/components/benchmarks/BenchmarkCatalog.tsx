@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useSiteBenchmarks, useCustomBenchmarks } from "@/lib/benchmarks-api";
+import { useState, useMemo } from "react";
+import { useSiteBenchmarks, useCustomBenchmarks, useOrganizationBenchmarks } from "@/lib/benchmarks-api";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,22 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
     false
   );
 
-  const isLoading = loadingSite || loadingCustom;
+  // Fetch organization enablement status for all benchmarks (include inactive to see all)
+  const { data: orgBenchmarks, isLoading: loadingOrgBenchmarks } = useOrganizationBenchmarks(
+    organizationId,
+    true // include all, even disabled ones
+  );
+
+  const isLoading = loadingSite || loadingCustom || loadingOrgBenchmarks;
+
+  // Create a map of benchmark enablement status for this org
+  const enablementMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    orgBenchmarks?.forEach(ob => {
+      map.set(ob.benchmarkId, ob.isEnabled);
+    });
+    return map;
+  }, [orgBenchmarks]);
 
   // Filter site benchmarks
   const filteredSiteBenchmarks = siteBenchmarks?.filter((benchmark) => {
@@ -134,7 +149,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                             organizationId={organizationId}
                             benchmarkId={benchmark.id}
                             benchmarkType="site"
-                            isEnabled={benchmark.isActive} // TODO: Track org enablement
+                            isEnabled={enablementMap.get(benchmark.id) ?? false}
                           />
                         </div>
                       </div>
@@ -192,7 +207,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                             organizationId={organizationId}
                             benchmarkId={benchmark.id}
                             benchmarkType="custom"
-                            isEnabled={benchmark.isActive} // TODO: Track org enablement
+                            isEnabled={enablementMap.get(benchmark.id) ?? false}
                           />
                         </div>
                       </div>

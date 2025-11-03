@@ -4,9 +4,13 @@
  * Apply manual SQL migrations that don't have drizzle snapshots
  *
  * Background:
- * Migrations 0014-0021 were added to the migration journal but lack the snapshot
+ * Migrations 0014+ were added to the migration journal but lack the snapshot
  * JSON files required by drizzle's migrate() function. This script applies them
  * as pure SQL migrations with separate tracking.
+ *
+ * Discovery:
+ * Automatically discovers all migration files matching pattern ####_*.sql where
+ * the migration number is >= 0014. New manual migrations are picked up automatically.
  *
  * Safety:
  * - Migrations run in transactions when possible (auto-rollback on failure)
@@ -19,25 +23,39 @@
  */
 
 import postgres from 'postgres';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Migrations to apply (in order)
-// These correspond to migrations in migrations/meta/_journal.json that lack snapshots
-const MANUAL_MIGRATIONS = [
-  '0014_add_organization_soft_delete_indexes',
-  '0015_add_measurements_organization_columns',
-  '0016_add_measurements_table_indexes',
-  '0017_add_composite_analytics_indexes',
-  '0018_add_org_query_composite_indexes',
-  '0019_add_user_teams_temporal_index',
-  '0020_add_measurements_org_metric_analytics_index',
-  '0021_backfill_measurements_org_from_users',
-];
+// Dynamically discover all manual migrations (0014 and above)
+// These correspond to migrations that lack drizzle snapshots or are pure SQL migrations
+function discoverManualMigrations() {
+  const migrationsDir = join(__dirname, '..', 'migrations');
+  const files = readdirSync(migrationsDir);
+
+  // Filter for migration files matching pattern: ####_name.sql where #### >= 0014
+  const migrations = files
+    .filter(file => {
+      const match = file.match(/^(\d{4})_.*\.sql$/);
+      if (!match) return false;
+      const migrationNumber = parseInt(match[1], 10);
+      return migrationNumber >= 14; // Only manual migrations (0014+)
+    })
+    .map(file => file.replace('.sql', '')) // Remove .sql extension
+    .sort((a, b) => {
+      // Sort numerically by migration number
+      const numA = parseInt(a.match(/^(\d{4})/)[1], 10);
+      const numB = parseInt(b.match(/^(\d{4})/)[1], 10);
+      return numA - numB;
+    });
+
+  return migrations;
+}
+
+const MANUAL_MIGRATIONS = discoverManualMigrations();
 
 async function applyManualMigrations() {
   const DATABASE_URL = process.env.DATABASE_URL;
@@ -50,7 +68,8 @@ async function applyManualMigrations() {
   console.log('🔄 Manual SQL Migrations');
   console.log('========================\n');
   console.log(`Database: ${DATABASE_URL.split('@')[1]?.split('?')[0] || 'unknown'}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}\n`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Discovered: ${MANUAL_MIGRATIONS.length} migration(s)\n`);
 
   const sql = postgres(DATABASE_URL, {
     max: 1,

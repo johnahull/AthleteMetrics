@@ -478,6 +478,28 @@ export const updateOrganizationStatusSchema = z.object({
   isActive: z.boolean(),
 });
 
+// Organization general update schema (for settings page)
+export const updateOrganizationSchema = z.object({
+  name: z.string().min(1, "Organization name is required").max(200, "Organization name must be 200 characters or less").optional(),
+  description: z.string().max(1000, "Description must be 1000 characters or less").optional().nullable(),
+  location: z.string().max(200, "Location must be 200 characters or less").optional().nullable(),
+  isActive: z.boolean().optional(),
+  benchmarksEnabled: z.boolean().optional(),
+  allowCustomBenchmarks: z.boolean().optional(),
+}).refine(
+  (data) => {
+    // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
+    if (data.allowCustomBenchmarks === true && data.benchmarksEnabled === false) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Custom benchmarks can only be enabled when benchmarks feature is enabled",
+    path: ["allowCustomBenchmarks"],
+  }
+);
+
 // Organization deletion validation schema
 export const deleteOrganizationSchema = z.object({
   confirmationName: z.string().min(1, "Organization name confirmation is required"),
@@ -838,6 +860,7 @@ export const updateOrganizationBenchmarkSchema = z.object({
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
+export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
 export type UpdateOrganizationStatus = z.infer<typeof updateOrganizationStatusSchema>;
 export type DeleteOrganization = z.infer<typeof deleteOrganizationSchema>;
 
