@@ -4,7 +4,7 @@ import {
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
-  type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark,
+  type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   type InsertSiteMetric, type InsertOrganizationMetric,
   type InsertSiteBenchmark, type InsertCustomBenchmark, type InsertOrganizationBenchmark,
@@ -247,6 +247,7 @@ export interface IStorage {
 
   // Organization Benchmarks (Org-level benchmark enablement)
   getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]>;
+  getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]>;
   enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
   disableBenchmarkForOrg(organizationId: string, benchmarkId: string): Promise<OrganizationBenchmark>;
 }
@@ -3498,6 +3499,94 @@ export class DatabaseStorage implements IStorage {
       .from(organizationBenchmarks)
       .where(and(...conditions))
       .orderBy(asc(organizationBenchmarks.createdAt));
+  }
+
+  async getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]> {
+    const conditions = [eq(organizationBenchmarks.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(organizationBenchmarks.isEnabled, true));
+    }
+
+    // Fetch site benchmarks with JOIN
+    const siteBenchmarksResults = await db
+      .select({
+        // Organization benchmark fields
+        id: organizationBenchmarks.id,
+        organizationId: organizationBenchmarks.organizationId,
+        benchmarkId: organizationBenchmarks.benchmarkId,
+        benchmarkType: organizationBenchmarks.benchmarkType,
+        isEnabled: organizationBenchmarks.isEnabled,
+        customName: organizationBenchmarks.customName,
+        displayOrder: organizationBenchmarks.displayOrder,
+        createdAt: organizationBenchmarks.createdAt,
+        updatedAt: organizationBenchmarks.updatedAt,
+        // Site benchmark details
+        name: siteBenchmarks.name,
+        metricCode: siteBenchmarks.metricCode,
+        description: siteBenchmarks.description,
+        benchmarkValue: siteBenchmarks.benchmarkValue,
+        comparisonOperator: siteBenchmarks.comparisonOperator,
+        gender: siteBenchmarks.gender,
+        ageMin: siteBenchmarks.ageMin,
+        ageMax: siteBenchmarks.ageMax,
+        position: siteBenchmarks.position,
+        level: siteBenchmarks.level,
+        isActive: siteBenchmarks.isActive,
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(siteBenchmarks, eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id))
+      .where(and(
+        eq(organizationBenchmarks.benchmarkType, 'site'),
+        ...conditions
+      ))
+      .orderBy(asc(organizationBenchmarks.createdAt));
+
+    // Fetch custom benchmarks with JOIN
+    const customBenchmarksResults = await db
+      .select({
+        // Organization benchmark fields
+        id: organizationBenchmarks.id,
+        organizationId: organizationBenchmarks.organizationId,
+        benchmarkId: organizationBenchmarks.benchmarkId,
+        benchmarkType: organizationBenchmarks.benchmarkType,
+        isEnabled: organizationBenchmarks.isEnabled,
+        customName: organizationBenchmarks.customName,
+        displayOrder: organizationBenchmarks.displayOrder,
+        createdAt: organizationBenchmarks.createdAt,
+        updatedAt: organizationBenchmarks.updatedAt,
+        // Custom benchmark details
+        name: customBenchmarks.name,
+        metricCode: customBenchmarks.metricCode,
+        description: customBenchmarks.description,
+        benchmarkValue: customBenchmarks.benchmarkValue,
+        comparisonOperator: customBenchmarks.comparisonOperator,
+        gender: customBenchmarks.gender,
+        ageMin: customBenchmarks.ageMin,
+        ageMax: customBenchmarks.ageMax,
+        position: customBenchmarks.position,
+        level: customBenchmarks.level,
+        isActive: customBenchmarks.isActive,
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(customBenchmarks, eq(organizationBenchmarks.benchmarkId, customBenchmarks.id))
+      .where(and(
+        eq(organizationBenchmarks.benchmarkType, 'custom'),
+        ...conditions
+      ))
+      .orderBy(asc(organizationBenchmarks.createdAt));
+
+    // Combine and format results
+    const allResults = [...siteBenchmarksResults, ...customBenchmarksResults];
+
+    // Convert to OrganizationBenchmarkWithDetails type
+    return allResults.map(row => ({
+      ...row,
+      benchmarkValue: Number(row.benchmarkValue),
+      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq',
+      gender: row.gender as 'Male' | 'Female' | 'Not Specified' | null,
+      level: row.level as 'college' | 'high_school' | 'club' | null,
+    }));
   }
 
   async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {

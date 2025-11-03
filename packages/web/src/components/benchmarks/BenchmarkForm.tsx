@@ -96,7 +96,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         description: benchmark.description || "",
         benchmarkValue: parseFloat(benchmark.benchmarkValue),
         comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
-        gender: benchmark.gender as 'Male' | 'Female' | 'Other' | undefined,
+        gender: benchmark.gender as 'Male' | 'Female' | 'Not Specified' | undefined,
         ageMin: benchmark.ageMin || undefined,
         ageMax: benchmark.ageMax || undefined,
         position: benchmark.position || undefined,

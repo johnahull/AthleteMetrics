@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS site_benchmarks (
     age_min IS NULL OR age_max IS NULL OR age_min <= age_max
   ),
   CONSTRAINT site_benchmarks_gender_valid CHECK (
-    gender IS NULL OR gender IN ('Male', 'Female', 'Other')
+    gender IS NULL OR gender IN ('Male', 'Female', 'Not Specified')
   ),
   CONSTRAINT site_benchmarks_value_positive CHECK (
     benchmark_value > 0
@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS site_benchmarks (
 CREATE INDEX IF NOT EXISTS site_benchmarks_metric_idx ON site_benchmarks(metric_code);
 CREATE INDEX IF NOT EXISTS site_benchmarks_active_idx ON site_benchmarks(is_active);
 CREATE INDEX IF NOT EXISTS site_benchmarks_metric_active_idx ON site_benchmarks(metric_code, is_active);
+-- Composite index for benchmark filtering (optimizes getAthleteBenchmarkStatus queries)
+CREATE INDEX IF NOT EXISTS site_benchmarks_filters_idx ON site_benchmarks(metric_code, gender, level) INCLUDE (age_min, age_max, position, is_active);
 
 -- Add comments for documentation
 COMMENT ON TABLE site_benchmarks IS 'Site-level benchmark definitions (master catalog) managed by site admins';
@@ -119,7 +121,7 @@ CREATE TABLE IF NOT EXISTS custom_benchmarks (
     age_min IS NULL OR age_max IS NULL OR age_min <= age_max
   ),
   CONSTRAINT custom_benchmarks_gender_valid CHECK (
-    gender IS NULL OR gender IN ('Male', 'Female', 'Other')
+    gender IS NULL OR gender IN ('Male', 'Female', 'Not Specified')
   ),
   CONSTRAINT custom_benchmarks_value_positive CHECK (
     benchmark_value > 0
@@ -165,7 +167,8 @@ CREATE TABLE IF NOT EXISTS organization_benchmarks (
 );
 
 -- Create indexes for efficient queries
-CREATE INDEX IF NOT EXISTS org_benchmarks_org_idx ON organization_benchmarks(organization_id);
+-- Note: org_benchmarks_org_idx is redundant due to leftmost prefix rule
+-- org_benchmarks_org_enabled_idx covers single-column queries on organization_id
 CREATE INDEX IF NOT EXISTS org_benchmarks_org_enabled_idx ON organization_benchmarks(organization_id, is_enabled);
 CREATE INDEX IF NOT EXISTS org_benchmarks_benchmark_idx ON organization_benchmarks(benchmark_id, benchmark_type);
 
@@ -200,19 +203,21 @@ COMMENT ON COLUMN organizations.allow_custom_benchmarks IS 'Site admin setting: 
 -- ============================================================================
 
 -- Insert example benchmarks as system defaults (cannot be deleted)
-INSERT INTO site_benchmarks (metric_code, name, description, benchmark_value, comparison_operator, is_system_default, is_active, display_order, color, icon, gender, age_min, age_max, level)
+-- Use INSERT ... ON CONFLICT to make idempotent (safe for re-runs)
+INSERT INTO site_benchmarks (id, metric_code, name, description, benchmark_value, comparison_operator, is_system_default, is_active, display_order, color, icon, gender, age_min, age_max, level)
 VALUES
   -- 10-Yard Fly Time benchmarks (lower is better)
-  ('FLY10_TIME', 'Elite Speed', 'Elite-level 10-yard fly time', 1.00, 'lte', true, true, 1, 'emerald', 'Zap', NULL, NULL, NULL, NULL),
-  ('FLY10_TIME', 'College Level', 'College-level 10-yard fly time', 1.20, 'lte', true, true, 2, 'blue', 'Target', NULL, NULL, NULL, 'College'),
+  ('00000000-0000-0000-0000-000000000001', 'FLY10_TIME', 'Elite Speed', 'Elite-level 10-yard fly time', 1.00, 'lte', true, true, 1, 'emerald', 'Zap', NULL, NULL, NULL, NULL),
+  ('00000000-0000-0000-0000-000000000002', 'FLY10_TIME', 'College Level', 'College-level 10-yard fly time', 1.20, 'lte', true, true, 2, 'blue', 'Target', NULL, NULL, NULL, 'College'),
 
   -- Vertical Jump benchmarks (higher is better)
-  ('VERTICAL_JUMP', 'Elite Power', 'Elite-level vertical jump height', 32.0, 'gte', true, true, 3, 'purple', 'TrendingUp', NULL, NULL, NULL, NULL),
-  ('VERTICAL_JUMP', 'College Level', 'College-level vertical jump height', 26.0, 'gte', true, true, 4, 'indigo', 'Target', NULL, NULL, NULL, 'College'),
+  ('00000000-0000-0000-0000-000000000003', 'VERTICAL_JUMP', 'Elite Power', 'Elite-level vertical jump height', 32.0, 'gte', true, true, 3, 'purple', 'TrendingUp', NULL, NULL, NULL, NULL),
+  ('00000000-0000-0000-0000-000000000004', 'VERTICAL_JUMP', 'College Level', 'College-level vertical jump height', 26.0, 'gte', true, true, 4, 'indigo', 'Target', NULL, NULL, NULL, 'College'),
 
   -- 40-Yard Dash benchmarks (lower is better)
-  ('DASH_40YD', 'Elite Speed', 'Elite-level 40-yard dash time', 4.50, 'lte', true, true, 5, 'red', 'Zap', NULL, NULL, NULL, NULL),
-  ('DASH_40YD', 'College Level', 'College-level 40-yard dash time', 5.00, 'lte', true, true, 6, 'orange', 'Target', NULL, NULL, NULL, 'College');
+  ('00000000-0000-0000-0000-000000000005', 'DASH_40YD', 'Elite Speed', 'Elite-level 40-yard dash time', 4.50, 'lte', true, true, 5, 'red', 'Zap', NULL, NULL, NULL, NULL),
+  ('00000000-0000-0000-0000-000000000006', 'DASH_40YD', 'College Level', 'College-level 40-yard dash time', 5.00, 'lte', true, true, 6, 'orange', 'Target', NULL, NULL, NULL, 'College')
+ON CONFLICT (id) DO NOTHING;
 
 -- Log seed completion
 DO $$
@@ -223,6 +228,52 @@ END $$;
 -- ============================================================================
 -- PART 6: UPDATE AUDIT LOGS CONSTRAINTS (Add benchmark actions)
 -- ============================================================================
+
+-- Validate existing audit log data before modifying constraints
+DO $$
+DECLARE
+  invalid_actions_count INTEGER;
+  invalid_resource_types_count INTEGER;
+BEGIN
+  -- Check for invalid actions
+  SELECT COUNT(*) INTO invalid_actions_count
+  FROM audit_logs
+  WHERE action NOT IN (
+    'organization_created', 'organization_deactivated', 'organization_reactivated',
+    'organization_deleted', 'organization_dependencies_viewed',
+    'site_admin_access', 'site_admin_organization_access', 'user_created', 'user_updated',
+    'user_deleted', 'user_role_changed', 'role_changed',
+    'password_reset_unknown_email', 'email_verification_requested', 'password_change_failed',
+    'privilege_restoration_blocked', 'admin_password_synced', 'privilege_restored',
+    'team_created', 'team_updated', 'team_deleted', 'team_archived',
+    'measurement_created', 'measurement_updated', 'measurement_deleted',
+    'invitation_created', 'invitation_accepted', 'invitation_cancelled', 'invitation_resent',
+    'sessions_revoked', 'zombie_sessions_cleaned', 'zombie_cleanup_failed', 'session_revocation_failed',
+    'metric_created', 'metric_updated', 'metric_enabled', 'metric_disabled', 'metric_deleted',
+    'org_metric_enabled', 'org_metric_disabled', 'org_metric_updated', 'org_metrics_bulk_enabled',
+    'benchmark_created', 'benchmark_updated', 'benchmark_enabled', 'benchmark_disabled', 'benchmark_deleted',
+    'custom_benchmark_created', 'custom_benchmark_updated', 'custom_benchmark_deleted',
+    'org_benchmark_enabled', 'org_benchmark_disabled', 'org_benchmark_updated'
+  );
+
+  IF invalid_actions_count > 0 THEN
+    RAISE EXCEPTION 'Migration aborted: Found % audit log entries with invalid actions. Clean up data before proceeding.', invalid_actions_count;
+  END IF;
+
+  -- Check for invalid resource types
+  SELECT COUNT(*) INTO invalid_resource_types_count
+  FROM audit_logs
+  WHERE resource_type NOT IN (
+    'organization', 'user', 'team', 'measurement', 'invitation', 'session', 'site_metric',
+    'site_benchmark', 'custom_benchmark', 'organization_benchmark'
+  );
+
+  IF invalid_resource_types_count > 0 THEN
+    RAISE EXCEPTION 'Migration aborted: Found % audit log entries with invalid resource types. Clean up data before proceeding.', invalid_resource_types_count;
+  END IF;
+
+  RAISE NOTICE 'Pre-validation passed: All existing audit log data is valid';
+END $$;
 
 -- Drop existing CHECK constraints
 ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;

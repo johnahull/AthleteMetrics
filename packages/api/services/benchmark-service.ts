@@ -596,49 +596,8 @@ export class BenchmarkService extends BaseService {
         throw new Error("Unauthorized: Cannot access benchmarks for this organization");
       }
 
-      // Get organization benchmark enablement records
-      const orgBenchmarks = await this.storage.getOrganizationBenchmarks(organizationId, filters);
-
-      // Fetch full details for each benchmark
-      const enrichedBenchmarks: OrganizationBenchmarkWithDetails[] = [];
-
-      for (const orgBenchmark of orgBenchmarks) {
-        try {
-          let benchmarkDetails: SiteBenchmark | CustomBenchmark | null | undefined = null;
-
-          if (orgBenchmark.benchmarkType === 'site') {
-            benchmarkDetails = await this.storage.getSiteBenchmark(orgBenchmark.benchmarkId);
-          } else if (orgBenchmark.benchmarkType === 'custom') {
-            benchmarkDetails = await this.storage.getCustomBenchmark(orgBenchmark.benchmarkId);
-          }
-
-          // Skip if benchmark details not found
-          if (!benchmarkDetails) {
-            console.warn(`Benchmark details not found for ${orgBenchmark.benchmarkType} benchmark ${orgBenchmark.benchmarkId}`);
-            continue;
-          }
-
-          // Merge organization benchmark with full details
-          enrichedBenchmarks.push({
-            ...orgBenchmark,
-            name: benchmarkDetails.name,
-            metricCode: benchmarkDetails.metricCode,
-            description: benchmarkDetails.description,
-            benchmarkValue: Number(benchmarkDetails.benchmarkValue),
-            comparisonOperator: benchmarkDetails.comparisonOperator as 'lte' | 'gte' | 'eq',
-            ageMin: benchmarkDetails.ageMin,
-            ageMax: benchmarkDetails.ageMax,
-            gender: benchmarkDetails.gender as 'male' | 'female' | 'other' | null,
-            position: benchmarkDetails.position,
-            level: benchmarkDetails.level as 'college' | 'high_school' | 'club' | null,
-            // isActive only exists on site benchmarks
-            isActive: 'isActive' in benchmarkDetails ? benchmarkDetails.isActive : undefined,
-          });
-        } catch (error) {
-          console.error(`Failed to fetch details for benchmark ${orgBenchmark.benchmarkId}:`, error);
-          // Continue processing other benchmarks
-        }
-      }
+      // Get organization benchmarks with full details in a single query (optimized to avoid N+1 problem)
+      const enrichedBenchmarks = await this.storage.getOrganizationBenchmarksWithDetails(organizationId, filters);
 
       return enrichedBenchmarks;
     } catch (error) {

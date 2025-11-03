@@ -15,7 +15,7 @@ export abstract class BaseService {
   /**
    * Check if user is a site administrator
    */
-  protected async isSiteAdmin(userId: string): Promise<boolean> {
+  public async isSiteAdmin(userId: string): Promise<boolean> {
     const user = await this.storage.getUser(userId);
     return user?.isSiteAdmin === true;
   }

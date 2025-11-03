@@ -213,7 +213,7 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
   uniqueOrgBenchmark: unique().on(table.organizationId, table.benchmarkId, table.benchmarkType),
-  orgIdx: index("org_benchmarks_org_idx").on(table.organizationId),
+  // Note: orgIdx removed as redundant (org_benchmarks_org_enabled_idx covers single-column queries via leftmost prefix rule)
   orgEnabledIdx: index("org_benchmarks_org_enabled_idx").on(table.organizationId, table.isEnabled),
   benchmarkIdx: index("org_benchmarks_benchmark_idx").on(table.benchmarkId, table.benchmarkType),
 }));
@@ -777,7 +777,7 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   description: z.string().optional(),
   benchmarkValue: z.number().positive("Benchmark value must be positive"),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
-  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
@@ -801,7 +801,7 @@ export const updateSiteBenchmarkSchema = z.object({
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
-  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
@@ -832,7 +832,7 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
   description: z.string().optional(),
   benchmarkValue: z.number().positive("Benchmark value must be positive"),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
-  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
@@ -856,7 +856,7 @@ export const updateCustomBenchmarkSchema = z.object({
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
-  gender: z.enum(['Male', 'Female', 'Other']).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
   position: z.string().max(50).optional(),
@@ -984,7 +984,7 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   // Athlete filters
   ageMin: number | null;
   ageMax: number | null;
-  gender: 'Male' | 'Female' | 'Other' | null;
+  gender: 'Male' | 'Female' | 'Not Specified' | null;
   position: string | null;
   level: 'college' | 'high_school' | 'club' | null;
   // Status (from site benchmarks only, custom benchmarks don't have isActive)

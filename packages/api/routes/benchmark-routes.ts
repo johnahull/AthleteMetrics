@@ -85,10 +85,19 @@ export function registerBenchmarkRoutes(app: Express) {
   app.get("/api/benchmarks/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const userId = req.session.user!.id;
       const benchmark = await benchmarkService.getSiteBenchmark(id);
 
       if (!benchmark) {
         return res.status(404).json({ message: "Benchmark not found" });
+      }
+
+      // Non-site-admins can only view active benchmarks
+      if (!benchmark.isActive) {
+        const isSiteAdmin = await benchmarkService.isSiteAdmin(userId);
+        if (!isSiteAdmin) {
+          return res.status(404).json({ message: "Benchmark not found" });
+        }
       }
 
       res.json(benchmark);
