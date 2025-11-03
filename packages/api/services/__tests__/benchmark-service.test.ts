@@ -541,4 +541,132 @@ describe('Benchmark Service', () => {
       expect(benchmarks.some(b => b.id === created.id)).toBe(false);
     });
   });
+
+  describe('Enablement Operations', () => {
+    let siteBenchmarkId: string;
+    let customBenchmarkId: string;
+
+    beforeEach(async () => {
+      // Create a site benchmark for testing
+      const siteBenchmark = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'Site Benchmark for Enablement',
+        benchmarkValue: 1.00,
+      }, siteAdminUserId);
+      siteBenchmarkId = siteBenchmark.id;
+      createdBenchmarkIds.push(siteBenchmarkId);
+
+      // Create a custom benchmark for testing
+      const customBenchmark = await storage.createCustomBenchmark({
+        organizationId: testOrgId,
+        metricCode: testMetricCode,
+        name: 'Custom Benchmark for Enablement',
+        benchmarkValue: 1.10,
+      }, orgAdminUserId);
+      customBenchmarkId = customBenchmark.id;
+      createdBenchmarkIds.push(customBenchmarkId);
+    });
+
+    // Cycle 12: enableBenchmarkForOrg() requires org admin OR site admin
+    it('should throw error if regular user tries to enable benchmark', async () => {
+      await expect(
+        benchmarkService.enableBenchmarkForOrg(testOrgId, siteBenchmarkId, 'site', regularUserId)
+      ).rejects.toThrow('Unauthorized');
+    });
+
+    it('should allow org admin to enable benchmark for their org', async () => {
+      const enabled = await benchmarkService.enableBenchmarkForOrg(
+        testOrgId,
+        siteBenchmarkId,
+        'site',
+        orgAdminUserId
+      );
+
+      expect(enabled).toBeDefined();
+      expect(enabled.benchmarkId).toBe(siteBenchmarkId);
+      expect(enabled.organizationId).toBe(testOrgId);
+      expect(enabled.isEnabled).toBe(true);
+    });
+
+    it('should allow site admin to enable benchmark for any org', async () => {
+      const enabled = await benchmarkService.enableBenchmarkForOrg(
+        testOrgId,
+        siteBenchmarkId,
+        'site',
+        siteAdminUserId
+      );
+
+      expect(enabled).toBeDefined();
+      expect(enabled.benchmarkId).toBe(siteBenchmarkId);
+      expect(enabled.isEnabled).toBe(true);
+    });
+
+    // Cycle 13: enableBenchmarkForOrg() fails if benchmarks_enabled = false
+    it('should throw error if benchmarks are not enabled for organization', async () => {
+      // Disable benchmarks for org
+      await db.update(organizations)
+        .set({ benchmarksEnabled: false })
+        .where(eq(organizations.id, testOrgId));
+
+      await expect(
+        benchmarkService.enableBenchmarkForOrg(testOrgId, siteBenchmarkId, 'site', orgAdminUserId)
+      ).rejects.toThrow('not enabled');
+
+      // Re-enable for other tests
+      await db.update(organizations)
+        .set({ benchmarksEnabled: true })
+        .where(eq(organizations.id, testOrgId));
+    });
+
+    it('should allow enabling benchmark when feature is enabled', async () => {
+      const enabled = await benchmarkService.enableBenchmarkForOrg(
+        testOrgId,
+        customBenchmarkId,
+        'custom',
+        orgAdminUserId
+      );
+
+      expect(enabled).toBeDefined();
+      expect(enabled.benchmarkType).toBe('custom');
+      expect(enabled.isEnabled).toBe(true);
+    });
+
+    // Cycle 14: disableBenchmarkForOrg() requires org admin OR site admin
+    it('should throw error if regular user tries to disable benchmark', async () => {
+      // Enable it first
+      await storage.enableBenchmarkForOrg(testOrgId, siteBenchmarkId, 'site');
+
+      await expect(
+        benchmarkService.disableBenchmarkForOrg(testOrgId, siteBenchmarkId, regularUserId)
+      ).rejects.toThrow('Unauthorized');
+    });
+
+    it('should allow org admin to disable benchmark for their org', async () => {
+      // Enable it first
+      await storage.enableBenchmarkForOrg(testOrgId, siteBenchmarkId, 'site');
+
+      const disabled = await benchmarkService.disableBenchmarkForOrg(
+        testOrgId,
+        siteBenchmarkId,
+        orgAdminUserId
+      );
+
+      expect(disabled).toBeDefined();
+      expect(disabled.isEnabled).toBe(false);
+    });
+
+    it('should allow site admin to disable benchmark for any org', async () => {
+      // Enable it first
+      await storage.enableBenchmarkForOrg(testOrgId, customBenchmarkId, 'custom');
+
+      const disabled = await benchmarkService.disableBenchmarkForOrg(
+        testOrgId,
+        customBenchmarkId,
+        siteAdminUserId
+      );
+
+      expect(disabled).toBeDefined();
+      expect(disabled.isEnabled).toBe(false);
+    });
+  });
 });

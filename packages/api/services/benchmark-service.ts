@@ -444,4 +444,146 @@ export class BenchmarkService extends BaseService {
       return this.handleError(error, "BenchmarkService.getCustomBenchmarksForOrg");
     }
   }
+
+  // ========================================================================
+  // BENCHMARK ENABLEMENT (Org Admin + Site Admin)
+  // ========================================================================
+
+  /**
+   * Enable a benchmark for an organization (org admin OR site admin)
+   * Cycle 12: Requires org admin or site admin permission
+   * Cycle 13: Validates benchmarks_enabled feature flag
+   */
+  async enableBenchmarkForOrg(
+    organizationId: string,
+    benchmarkId: string,
+    benchmarkType: 'site' | 'custom',
+    requestingUserId: string
+  ): Promise<OrganizationBenchmark> {
+    try {
+      // Cycle 12: Verify org admin OR site admin permission
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      const hasOrgAccess = await this.validateOrganizationAccess(
+        requestingUserId,
+        organizationId,
+        isSiteAdmin
+      );
+
+      if (!hasOrgAccess && !isSiteAdmin) {
+        throw new Error("Unauthorized: Only organization administrators or site administrators can enable benchmarks");
+      }
+
+      // Cycle 13: Check if benchmarks are enabled for this organization
+      const organization = await this.storage.getOrganization(organizationId);
+      if (!organization) {
+        throw new Error(`Organization with id ${organizationId} not found`);
+      }
+
+      if (!organization.benchmarksEnabled) {
+        throw new Error(`Benchmarks are not enabled for organization ${organization.name}`);
+      }
+
+      // Enable benchmark
+      const enabled = await this.storage.enableBenchmarkForOrg(organizationId, benchmarkId, benchmarkType);
+
+      // Create audit log
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_benchmark_enabled',
+          resourceType: 'organization_benchmark',
+          resourceId: enabled.id,
+          details: JSON.stringify({
+            organizationId,
+            benchmarkId,
+            benchmarkType,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('Failed to create audit log:', auditError);
+      }
+
+      return enabled;
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.enableBenchmarkForOrg");
+    }
+  }
+
+  /**
+   * Disable a benchmark for an organization (org admin OR site admin)
+   * Cycle 14: Requires org admin or site admin permission
+   */
+  async disableBenchmarkForOrg(
+    organizationId: string,
+    benchmarkId: string,
+    requestingUserId: string
+  ): Promise<OrganizationBenchmark> {
+    try {
+      // Cycle 14: Verify org admin OR site admin permission
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      const hasOrgAccess = await this.validateOrganizationAccess(
+        requestingUserId,
+        organizationId,
+        isSiteAdmin
+      );
+
+      if (!hasOrgAccess && !isSiteAdmin) {
+        throw new Error("Unauthorized: Only organization administrators or site administrators can disable benchmarks");
+      }
+
+      // Disable benchmark
+      const disabled = await this.storage.disableBenchmarkForOrg(organizationId, benchmarkId);
+
+      // Create audit log
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_benchmark_disabled',
+          resourceType: 'organization_benchmark',
+          resourceId: disabled.id,
+          details: JSON.stringify({
+            organizationId,
+            benchmarkId,
+          }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('Failed to create audit log:', auditError);
+      }
+
+      return disabled;
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.disableBenchmarkForOrg");
+    }
+  }
+
+  /**
+   * Get all enabled benchmarks for an organization
+   */
+  async getOrganizationBenchmarks(
+    organizationId: string,
+    requestingUserId: string,
+    filters?: BenchmarkFilters
+  ): Promise<OrganizationBenchmark[]> {
+    try {
+      // Verify org access
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      const hasOrgAccess = await this.validateOrganizationAccess(
+        requestingUserId,
+        organizationId,
+        isSiteAdmin
+      );
+
+      if (!hasOrgAccess && !isSiteAdmin) {
+        throw new Error("Unauthorized: Cannot access benchmarks for this organization");
+      }
+
+      return await this.storage.getOrganizationBenchmarks(organizationId, filters);
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.getOrganizationBenchmarks");
+    }
+  }
 }
