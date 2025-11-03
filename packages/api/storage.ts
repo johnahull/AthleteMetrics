@@ -228,6 +228,25 @@ export interface IStorage {
   disableMetricForOrganization(organizationId: string, metricCode: string): Promise<OrganizationMetric>;
   updateOrganizationMetric(organizationId: string, metricCode: string, data: Partial<UpdateOrganizationMetric>): Promise<OrganizationMetric>;
   bulkEnableMetricsForOrganization(organizationId: string, metricCodes: string[]): Promise<OrganizationMetric[]>;
+
+  // Site Benchmarks (Master Benchmark Catalog)
+  getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]>;
+  getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
+  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
+  updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark>;
+  toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark>;
+  deleteSiteBenchmark(id: string): Promise<void>;
+
+  // Custom Benchmarks (Org-specific benchmarks)
+  getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]>;
+  createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark>;
+  updateCustomBenchmark(organizationId: string, benchmarkId: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark>;
+  deleteCustomBenchmark(organizationId: string, benchmarkId: string): Promise<void>;
+
+  // Organization Benchmarks (Org-level benchmark enablement)
+  getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]>;
+  enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
+  disableBenchmarkForOrg(organizationId: string, benchmarkId: string): Promise<OrganizationBenchmark>;
 }
 
 export class DatabaseStorage implements IStorage {

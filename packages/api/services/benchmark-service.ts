@@ -721,17 +721,18 @@ export class BenchmarkService extends BaseService {
           return false;
         }
 
-        // Position filter (athlete.position is array)
-        if (benchmark.position !== null && athlete.position && athlete.position.length > 0) {
-          if (!athlete.position.includes(benchmark.position)) {
+        // Position filter (athlete.positions is array)
+        if (benchmark.position !== null && athlete.positions && athlete.positions.length > 0) {
+          if (!athlete.positions.includes(benchmark.position)) {
             return false;
           }
         }
 
-        // Level filter (athlete.level is single value)
-        if (benchmark.level !== null && athlete.level !== null && benchmark.level !== athlete.level) {
-          return false;
-        }
+        // Level filter (not currently in users table - skip for now)
+        // TODO: Add level field to users table if needed
+        // if (benchmark.level !== null && athlete.level !== null && benchmark.level !== athlete.level) {
+        //   return false;
+        // }
 
         return true;
       });
@@ -765,8 +766,8 @@ export class BenchmarkService extends BaseService {
             ? parseFloat(benchmark.benchmarkValue)
             : benchmark.benchmarkValue;
 
-          isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator);
-          progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator);
+          isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+          progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
         }
 
         return {
@@ -776,7 +777,7 @@ export class BenchmarkService extends BaseService {
           benchmarkValue: typeof benchmark.benchmarkValue === 'string'
             ? parseFloat(benchmark.benchmarkValue)
             : benchmark.benchmarkValue,
-          comparisonOperator: benchmark.comparisonOperator,
+          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
           athleteValue,
           isMet,
           progress,
