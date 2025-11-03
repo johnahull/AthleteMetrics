@@ -81,7 +81,7 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
             Create organization-specific benchmarks tailored to your needs
           </p>
         </div>
-        <Button onClick={handleNewBenchmark}>
+        <Button onClick={handleNewBenchmark} data-testid="new-custom-benchmark-button">
           <Plus className="mr-2 h-4 w-4" />
           New Custom Benchmark
         </Button>

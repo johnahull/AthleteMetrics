@@ -29,6 +29,46 @@ function sanitizeError(error: unknown, fallback: string): string {
   return error.message;
 }
 
+/**
+ * Standardized error handler for benchmark routes
+ * Returns appropriate HTTP status codes based on error type:
+ * - 400: Validation errors (Zod parse failures)
+ * - 403: Permission denied (Unauthorized)
+ * - 404: Resource not found
+ * - 409: Conflict (duplicate, constraint violation, cannot delete)
+ * - 500: Unexpected server errors
+ */
+function handleBenchmarkError(res: Response, error: unknown, operation: string): void {
+  if (!(error instanceof Error)) {
+    return res.status(500).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+  }
+
+  const errorMessage = error.message.toLowerCase();
+
+  // 403 - Permission denied
+  if (errorMessage.includes('unauthorized') || errorMessage.includes('permission denied') || errorMessage.includes('not allowed')) {
+    return res.status(403).json({ message: error.message });
+  }
+
+  // 404 - Not found
+  if (errorMessage.includes('not found')) {
+    return res.status(404).json({ message: error.message });
+  }
+
+  // 409 - Conflict (duplicate, cannot delete, constraint violation)
+  if (errorMessage.includes('already exists') || errorMessage.includes('cannot delete') || errorMessage.includes('system default')) {
+    return res.status(409).json({ message: error.message });
+  }
+
+  // 400 - Validation errors (including Zod parse errors)
+  if (error.name === 'ZodError' || errorMessage.includes('invalid') || errorMessage.includes('must be')) {
+    return res.status(400).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+  }
+
+  // 500 - Unexpected errors
+  return res.status(500).json({ message: sanitizeError(error, `Failed to ${operation}`) });
+}
+
 // Rate limiters
 const benchmarkCreateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -102,7 +142,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.json(benchmarks);
     } catch (error) {
       console.error("GET /api/benchmarks error:", error);
-      res.status(500).json({ message: sanitizeError(error, "Failed to fetch benchmarks") });
+      handleBenchmarkError(res, error, "fetch benchmarks");
     }
   });
 
@@ -124,7 +164,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.json(benchmark);
     } catch (error) {
       console.error("GET /api/benchmarks/:id error:", error);
-      res.status(500).json({ message: sanitizeError(error, "Failed to fetch benchmark") });
+      handleBenchmarkError(res, error, "fetch benchmark");
     }
   });
 
@@ -143,12 +183,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.status(201).json(benchmark);
     } catch (error) {
       console.error("POST /api/benchmarks error:", error);
-
-      if (error instanceof Error && error.message.includes('already exists')) {
-        return res.status(409).json({ message: error.message });
-      }
-
-      res.status(400).json({ message: sanitizeError(error, "Failed to create benchmark") });
+      handleBenchmarkError(res, error, "create benchmark");
     }
   });
 
@@ -168,12 +203,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.json(benchmark);
     } catch (error) {
       console.error("PATCH /api/benchmarks/:id error:", error);
-
-      if (error instanceof Error && error.message.includes('not found')) {
-        return res.status(404).json({ message: error.message });
-      }
-
-      res.status(400).json({ message: sanitizeError(error, "Failed to update benchmark") });
+      handleBenchmarkError(res, error, "update benchmark");
     }
   });
 
@@ -197,7 +227,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.json(benchmark);
     } catch (error) {
       console.error("PATCH /api/benchmarks/:id/status error:", error);
-      res.status(400).json({ message: sanitizeError(error, "Failed to toggle benchmark status") });
+      handleBenchmarkError(res, error, "toggle benchmark status");
     }
   });
 
@@ -216,17 +246,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.status(204).send();
     } catch (error) {
       console.error("DELETE /api/benchmarks/:id error:", error);
-
-      if (error instanceof Error) {
-        if (error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
-        }
-        if (error.message.includes('Cannot delete') || error.message.includes('system default')) {
-          return res.status(409).json({ message: error.message });
-        }
-      }
-
-      res.status(400).json({ message: sanitizeError(error, "Failed to delete benchmark") });
+      handleBenchmarkError(res, error, "delete benchmark");
     }
   });
 
@@ -254,12 +274,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.json(benchmarks);
     } catch (error) {
       console.error("GET /api/organizations/:id/benchmarks/custom error:", error);
-
-      if (error instanceof Error && error.message.includes('Unauthorized')) {
-        return res.status(403).json({ message: error.message });
-      }
-
-      res.status(500).json({ message: sanitizeError(error, "Failed to fetch custom benchmarks") });
+      handleBenchmarkError(res, error, "fetch custom benchmarks");
     }
   });
 
@@ -289,12 +304,7 @@ export function registerBenchmarkRoutes(app: Express) {
         res.status(201).json(benchmark);
       } catch (error) {
         console.error("POST /api/organizations/:id/benchmarks/custom error:", error);
-
-        if (error instanceof Error && error.message.includes('not allowed')) {
-          return res.status(403).json({ message: error.message });
-        }
-
-        res.status(400).json({ message: sanitizeError(error, "Failed to create custom benchmark") });
+        handleBenchmarkError(res, error, "create custom benchmark");
       }
     }
   );
@@ -325,12 +335,7 @@ export function registerBenchmarkRoutes(app: Express) {
         res.json(benchmark);
       } catch (error) {
         console.error("PATCH /api/organizations/:id/benchmarks/custom/:id error:", error);
-
-        if (error instanceof Error && error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
-        }
-
-        res.status(400).json({ message: sanitizeError(error, "Failed to update custom benchmark") });
+        handleBenchmarkError(res, error, "update custom benchmark");
       }
     }
   );
@@ -354,12 +359,7 @@ export function registerBenchmarkRoutes(app: Express) {
         res.status(204).send();
       } catch (error) {
         console.error("DELETE /api/organizations/:id/benchmarks/custom/:id error:", error);
-
-        if (error instanceof Error && error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
-        }
-
-        res.status(400).json({ message: sanitizeError(error, "Failed to delete custom benchmark") });
+        handleBenchmarkError(res, error, "delete custom benchmark");
       }
     }
   );
@@ -388,12 +388,7 @@ export function registerBenchmarkRoutes(app: Express) {
       res.json(benchmarks);
     } catch (error) {
       console.error("GET /api/organizations/:id/benchmarks error:", error);
-
-      if (error instanceof Error && error.message.includes('Unauthorized')) {
-        return res.status(403).json({ message: error.message });
-      }
-
-      res.status(500).json({ message: sanitizeError(error, "Failed to fetch organization benchmarks") });
+      handleBenchmarkError(res, error, "fetch organization benchmarks");
     }
   });
 
@@ -428,12 +423,7 @@ export function registerBenchmarkRoutes(app: Express) {
         res.status(201).json(enabled);
       } catch (error) {
         console.error("POST /api/organizations/:id/benchmarks/:id/enable error:", error);
-
-        if (error instanceof Error && error.message.includes('not enabled')) {
-          return res.status(403).json({ message: error.message });
-        }
-
-        res.status(400).json({ message: sanitizeError(error, "Failed to enable benchmark") });
+        handleBenchmarkError(res, error, "enable benchmark");
       }
     }
   );
@@ -463,7 +453,7 @@ export function registerBenchmarkRoutes(app: Express) {
         res.json(disabled);
       } catch (error) {
         console.error("POST /api/organizations/:id/benchmarks/:id/disable error:", error);
-        res.status(400).json({ message: sanitizeError(error, "Failed to disable benchmark") });
+        handleBenchmarkError(res, error, "disable benchmark");
       }
     }
   );
@@ -486,12 +476,7 @@ export function registerBenchmarkRoutes(app: Express) {
         res.json(status);
       } catch (error) {
         console.error("GET /api/organizations/:id/athletes/:id/benchmark-status error:", error);
-
-        if (error instanceof Error && error.message.includes('not found')) {
-          return res.status(404).json({ message: error.message });
-        }
-
-        res.status(500).json({ message: sanitizeError(error, "Failed to fetch athlete benchmark status") });
+        handleBenchmarkError(res, error, "fetch athlete benchmark status");
       }
     }
   );

@@ -3345,8 +3345,8 @@ export class DatabaseStorage implements IStorage {
       .insert(siteBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric values to strings for decimal columns
-        benchmarkValue: String(benchmark.benchmarkValue),
+        // Convert numeric values to strings for decimal columns with proper precision (DECIMAL(10,3))
+        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
         createdBy,
         createdAt: new Date(),
       })
@@ -3360,8 +3360,8 @@ export class DatabaseStorage implements IStorage {
       .update(siteBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column
-        benchmarkValue: benchmark.benchmarkValue !== undefined ? String(benchmark.benchmarkValue) : undefined,
+        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(siteBenchmarks.id, id))
@@ -3392,23 +3392,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSiteBenchmark(id: string): Promise<void> {
-    // Check if benchmark is a system default (cannot be deleted)
-    const [benchmark] = await db
-      .select()
-      .from(siteBenchmarks)
-      .where(eq(siteBenchmarks.id, id))
-      .limit(1);
+    // Delete the benchmark in a single query with WHERE clause checking isSystemDefault
+    // This prevents TOCTOU race condition and ensures atomicity
+    const deleted = await db
+      .delete(siteBenchmarks)
+      .where(
+        and(
+          eq(siteBenchmarks.id, id),
+          eq(siteBenchmarks.isSystemDefault, false)
+        )
+      )
+      .returning();
 
-    if (!benchmark) {
-      throw new Error(`Site benchmark with id ${id} not found`);
+    if (!deleted || deleted.length === 0) {
+      // Check if benchmark exists and is a system default
+      const [benchmark] = await db
+        .select()
+        .from(siteBenchmarks)
+        .where(eq(siteBenchmarks.id, id))
+        .limit(1);
+
+      if (!benchmark) {
+        throw new Error(`Site benchmark with id ${id} not found`);
+      }
+
+      if (benchmark.isSystemDefault) {
+        throw new Error(`Cannot delete system default benchmark: ${id}`);
+      }
+
+      // If we get here, something else prevented the delete
+      throw new Error(`Failed to delete site benchmark: ${id}`);
     }
-
-    if (benchmark.isSystemDefault) {
-      throw new Error(`Cannot delete system default benchmark: ${id}`);
-    }
-
-    // Delete the benchmark (this will cascade to organization_benchmarks)
-    await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, id));
   }
 
   // ========================================================================
@@ -3446,8 +3460,8 @@ export class DatabaseStorage implements IStorage {
       .insert(customBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric value to string for decimal column
-        benchmarkValue: String(benchmark.benchmarkValue),
+        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
         createdBy,
         createdAt: new Date(),
       })
@@ -3461,8 +3475,8 @@ export class DatabaseStorage implements IStorage {
       .update(customBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column
-        benchmarkValue: benchmark.benchmarkValue !== undefined ? String(benchmark.benchmarkValue) : undefined,
+        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(

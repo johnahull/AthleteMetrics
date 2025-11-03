@@ -107,7 +107,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
               Custom Benchmarks
             </Button>
           </Link>
-          <Button onClick={() => setShowCatalog(true)}>
+          <Button onClick={() => setShowCatalog(true)} data-testid="browse-catalog-button">
             <Plus className="mr-2 h-4 w-4" />
             Browse Catalog
           </Button>

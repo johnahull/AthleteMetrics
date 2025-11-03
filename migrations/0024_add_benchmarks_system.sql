@@ -162,6 +162,16 @@ CREATE TABLE IF NOT EXISTS organization_benchmarks (
   CONSTRAINT organization_benchmarks_org_fkey FOREIGN KEY (organization_id)
     REFERENCES organizations(id) ON DELETE CASCADE,
 
+  -- NOTE: Polymorphic FK Design Decision
+  -- benchmark_id references either site_benchmarks.id OR custom_benchmarks.id
+  -- depending on benchmark_type. Database-level FK constraint cannot be added
+  -- for polymorphic relationships. Instead, referential integrity is enforced via:
+  --   1. Application-level validation in storage layer (enableBenchmarkForOrg)
+  --   2. Trigger functions (cleanup_org_benchmarks) for cascading deletes
+  --   3. The unique constraint below prevents duplicate entries
+  -- Alternative considered: Split into two tables (org_site_benchmarks, org_custom_benchmarks)
+  -- but this would complicate queries that need to list all enabled benchmarks.
+
   -- CHECK constraints
   CONSTRAINT organization_benchmarks_type_valid CHECK (
     benchmark_type IN ('site', 'custom')
