@@ -67,7 +67,6 @@ const setupTestData = async () => {
     firstName: 'Org',
     lastName: 'Admin',
     fullName: 'Org Admin', // Required field
-    role: 'org_admin',
     isSiteAdmin: false,
     isActive: true,
   }).returning();
@@ -120,8 +119,7 @@ const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = '
       user: userCheck[0] ? {
         username: userCheck[0].username,
         isActive: userCheck[0].isActive,
-        isSiteAdmin: userCheck[0].isSiteAdmin,
-        role: userCheck[0].role
+        isSiteAdmin: userCheck[0].isSiteAdmin
       } : null
     });
   }
