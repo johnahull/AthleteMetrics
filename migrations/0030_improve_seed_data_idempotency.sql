@@ -6,8 +6,23 @@
 -- Drop and recreate seed data with semantic conflict resolution
 -- This allows updating seed data values (description, benchmark_value, etc.) while preserving IDs
 
--- First, ensure we have a unique constraint on (metric_code, name) for semantic matching
--- This constraint likely already exists from the schema, but we'll make it explicit
+-- First, clean up any duplicate (metric_code, name) combinations
+-- Keep the oldest record for each combination
+DELETE FROM site_benchmarks
+WHERE id IN (
+  SELECT id
+  FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY metric_code, name
+             ORDER BY created_at ASC, id ASC
+           ) as rn
+    FROM site_benchmarks
+  ) t
+  WHERE t.rn > 1
+);
+
+-- Now ensure we have a unique constraint on (metric_code, name) for semantic matching
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -16,6 +31,9 @@ BEGIN
   ) THEN
     ALTER TABLE site_benchmarks
     ADD CONSTRAINT site_benchmarks_metric_name_unique UNIQUE (metric_code, name);
+    RAISE NOTICE 'Created site_benchmarks_metric_name_unique constraint';
+  ELSE
+    RAISE NOTICE 'Constraint site_benchmarks_metric_name_unique already exists';
   END IF;
 END $$;
 
