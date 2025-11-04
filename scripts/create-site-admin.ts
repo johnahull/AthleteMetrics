@@ -22,10 +22,17 @@ async function createSiteAdmin() {
   }
 
   const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'Way2good@99?';
+  const password = process.env.ADMIN_PASSWORD;
   const firstName = process.env.ADMIN_FIRST_NAME || 'Site';
   const lastName = process.env.ADMIN_LAST_NAME || 'Admin';
   const email = process.env.ADMIN_EMAIL || 'admin@athletemetrics.io';
+
+  if (!password) {
+    console.error('❌ ADMIN_PASSWORD environment variable is required');
+    console.error('   This script does not use default passwords for security reasons.');
+    console.error('   Usage: ADMIN_PASSWORD="YourSecurePassword123!" npx tsx scripts/create-site-admin.ts');
+    process.exit(1);
+  }
 
   console.log('🔧 Creating site admin user...');
   console.log(`Username: ${username}`);

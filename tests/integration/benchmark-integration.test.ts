@@ -245,6 +245,7 @@ describe('Benchmark Endpoints Integration Tests', () => {
 
       it('should enforce rate limiting', async () => {
         const agent = await createAuthenticatedSession('siteAdmin');
+        const isTestEnv = process.env.NODE_ENV === 'test';
 
         // Make requests up to rate limit
         const requests = Array.from({ length: 101 }, () =>
@@ -253,15 +254,20 @@ describe('Benchmark Endpoints Integration Tests', () => {
 
         const responses = await Promise.all(requests);
 
-        // Note: Rate limiting is bypassed in test environment (process.env.NODE_ENV === 'test')
-        // In production, this would return 429 after exceeding the limit
-        // For test environment, we verify all requests succeed
-        if (process.env.NODE_ENV === 'test') {
-          // In test mode, rate limiting is disabled, all requests should succeed (404 for non-existent ID)
+        // Test environment behavior: Rate limiting is intentionally bypassed
+        // This is configured in rate limiter middleware via skip: () => process.env.NODE_ENV === 'test'
+        if (isTestEnv) {
+          // Assert rate limiting is intentionally disabled in test environment
+          // All requests should succeed (404 for non-existent ID, not 429 rate limit)
           const nonRateLimitedResponses = responses.filter(r => r.status !== 429);
           expect(nonRateLimitedResponses.length).toBe(101);
+
+          // Verify we're actually testing the bypass behavior
+          const rateLimitedResponses = responses.filter(r => r.status === 429);
+          expect(rateLimitedResponses.length).toBe(0); // No rate limiting in test mode
         } else {
-          // In non-test environments, at least one should be rate limited
+          // Production/staging behavior: Rate limiting should be enforced
+          // At least one request should be rate limited (429 Too Many Requests)
           const rateLimitedResponses = responses.filter(r => r.status === 429);
           expect(rateLimitedResponses.length).toBeGreaterThan(0);
         }
