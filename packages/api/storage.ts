@@ -3681,7 +3681,7 @@ export class DatabaseStorage implements IStorage {
 
       // Compute max display order locally from locked rows
       const maxDisplayOrder = existingBenchmarks.length > 0
-        ? Math.max(...existingBenchmarks.map(b => b.displayOrder ?? 0))
+        ? Math.max(...existingBenchmarks.map((b: { displayOrder: number | null }) => b.displayOrder ?? 0))
         : 0;
 
       const nextDisplayOrder = maxDisplayOrder + 1;
