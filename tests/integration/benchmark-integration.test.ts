@@ -59,6 +59,7 @@ const setupTestData = async () => {
     password: 'TestPassword123!',
     firstName: 'Org',
     lastName: 'Admin',
+    fullName: 'Org Admin', // Required field
     role: 'org_admin',
     isSiteAdmin: false,
     isActive: true,

@@ -45,20 +45,8 @@ describe('Benchmark Storage', () => {
     }).returning();
     siteAdminUserId = siteAdmin.id;
 
-    // Create test metric (or use existing FLY10_TIME)
+    // Use existing FLY10_TIME metric from seed data (migration 0024)
     testMetricCode = 'FLY10_TIME';
-    const existingMetric = await db.select().from(siteMetrics).where(eq(siteMetrics.code, testMetricCode)).limit(1);
-    if (existingMetric.length === 0) {
-      await db.insert(siteMetrics).values({
-        code: testMetricCode,
-        label: '10-Yard Fly Time',
-        category: 'speed',
-        unit: 's',
-        lowerIsBetter: true,
-        isSystemDefault: true,
-        isActive: true,
-      });
-    }
   });
 
   afterEach(async () => {
