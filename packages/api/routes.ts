@@ -214,6 +214,12 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 
 // Initialize default site admin user
 export async function initializeDefaultUser() {
+  // Skip initialization during integration tests - tests manage their own admin users
+  if (process.env.NODE_ENV === 'test') {
+    console.log('Skipping initializeDefaultUser in test environment');
+    return;
+  }
+
   // Environment validation is outside try-catch to allow process.exit errors to propagate in tests
   const adminUser = process.env.ADMIN_USER;
   const adminPassword = process.env.ADMIN_PASSWORD;
