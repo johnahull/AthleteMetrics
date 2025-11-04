@@ -3670,7 +3670,7 @@ export class DatabaseStorage implements IStorage {
 
     // Use transaction with advisory lock to prevent race condition in display order assignment
     // Advisory lock ensures only one transaction at a time can assign display_order for this organization
-    return await db.transaction(async (tx: any) => {
+    return await db.transaction(async (tx) => {
       // Acquire advisory lock for this organization (automatically released at transaction end)
       // Use hash of organizationId UUID to get a stable integer key
       const orgIdHash = organizationId.split('-').reduce((acc, part) => acc + parseInt(part, 16), 0);
