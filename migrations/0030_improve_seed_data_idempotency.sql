@@ -8,9 +8,13 @@
 
 -- First, clean up any duplicate (metric_code, name) combinations
 -- Keep the oldest record for each combination
-DELETE FROM site_benchmarks
-WHERE id IN (
-  SELECT id
+DO $$
+DECLARE
+  duplicate_count INTEGER;
+  deleted_ids TEXT[];
+BEGIN
+  -- Count duplicates before deletion
+  SELECT COUNT(*) INTO duplicate_count
   FROM (
     SELECT id,
            ROW_NUMBER() OVER (
@@ -19,8 +23,45 @@ WHERE id IN (
            ) as rn
     FROM site_benchmarks
   ) t
-  WHERE t.rn > 1
-);
+  WHERE t.rn > 1;
+
+  IF duplicate_count > 0 THEN
+    RAISE NOTICE 'Found % duplicate site_benchmark records to clean up', duplicate_count;
+
+    -- Store IDs being deleted for audit trail
+    SELECT array_agg(id::TEXT) INTO deleted_ids
+    FROM (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY metric_code, name
+               ORDER BY created_at ASC, id ASC
+             ) as rn
+      FROM site_benchmarks
+    ) t
+    WHERE t.rn > 1;
+
+    RAISE NOTICE 'Deleting duplicate benchmark IDs: %', deleted_ids;
+
+    -- Perform deletion
+    DELETE FROM site_benchmarks
+    WHERE id IN (
+      SELECT id
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY metric_code, name
+                 ORDER BY created_at ASC, id ASC
+               ) as rn
+        FROM site_benchmarks
+      ) t
+      WHERE t.rn > 1
+    );
+
+    RAISE NOTICE 'Successfully deleted % duplicate records', duplicate_count;
+  ELSE
+    RAISE NOTICE 'No duplicate (metric_code, name) combinations found';
+  END IF;
+END $$;
 
 -- Now ensure we have a unique constraint on (metric_code, name) for semantic matching
 DO $$
