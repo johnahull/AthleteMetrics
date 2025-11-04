@@ -180,10 +180,7 @@ export class BenchmarkService extends BaseService {
         throw new Error(`Cannot delete system default benchmark: ${benchmarkId}`);
       }
 
-      // Delete benchmark (storage layer also validates)
-      await this.storage.deleteSiteBenchmark(benchmarkId);
-
-      // Create audit log
+      // Create audit log BEFORE deletion with production safety check
       try {
         await this.storage.createAuditLog({
           userId: requestingUserId,
@@ -197,7 +194,7 @@ export class BenchmarkService extends BaseService {
       } catch (auditError) {
         console.error('Failed to create audit log:', auditError);
 
-        // Security: Block operation in production if audit log fails
+        // Security: Block operation in production if audit log fails - prevent deletion
         if (process.env.NODE_ENV === 'production') {
           console.error('SECURITY ALERT: Audit log failure - blocking operation', {
             operation: 'audit_log_failure',
@@ -207,6 +204,9 @@ export class BenchmarkService extends BaseService {
           throw new Error('Failed to create audit log - operation blocked for security');
         }
       }
+
+      // Delete benchmark AFTER audit log is created (storage layer also validates)
+      await this.storage.deleteSiteBenchmark(benchmarkId);
     } catch (error) {
       return this.handleError(error, "BenchmarkService.deleteSiteBenchmark");
     }
@@ -463,29 +463,35 @@ export class BenchmarkService extends BaseService {
         throw new Error("Unauthorized: Only the owning organization administrators or site administrators can delete custom benchmarks");
       }
 
-      // Get benchmark for audit log
+      // Get benchmark for audit log BEFORE deletion
       const benchmarks = await this.storage.getCustomBenchmarksForOrg(organizationId);
       const benchmark = benchmarks.find(b => b.id === benchmarkId);
 
-      // Delete benchmark (storage layer validates ownership)
-      await this.storage.deleteCustomBenchmark(organizationId, benchmarkId);
+      if (!benchmark) {
+        throw new Error(`Custom benchmark ${benchmarkId} not found for organization ${organizationId}`);
+      }
 
-      // Create audit log
-      if (benchmark) {
-        try {
-          await this.storage.createAuditLog({
-            userId: requestingUserId,
-            action: 'custom_benchmark_deleted',
-            resourceType: 'custom_benchmark',
-            resourceId: benchmarkId,
-            details: JSON.stringify({ name: benchmark.name, organizationId }),
-            ipAddress: context?.ipAddress || null,
-            userAgent: context?.userAgent || null,
-          });
-        } catch (auditError) {
-          console.error('Failed to create audit log:', auditError);
+      // Create audit log BEFORE deletion with production safety check
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'custom_benchmark_deleted',
+          resourceType: 'custom_benchmark',
+          resourceId: benchmarkId,
+          details: JSON.stringify({ name: benchmark.name, organizationId }),
+          ipAddress: context?.ipAddress || null,
+          userAgent: context?.userAgent || null,
+        });
+      } catch (auditError) {
+        console.error('Failed to create audit log:', auditError);
+        // In production, audit trail is mandatory for compliance - prevent deletion
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error('Failed to create audit trail for custom benchmark deletion. Operation aborted for compliance.');
         }
       }
+
+      // Delete benchmark AFTER audit log is created (storage layer validates ownership)
+      await this.storage.deleteCustomBenchmark(organizationId, benchmarkId);
     } catch (error) {
       return this.handleError(error, "BenchmarkService.deleteCustomBenchmark");
     }

@@ -125,9 +125,9 @@ const benchmarkReadLimiter = rateLimit({
     // Development/staging can bypass with explicit flag
     return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
-  keyGenerator: (req) => {
+  keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
-    const ip = req.ip || 'unknown';
+    const ip = ipKeyGenerator(req.ip || 'unknown');
     return userId ? `${ip}-${userId}` : ip;
   },
 });

@@ -149,7 +149,7 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
   // Athlete attribute filters (NULL = applies to all)
-  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Other"
+  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
   ageMax: integer("age_max"),
   position: varchar("position", { length: 50 }),
@@ -168,6 +168,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   metricIdx: index("site_benchmarks_metric_idx").on(table.metricCode),
   activeIdx: index("site_benchmarks_active_idx").on(table.isActive),
   metricActiveIdx: index("site_benchmarks_metric_active_idx").on(table.metricCode, table.isActive),
+  // Composite index for filtering with INCLUDE clause (migration 0024)
+  filtersIdx: index("site_benchmarks_filters_idx").on(table.metricCode, table.gender, table.level),
 }));
 
 // Organization-specific custom benchmarks
@@ -180,7 +182,7 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(),
   // Athlete attribute filters
-  gender: varchar("gender", { length: 20 }),
+  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
   ageMax: integer("age_max"),
   position: varchar("position", { length: 50 }),
@@ -213,9 +215,15 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
   uniqueOrgBenchmark: unique().on(table.organizationId, table.benchmarkId, table.benchmarkType),
+  // Partial unique index for display_order (migration 0024)
+  displayOrderUnique: unique("org_benchmarks_display_order_unique").on(table.organizationId, table.displayOrder),
   // Note: orgIdx removed as redundant (org_benchmarks_org_enabled_idx covers single-column queries via leftmost prefix rule)
   orgEnabledIdx: index("org_benchmarks_org_enabled_idx").on(table.organizationId, table.isEnabled),
   benchmarkIdx: index("org_benchmarks_benchmark_idx").on(table.benchmarkId, table.benchmarkType),
+  // Additional indexes from migrations 0026-0028
+  typeIdIdx: index("org_benchmarks_type_id_idx").on(table.benchmarkType, table.benchmarkId),
+  orgBenchmarkIdx: index("org_benchmarks_org_benchmark_idx").on(table.organizationId, table.benchmarkId),
+  enabledIdx: index("org_benchmarks_enabled_idx").on(table.isEnabled),
 }));
 
 export const measurements = pgTable("measurements", {

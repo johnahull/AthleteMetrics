@@ -3616,7 +3616,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
-    // Validate that the benchmark exists before creating FK relationship
+    // 1. Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(benchmarkId)) {
+      throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
+    }
+    if (!uuidRegex.test(organizationId)) {
+      throw new Error(`Invalid organization ID format: ${organizationId}`);
+    }
+
+    // 2. Validate that the benchmark exists and ownership (for custom)
     if (benchmarkType === 'site') {
       const benchmark = await this.getSiteBenchmark(benchmarkId);
       if (!benchmark) {
@@ -3626,6 +3635,10 @@ export class DatabaseStorage implements IStorage {
       const benchmark = await this.getCustomBenchmark(benchmarkId);
       if (!benchmark) {
         throw new Error(`Custom benchmark not found: ${benchmarkId}`);
+      }
+      // CRITICAL: Verify ownership for custom benchmarks
+      if (benchmark.organizationId !== organizationId) {
+        throw new Error(`Custom benchmark ${benchmarkId} does not belong to organization ${organizationId}`);
       }
     }
 
