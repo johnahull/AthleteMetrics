@@ -54,8 +54,8 @@ const setupTestData = async () => {
   testOrgId = orgResult[0].id;
 
   // Create org admin user
-  const bcrypt = await import('bcryptjs');
-  const hashedPassword = await bcrypt.hash('TestPassword123!', 12);
+  const bcrypt = await import('bcrypt');
+  const hashedPassword = await bcrypt.default.hash('TestPassword123!', 12);
   testOrgAdminUsername = 'orgadmin' + Date.now();
 
   const orgAdminResult = await db.insert(users).values({
