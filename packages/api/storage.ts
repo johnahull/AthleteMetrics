@@ -3668,28 +3668,35 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
 
-    // Get the max display order for this organization to assign a unique one
-    const [maxDisplayOrder] = await db
-      .select({ maxOrder: sql<number>`COALESCE(MAX(${organizationBenchmarks.displayOrder}), 0)` })
-      .from(organizationBenchmarks)
-      .where(eq(organizationBenchmarks.organizationId, organizationId));
+    // Use transaction to prevent race condition in display order assignment
+    // Ensures atomic read-modify-write for MAX(display_order) + 1 pattern
+    return await db.transaction(async (tx: any) => {
+      // Get the max display order for this organization with row-level lock
+      // FOR UPDATE prevents concurrent transactions from reading the same max value
+      const maxDisplayOrderResult = await tx.execute(sql`
+        SELECT COALESCE(MAX(display_order), 0) as max_order
+        FROM organization_benchmarks
+        WHERE organization_id = ${organizationId}
+        FOR UPDATE
+      `);
 
-    const nextDisplayOrder = (maxDisplayOrder?.maxOrder ?? 0) + 1;
+      const nextDisplayOrder = (maxDisplayOrderResult.rows[0]?.max_order ?? 0) + 1;
 
-    // Create new enablement record
-    const [created] = await db
-      .insert(organizationBenchmarks)
-      .values({
-        organizationId,
-        benchmarkId,
-        benchmarkType,
-        isEnabled: true,
-        displayOrder: nextDisplayOrder,
-        createdAt: new Date(),
-      })
-      .returning();
+      // Create new enablement record with unique display order
+      const [created] = await tx
+        .insert(organizationBenchmarks)
+        .values({
+          organizationId,
+          benchmarkId,
+          benchmarkType,
+          isEnabled: true,
+          displayOrder: nextDisplayOrder,
+          createdAt: new Date(),
+        })
+        .returning();
 
-    return created;
+      return created;
+    });
   }
 
   async disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {

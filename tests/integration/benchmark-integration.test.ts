@@ -489,6 +489,46 @@ describe('Benchmark Endpoints Integration Tests', () => {
         expect(response.status).toBe(400);
         cleanupAgent(agent);
       });
+
+      it('should handle concurrent benchmark enablement without display_order conflicts', async () => {
+        const agent = await createAuthenticatedSession('siteAdmin');
+
+        // Create 5 benchmarks
+        const benchmarkIds = [];
+        for (let i = 0; i < 5; i++) {
+          const createResponse = await agent.post('/api/benchmarks').send({
+            metricCode: 'FLY10_TIME',
+            name: `Concurrent Test Benchmark ${i}`,
+            description: `For concurrent enablement test ${i}`,
+            benchmarkValue: 1.0 + i * 0.1,
+            comparisonOperator: 'lte',
+            isActive: true,
+          });
+          benchmarkIds.push(createResponse.body.id);
+        }
+
+        // Enable all benchmarks concurrently
+        const enablePromises = benchmarkIds.map(id =>
+          agent
+            .post(`/api/organizations/${testOrgId}/benchmarks/${id}/enable`)
+            .send({ benchmarkType: 'site' })
+        );
+
+        const results = await Promise.all(enablePromises);
+
+        // All should succeed with 201 status
+        results.forEach(result => {
+          expect(result.status).toBe(201);
+          expect(result.body.isEnabled).toBe(true);
+        });
+
+        // All display orders should be unique
+        const displayOrders = results.map(r => r.body.displayOrder);
+        const uniqueOrders = new Set(displayOrders);
+        expect(uniqueOrders.size).toBe(displayOrders.length);
+
+        cleanupAgent(agent);
+      });
     });
 
     describe('POST /api/organizations/:organizationId/benchmarks/:id/disable', () => {
