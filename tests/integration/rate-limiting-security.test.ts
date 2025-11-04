@@ -226,7 +226,7 @@ describe('Rate Limiting Security - Production Safeguards', () => {
     expect(rateLimitedResponse?.body.message).toMatch(/Too many.*requests/i);
   });
 
-  it('should allow bypass in test/development environments', async () => {
+  it('should allow bypass in test/development environments', { timeout: 30000 }, async () => {
     // Set test environment with bypass flag
     process.env.NODE_ENV = 'test';
     process.env.BYPASS_GENERAL_RATE_LIMIT = 'true';

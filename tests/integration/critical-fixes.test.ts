@@ -23,7 +23,8 @@ import {
 } from '@shared/schema';
 import { eq, sql } from 'drizzle-orm';
 
-describe('Critical Fix 2: User-Team Soft Delete', () => {
+// Run these tests sequentially to avoid serialization errors from concurrent database access
+describe.sequential('Critical Fix 2: User-Team Soft Delete', () => {
   let testOrg: Organization;
   let testTeam: Team;
   let athlete: User;
@@ -170,7 +171,7 @@ describe('Critical Fix 2: User-Team Soft Delete', () => {
   });
 });
 
-describe('Critical Fix 3: Invitation History Preservation', () => {
+describe.sequential('Critical Fix 3: Invitation History Preservation', () => {
   let testOrg: Organization;
   let admin: User;
   let coach: User;
@@ -289,7 +290,7 @@ describe('Critical Fix 3: Invitation History Preservation', () => {
   });
 });
 
-describe('Critical Fix 4: Soft Delete Test Coverage', () => {
+describe.sequential('Critical Fix 4: Soft Delete Test Coverage', () => {
   let testOrg: Organization;
   let athlete: User;
 
@@ -403,7 +404,7 @@ describe('Critical Fix 4: Soft Delete Test Coverage', () => {
   });
 });
 
-describe('Critical Fix 7: GDPR Hard Delete', () => {
+describe.sequential('Critical Fix 7: GDPR Hard Delete', () => {
   let testOrg: Organization;
   let athlete: User;
 
@@ -505,7 +506,7 @@ describe('Critical Fix 7: GDPR Hard Delete', () => {
   });
 });
 
-describe('Critical Fix 6: Code Duplication - deletedAt Filter', () => {
+describe.sequential('Critical Fix 6: Code Duplication - deletedAt Filter', () => {
   it('should verify helper function exists for deletedAt filtering', async () => {
     // This test verifies the refactoring has been done
     // by checking that the storage module exports a helper

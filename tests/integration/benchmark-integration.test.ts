@@ -40,10 +40,34 @@ let activeAgents: Set<request.SuperAgentTest> = new Set();
 
 // Test data setup
 const setupTestData = async () => {
-  // Get site admin user (created by initializeDefaultUser)
-  const adminUser = await db.select().from(users).where(eq(users.username, process.env.ADMIN_USER || 'admin')).limit(1);
-  if (adminUser.length > 0) {
+  const bcrypt = await import('bcrypt');
+
+  // Explicitly create site admin user (don't assume initializeDefaultUser has run)
+  const adminUsername = process.env.ADMIN_USER || 'admin';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'TestPassword123!';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@test.com';
+
+  // Check if admin user exists
+  let adminUser = await db.select().from(users).where(eq(users.username, adminUsername)).limit(1);
+
+  if (adminUser.length === 0) {
+    // Create admin user if it doesn't exist
+    const hashedAdminPassword = await bcrypt.default.hash(adminPassword, 12);
+    const newAdminUser = await db.insert(users).values({
+      username: adminUsername,
+      emails: [adminEmail],
+      password: hashedAdminPassword,
+      firstName: 'Admin',
+      lastName: 'User',
+      fullName: 'Admin User',
+      isSiteAdmin: true,
+      isActive: true,
+    }).returning();
+    testSiteAdminId = newAdminUser[0].id;
+    console.log('Site administrator account created successfully:', adminUsername);
+  } else {
     testSiteAdminId = adminUser[0].id;
+    console.log('Site administrator account already exists:', adminUsername);
   }
 
   // Create test organization with benchmarks enabled
@@ -56,7 +80,6 @@ const setupTestData = async () => {
   testOrgId = orgResult[0].id;
 
   // Create org admin user
-  const bcrypt = await import('bcrypt');
   const hashedPassword = await bcrypt.default.hash('TestPassword123!', 12);
   testOrgAdminUsername = 'orgadmin' + Date.now();
 
@@ -100,6 +123,9 @@ const cleanupTestData = async () => {
   if (testOrgAdminId) {
     await db.delete(users).where(eq(users.id, testOrgAdminId));
   }
+
+  // Note: We don't delete the site admin user in cleanup because it may be shared across tests
+  // and we want to avoid recreating it on every test run
 };
 
 const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = 'siteAdmin') => {
