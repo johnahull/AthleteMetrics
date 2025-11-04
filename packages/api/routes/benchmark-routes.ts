@@ -5,7 +5,7 @@
  */
 
 import type { Express, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { BenchmarkService } from "../services/benchmark-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireAthleteAccess } from "../middleware";
 import {
@@ -89,7 +89,7 @@ const benchmarkCreateLimiter = rateLimit({
   },
   keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
-    const ip = req.ip || 'unknown';
+    const ip = ipKeyGenerator(req.ip || 'unknown');
     return userId ? `${ip}-${userId}` : ip;
   },
 });
@@ -108,7 +108,7 @@ const benchmarkModifyLimiter = rateLimit({
   },
   keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
-    const ip = req.ip || 'unknown';
+    const ip = ipKeyGenerator(req.ip || 'unknown');
     return userId ? `${ip}-${userId}` : ip;
   },
 });
