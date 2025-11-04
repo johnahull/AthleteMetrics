@@ -4,6 +4,26 @@
  * to improve resilience while maintaining security guarantees
  */
 
+/**
+ * Default retry configuration for audit log operations
+ */
+export const AUDIT_RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 1000,
+  backoffMultiplier: 2
+} as const;
+
+/**
+ * Default retry configuration for general operations
+ */
+export const DEFAULT_RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 2000,
+  backoffMultiplier: 2
+} as const;
+
 interface RetryOptions {
   maxRetries?: number;
   initialDelayMs?: number;
@@ -13,20 +33,60 @@ interface RetryOptions {
 
 /**
  * Retry an async operation with exponential backoff
+ *
+ * Features:
+ * - Fast-fail on non-retryable errors (permission, validation, not found, duplicate)
+ * - Jitter (±25%) to prevent thundering herd
+ * - Exponential backoff with configurable parameters
+ *
  * @param operation - The async function to retry
  * @param options - Retry configuration
  * @returns Promise resolving to the operation result
- * @throws Error if all retries are exhausted
+ * @throws Error if all retries are exhausted or on non-retryable errors
+ *
+ * @example
+ * ```typescript
+ * // Basic usage with default configuration (3 retries, 100-2000ms backoff)
+ * const result = await retryWithBackoff(async () => {
+ *   return await fetchDataFromAPI();
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Custom retry configuration
+ * const result = await retryWithBackoff(
+ *   async () => await database.query('SELECT * FROM users'),
+ *   {
+ *     maxRetries: 5,
+ *     initialDelayMs: 200,
+ *     maxDelayMs: 5000,
+ *     backoffMultiplier: 3
+ *   }
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Fast-fail on validation errors (no retries)
+ * try {
+ *   await retryWithBackoff(async () => {
+ *     throw new Error('Validation failed: invalid email');
+ *   });
+ * } catch (error) {
+ *   // Error thrown immediately without retries
+ * }
+ * ```
  */
 export async function retryWithBackoff<T>(
   operation: () => Promise<T>,
   options: RetryOptions = {}
 ): Promise<T> {
   const {
-    maxRetries = 3,
-    initialDelayMs = 100,
-    maxDelayMs = 2000,
-    backoffMultiplier = 2
+    maxRetries = DEFAULT_RETRY_CONFIG.maxRetries,
+    initialDelayMs = DEFAULT_RETRY_CONFIG.initialDelayMs,
+    maxDelayMs = DEFAULT_RETRY_CONFIG.maxDelayMs,
+    backoffMultiplier = DEFAULT_RETRY_CONFIG.backoffMultiplier
   } = options;
 
   let lastError: Error | unknown;
@@ -75,10 +135,59 @@ export async function retryWithBackoff<T>(
 
 /**
  * Retry audit log creation with exponential backoff
+ *
+ * Uses optimized configuration for audit logs (3 retries, 100-1000ms backoff).
+ * In production, blocks the operation if audit logging fails (fail-closed security).
+ * In development/test environments, logs warnings but allows operation to proceed.
+ *
  * @param auditLogFn - Function that creates an audit log
- * @param context - Context information for error logging
+ * @param context - Context information for error logging and security alerts
  * @returns Promise resolving when audit log is created
  * @throws Error with security alert if all retries fail in production
+ *
+ * @example
+ * ```typescript
+ * // Audit log for benchmark creation
+ * await retryAuditLog(
+ *   async () => {
+ *     await storage.createAuditLog({
+ *       userId: requestingUserId,
+ *       action: 'benchmark_created',
+ *       resourceType: 'site_benchmark',
+ *       resourceId: benchmark.id,
+ *       details: { name: benchmark.name },
+ *     });
+ *   },
+ *   {
+ *     operation: 'benchmark_created',
+ *     userId: requestingUserId,
+ *     resourceType: 'site_benchmark',
+ *     resourceId: benchmark.id,
+ *   }
+ * );
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Audit log for deletion
+ * await retryAuditLog(
+ *   async () => {
+ *     await storage.createAuditLog({
+ *       userId: userId,
+ *       action: 'benchmark_deleted',
+ *       resourceType: 'custom_benchmark',
+ *       resourceId: benchmarkId,
+ *       details: { organizationId },
+ *     });
+ *   },
+ *   {
+ *     operation: 'benchmark_deleted',
+ *     userId: userId,
+ *     resourceType: 'custom_benchmark',
+ *     resourceId: benchmarkId,
+ *   }
+ * );
+ * ```
  */
 export async function retryAuditLog(
   auditLogFn: () => Promise<void>,
@@ -90,12 +199,7 @@ export async function retryAuditLog(
   }
 ): Promise<void> {
   try {
-    await retryWithBackoff(auditLogFn, {
-      maxRetries: 3,
-      initialDelayMs: 100,
-      maxDelayMs: 1000,
-      backoffMultiplier: 2
-    });
+    await retryWithBackoff(auditLogFn, AUDIT_RETRY_CONFIG);
   } catch (error) {
     // Log detailed error information
     console.error('SECURITY ALERT: Audit log failure after retries', {

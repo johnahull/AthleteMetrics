@@ -172,7 +172,8 @@ export function registerBenchmarkRoutes(app: Express) {
       const canView = (benchmarkExists & (benchmarkActive | adminAccess)) === 1;
 
       // Normalize response time to prevent timing analysis
-      const minResponseTimeMs = 50;
+      // 100ms provides stronger protection against timing attacks while remaining responsive
+      const minResponseTimeMs = 100;
       const elapsed = Date.now() - startTime;
       await new Promise(resolve => setTimeout(resolve, Math.max(0, minResponseTimeMs - elapsed)));
 
