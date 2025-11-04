@@ -46,10 +46,12 @@ const setupTestData = async () => {
     testSiteAdminId = adminUser[0].id;
   }
 
-  // Create test organization
+  // Create test organization with benchmarks enabled
   const orgResult = await db.insert(organizations).values({
     name: 'Test Org ' + Date.now(),
     isActive: true,
+    benchmarksEnabled: true,
+    allowCustomBenchmarks: true,
   }).returning();
   testOrgId = orgResult[0].id;
 
