@@ -828,11 +828,8 @@ describe('Benchmark Storage', () => {
   // Cascade Delete Tests
   describe('Cascade Deletes', () => {
     // These tests verify PostgreSQL triggers from migration 0024_add_benchmarks_system.sql
-    // Triggers must be manually applied: see scripts/apply-triggers-to-test-db.sh
-    // Tests are skipped in CI because triggers aren't applied automatically
-    const shouldSkipTriggerTests = process.env.CI === 'true';
-
-    test.skipIf(shouldSkipTriggerTests)('deleting site benchmark should cascade to organization_benchmarks via trigger', async () => {
+    // Triggers are applied via scripts/apply-cascade-triggers.sh in CI and locally
+    test('deleting site benchmark should cascade to organization_benchmarks via trigger', async () => {
       // Create a site benchmark
       const benchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
@@ -856,7 +853,7 @@ describe('Benchmark Storage', () => {
       expect(afterDelete.some(b => b.benchmarkId === benchmark.id)).toBe(false);
     });
 
-    test.skipIf(shouldSkipTriggerTests)('deleting custom benchmark should cascade to organization_benchmarks via trigger', async () => {
+    test('deleting custom benchmark should cascade to organization_benchmarks via trigger', async () => {
       // Create a custom benchmark
       const benchmark = await storage.createCustomBenchmark({
         organizationId: testOrgId,
