@@ -271,11 +271,9 @@ describe('Benchmark Endpoints Integration Tests', () => {
         cleanupAgent(agent);
       });
 
-      // Skip flaky rate limiting test - causes ECONNRESET errors with 101 parallel requests
-      // Rate limiting is tested in dedicated files: rate-limiting-security.test.ts
-      it.skip('should enforce rate limiting', async () => {
-        // Test skipped - flaky and redundant
-      });
+      // Rate limiting test removed - redundant with dedicated rate-limiting-security.test.ts
+      // and flaky due to 101 parallel requests causing ECONNRESET errors
+      // Rate limiting is also bypassed in test env, so this wasn't testing actual rate limiting
     });
 
     describe('POST /api/benchmarks', () => {
