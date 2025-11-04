@@ -124,9 +124,10 @@ describe('POST /api/organizations/:id/deactivate', () => {
 
   it('should return 400 if organization already deactivated', async () => {
     // First deactivate
+    // Note: Must set deletedAt to satisfy check_is_active_deleted_at_consistency constraint
     await db
       .update(organizations)
-      .set({ isActive: false })
+      .set({ isActive: false, deletedAt: new Date() })
       .where(eq(organizations.id, testOrg.id));
 
     // Try to deactivate again
@@ -163,9 +164,10 @@ describe('POST /api/organizations/:id/deactivate', () => {
 describe('POST /api/organizations/:id/reactivate', () => {
   beforeEach(async () => {
     // Deactivate test org for reactivation tests
+    // Note: Must set deletedAt to satisfy check_is_active_deleted_at_consistency constraint
     await db
       .update(organizations)
-      .set({ isActive: false })
+      .set({ isActive: false, deletedAt: new Date() })
       .where(eq(organizations.id, testOrg.id));
   });
 
@@ -202,9 +204,10 @@ describe('POST /api/organizations/:id/reactivate', () => {
 
   it('should return 400 if organization already active', async () => {
     // First reactivate
+    // Note: Must clear deletedAt to satisfy check_is_active_deleted_at_consistency constraint
     await db
       .update(organizations)
-      .set({ isActive: true })
+      .set({ isActive: true, deletedAt: null })
       .where(eq(organizations.id, testOrg.id));
 
     // Try to reactivate again

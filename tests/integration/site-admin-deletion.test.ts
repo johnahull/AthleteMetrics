@@ -311,7 +311,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // Create audit log for site admin
     const [auditLog] = await db.insert(auditLogs).values({
       userId: siteAdmin.id,
-      action: 'user.login',
+      action: 'site_admin_access',
       resourceType: 'user',
       resourceId: siteAdmin.id
     }).returning();
@@ -332,7 +332,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     const logsAfter = await db.select().from(auditLogs).where(eq(auditLogs.id, auditLog.id));
     expect(logsAfter).toHaveLength(1);
     expect(logsAfter[0].userId).toBeNull();
-    expect(logsAfter[0].action).toBe('user.login');
+    expect(logsAfter[0].action).toBe('site_admin_access');
   });
 
   it('should revoke all active sessions when deleting site admin', async () => {
@@ -662,7 +662,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // 7. Audit log
     await db.insert(auditLogs).values({
       userId: siteAdmin.id,
-      action: 'user.login',
+      action: 'site_admin_access',
       resourceType: 'user',
       resourceId: siteAdmin.id
     });
