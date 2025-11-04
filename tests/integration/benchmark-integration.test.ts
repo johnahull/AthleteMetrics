@@ -27,6 +27,8 @@ import { registerRoutes } from '../../packages/api/routes';
 import { db } from '../../packages/api/db';
 import { users, organizations, userOrganizations, siteBenchmarks, customBenchmarks, organizationBenchmarks } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import bcrypt from 'bcrypt';
 
 // Test data
 let app: Express;
@@ -40,10 +42,37 @@ let activeAgents: Set<request.SuperAgentTest> = new Set();
 
 // Test data setup
 const setupTestData = async () => {
-  // Get site admin user (created by initializeDefaultUser)
-  const adminUser = await db.select().from(users).where(eq(users.username, process.env.ADMIN_USER || 'admin')).limit(1);
-  if (adminUser.length > 0) {
-    testSiteAdminId = adminUser[0].id;
+  // Explicitly create site admin user for integration tests
+  // This ensures the admin user exists without relying on initializeDefaultUser()
+  const adminUsername = process.env.ADMIN_USER || 'admin';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'TestPassword123!';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@test.com';
+
+  const adminHashedPassword = await bcrypt.hash(adminPassword, BCRYPT_SALT_ROUNDS);
+
+  const adminUserResult = await db.insert(users).values({
+    username: adminUsername,
+    emails: [adminEmail],
+    password: adminHashedPassword,
+    firstName: 'Site',
+    lastName: 'Admin',
+    fullName: 'Site Admin',
+    isSiteAdmin: true,
+    isActive: true,
+    isEmailVerified: true,
+  }).onConflictDoUpdate({
+    target: users.username,
+    set: {
+      password: adminHashedPassword,
+      isSiteAdmin: true,
+      isActive: true,
+    }
+  }).returning();
+
+  testSiteAdminId = adminUserResult[0].id;
+
+  if (!testSiteAdminId) {
+    throw new Error('Failed to create or retrieve site admin user for integration tests');
   }
 
   // Create test organization with benchmarks enabled
@@ -56,8 +85,7 @@ const setupTestData = async () => {
   testOrgId = orgResult[0].id;
 
   // Create org admin user
-  const bcrypt = await import('bcrypt');
-  const hashedPassword = await bcrypt.default.hash('TestPassword123!', 12);
+  const hashedPassword = await bcrypt.hash('TestPassword123!', BCRYPT_SALT_ROUNDS);
   testOrgAdminUsername = 'orgadmin' + Date.now();
 
   const orgAdminResult = await db.insert(users).values({
