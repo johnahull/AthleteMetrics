@@ -157,7 +157,7 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   // Control flags
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   // Display settings
   color: varchar("color", { length: 20 }),
   icon: varchar("icon", { length: 50 }),
@@ -170,6 +170,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   metricActiveIdx: index("site_benchmarks_metric_active_idx").on(table.metricCode, table.isActive),
   // Composite index for filtering with INCLUDE clause (migration 0024)
   filtersIdx: index("site_benchmarks_filters_idx").on(table.metricCode, table.gender, table.level),
+  // Unique constraint for semantic conflict resolution (migration 0030)
+  uniqueMetricName: unique("site_benchmarks_metric_name_unique").on(table.metricCode, table.name),
 }));
 
 // Organization-specific custom benchmarks
@@ -189,7 +191,7 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   level: varchar("level", { length: 50 }),
   // Control flags
   isActive: boolean("is_active").default(true).notNull(),
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   // Display settings
   color: varchar("color", { length: 20 }),
   icon: varchar("icon", { length: 50 }),
@@ -210,7 +212,7 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   benchmarkType: varchar("benchmark_type", { length: 10 }).notNull(), // 'site' or 'custom'
   isEnabled: boolean("is_enabled").default(true).notNull(),
   customName: varchar("custom_name", { length: 100 }),
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({

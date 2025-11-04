@@ -3669,6 +3669,8 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Create new enablement record
+    // displayOrder will use the DEFAULT 999 from schema (migration 0029)
+    // This prevents race conditions from MAX(display_order) + 1 pattern
     const [created] = await db
       .insert(organizationBenchmarks)
       .values({
@@ -3676,6 +3678,7 @@ export class DatabaseStorage implements IStorage {
         benchmarkId,
         benchmarkType,
         isEnabled: true,
+        // displayOrder omitted - uses DEFAULT 999 from schema
         createdAt: new Date(),
       })
       .returning();

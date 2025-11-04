@@ -21,6 +21,11 @@ UPDATE site_benchmarks SET display_order = 999 WHERE display_order IS NULL;
 UPDATE custom_benchmarks SET display_order = 999 WHERE display_order IS NULL;
 UPDATE organization_benchmarks SET display_order = 999 WHERE display_order IS NULL;
 
+-- Add NOT NULL constraints after backfilling NULL values
+ALTER TABLE site_benchmarks ALTER COLUMN display_order SET NOT NULL;
+ALTER TABLE custom_benchmarks ALTER COLUMN display_order SET NOT NULL;
+ALTER TABLE organization_benchmarks ALTER COLUMN display_order SET NOT NULL;
+
 -- Add comments for documentation
 COMMENT ON COLUMN site_benchmarks.display_order IS 'Display order for UI sorting. Default 999 sorts last. Lower values appear first.';
 COMMENT ON COLUMN custom_benchmarks.display_order IS 'Display order for UI sorting. Default 999 sorts last. Lower values appear first.';

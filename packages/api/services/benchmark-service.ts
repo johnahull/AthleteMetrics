@@ -5,6 +5,7 @@
  */
 
 import { BaseService } from "./base-service";
+import { retryAuditLog } from "../utils/audit-retry";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
@@ -65,34 +66,30 @@ export class BenchmarkService extends BaseService {
       // Create benchmark
       const benchmark = await this.storage.createSiteBenchmark(validatedData, requestingUserId);
 
-      // Cycle 3: Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Cycle 3: Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'benchmark_created',
+            resourceType: 'site_benchmark',
+            resourceId: benchmark.id,
+            details: JSON.stringify({
+              name: benchmark.name,
+              metricCode: benchmark.metricCode,
+              benchmarkValue: benchmark.benchmarkValue,
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'benchmark_created',
           userId: requestingUserId,
-          action: 'benchmark_created',
           resourceType: 'site_benchmark',
           resourceId: benchmark.id,
-          details: JSON.stringify({
-            name: benchmark.name,
-            metricCode: benchmark.metricCode,
-            benchmarkValue: benchmark.benchmarkValue,
-          }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return benchmark;
     } catch (error) {
@@ -124,30 +121,26 @@ export class BenchmarkService extends BaseService {
       // Update benchmark
       const updated = await this.storage.updateSiteBenchmark(benchmarkId, benchmarkData);
 
-      // Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'benchmark_updated',
+            resourceType: 'site_benchmark',
+            resourceId: benchmarkId,
+            details: JSON.stringify(benchmarkData),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'benchmark_updated',
           userId: requestingUserId,
-          action: 'benchmark_updated',
           resourceType: 'site_benchmark',
           resourceId: benchmarkId,
-          details: JSON.stringify(benchmarkData),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return updated;
     } catch (error) {
@@ -180,30 +173,26 @@ export class BenchmarkService extends BaseService {
         throw new Error(`Cannot delete system default benchmark: ${benchmarkId}`);
       }
 
-      // Create audit log BEFORE deletion with production safety check
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log BEFORE deletion with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'benchmark_deleted',
+            resourceType: 'site_benchmark',
+            resourceId: benchmarkId,
+            details: JSON.stringify({ name: benchmark.name }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'benchmark_deleted',
           userId: requestingUserId,
-          action: 'benchmark_deleted',
           resourceType: 'site_benchmark',
           resourceId: benchmarkId,
-          details: JSON.stringify({ name: benchmark.name }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails - prevent deletion
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       // Delete benchmark AFTER audit log is created (storage layer also validates)
       await this.storage.deleteSiteBenchmark(benchmarkId);
@@ -231,30 +220,26 @@ export class BenchmarkService extends BaseService {
       // Toggle status
       const updated = await this.storage.toggleSiteBenchmarkStatus(benchmarkId, isActive);
 
-      // Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: isActive ? 'benchmark_enabled' : 'benchmark_disabled',
+            resourceType: 'site_benchmark',
+            resourceId: benchmarkId,
+            details: JSON.stringify({ isActive }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: isActive ? 'benchmark_enabled' : 'benchmark_disabled',
           userId: requestingUserId,
-          action: isActive ? 'benchmark_enabled' : 'benchmark_disabled',
           resourceType: 'site_benchmark',
           resourceId: benchmarkId,
-          details: JSON.stringify({ isActive }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return updated;
     } catch (error) {
@@ -342,34 +327,31 @@ export class BenchmarkService extends BaseService {
       const benchmark = await this.storage.createCustomBenchmark(validatedData, requestingUserId);
 
       // Cycle 9: Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'custom_benchmark_created',
+            resourceType: 'custom_benchmark',
+            resourceId: benchmark.id,
+            details: JSON.stringify({
+              name: benchmark.name,
+              metricCode: benchmark.metricCode,
+              organizationId: benchmark.organizationId,
+              benchmarkValue: benchmark.benchmarkValue,
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'custom_benchmark_created',
           userId: requestingUserId,
-          action: 'custom_benchmark_created',
           resourceType: 'custom_benchmark',
           resourceId: benchmark.id,
-          details: JSON.stringify({
-            name: benchmark.name,
-            metricCode: benchmark.metricCode,
-            organizationId: benchmark.organizationId,
-            benchmarkValue: benchmark.benchmarkValue,
-          }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return benchmark;
     } catch (error) {
@@ -410,29 +392,26 @@ export class BenchmarkService extends BaseService {
       const updated = await this.storage.updateCustomBenchmark(organizationId, benchmarkId, benchmarkData);
 
       // Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'custom_benchmark_updated',
+            resourceType: 'custom_benchmark',
+            resourceId: benchmarkId,
+            details: JSON.stringify(benchmarkData),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'custom_benchmark_updated',
           userId: requestingUserId,
-          action: 'custom_benchmark_updated',
           resourceType: 'custom_benchmark',
           resourceId: benchmarkId,
-          details: JSON.stringify(benchmarkData),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return updated;
     } catch (error) {
@@ -472,23 +451,26 @@ export class BenchmarkService extends BaseService {
       }
 
       // Create audit log BEFORE deletion with production safety check
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'custom_benchmark_deleted',
+            resourceType: 'custom_benchmark',
+            resourceId: benchmarkId,
+            details: JSON.stringify({ name: benchmark.name, organizationId }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'custom_benchmark_deleted',
           userId: requestingUserId,
-          action: 'custom_benchmark_deleted',
           resourceType: 'custom_benchmark',
           resourceId: benchmarkId,
-          details: JSON.stringify({ name: benchmark.name, organizationId }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-        // In production, audit trail is mandatory for compliance - prevent deletion
-        if (process.env.NODE_ENV === 'production') {
-          throw new Error('Failed to create audit trail for custom benchmark deletion. Operation aborted for compliance.');
         }
-      }
+      );
 
       // Delete benchmark AFTER audit log is created (storage layer validates ownership)
       await this.storage.deleteCustomBenchmark(organizationId, benchmarkId);
@@ -506,6 +488,12 @@ export class BenchmarkService extends BaseService {
     filters?: BenchmarkFilters
   ): Promise<CustomBenchmark[]> {
     try {
+      // Verify organization exists first (even for site admins)
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error(`Organization not found: ${organizationId}`);
+      }
+
       // Verify org access
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.validateOrganizationAccess(
@@ -567,33 +555,30 @@ export class BenchmarkService extends BaseService {
       const enabled = await this.storage.enableBenchmarkForOrg(organizationId, benchmarkId, benchmarkType);
 
       // Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'org_benchmark_enabled',
+            resourceType: 'organization_benchmark',
+            resourceId: enabled.id,
+            details: JSON.stringify({
+              organizationId,
+              benchmarkId,
+              benchmarkType,
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'org_benchmark_enabled',
           userId: requestingUserId,
-          action: 'org_benchmark_enabled',
           resourceType: 'organization_benchmark',
           resourceId: enabled.id,
-          details: JSON.stringify({
-            organizationId,
-            benchmarkId,
-            benchmarkType,
-          }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return enabled;
     } catch (error) {
@@ -629,32 +614,29 @@ export class BenchmarkService extends BaseService {
       const disabled = await this.storage.disableBenchmarkForOrg(organizationId, benchmarkId, benchmarkType);
 
       // Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Create audit log with retry logic
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'org_benchmark_disabled',
+            resourceType: 'organization_benchmark',
+            resourceId: disabled.id,
+            details: JSON.stringify({
+              organizationId,
+              benchmarkId,
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'org_benchmark_disabled',
           userId: requestingUserId,
-          action: 'org_benchmark_disabled',
           resourceType: 'organization_benchmark',
           resourceId: disabled.id,
-          details: JSON.stringify({
-            organizationId,
-            benchmarkId,
-          }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
         }
-      }
+      );
 
       return disabled;
     } catch (error) {
