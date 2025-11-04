@@ -60,7 +60,7 @@ const setupTestData = async () => {
 
   const orgAdminResult = await db.insert(users).values({
     username: testOrgAdminUsername,
-    email: `orgadmin${Date.now()}@test.com`,
+    emails: [`orgadmin${Date.now()}@test.com`],
     password: hashedPassword,
     firstName: 'Org',
     lastName: 'Admin',
@@ -109,9 +109,33 @@ const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = '
     ? { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'TestPassword123!' }
     : { username: testOrgAdminUsername, password: 'TestPassword123!' };
 
+  // For orgAdmin, verify the user exists before attempting login
+  if (userType === 'orgAdmin') {
+    const userCheck = await db.select().from(users).where(eq(users.username, testOrgAdminUsername)).limit(1);
+    console.log('OrgAdmin user check:', {
+      username: testOrgAdminUsername,
+      exists: userCheck.length > 0,
+      user: userCheck[0] ? {
+        username: userCheck[0].username,
+        isActive: userCheck[0].isActive,
+        isSiteAdmin: userCheck[0].isSiteAdmin,
+        role: userCheck[0].role
+      } : null
+    });
+  }
+
   const loginResponse = await agent
     .post('/api/auth/login')
     .send(credentials);
+
+  if (loginResponse.status !== 200) {
+    console.error('Login failed:', {
+      userType,
+      username: credentials.username,
+      status: loginResponse.status,
+      body: loginResponse.body
+    });
+  }
 
   expect(loginResponse.status).toBe(200);
   return agent;
