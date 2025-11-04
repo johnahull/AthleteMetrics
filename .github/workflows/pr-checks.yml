@@ -62,8 +62,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
-      - name: Apply manual SQL migrations
-        run: npm run db:migrate:manual
+      - name: Seed default metrics
+        run: npx tsx scripts/seed-default-metrics.ts
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
@@ -126,8 +126,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
-      - name: Apply manual SQL migrations
-        run: npm run db:migrate:manual
+      - name: Seed default metrics
+        run: npx tsx scripts/seed-default-metrics.ts
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
