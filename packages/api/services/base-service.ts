@@ -15,7 +15,7 @@ export abstract class BaseService {
   /**
    * Check if user is a site administrator
    */
-  protected async isSiteAdmin(userId: string): Promise<boolean> {
+  public async isSiteAdmin(userId: string): Promise<boolean> {
     const user = await this.storage.getUser(userId);
     return user?.isSiteAdmin === true;
   }
@@ -42,18 +42,29 @@ export abstract class BaseService {
     // Site admins have access to all organizations
     if (isAdmin) {
       // Create audit log for site admin access
-      await this.storage.createAuditLog({
-        userId,
-        action: 'site_admin_organization_access',
-        resourceType: 'organization',
-        resourceId: organizationId,
-        details: JSON.stringify({ accessType: 'site_admin_override' }),
-        ipAddress: null,
-        userAgent: null,
-      }).catch(err => {
-        // Don't fail the request if audit logging fails
-        console.error('Failed to create audit log:', err);
-      });
+      try {
+        await this.storage.createAuditLog({
+          userId,
+          action: 'site_admin_organization_access',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({ accessType: 'site_admin_override' }),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('Failed to create audit log:', auditError);
+
+        // Security: Block operation in production if audit log fails
+        if (process.env.NODE_ENV === 'production') {
+          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
+            operation: 'audit_log_failure',
+            userId,
+            error: auditError instanceof Error ? auditError.message : 'Unknown error',
+          });
+          throw new Error('Failed to create audit log - operation blocked for security');
+        }
+      }
       return true;
     }
 

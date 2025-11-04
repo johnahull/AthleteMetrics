@@ -12,7 +12,8 @@ import {
   FileCheck,
   FileText,
   TrendingUp,
-  Settings
+  Settings,
+  Target
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -27,7 +28,8 @@ const NAVIGATION_CONFIGS = {
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
-      { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" }
+      { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
+      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -36,7 +38,8 @@ const NAVIGATION_CONFIGS = {
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Measurements", href: "/publish", icon: FileCheck },
-      { name: "Import/Export", href: "/import-export", icon: FileText }
+      { name: "Import/Export", href: "/import-export", icon: FileText },
+      { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
     ]
   },
   org_admin: [
@@ -47,6 +50,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
+    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
     { name: "My Organization", href: "/organizations", icon: Building2 }
   ],
   coach: [
@@ -56,7 +60,8 @@ const NAVIGATION_CONFIGS = {
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Measurements", href: "/publish", icon: FileCheck },
-    { name: "Import/Export", href: "/import-export", icon: FileText }
+    { name: "Import/Export", href: "/import-export", icon: FileText },
+    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
   ],
   athlete: [
     { name: "Analytics", href: "/analytics", icon: BarChart3 }
@@ -96,8 +101,22 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     if (orgIndex !== -1) {
       navigation[orgIndex].href = `/organizations/${userOrganizations[0].organizationId}`;
     }
+
+    // Update benchmarks link with organization ID
+    const benchmarksIndex = navigation.findIndex(item => item.name === "Benchmarks");
+    if (benchmarksIndex !== -1) {
+      navigation[benchmarksIndex].href = `/organizations/${userOrganizations[0].organizationId}/benchmarks`;
+    }
   }
-  
+
+  // Update site admin organization context benchmarks link with organization ID
+  if (isSiteAdmin && isInOrganizationContext && organizationContext) {
+    const benchmarksIndex = navigation.findIndex(item => item.name === "Benchmarks");
+    if (benchmarksIndex !== -1) {
+      navigation[benchmarksIndex].href = `/organizations/${organizationContext}/benchmarks`;
+    }
+  }
+
   return navigation;
 };
 

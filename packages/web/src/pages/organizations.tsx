@@ -14,7 +14,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, Trash2, CheckCircle, Ban } from "lucide-react";
+import { Plus, Building2, Trash2, CheckCircle, Ban, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { mutations, type ApiError } from "@/lib/api";
@@ -337,6 +337,25 @@ export default function Organizations() {
                     {/* Site Admin Actions */}
                     {user?.isSiteAdmin && (
                       <div className="flex items-center gap-2 ml-4">
+                        {/* Settings Button */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`/organizations/${org.id}/settings`}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid={`settings-org-${org.id}`}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Organization settings (feature flags, basic info)</p>
+                          </TooltipContent>
+                        </Tooltip>
+
                         {/* Deactivate/Activate Button */}
                         <Tooltip>
                           <TooltipTrigger asChild>

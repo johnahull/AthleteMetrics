@@ -27,6 +27,7 @@ const UserManagement = React.lazy(() => import("./pages/user-management"));
 const Profile = React.lazy(() => import("./pages/profile"));
 const UserProfile = React.lazy(() => import("./pages/user-profile"));
 const OrganizationProfile = React.lazy(() => import("./pages/organization-profile"));
+const OrganizationSettings = React.lazy(() => import("./pages/organization-settings"));
 const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
 const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
@@ -40,6 +41,12 @@ const AthleteAnalytics = React.lazy(() => import("./pages/AthleteAnalytics"));
 
 // Lazy load welcome page
 const Welcome = React.lazy(() => import("./pages/welcome"));
+
+// Lazy load benchmark pages
+const Benchmarks = React.lazy(() => import("./pages/benchmarks"));
+const OrganizationBenchmarks = React.lazy(() => import("./pages/organization-benchmarks"));
+const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
+const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
 
 function Router() {
   return (
@@ -59,6 +66,11 @@ function Router() {
       <Route path="/athletes">
         <RouteWrapper loadingText="Loading Athletes...">
           <Athletes />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id/settings">
+        <RouteWrapper loadingText="Loading Organization Settings...">
+          <OrganizationSettings />
         </RouteWrapper>
       </Route>
       <Route path="/organizations/:id">
@@ -119,6 +131,26 @@ function Router() {
       <Route path="/metrics">
         <RouteWrapper loadingText="Loading Metrics Management...">
           <MetricsManagement />
+        </RouteWrapper>
+      </Route>
+      <Route path="/benchmarks">
+        <RouteWrapper loadingText="Loading Benchmarks...">
+          <Benchmarks />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id/custom-benchmarks">
+        <RouteWrapper loadingText="Loading Custom Benchmarks...">
+          <CustomBenchmarks />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id/benchmarks">
+        <RouteWrapper loadingText="Loading Organization Benchmarks...">
+          <OrganizationBenchmarks />
+        </RouteWrapper>
+      </Route>
+      <Route path="/athletes/:id/benchmarks">
+        <RouteWrapper loadingText="Loading Athlete Benchmarks...">
+          <AthleteBenchmarks />
         </RouteWrapper>
       </Route>
       <Route path="/teams">

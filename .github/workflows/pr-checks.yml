@@ -62,6 +62,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
+      - name: Apply cascade delete triggers
+        run: ./scripts/apply-cascade-triggers.sh
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+
       - name: Run unit tests
         run: npm run test:unit
         env:
@@ -113,6 +118,11 @@ jobs:
 
       - name: Run database migrations
         run: npm run db:push
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+
+      - name: Apply cascade delete triggers
+        run: ./scripts/apply-cascade-triggers.sh
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
