@@ -45,8 +45,24 @@ describe('Benchmark Storage', () => {
     }).returning();
     siteAdminUserId = siteAdmin.id;
 
-    // Use existing FLY10_TIME metric from seed data (migration 0024)
+    // Create test metric FLY10_TIME (use unique name if it already exists)
     testMetricCode = 'FLY10_TIME';
+
+    // Try to insert, or use existing if it already exists (e.g., from seed data)
+    try {
+      await db.insert(siteMetrics).values({
+        code: testMetricCode,
+        label: '10-Yard Fly Time',
+        category: 'speed',
+        unit: 's',
+        lowerIsBetter: true,
+        isSystemDefault: true,
+        isActive: true,
+      }).onConflictDoNothing();
+    } catch (error) {
+      // Metric already exists, which is fine
+      console.log(`Metric ${testMetricCode} already exists, continuing...`);
+    }
   });
 
   afterEach(async () => {

@@ -33,6 +33,7 @@ let app: Express;
 let testOrgId: string;
 let testSiteAdminId: string;
 let testOrgAdminId: string;
+let testOrgAdminUsername: string; // Store username for login
 let testSiteBenchmarkId: string;
 let testCustomBenchmarkId: string;
 let activeAgents: Set<request.SuperAgentTest> = new Set();
@@ -53,10 +54,14 @@ const setupTestData = async () => {
   testOrgId = orgResult[0].id;
 
   // Create org admin user
+  const bcrypt = await import('bcryptjs');
+  const hashedPassword = await bcrypt.hash('TestPassword123!', 12);
+  testOrgAdminUsername = 'orgadmin' + Date.now();
+
   const orgAdminResult = await db.insert(users).values({
-    username: 'orgadmin' + Date.now(),
+    username: testOrgAdminUsername,
     email: `orgadmin${Date.now()}@test.com`,
-    password: 'TestPassword123!',
+    password: hashedPassword,
     firstName: 'Org',
     lastName: 'Admin',
     fullName: 'Org Admin', // Required field
@@ -102,7 +107,7 @@ const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = '
 
   const credentials = userType === 'siteAdmin'
     ? { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'TestPassword123!' }
-    : { username: 'orgadmin' + Date.now(), password: 'TestPassword123!' };
+    : { username: testOrgAdminUsername, password: 'TestPassword123!' };
 
   const loginResponse = await agent
     .post('/api/auth/login')
