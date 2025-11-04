@@ -48,12 +48,6 @@ const setupTestData = async () => {
   const adminPassword = process.env.ADMIN_PASSWORD || 'TestPassword123!';
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@test.com';
 
-  console.log('Setup admin user:', {
-    username: adminUsername,
-    passwordLength: adminPassword.length,
-    passwordSource: process.env.ADMIN_PASSWORD ? 'env' : 'default'
-  });
-
   const adminHashedPassword = await bcrypt.hash(adminPassword, BCRYPT_SALT_ROUNDS);
 
   const adminUserResult = await db.insert(users).values({
@@ -143,14 +137,6 @@ const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = '
   const credentials = userType === 'siteAdmin'
     ? { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'TestPassword123!' }
     : { username: testOrgAdminUsername, password: 'TestPassword123!' };
-
-  if (userType === 'siteAdmin') {
-    console.log('Login attempt:', {
-      username: credentials.username,
-      passwordLength: credentials.password.length,
-      passwordSource: process.env.ADMIN_PASSWORD ? 'env' : 'default'
-    });
-  }
 
   // For orgAdmin, verify the user exists before attempting login
   if (userType === 'orgAdmin') {
