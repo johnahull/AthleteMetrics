@@ -3668,6 +3668,14 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
 
+    // Get the max display order for this organization to assign a unique one
+    const [maxDisplayOrder] = await db
+      .select({ maxOrder: sql<number>`COALESCE(MAX(${organizationBenchmarks.displayOrder}), 0)` })
+      .from(organizationBenchmarks)
+      .where(eq(organizationBenchmarks.organizationId, organizationId));
+
+    const nextDisplayOrder = (maxDisplayOrder?.maxOrder ?? 0) + 1;
+
     // Create new enablement record
     const [created] = await db
       .insert(organizationBenchmarks)
@@ -3676,6 +3684,7 @@ export class DatabaseStorage implements IStorage {
         benchmarkId,
         benchmarkType,
         isEnabled: true,
+        displayOrder: nextDisplayOrder,
         createdAt: new Date(),
       })
       .returning();
