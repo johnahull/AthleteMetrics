@@ -68,19 +68,21 @@ export class BenchmarkService extends BaseService {
 
       // Cycle 3: Create audit log with retry logic
       await retryAuditLog(
-        () => this.storage.createAuditLog({
-          userId: requestingUserId,
-          action: 'benchmark_created',
-          resourceType: 'site_benchmark',
-          resourceId: benchmark.id,
-          details: JSON.stringify({
-            name: benchmark.name,
-            metricCode: benchmark.metricCode,
-            benchmarkValue: benchmark.benchmarkValue,
-          }),
-          ipAddress: context?.ipAddress || null,
-          userAgent: context?.userAgent || null,
-        }),
+        async () => {
+          await this.storage.createAuditLog({
+            userId: requestingUserId,
+            action: 'benchmark_created',
+            resourceType: 'site_benchmark',
+            resourceId: benchmark.id,
+            details: JSON.stringify({
+              name: benchmark.name,
+              metricCode: benchmark.metricCode,
+              benchmarkValue: benchmark.benchmarkValue,
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
         {
           operation: 'benchmark_created',
           userId: requestingUserId,
