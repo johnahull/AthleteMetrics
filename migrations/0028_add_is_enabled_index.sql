@@ -13,14 +13,13 @@
 -- This index optimizes queries that filter by is_enabled across organizations
 -- without requiring a specific organization_id in the WHERE clause
 CREATE INDEX IF NOT EXISTS org_benchmarks_enabled_idx
-  ON organization_benchmarks(is_enabled)
-  WHERE is_enabled = true;
+  ON organization_benchmarks(is_enabled);
 
--- Note: This is a partial index that only indexes enabled benchmarks
--- since most queries filter for enabled benchmarks only
+-- Note: This is a full index covering both enabled and disabled benchmarks
+-- to support queries filtering for either state
 
 -- Add comment for documentation
-COMMENT ON INDEX org_benchmarks_enabled_idx IS 'Partial index for filtering enabled benchmarks across organizations';
+COMMENT ON INDEX org_benchmarks_enabled_idx IS 'Index for filtering benchmarks by enabled/disabled state across organizations';
 
 -- ============================================================================
 -- Rollback Instructions (if needed)

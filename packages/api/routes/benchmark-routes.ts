@@ -163,8 +163,13 @@ export function registerBenchmarkRoutes(app: Express) {
         benchmarkService.getSiteBenchmark(id)
       ]);
 
-      // Non-site-admins can only view active benchmarks
-      if (!benchmark || (!benchmark.isActive && !isSiteAdmin)) {
+      // Timing-safe visibility check: always evaluate both conditions
+      // to prevent revealing information through execution time
+      const benchmarkExists = !!benchmark;
+      const benchmarkActive = benchmark?.isActive ?? false;
+      const canView = benchmarkExists && (benchmarkActive || isSiteAdmin);
+
+      if (!canView) {
         return res.status(404).json({ message: "Benchmark not found" });
       }
 

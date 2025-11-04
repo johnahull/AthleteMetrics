@@ -5,6 +5,7 @@
  */
 
 import { BaseService } from "./base-service";
+import { retryAuditLog } from "../utils/audit-retry";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
@@ -65,9 +66,9 @@ export class BenchmarkService extends BaseService {
       // Create benchmark
       const benchmark = await this.storage.createSiteBenchmark(validatedData, requestingUserId);
 
-      // Cycle 3: Create audit log
-      try {
-        await this.storage.createAuditLog({
+      // Cycle 3: Create audit log with retry logic
+      await retryAuditLog(
+        () => this.storage.createAuditLog({
           userId: requestingUserId,
           action: 'benchmark_created',
           resourceType: 'site_benchmark',
@@ -79,20 +80,14 @@ export class BenchmarkService extends BaseService {
           }),
           ipAddress: context?.ipAddress || null,
           userAgent: context?.userAgent || null,
-        });
-      } catch (auditError) {
-        console.error('Failed to create audit log:', auditError);
-
-        // Security: Block operation in production if audit log fails
-        if (process.env.NODE_ENV === 'production') {
-          console.error('SECURITY ALERT: Audit log failure - blocking operation', {
-            operation: 'audit_log_failure',
-            userId: requestingUserId,
-            error: auditError instanceof Error ? auditError.message : 'Unknown error',
-          });
-          throw new Error('Failed to create audit log - operation blocked for security');
+        }),
+        {
+          operation: 'benchmark_created',
+          userId: requestingUserId,
+          resourceType: 'site_benchmark',
+          resourceId: benchmark.id,
         }
-      }
+      );
 
       return benchmark;
     } catch (error) {
