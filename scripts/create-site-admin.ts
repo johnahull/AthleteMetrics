@@ -34,6 +34,24 @@ async function createSiteAdmin() {
     process.exit(1);
   }
 
+  // Validate password strength
+  if (password.length < 8) {
+    console.error('❌ Password must be at least 8 characters long');
+    process.exit(1);
+  }
+  if (!/[A-Z]/.test(password)) {
+    console.error('❌ Password must contain at least one uppercase letter');
+    process.exit(1);
+  }
+  if (!/[a-z]/.test(password)) {
+    console.error('❌ Password must contain at least one lowercase letter');
+    process.exit(1);
+  }
+  if (!/[0-9]/.test(password)) {
+    console.error('❌ Password must contain at least one number');
+    process.exit(1);
+  }
+
   console.log('🔧 Creating site admin user...');
   console.log(`Username: ${username}`);
   console.log(`Email: ${email}`);

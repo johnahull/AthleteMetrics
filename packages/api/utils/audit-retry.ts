@@ -37,16 +37,27 @@ export async function retryWithBackoff<T>(
     } catch (error) {
       lastError = error;
 
+      // Fast-fail on non-retryable errors (permanent failures)
+      if (error instanceof Error) {
+        const nonRetryable = ['permission', 'unauthorized', 'validation', 'not found', 'duplicate'];
+        if (nonRetryable.some(msg => error.message.toLowerCase().includes(msg))) {
+          throw error; // Don't waste retries on permanent failures
+        }
+      }
+
       // If this was the last attempt, throw the error
       if (attempt === maxRetries) {
         break;
       }
 
-      // Calculate delay with exponential backoff
-      const delay = Math.min(
+      // Calculate delay with exponential backoff and jitter
+      const baseDelay = Math.min(
         initialDelayMs * Math.pow(backoffMultiplier, attempt),
         maxDelayMs
       );
+      // Add ±25% jitter to prevent thundering herd
+      const jitter = baseDelay * 0.25 * (Math.random() * 2 - 1);
+      const delay = Math.max(0, baseDelay + jitter);
 
       // Log retry attempt (not in production to avoid log spam)
       if (process.env.NODE_ENV !== 'production') {

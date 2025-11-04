@@ -158,16 +158,23 @@ export function registerBenchmarkRoutes(app: Express) {
       const userId = req.session.user!.id;
 
       // Security: Fetch both in parallel to prevent timing attacks
+      const startTime = Date.now();
       const [isSiteAdmin, benchmark] = await Promise.all([
         benchmarkService.isSiteAdmin(userId),
         benchmarkService.getSiteBenchmark(id)
       ]);
 
-      // Timing-safe visibility check: always evaluate both conditions
+      // Timing-safe visibility check using constant-time arithmetic operations
       // to prevent revealing information through execution time
-      const benchmarkExists = !!benchmark;
-      const benchmarkActive = benchmark?.isActive ?? false;
-      const canView = benchmarkExists && (benchmarkActive || isSiteAdmin);
+      const benchmarkExists = benchmark ? 1 : 0;
+      const benchmarkActive = (benchmark?.isActive ?? false) ? 1 : 0;
+      const adminAccess = isSiteAdmin ? 1 : 0;
+      const canView = (benchmarkExists & (benchmarkActive | adminAccess)) === 1;
+
+      // Normalize response time to prevent timing analysis
+      const minResponseTimeMs = 50;
+      const elapsed = Date.now() - startTime;
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, minResponseTimeMs - elapsed)));
 
       if (!canView) {
         return res.status(404).json({ message: "Benchmark not found" });
