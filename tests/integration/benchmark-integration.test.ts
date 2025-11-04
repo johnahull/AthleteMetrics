@@ -188,10 +188,12 @@ describe('Benchmark Endpoints Integration Tests', () => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
 
-    // Register routes
-    await registerRoutes(app);
-
+    // Setup test data BEFORE registering routes
+    // This ensures admin user exists when routes initialize
     await setupTestData();
+
+    // Register routes after test data is ready
+    await registerRoutes(app);
   });
 
   afterAll(async () => {
