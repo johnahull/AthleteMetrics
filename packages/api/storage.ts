@@ -3668,18 +3668,21 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
 
-    // Use transaction to prevent race condition in display order assignment
-    // Ensures atomic read-modify-write for MAX(display_order) + 1 pattern
+    // Use transaction with advisory lock to prevent race condition in display order assignment
+    // Advisory lock ensures only one transaction at a time can assign display_order for this organization
     return await db.transaction(async (tx: any) => {
-      // Lock all rows for this organization to prevent concurrent display_order calculation
-      // FOR UPDATE locks the actual rows, then we compute MAX() locally
+      // Acquire advisory lock for this organization (automatically released at transaction end)
+      // Use hash of organizationId UUID to get a stable integer key
+      const orgIdHash = organizationId.split('-').reduce((acc, part) => acc + parseInt(part, 16), 0);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${orgIdHash})`);
+
+      // Now safely compute next display order (protected by advisory lock)
       const existingBenchmarks = await tx
         .select({ displayOrder: organizationBenchmarks.displayOrder })
         .from(organizationBenchmarks)
-        .where(eq(organizationBenchmarks.organizationId, organizationId))
-        .for('update');
+        .where(eq(organizationBenchmarks.organizationId, organizationId));
 
-      // Compute max display order locally from locked rows
+      // Compute max display order locally
       const maxDisplayOrder = existingBenchmarks.length > 0
         ? Math.max(...existingBenchmarks.map((b: { displayOrder: number | null }) => b.displayOrder ?? 0))
         : 0;
