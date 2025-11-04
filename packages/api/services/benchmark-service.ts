@@ -503,6 +503,12 @@ export class BenchmarkService extends BaseService {
     filters?: BenchmarkFilters
   ): Promise<CustomBenchmark[]> {
     try {
+      // Verify organization exists first (even for site admins)
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error(`Organization not found: ${organizationId}`);
+      }
+
       // Verify org access
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.validateOrganizationAccess(
