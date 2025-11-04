@@ -3668,22 +3668,42 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
 
-    // Create new enablement record
-    // displayOrder will use the DEFAULT 999 from schema (migration 0029)
-    // This prevents race conditions from MAX(display_order) + 1 pattern
-    const [created] = await db
-      .insert(organizationBenchmarks)
-      .values({
-        organizationId,
-        benchmarkId,
-        benchmarkType,
-        isEnabled: true,
-        // displayOrder omitted - uses DEFAULT 999 from schema
-        createdAt: new Date(),
-      })
-      .returning();
+    // Use transaction with advisory lock to prevent race condition in display order assignment
+    // Advisory lock ensures only one transaction at a time can assign display_order for this organization
+    return await db.transaction(async (tx) => {
+      // Acquire advisory lock for this organization (automatically released at transaction end)
+      // Use hash of organizationId UUID to get a stable integer key
+      const orgIdHash = organizationId.split('-').reduce((acc, part) => acc + parseInt(part, 16), 0);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${orgIdHash})`);
 
-    return created;
+      // Now safely compute next display order (protected by advisory lock)
+      const existingBenchmarks = await tx
+        .select({ displayOrder: organizationBenchmarks.displayOrder })
+        .from(organizationBenchmarks)
+        .where(eq(organizationBenchmarks.organizationId, organizationId));
+
+      // Compute max display order locally
+      const maxDisplayOrder = existingBenchmarks.length > 0
+        ? Math.max(...existingBenchmarks.map((b: { displayOrder: number | null }) => b.displayOrder ?? 0))
+        : 0;
+
+      const nextDisplayOrder = maxDisplayOrder + 1;
+
+      // Create new enablement record with unique display order
+      const [created] = await tx
+        .insert(organizationBenchmarks)
+        .values({
+          organizationId,
+          benchmarkId,
+          benchmarkType,
+          isEnabled: true,
+          displayOrder: nextDisplayOrder,
+          createdAt: new Date(),
+        })
+        .returning();
+
+      return created;
+    });
   }
 
   async disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {

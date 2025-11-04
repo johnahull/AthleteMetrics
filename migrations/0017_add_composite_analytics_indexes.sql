@@ -17,8 +17,19 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_team_verified_date
   WHERE team_id IS NOT NULL AND is_verified = true;
 
 -- Index comments for documentation
-COMMENT ON INDEX idx_measurements_org_date_verified IS
-  'Composite index for org-scoped analytics - optimizes dashboard 30-day window queries';
+-- Note: COMMENT ON INDEX doesn't support IF EXISTS, so we use DO blocks to check first
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_measurements_org_date_verified') THEN
+    COMMENT ON INDEX idx_measurements_org_date_verified IS
+      'Composite index for org-scoped analytics - optimizes dashboard 30-day window queries';
+  END IF;
+END $$;
 
-COMMENT ON INDEX idx_measurements_team_verified_date IS
-  'Composite index for team analytics - optimizes team performance queries with verification filter';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_measurements_team_verified_date') THEN
+    COMMENT ON INDEX idx_measurements_team_verified_date IS
+      'Composite index for team analytics - optimizes team performance queries with verification filter';
+  END IF;
+END $$;
