@@ -34,19 +34,20 @@ import bcrypt from 'bcrypt';
 let app: Express;
 let testOrgId: string;
 let testSiteAdminId: string;
+let testSiteAdminUsername: string; // Store site admin username for login
 let testOrgAdminId: string;
-let testOrgAdminUsername: string; // Store username for login
+let testOrgAdminUsername: string; // Store org admin username for login
 let testSiteBenchmarkId: string;
 let testCustomBenchmarkId: string;
 let activeAgents: Set<request.SuperAgentTest> = new Set();
 
 // Test data setup
 const setupTestData = async () => {
-  // Explicitly create site admin user for integration tests
-  // This ensures the admin user exists without relying on initializeDefaultUser()
-  const adminUsername = process.env.ADMIN_USER || 'admin';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'TestPassword123!';
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@test.com';
+  // Create dedicated admin user for benchmark tests to avoid conflicts with other tests
+  // Use a unique username so this test doesn't interfere with admin-initialization.test.ts
+  const adminUsername = 'benchmark-test-admin-' + Date.now();
+  const adminPassword = 'TestPassword123!';
+  const adminEmail = 'benchmark-admin@test.com';
 
   const adminHashedPassword = await bcrypt.hash(adminPassword, BCRYPT_SALT_ROUNDS);
 
@@ -70,6 +71,7 @@ const setupTestData = async () => {
   }).returning();
 
   testSiteAdminId = adminUserResult[0].id;
+  testSiteAdminUsername = adminUsername; // Save username for login
 
   if (!testSiteAdminId) {
     throw new Error('Failed to create or retrieve site admin user for integration tests');
@@ -128,6 +130,10 @@ const cleanupTestData = async () => {
   if (testOrgAdminId) {
     await db.delete(users).where(eq(users.id, testOrgAdminId));
   }
+
+  if (testSiteAdminId) {
+    await db.delete(users).where(eq(users.id, testSiteAdminId));
+  }
 };
 
 const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = 'siteAdmin') => {
@@ -135,7 +141,7 @@ const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = '
   activeAgents.add(agent);
 
   const credentials = userType === 'siteAdmin'
-    ? { username: process.env.ADMIN_USER || 'admin', password: process.env.ADMIN_PASSWORD || 'TestPassword123!' }
+    ? { username: testSiteAdminUsername, password: 'TestPassword123!' }
     : { username: testOrgAdminUsername, password: 'TestPassword123!' };
 
   // For orgAdmin, verify the user exists before attempting login
