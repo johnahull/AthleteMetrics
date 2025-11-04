@@ -271,36 +271,9 @@ describe('Benchmark Endpoints Integration Tests', () => {
         cleanupAgent(agent);
       });
 
-      it('should enforce rate limiting', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
-        const isTestEnv = process.env.NODE_ENV === 'test';
-
-        // Make requests up to rate limit
-        const requests = Array.from({ length: 101 }, () =>
-          agent.get('/api/benchmarks/00000000-0000-0000-0000-000000000000')
-        );
-
-        const responses = await Promise.all(requests);
-
-        // Test environment behavior: Rate limiting is intentionally bypassed
-        // This is configured in rate limiter middleware via skip: () => process.env.NODE_ENV === 'test'
-        if (isTestEnv) {
-          // Assert rate limiting is intentionally disabled in test environment
-          // All requests should succeed (404 for non-existent ID, not 429 rate limit)
-          const nonRateLimitedResponses = responses.filter(r => r.status !== 429);
-          expect(nonRateLimitedResponses.length).toBe(101);
-
-          // Verify we're actually testing the bypass behavior
-          const rateLimitedResponses = responses.filter(r => r.status === 429);
-          expect(rateLimitedResponses.length).toBe(0); // No rate limiting in test mode
-        } else {
-          // Production/staging behavior: Rate limiting should be enforced
-          // At least one request should be rate limited (429 Too Many Requests)
-          const rateLimitedResponses = responses.filter(r => r.status === 429);
-          expect(rateLimitedResponses.length).toBeGreaterThan(0);
-        }
-        cleanupAgent(agent);
-      });
+      // Rate limiting test removed - redundant with dedicated rate-limiting-security.test.ts
+      // and flaky due to 101 parallel requests causing ECONNRESET errors
+      // Rate limiting is also bypassed in test env, so this wasn't testing actual rate limiting
     });
 
     describe('POST /api/benchmarks', () => {
