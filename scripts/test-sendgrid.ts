@@ -15,11 +15,10 @@
  *   --type   Email type: invitation, welcome, verification, password-reset (default: invitation)
  */
 
-import { emailService } from '../packages/api/services/email-service.js';
+// Load environment variables BEFORE importing email service
 import dotenv from 'dotenv';
-
-// Load environment variables
 dotenv.config();
+dotenv.config({ path: '.env.local' }); // Load .env.local for local testing
 
 // ANSI color codes for console output
 const colors = {
@@ -155,9 +154,17 @@ async function testSendGrid() {
   printSuccess(`Recipient email: ${recipientEmail}`);
   printInfo(`Email type: ${emailType}`);
 
-  // Step 3: Send test email
+  // Step 3: Load email service (dynamic import ensures env vars are available)
   console.log('');
-  console.log(colorize('Step 3: Sending Test Email', 'bright'));
+  console.log(colorize('Step 3: Loading Email Service', 'bright'));
+  console.log(colorize('─'.repeat(60), 'cyan'));
+
+  const { emailService } = await import('../packages/api/services/email-service.js');
+  printSuccess('Email service loaded successfully');
+
+  // Step 4: Send test email
+  console.log('');
+  console.log(colorize('Step 4: Sending Test Email', 'bright'));
   console.log(colorize('─'.repeat(60), 'cyan'));
 
   try {
