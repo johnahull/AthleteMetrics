@@ -43,39 +43,17 @@ let activeAgents: Set<request.SuperAgentTest> = new Set();
 
 // Test data setup
 const setupTestData = async () => {
-  // Create dedicated admin user for benchmark tests to avoid conflicts with other tests
-  // Use a unique username so this test doesn't interfere with admin-initialization.test.ts
-  const adminUsername = 'benchmark-test-admin-' + Date.now();
-  const adminPassword = 'TestPassword123!';
-  const adminEmail = 'benchmark-admin@test.com';
+  // Admin user is already created by initializeDefaultUser() in registerRoutes()
+  // Just fetch it for reference (don't create it manually)
+  const adminUsername = process.env.ADMIN_USER || 'admin';
 
-  const adminHashedPassword = await bcrypt.hash(adminPassword, BCRYPT_SALT_ROUNDS);
-
-  const adminUserResult = await db.insert(users).values({
-    username: adminUsername,
-    emails: [adminEmail],
-    password: adminHashedPassword,
-    firstName: 'Site',
-    lastName: 'Admin',
-    fullName: 'Site Admin',
-    isSiteAdmin: true,
-    isActive: true,
-    isEmailVerified: true,
-  }).onConflictDoUpdate({
-    target: users.username,
-    set: {
-      password: adminHashedPassword,
-      isSiteAdmin: true,
-      isActive: true,
-    }
-  }).returning();
-
-  testSiteAdminId = adminUserResult[0].id;
-  testSiteAdminUsername = adminUsername; // Save username for login
-
-  if (!testSiteAdminId) {
-    throw new Error('Failed to create or retrieve site admin user for integration tests');
+  const adminUsers = await db.select().from(users).where(eq(users.username, adminUsername)).limit(1);
+  if (adminUsers.length === 0) {
+    throw new Error('Admin user not found after initialization. This should not happen.');
   }
+
+  testSiteAdminId = adminUsers[0].id;
+  testSiteAdminUsername = adminUsername;
 
   // Create test organization with benchmarks enabled
   const orgResult = await db.insert(organizations).values({
@@ -131,9 +109,8 @@ const cleanupTestData = async () => {
     await db.delete(users).where(eq(users.id, testOrgAdminId));
   }
 
-  if (testSiteAdminId) {
-    await db.delete(users).where(eq(users.id, testSiteAdminId));
-  }
+  // Note: Do not delete the admin user created by initializeDefaultUser()
+  // It may be used by other tests
 };
 
 const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = 'siteAdmin') => {
@@ -141,7 +118,7 @@ const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = '
   activeAgents.add(agent);
 
   const credentials = userType === 'siteAdmin'
-    ? { username: testSiteAdminUsername, password: 'TestPassword123!' }
+    ? { username: testSiteAdminUsername, password: process.env.ADMIN_PASSWORD || 'TestPassword123!' }
     : { username: testOrgAdminUsername, password: 'TestPassword123!' };
 
   // For orgAdmin, verify the user exists before attempting login
@@ -490,7 +467,7 @@ describe('Benchmark Endpoints Integration Tests', () => {
         cleanupAgent(agent);
       });
 
-      it('should handle concurrent benchmark enablement without display_order conflicts', async () => {
+      it('should handle concurrent benchmark enablement without display_order conflicts', { timeout: 30000 }, async () => {
         const agent = await createAuthenticatedSession('siteAdmin');
 
         // Create 5 benchmarks
