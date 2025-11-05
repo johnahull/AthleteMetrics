@@ -479,11 +479,12 @@ export class AnalyticsService {
       }
 
       // Add birth year range filtering if specified
+      // Note: Include users with NULL birthDate to avoid excluding users without birth year data
       if (request.filters.birthYearFrom) {
-        whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom}`);
+        whereConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom} OR ${users.birthDate} IS NULL)`);
       }
       if (request.filters.birthYearTo) {
-        whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo}`);
+        whereConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo} OR ${users.birthDate} IS NULL)`);
       }
 
       // Add date range filtering if specified

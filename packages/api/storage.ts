@@ -2024,11 +2024,23 @@ export class DatabaseStorage implements IStorage {
     if (filters?.dateTo) {
       conditions.push(lte(measurements.date, filters.dateTo));
     }
+    // Birth year filtering (applied to users table)
+    // Note: Include users with NULL birthYear to avoid excluding users without birth year data
     if (filters?.birthYearFrom) {
-      conditions.push(gte(users.birthYear, filters.birthYearFrom));
+      conditions.push(
+        or(
+          gte(users.birthYear, filters.birthYearFrom),
+          isNull(users.birthYear)
+        )
+      );
     }
     if (filters?.birthYearTo) {
-      conditions.push(lte(users.birthYear, filters.birthYearTo));
+      conditions.push(
+        or(
+          lte(users.birthYear, filters.birthYearTo),
+          isNull(users.birthYear)
+        )
+      );
     }
     if (filters?.search) {
       conditions.push(sql`${users.fullName} ILIKE ${'%' + filters.search + '%'}`);
