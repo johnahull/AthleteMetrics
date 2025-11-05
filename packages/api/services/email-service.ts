@@ -19,6 +19,32 @@ function escapeHtml(unsafe: string | undefined | null): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * Sanitize URL to prevent javascript: protocol and other injection attacks
+ * Only allows http:, https:, and mailto: protocols
+ */
+function sanitizeUrl(url: string | undefined | null): string {
+  if (!url) return '#';
+
+  const urlString = String(url).trim();
+
+  // Check for dangerous protocols (javascript:, data:, file:, etc.)
+  const dangerousProtocols = /^(javascript|data|file|vbscript):/i;
+  if (dangerousProtocols.test(urlString)) {
+    console.error('⚠️ Dangerous URL protocol detected and blocked:', urlString);
+    return '#';
+  }
+
+  // Only allow http:, https:, and mailto: protocols
+  const allowedProtocols = /^(https?|mailto):/i;
+  if (!allowedProtocols.test(urlString)) {
+    // If no protocol, assume it's a relative URL - make it safe
+    return '#';
+  }
+
+  return urlString;
+}
+
 // Initialize SendGrid
 const apiKey = process.env.SENDGRID_API_KEY;
 if (apiKey) {
@@ -216,7 +242,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${data.invitationLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(data.invitationLink)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Accept Invitation
                     </a>
                   </td>
@@ -228,7 +254,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${data.invitationLink}
+                ${escapeHtml(data.invitationLink)}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -349,7 +375,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${data.verificationLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(data.verificationLink)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Verify Email
                     </a>
                   </td>
@@ -361,7 +387,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${data.verificationLink}
+                ${escapeHtml(data.verificationLink)}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -422,7 +448,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${data.resetLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(data.resetLink)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Reset Password
                     </a>
                   </td>
@@ -434,7 +460,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${data.resetLink}
+                ${escapeHtml(data.resetLink)}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">

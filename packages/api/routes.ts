@@ -827,6 +827,23 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for test email operations (development/staging only)
+  const testEmailLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 5, // Limit each IP to 5 test email operations per 15 minutes
+    message: {
+      error: "Too many test email requests, please try again later."
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || bypassForDev;
+    }
+  });
+
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
 
@@ -5723,6 +5740,135 @@ export async function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Contact data cleanup error:', error);
       res.status(500).json({ message: "Contact data cleanup failed", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // TESTING ENDPOINT: Send test emails (development/staging only)
+  interface TestEmailRequest {
+    emailType: 'invitation' | 'welcome' | 'verification' | 'password-reset';
+    recipientEmail: string;
+  }
+
+  app.post("/api/test/send-email", testEmailLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      // Only allow in development and staging environments
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          success: false,
+          error: 'This endpoint is not available in production environments'
+        });
+      }
+
+      const { emailType, recipientEmail } = req.body as TestEmailRequest;
+
+      // Validate required parameters
+      if (!emailType) {
+        return res.status(400).json({
+          success: false,
+          error: 'emailType is required. Valid types: invitation, welcome, verification, password-reset'
+        });
+      }
+
+      if (!recipientEmail) {
+        return res.status(400).json({
+          success: false,
+          error: 'recipientEmail is required'
+        });
+      }
+
+      // Validate email format
+      const { isValidEmail } = await import('@shared/email-validation.js');
+      if (!isValidEmail(recipientEmail)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Please provide a valid email address'
+        });
+      }
+
+      // Validate email type
+      const validEmailTypes = ['invitation', 'welcome', 'verification', 'password-reset'];
+      if (!validEmailTypes.includes(emailType)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid emailType. Must be one of: ${validEmailTypes.join(', ')}`
+        });
+      }
+
+      let emailSent = false;
+      const appUrl = process.env.APP_URL || 'http://localhost:5000';
+
+      // Send appropriate test email based on type
+      switch (emailType) {
+        case 'invitation': {
+          const crypto = await import('crypto');
+          const invitationToken = `test-invitation-${crypto.randomBytes(8).toString('hex')}`;
+          const testInvitationData = {
+            recipientName: 'Test User',
+            inviterName: 'Admin User',
+            organizationName: 'Test Organization',
+            invitationLink: `${appUrl}/accept-invitation?token=${invitationToken}`,
+            expiryDays: 7,
+            role: 'coach'
+          };
+          emailSent = await emailService.sendInvitation(recipientEmail, testInvitationData);
+          break;
+        }
+
+        case 'welcome': {
+          const testWelcomeData = {
+            userName: 'Test User',
+            organizationName: 'Test Organization',
+            role: 'coach'
+          };
+          emailSent = await emailService.sendWelcome(recipientEmail, testWelcomeData);
+          break;
+        }
+
+        case 'verification': {
+          const crypto = await import('crypto');
+          const verificationToken = `test-verification-${crypto.randomBytes(8).toString('hex')}`;
+          const testVerificationData = {
+            userName: 'Test User',
+            verificationLink: `${appUrl}/verify-email?token=${verificationToken}`
+          };
+          emailSent = await emailService.sendEmailVerification(recipientEmail, testVerificationData);
+          break;
+        }
+
+        case 'password-reset': {
+          const crypto = await import('crypto');
+          const resetToken = `test-reset-${crypto.randomBytes(8).toString('hex')}`;
+          const testResetData = {
+            userName: 'Test User',
+            resetLink: `${appUrl}/reset-password?token=${resetToken}`
+          };
+          emailSent = await emailService.sendPasswordReset(recipientEmail, testResetData);
+          break;
+        }
+      }
+
+      if (emailSent) {
+        res.json({
+          success: true,
+          message: `Test ${emailType} email sent successfully`,
+          emailType,
+          recipientEmail
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'Email service is not configured. Email was logged to console but not sent.',
+          emailType,
+          note: 'Contact administrator to configure email service'
+        });
+      }
+
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to send test email'
+      });
     }
   });
 
