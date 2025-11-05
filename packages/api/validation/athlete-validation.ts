@@ -52,6 +52,13 @@ export const athleteQuerySchema = z.object({
   gender: z
     .enum(['Male', 'Female', 'Not Specified'])
     .optional(),
+
+  includeUnknownBirthYear: z
+    .string()
+    .transform(val => val === 'true')
+    .pipe(z.boolean())
+    .optional()
+    .default('false'),
 }).refine(
   (data) => {
     // Cross-field validation: birthYearFrom must be <= birthYearTo

@@ -408,7 +408,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                       <Input
                         {...field}
                         type="date"
-                        min="1970-01-01"
+                        min="1900-01-01"
                         disabled={isPending}
                         data-testid="input-athlete-birthdate"
                         value={field.value || ""}

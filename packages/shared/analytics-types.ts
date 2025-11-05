@@ -31,6 +31,7 @@ export interface AnalyticsFilters {
   genders?: ('Male' | 'Female' | 'Not Specified')[];
   birthYearFrom?: number; // Birth year range start
   birthYearTo?: number; // Birth year range end
+  includeUnknownBirthYear?: boolean; // Include athletes with NULL birthDate
 }
 
 // Metrics selection with priority

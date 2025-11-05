@@ -64,6 +64,7 @@ export default function Athletes() {
     birthYearFrom: "",
     birthYearTo: "",
     search: "",
+    includeUnknownBirthYear: false,
   });
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -135,6 +136,7 @@ export default function Athletes() {
       if (filters.teamId && filters.teamId !== 'all') params.append('teamId', filters.teamId);
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+      if (filters.includeUnknownBirthYear) params.append('includeUnknownBirthYear', 'true');
       if (debouncedSearch) params.append('search', debouncedSearch);
 
       // Always include organization context for proper filtering
@@ -709,7 +711,7 @@ export default function Athletes() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 40 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                  {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
@@ -726,11 +728,24 @@ export default function Athletes() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 40 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                  {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center space-x-2 pt-6">
+              <Checkbox
+                id="includeUnknownBirthYear"
+                checked={filters.includeUnknownBirthYear}
+                onCheckedChange={(checked) => setFilters(prev => ({ ...prev, includeUnknownBirthYear: !!checked }))}
+              />
+              <label
+                htmlFor="includeUnknownBirthYear"
+                className="text-sm font-medium text-gray-700 cursor-pointer"
+              >
+                Include athletes with unknown birth year
+              </label>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
