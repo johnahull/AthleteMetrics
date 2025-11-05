@@ -662,7 +662,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // 7. Audit log
     await db.insert(auditLogs).values({
       userId: siteAdmin.id,
-      action: 'site_admin_access',
+      action: 'user.login',
       resourceType: 'user',
       resourceId: siteAdmin.id
     });
