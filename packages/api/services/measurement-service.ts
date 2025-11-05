@@ -554,6 +554,12 @@ export class MeasurementService {
       // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
       // PostgreSQL date column only stores date part, not time
       const dateOnly = filters.dateFrom.split('T')[0];
+
+      // Defense-in-depth: Validate date format even though validated at route layer
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+        throw new Error('Invalid date format in service layer');
+      }
+
       conditions.push(gte(measurements.date, dateOnly));
     }
 
@@ -561,6 +567,12 @@ export class MeasurementService {
       // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
       // PostgreSQL date column only stores date part, not time
       const dateOnly = filters.dateTo.split('T')[0];
+
+      // Defense-in-depth: Validate date format even though validated at route layer
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+        throw new Error('Invalid date format in service layer');
+      }
+
       conditions.push(lte(measurements.date, dateOnly));
     }
 

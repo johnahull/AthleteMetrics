@@ -73,13 +73,16 @@ export default function Publish() {
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
 
       // Convert date strings (YYYY-MM-DD) to ISO datetime format for backend validation
+      // Parse in local timezone to avoid off-by-one-day errors for users in negative UTC offsets
       if (filters.dateFrom) {
-        const dateFromISO = new Date(filters.dateFrom + 'T00:00:00.000Z').toISOString();
-        params.append('dateFrom', dateFromISO);
+        const [year, month, day] = filters.dateFrom.split('-').map(Number);
+        const dateFromLocal = new Date(year, month - 1, day, 0, 0, 0);
+        params.append('dateFrom', dateFromLocal.toISOString());
       }
       if (filters.dateTo) {
-        const dateToISO = new Date(filters.dateTo + 'T23:59:59.999Z').toISOString();
-        params.append('dateTo', dateToISO);
+        const [year, month, day] = filters.dateTo.split('-').map(Number);
+        const dateToLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
+        params.append('dateTo', dateToLocal.toISOString());
       }
 
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
