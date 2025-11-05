@@ -64,6 +64,7 @@ export function registerAthleteRoutes(app: Express) {
       if (validatedParams.gender) filters.gender = validatedParams.gender;
       if (validatedParams.birthYearFrom !== undefined) filters.birthYearFrom = validatedParams.birthYearFrom;
       if (validatedParams.birthYearTo !== undefined) filters.birthYearTo = validatedParams.birthYearTo;
+      if (validatedParams.includeUnknownBirthYear !== undefined) filters.includeUnknownBirthYear = validatedParams.includeUnknownBirthYear;
 
       // For org admins and coaches, automatically filter by their organization unless they're a site admin
       const user = req.session.user;

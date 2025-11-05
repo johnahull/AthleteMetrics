@@ -43,6 +43,11 @@ const measurementQuerySchema = z.object({
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
+  includeUnknownBirthYear: z
+    .string()
+    .transform(val => val === 'true')
+    .pipe(z.boolean())
+    .optional(),
   birthYearFrom: z.coerce.number().int().min(1900).max(2100).optional(),
   birthYearTo: z.coerce.number().int().min(1900).max(2100).optional(),
   ageFrom: z.coerce.number().int().min(0).max(120).optional(),
@@ -69,6 +74,7 @@ interface MeasurementFilters {
   dateFrom?: string;
   dateTo?: string;
   includeUnverified?: boolean;
+  includeUnknownBirthYear?: boolean;
   birthYearFrom?: number;
   birthYearTo?: number;
   ageFrom?: number;
@@ -102,6 +108,7 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
         ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
         includeUnverified: validatedParams.includeUnverified === 'true',
+        ...(validatedParams.includeUnknownBirthYear !== undefined && { includeUnknownBirthYear: validatedParams.includeUnknownBirthYear }),
         ...(validatedParams.birthYearFrom !== undefined && { birthYearFrom: validatedParams.birthYearFrom }),
         ...(validatedParams.birthYearTo !== undefined && { birthYearTo: validatedParams.birthYearTo }),
         ...(validatedParams.ageFrom !== undefined && { ageFrom: validatedParams.ageFrom }),
