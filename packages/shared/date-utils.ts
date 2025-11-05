@@ -19,9 +19,13 @@ import { z } from 'zod';
 export function parseDateFilter(dateString: string): string {
   // Try parsing as YYYY-MM-DD first
   if (DATE_CONSTANTS.DATE_ONLY_REGEX.test(dateString)) {
-    // Validate it's a real date
+    // Validate it's a real date and check for rollover
     const parsed = new Date(dateString + DATE_CONSTANTS.START_OF_DAY);
     if (isNaN(parsed.getTime())) {
+      throw new Error(`Invalid date value: ${dateString}`);
+    }
+    // Check for date rollover (e.g., "2024-02-30" -> "2024-03-01")
+    if (parsed.toISOString().split('T')[0] !== dateString) {
       throw new Error(`Invalid date value: ${dateString}`);
     }
     return dateString;

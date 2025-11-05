@@ -10,8 +10,8 @@ test.describe('Publish Page - Date Filter E2E', () => {
 
     // Login as admin
     await page.goto(`${targetURL}/login`);
-    await page.fill('input[name="username"]', process.env.TESTING_USERNAME || 'texasfcadmin2');
-    await page.fill('input[name="password"]', process.env.TESTING_PASSWORD || 'Way2good@99?');
+    await page.fill('input[name="username"]', process.env.TESTING_USERNAME || '');
+    await page.fill('input[name="password"]', process.env.TESTING_PASSWORD || '');
     await page.click('button[type="submit"]');
 
     // Wait for navigation to complete
@@ -32,15 +32,15 @@ test.describe('Publish Page - Date Filter E2E', () => {
     const firstMetric = page.locator('[role="option"]').first();
     await firstMetric.click();
 
-    // Wait for initial data to load
-    await page.waitForTimeout(1000);
+    // Wait for initial data to load after metric selection
+    await page.waitForLoadState('networkidle');
 
     // Set dateFrom to January 1st (the problematic date)
     const dateFromInput = page.getByTestId('input-date-from');
     await dateFromInput.fill('2024-01-01');
 
-    // Wait for query to complete
-    await page.waitForTimeout(2000);
+    // Wait for query to complete after date input
+    await page.waitForLoadState('networkidle');
 
     // Page should not have crashed - check for error messages
     const errorMessage = page.locator('text=/error|crash|failed/i').first();
@@ -59,8 +59,8 @@ test.describe('Publish Page - Date Filter E2E', () => {
     const firstMetric = page.locator('[role="option"]').first();
     await firstMetric.click();
 
-    // Wait for initial data to load
-    await page.waitForTimeout(1000);
+    // Wait for initial data to load after metric selection
+    await page.waitForLoadState('networkidle');
 
     // Get initial count of results
     const initialResults = page.locator('table tbody tr');
@@ -77,8 +77,8 @@ test.describe('Publish Page - Date Filter E2E', () => {
     await dateFromInput.fill(thirtyDaysAgo.toISOString().split('T')[0]);
     await dateToInput.fill(today.toISOString().split('T')[0]);
 
-    // Wait for filtered query
-    await page.waitForTimeout(2000);
+    // Wait for filtered query to complete
+    await page.waitForLoadState('networkidle');
 
     // Should have results or "no measurements found" message
     const hasTable = await page.locator('table tbody tr').count();
@@ -96,15 +96,15 @@ test.describe('Publish Page - Date Filter E2E', () => {
     const firstMetric = page.locator('[role="option"]').first();
     await firstMetric.click();
 
-    // Wait for initial data to load
-    await page.waitForTimeout(1000);
+    // Wait for initial data to load after metric selection
+    await page.waitForLoadState('networkidle');
 
     // Set dateFrom to 2nd of month
     const dateFromInput = page.getByTestId('input-date-from');
     await dateFromInput.fill('2024-01-02');
 
-    // Wait for query to complete
-    await page.waitForTimeout(2000);
+    // Wait for query to complete after date input
+    await page.waitForLoadState('networkidle');
 
     // Should not crash - check results heading is visible
     const resultsHeading = page.getByRole('heading', { name: /Results -/ });
@@ -134,8 +134,8 @@ test.describe('Publish Page - Date Filter E2E', () => {
     const resetButton = page.getByTestId('reset-filters-button');
     await resetButton.click();
 
-    // Wait for reset to complete
-    await page.waitForTimeout(500);
+    // Wait for reset to complete (filters should be cleared)
+    await expect(dateFromInput).toHaveValue('', { timeout: 1000 });
 
     // Date filters should be cleared
     await expect(dateFromInput).toHaveValue('');
@@ -163,8 +163,8 @@ test.describe('Publish Page - Date Filter E2E', () => {
     const dateFromInput = page.getByTestId('input-date-from');
     await dateFromInput.fill('2024-01-15');
 
-    // Wait for API call
-    await page.waitForTimeout(2000);
+    // Wait for API call to complete
+    await page.waitForLoadState('networkidle');
 
     // Check that API was called with ISO datetime format
     const measurementCall = apiCalls.find(url => url.includes('dateFrom='));
