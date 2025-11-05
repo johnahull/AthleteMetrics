@@ -85,8 +85,9 @@ export default function ArchiveTeamModal({
                 <FormItem>
                   <FormLabel>Archive Date</FormLabel>
                   <FormControl>
-                    <Input 
+                    <Input
                       type="date"
+                      min="1970-01-01"
                       disabled={isLoading}
                       data-testid="input-archive-date"
                       value={field.value?.toISOString().split('T')[0] || ""}

@@ -29,8 +29,8 @@ export default function Publish() {
 
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
-    birthYearFrom: "",
-    birthYearTo: "",
+    birthYearFrom: "2000",
+    birthYearTo: new Date().getFullYear().toString(),
     metric: "",
     sport: "",
     dateFrom: "",
@@ -459,6 +459,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
               <Input
                 type="date"
+                min="1970-01-01"
                 value={filters.dateFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
                 data-testid="input-date-from"
@@ -470,6 +471,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
               <Input
                 type="date"
+                min="1970-01-01"
                 value={filters.dateTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
                 data-testid="input-date-to"
@@ -505,6 +507,8 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year From</label>
               <Input
                 type="number"
+                min="1970"
+                max={new Date().getFullYear()}
                 placeholder="2000"
                 value={filters.birthYearFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearFrom: e.target.value }))}
@@ -517,6 +521,8 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year To</label>
               <Input
                 type="number"
+                min="1970"
+                max={new Date().getFullYear()}
                 placeholder="2010"
                 value={filters.birthYearTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearTo: e.target.value }))}

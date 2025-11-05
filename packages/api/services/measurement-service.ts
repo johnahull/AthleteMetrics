@@ -548,6 +548,15 @@ export class MeasurementService {
       conditions.push(eq(measurements.isVerified, true));
     }
 
+    // Birth year filtering (applied to users table)
+    if (filters?.birthYearFrom !== undefined) {
+      conditions.push(gte(users.birthYear, filters.birthYearFrom));
+    }
+
+    if (filters?.birthYearTo !== undefined) {
+      conditions.push(lte(users.birthYear, filters.birthYearTo));
+    }
+
     // Pagination parameters with safety limits to prevent memory exhaustion
     const limit = Math.min(filters?.limit || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
     const offset = Math.min(filters?.offset || 0, PAGINATION.MAX_OFFSET);
@@ -608,6 +617,7 @@ export class MeasurementService {
         .offset(offset),
       db.select({ count: sql<number>`count(*)::int` })
         .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
         .where(whereClause)
     ]);
 
