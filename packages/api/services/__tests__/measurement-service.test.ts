@@ -709,6 +709,7 @@ describe('MeasurementService', () => {
         const result = await measurementService.getMeasurements({
           metric: 'FLY10_TIME',
           birthYearFrom: 2000,
+          includeUnknownBirthYear: true,
         }, true);
 
         // Should include user2005 (2005 >= 2000) and userNoBirthYear (NULL included)
@@ -723,6 +724,7 @@ describe('MeasurementService', () => {
         const result = await measurementService.getMeasurements({
           metric: 'FLY10_TIME',
           birthYearTo: 2000,
+          includeUnknownBirthYear: true,
         }, true);
 
         // Should include user1995 (1995 <= 2000) and userNoBirthYear (NULL included)
@@ -738,6 +740,7 @@ describe('MeasurementService', () => {
           metric: 'FLY10_TIME',
           birthYearFrom: 2000,
           birthYearTo: 2010,
+          includeUnknownBirthYear: true,
         }, true);
 
         // Should include user2005 (2000 <= 2005 <= 2010) and userNoBirthYear (NULL included)
@@ -752,9 +755,10 @@ describe('MeasurementService', () => {
         const result = await measurementService.getMeasurements({
           metric: 'FLY10_TIME',
           birthYearFrom: 2020, // Very restrictive filter
+          includeUnknownBirthYear: true,
         }, true);
 
-        // Should still include userNoBirthYear (NULL always included)
+        // Should still include userNoBirthYear (NULL included when includeUnknownBirthYear is true)
         const userIds = result.measurements.map(m => m.userId);
         expect(userIds).toContain(userNoBirthYearId);
 
@@ -768,6 +772,7 @@ describe('MeasurementService', () => {
           metric: 'FLY10_TIME',
           birthYearFrom: 2000,
           birthYearTo: 2010,
+          includeUnknownBirthYear: true,
         }, true);
 
         // Should include: user2005 (2005 in range), userNoBirthYear (NULL included),
