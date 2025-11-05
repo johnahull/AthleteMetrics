@@ -509,9 +509,19 @@ export default function Publish() {
                 type="number"
                 min="1970"
                 max={new Date().getFullYear()}
-                placeholder="2000"
+                placeholder={`e.g., ${new Date().getFullYear() - 25}`}
                 value={filters.birthYearFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearFrom: e.target.value }))}
+                onFocus={(e) => {
+                  // If empty, don't let browser default to min value
+                  if (!e.target.value) {
+                    e.target.removeAttribute('min');
+                  }
+                }}
+                onBlur={(e) => {
+                  // Restore min after blur
+                  e.target.setAttribute('min', '1970');
+                }}
                 data-testid="input-birth-year-from"
               />
             </div>
@@ -523,9 +533,19 @@ export default function Publish() {
                 type="number"
                 min="1970"
                 max={new Date().getFullYear()}
-                placeholder="2010"
+                placeholder={`e.g., ${new Date().getFullYear() - 15}`}
                 value={filters.birthYearTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearTo: e.target.value }))}
+                onFocus={(e) => {
+                  // If empty, don't let browser default to min value
+                  if (!e.target.value) {
+                    e.target.removeAttribute('min');
+                  }
+                }}
+                onBlur={(e) => {
+                  // Restore min after blur
+                  e.target.setAttribute('min', '1970');
+                }}
                 data-testid="input-birth-year-to"
               />
             </div>
