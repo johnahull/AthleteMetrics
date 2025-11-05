@@ -42,6 +42,7 @@ const measurementQuerySchema = z.object({
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z
     .string()
@@ -73,6 +74,7 @@ interface MeasurementFilters {
   metric?: string;
   dateFrom?: string;
   dateTo?: string;
+  gender?: string;
   includeUnverified?: boolean;
   includeUnknownBirthYear?: boolean;
   birthYearFrom?: number;
@@ -107,6 +109,7 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.metric && { metric: validatedParams.metric }),
         ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
         ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
+        ...(validatedParams.gender && { gender: validatedParams.gender }),
         includeUnverified: validatedParams.includeUnverified === 'true',
         ...(validatedParams.includeUnknownBirthYear !== undefined && { includeUnknownBirthYear: validatedParams.includeUnknownBirthYear }),
         ...(validatedParams.birthYearFrom !== undefined && { birthYearFrom: validatedParams.birthYearFrom }),

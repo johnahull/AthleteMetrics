@@ -539,6 +539,10 @@ export class MeasurementService {
       conditions.push(eq(measurements.organizationId, filters.organizationId));
     }
 
+    if (filters?.gender) {
+      conditions.push(eq(users.gender, filters.gender as 'Male' | 'Female' | 'Not Specified'));
+    }
+
     if (filters?.dateFrom) {
       conditions.push(gte(measurements.date, new Date(filters.dateFrom).toISOString()));
     }
