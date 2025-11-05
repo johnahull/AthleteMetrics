@@ -130,11 +130,13 @@ export class MeasurementService {
       if (!user) throw new Error('User not found');
 
       const measurementDate = new Date(measurement.date);
-      let age = measurementDate.getFullYear() - (user.birthYear || 0);
+      let age = 0;
 
-      // Use birthDate for more precise age calculation if available
+      // Calculate age from birthDate (source of truth)
+      // Note: birthYear field is not reliably maintained
       if (user.birthDate) {
         const birthDate = new Date(user.birthDate);
+        age = measurementDate.getFullYear() - birthDate.getFullYear();
         const birthdayThisYear = new Date(
           measurementDate.getFullYear(),
           birthDate.getMonth(),
@@ -549,12 +551,13 @@ export class MeasurementService {
     }
 
     // Birth year filtering (applied to users table)
-    // Note: Include users with NULL birthYear to avoid excluding users without birth year data
+    // Note: Include users with NULL birthDate to avoid excluding users without birth year data
+    // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
     if (filters?.birthYearFrom !== undefined) {
       conditions.push(
         or(
-          gte(users.birthYear, filters.birthYearFrom),
-          isNull(users.birthYear)
+          sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+          isNull(users.birthDate)
         )
       );
     }
@@ -562,8 +565,8 @@ export class MeasurementService {
     if (filters?.birthYearTo !== undefined) {
       conditions.push(
         or(
-          lte(users.birthYear, filters.birthYearTo),
-          isNull(users.birthYear)
+          sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+          isNull(users.birthDate)
         )
       );
     }

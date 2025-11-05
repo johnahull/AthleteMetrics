@@ -46,6 +46,7 @@ describe('MeasurementService', () => {
       firstName: 'Test',
       lastName: 'Athlete',
       fullName: 'Test Athlete',
+      birthDate: new Date('2000-01-01').toISOString(),
       birthYear: 2000,
       sports: ['Soccer'],
     }).returning();
@@ -622,6 +623,7 @@ describe('MeasurementService', () => {
           firstName: 'Athlete',
           lastName: '1995',
           fullName: 'Athlete 1995',
+          birthDate: new Date('1995-06-15').toISOString(),
           birthYear: 1995,
           sports: ['Soccer'],
         }).returning();
@@ -635,12 +637,13 @@ describe('MeasurementService', () => {
           firstName: 'Athlete',
           lastName: '2005',
           fullName: 'Athlete 2005',
+          birthDate: new Date('2005-03-20').toISOString(),
           birthYear: 2005,
           sports: ['Soccer'],
         }).returning();
         user2005Id = user2005.id;
 
-        // Create user without birth year (NULL)
+        // Create user without birth year (NULL birthDate)
         const [userNoBirthYear] = await db.insert(users).values({
           username: `athleteNoBY${uniqueSuffix}`,
           emails: ['athletenoby@test.com'],
@@ -648,6 +651,7 @@ describe('MeasurementService', () => {
           firstName: 'Athlete',
           lastName: 'NoBY',
           fullName: 'Athlete NoBY',
+          birthDate: null,
           birthYear: null,
           sports: ['Soccer'],
         }).returning();

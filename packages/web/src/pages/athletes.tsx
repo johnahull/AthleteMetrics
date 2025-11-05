@@ -700,13 +700,16 @@ export default function Athletes() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year From</label>
-              <Select value={filters.birthYearFrom} onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearFrom: value }))}>
+              <Select
+                value={filters.birthYearFrom || 'any'}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearFrom: value === 'any' ? '' : value }))}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
+                  {Array.from({ length: 40 }, (_, i) => new Date().getFullYear() - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
@@ -714,13 +717,16 @@ export default function Athletes() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year To</label>
-              <Select value={filters.birthYearTo} onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearTo: value }))}>
+              <Select
+                value={filters.birthYearTo || 'any'}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearTo: value === 'any' ? '' : value }))}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
+                  {Array.from({ length: 40 }, (_, i) => new Date().getFullYear() - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>

@@ -20,6 +20,8 @@ import {
   requireAthleteManagementPermission,
   requireAthleteAccessPermission
 } from "../middleware/athlete-permissions";
+import { athleteQuerySchema } from "../validation/athlete-validation";
+import { ZodError } from "zod";
 // Session types are loaded globally
 
 // Helper function to check if user is site admin
@@ -51,10 +53,17 @@ export function registerAthleteRoutes(app: Express) {
    */
   app.get("/api/athletes", athleteLimiter, requireAuth, async (req, res) => {
     try {
-      // Parse and validate query parameters with proper typing
+      // Validate query parameters using Zod schema
+      const validatedParams = athleteQuerySchema.parse(req.query);
+
+      // Build filters from validated parameters
       const filters: Parameters<typeof storage.getAthletes>[0] = {};
 
-      if (req.query.teamId) filters.teamId = req.query.teamId as string;
+      if (validatedParams.teamId) filters.teamId = validatedParams.teamId;
+      if (validatedParams.search) filters.search = validatedParams.search;
+      if (validatedParams.gender) filters.gender = validatedParams.gender;
+      if (validatedParams.birthYearFrom !== undefined) filters.birthYearFrom = validatedParams.birthYearFrom;
+      if (validatedParams.birthYearTo !== undefined) filters.birthYearTo = validatedParams.birthYearTo;
 
       // For org admins and coaches, automatically filter by their organization unless they're a site admin
       const user = req.session.user;
@@ -66,24 +75,13 @@ export function registerAthleteRoutes(app: Express) {
         primaryOrganizationId: user?.primaryOrganizationId
       });
 
-      if (req.query.organizationId) {
-        filters.organizationId = req.query.organizationId as string;
+      if (validatedParams.organizationId) {
+        filters.organizationId = validatedParams.organizationId;
       } else if (user && !isSiteAdmin(user) && user.primaryOrganizationId) {
         filters.organizationId = user.primaryOrganizationId;
       }
 
       console.log('[GET /api/athletes] Filters:', filters);
-
-      if (req.query.birthYearFrom) {
-        const year = parseInt(req.query.birthYearFrom as string);
-        if (!isNaN(year)) filters.birthYearFrom = year;
-      }
-      if (req.query.birthYearTo) {
-        const year = parseInt(req.query.birthYearTo as string);
-        if (!isNaN(year)) filters.birthYearTo = year;
-      }
-      if (req.query.search) filters.search = req.query.search as string;
-      if (req.query.gender) filters.gender = req.query.gender as string;
 
       const athletes = await storage.getAthletes(filters);
 
@@ -119,6 +117,12 @@ export function registerAthleteRoutes(app: Express) {
       res.json(transformedAthletes);
     } catch (error) {
       console.error("Get athletes error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({
+          message: "Invalid query parameters",
+          errors: error.errors
+        });
+      }
       const message = error instanceof Error ? error.message : "Failed to fetch athletes";
       res.status(500).json({ message });
     }
