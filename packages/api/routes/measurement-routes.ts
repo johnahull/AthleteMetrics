@@ -40,8 +40,29 @@ const measurementQuerySchema = z.object({
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  // Accept both date (YYYY-MM-DD) and datetime (ISO 8601) formats for flexibility
+  dateFrom: z.string().refine((val) => {
+    // Accept YYYY-MM-DD or ISO datetime formats
+    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateOnlyRegex.test(val)) {
+      const parsed = new Date(val + 'T00:00:00.000Z');
+      return !isNaN(parsed.getTime());
+    }
+    // Try parsing as ISO datetime
+    const parsed = new Date(val);
+    return !isNaN(parsed.getTime());
+  }, { message: "Invalid date format. Expected YYYY-MM-DD or ISO datetime." }).optional(),
+  dateTo: z.string().refine((val) => {
+    // Accept YYYY-MM-DD or ISO datetime formats
+    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateOnlyRegex.test(val)) {
+      const parsed = new Date(val + 'T23:59:59.999Z');
+      return !isNaN(parsed.getTime());
+    }
+    // Try parsing as ISO datetime
+    const parsed = new Date(val);
+    return !isNaN(parsed.getTime());
+  }, { message: "Invalid date format. Expected YYYY-MM-DD or ISO datetime." }).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z

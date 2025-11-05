@@ -71,8 +71,17 @@ export default function Publish() {
 
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
-      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
-      if (filters.dateTo) params.append('dateTo', filters.dateTo);
+
+      // Convert date strings (YYYY-MM-DD) to ISO datetime format for backend validation
+      if (filters.dateFrom) {
+        const dateFromISO = new Date(filters.dateFrom + 'T00:00:00.000Z').toISOString();
+        params.append('dateFrom', dateFromISO);
+      }
+      if (filters.dateTo) {
+        const dateToISO = new Date(filters.dateTo + 'T23:59:59.999Z').toISOString();
+        params.append('dateTo', dateToISO);
+      }
+
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
 
       const response = await fetch(`/api/measurements?${params}`, {

@@ -536,7 +536,14 @@ export class MeasurementService {
     }
 
     if (filters?.organizationId) {
-      conditions.push(eq(measurements.organizationId, filters.organizationId));
+      // Include measurements with matching organizationId OR NULL organizationId
+      // NULL organization IDs represent legacy measurements before organization tracking
+      conditions.push(
+        or(
+          eq(measurements.organizationId, filters.organizationId),
+          isNull(measurements.organizationId)
+        )!
+      );
     }
 
     if (filters?.gender) {
@@ -544,11 +551,17 @@ export class MeasurementService {
     }
 
     if (filters?.dateFrom) {
-      conditions.push(gte(measurements.date, new Date(filters.dateFrom).toISOString()));
+      // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
+      // PostgreSQL date column only stores date part, not time
+      const dateOnly = filters.dateFrom.split('T')[0];
+      conditions.push(gte(measurements.date, dateOnly));
     }
 
     if (filters?.dateTo) {
-      conditions.push(lte(measurements.date, new Date(filters.dateTo).toISOString()));
+      // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
+      // PostgreSQL date column only stores date part, not time
+      const dateOnly = filters.dateTo.split('T')[0];
+      conditions.push(lte(measurements.date, dateOnly));
     }
 
     if (!filters?.includeUnverified) {
