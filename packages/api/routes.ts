@@ -827,6 +827,23 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  // Rate limiting for test email operations (development/staging only)
+  const testEmailLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 5, // Limit each IP to 5 test email operations per 15 minutes
+    message: {
+      error: "Too many test email requests, please try again later."
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || bypassForDev;
+    }
+  });
+
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
 
@@ -5727,7 +5744,7 @@ export async function registerRoutes(app: Express) {
   });
 
   // TESTING ENDPOINT: Send test emails (development/staging only)
-  app.post("/api/test/send-email", requireAuth, async (req, res) => {
+  app.post("/api/test/send-email", testEmailLimiter, requireSiteAdmin, async (req, res) => {
     try {
       // Only allow in development and staging environments
       if (process.env.NODE_ENV === 'production') {
@@ -5778,7 +5795,8 @@ export async function registerRoutes(app: Express) {
       // Send appropriate test email based on type
       switch (emailType) {
         case 'invitation': {
-          const invitationToken = `test-invitation-${Date.now()}`;
+          const crypto = await import('crypto');
+          const invitationToken = `test-invitation-${crypto.randomBytes(8).toString('hex')}`;
           const testInvitationData = {
             recipientName: 'Test User',
             inviterName: 'Admin User',
@@ -5802,7 +5820,8 @@ export async function registerRoutes(app: Express) {
         }
 
         case 'verification': {
-          const verificationToken = `test-verification-${Date.now()}`;
+          const crypto = await import('crypto');
+          const verificationToken = `test-verification-${crypto.randomBytes(8).toString('hex')}`;
           const testVerificationData = {
             userName: 'Test User',
             verificationLink: `${appUrl}/verify-email?token=${verificationToken}`
@@ -5812,7 +5831,8 @@ export async function registerRoutes(app: Express) {
         }
 
         case 'password-reset': {
-          const resetToken = `test-reset-${Date.now()}`;
+          const crypto = await import('crypto');
+          const resetToken = `test-reset-${crypto.randomBytes(8).toString('hex')}`;
           const testResetData = {
             userName: 'Test User',
             resetLink: `${appUrl}/reset-password?token=${resetToken}`
@@ -5826,16 +5846,14 @@ export async function registerRoutes(app: Express) {
         res.json({
           success: true,
           message: `Test ${emailType} email sent successfully`,
-          emailType,
-          recipientEmail,
+          emailType
         });
       } else {
         res.json({
           success: false,
-          message: 'SendGrid is not configured. Email was logged to console but not sent.',
+          message: 'Email service is not configured. Email was logged to console but not sent.',
           emailType,
-          recipientEmail,
-          note: 'Please configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL environment variables'
+          note: 'Contact administrator to configure email service'
         });
       }
 
@@ -5843,8 +5861,7 @@ export async function registerRoutes(app: Express) {
       console.error('Error sending test email:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to send test email',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to send test email'
       });
     }
   });

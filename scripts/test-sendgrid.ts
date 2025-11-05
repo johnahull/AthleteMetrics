@@ -173,11 +173,16 @@ async function testSendGrid() {
     switch (emailType) {
       case 'invitation': {
         printInfo('Preparing invitation email...');
+        const crypto = await import('crypto');
+        const invitationToken = `test-invitation-${crypto.randomBytes(8).toString('hex')}`;
+        const appUrl = process.env.APP_URL || 'http://localhost:5000';
         const testInvitationData = {
-          invitationToken: `test-invitation-${Date.now()}`,
+          recipientName: 'Test User',
+          inviterName: 'Admin User',
           organizationName: 'Test Organization',
-          role: 'coach' as const,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+          invitationLink: `${appUrl}/accept-invitation?token=${invitationToken}`,
+          expiryDays: 7,
+          role: 'coach'
         };
         emailSent = await emailService.sendInvitation(recipientEmail, testInvitationData);
         break;
@@ -185,34 +190,38 @@ async function testSendGrid() {
 
       case 'welcome': {
         printInfo('Preparing welcome email...');
-        emailSent = await emailService.sendWelcome(
-          recipientEmail,
-          'Test User',
-          'Test Organization',
-          'coach'
-        );
+        const testWelcomeData = {
+          userName: 'Test User',
+          organizationName: 'Test Organization',
+          role: 'coach'
+        };
+        emailSent = await emailService.sendWelcome(recipientEmail, testWelcomeData);
         break;
       }
 
       case 'verification': {
         printInfo('Preparing email verification email...');
-        const verificationToken = `test-verification-${Date.now()}`;
-        emailSent = await emailService.sendEmailVerification(
-          recipientEmail,
-          'Test User',
-          verificationToken
-        );
+        const crypto = await import('crypto');
+        const verificationToken = `test-verification-${crypto.randomBytes(8).toString('hex')}`;
+        const appUrl = process.env.APP_URL || 'http://localhost:5000';
+        const testVerificationData = {
+          userName: 'Test User',
+          verificationLink: `${appUrl}/verify-email?token=${verificationToken}`
+        };
+        emailSent = await emailService.sendEmailVerification(recipientEmail, testVerificationData);
         break;
       }
 
       case 'password-reset': {
         printInfo('Preparing password reset email...');
-        const resetToken = `test-reset-${Date.now()}`;
-        emailSent = await emailService.sendPasswordReset(
-          recipientEmail,
-          'Test User',
-          resetToken
-        );
+        const crypto = await import('crypto');
+        const resetToken = `test-reset-${crypto.randomBytes(8).toString('hex')}`;
+        const appUrl = process.env.APP_URL || 'http://localhost:5000';
+        const testResetData = {
+          userName: 'Test User',
+          resetLink: `${appUrl}/reset-password?token=${resetToken}`
+        };
+        emailSent = await emailService.sendPasswordReset(recipientEmail, testResetData);
         break;
       }
     }
