@@ -159,11 +159,27 @@ export class AnalyticsService {
     }
 
     // Add birth year range filtering
-    if (filters.birthYearFrom) {
-      allConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${filters.birthYearFrom}`);
-    }
-    if (filters.birthYearTo) {
-      allConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${filters.birthYearTo}`);
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
+    if (filters.birthYearFrom && filters.birthYearTo) {
+      // When both from and to are specified, combine them into a single condition
+      // to avoid redundant NULL checks
+      if (filters.includeUnknownBirthYear) {
+        allConditions.push(sql`((EXTRACT(YEAR FROM ${users.birthDate}) >= ${filters.birthYearFrom} AND EXTRACT(YEAR FROM ${users.birthDate}) <= ${filters.birthYearTo}) OR ${users.birthDate} IS NULL)`);
+      } else {
+        allConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) >= ${filters.birthYearFrom} AND EXTRACT(YEAR FROM ${users.birthDate}) <= ${filters.birthYearTo})`);
+      }
+    } else if (filters.birthYearFrom) {
+      if (filters.includeUnknownBirthYear) {
+        allConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) >= ${filters.birthYearFrom} OR ${users.birthDate} IS NULL)`);
+      } else {
+        allConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${filters.birthYearFrom}`);
+      }
+    } else if (filters.birthYearTo) {
+      if (filters.includeUnknownBirthYear) {
+        allConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) <= ${filters.birthYearTo} OR ${users.birthDate} IS NULL)`);
+      } else {
+        allConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${filters.birthYearTo}`);
+      }
     }
 
     // Return the complete query with all conditions applied

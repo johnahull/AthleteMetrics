@@ -110,9 +110,10 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                     Test Date <span className="text-red-500">*</span>
                   </FormLabel>
                   <FormControl>
-                    <Input 
+                    <Input
                       {...field}
                       type="date"
+                      min="1970-01-01"
                       disabled={createMeasurementMutation.isPending}
                       data-testid="input-measurement-date"
                     />

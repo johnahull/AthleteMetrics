@@ -58,8 +58,17 @@ export default function Publish() {
 
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
-      if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
-      if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+
+      // Only include birth year filters if they're valid 4-digit years
+      const birthYearFromNum = parseInt(filters.birthYearFrom);
+      const birthYearToNum = parseInt(filters.birthYearTo);
+      if (filters.birthYearFrom && birthYearFromNum >= 1900 && birthYearFromNum <= 2100) {
+        params.append('birthYearFrom', filters.birthYearFrom);
+      }
+      if (filters.birthYearTo && birthYearToNum >= 1900 && birthYearToNum <= 2100) {
+        params.append('birthYearTo', filters.birthYearTo);
+      }
+
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
@@ -459,6 +468,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
               <Input
                 type="date"
+                min="1970-01-01"
                 value={filters.dateFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
                 data-testid="input-date-from"
@@ -470,6 +480,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
               <Input
                 type="date"
+                min="1970-01-01"
                 value={filters.dateTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
                 data-testid="input-date-to"
@@ -505,9 +516,21 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year From</label>
               <Input
                 type="number"
-                placeholder="2000"
+                min="1970"
+                max={new Date().getFullYear()}
+                placeholder={`e.g., ${new Date().getFullYear() - 25}`}
                 value={filters.birthYearFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearFrom: e.target.value }))}
+                onFocus={(e) => {
+                  // If empty, don't let browser default to min value
+                  if (!e.target.value) {
+                    e.target.removeAttribute('min');
+                  }
+                }}
+                onBlur={(e) => {
+                  // Restore min after blur
+                  e.target.setAttribute('min', '1970');
+                }}
                 data-testid="input-birth-year-from"
               />
             </div>
@@ -517,9 +540,21 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year To</label>
               <Input
                 type="number"
-                placeholder="2010"
+                min="1970"
+                max={new Date().getFullYear()}
+                placeholder={`e.g., ${new Date().getFullYear() - 15}`}
                 value={filters.birthYearTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearTo: e.target.value }))}
+                onFocus={(e) => {
+                  // If empty, don't let browser default to min value
+                  if (!e.target.value) {
+                    e.target.removeAttribute('min');
+                  }
+                }}
+                onBlur={(e) => {
+                  // Restore min after blur
+                  e.target.setAttribute('min', '1970');
+                }}
                 data-testid="input-birth-year-to"
               />
             </div>

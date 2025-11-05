@@ -270,9 +270,10 @@ export default function MeasurementForm() {
                   Test Date <span className="text-red-500">*</span>
                 </FormLabel>
                 <FormControl>
-                  <Input 
+                  <Input
                     {...field}
                     type="date"
+                    min="1970-01-01"
                     disabled={createMeasurementMutation.isPending}
                     data-testid="input-measurement-date"
                   />
@@ -574,9 +575,10 @@ export default function MeasurementForm() {
                         <FormItem>
                           <FormLabel>Birth Date</FormLabel>
                           <FormControl>
-                            <Input 
+                            <Input
                               {...field}
                               type="date"
+                              min="1970-01-01"
                               disabled={createAthleteMutation.isPending}
                               data-testid="input-quick-add-birthday"
                               max={new Date().toISOString().split('T')[0]} // Prevent future dates

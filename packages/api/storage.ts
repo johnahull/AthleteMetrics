@@ -116,6 +116,7 @@ export interface IStorage {
     birthYearTo?: number;
     search?: string;
     gender?: string;
+    includeUnknownBirthYear?: boolean;
     page?: number;
     limit?: number;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
@@ -139,6 +140,7 @@ export interface IStorage {
     search?: string;
     sport?: string;
     includeUnverified?: boolean;
+    includeUnknownBirthYear?: boolean;
   }): Promise<(Measurement & {
     user: User;
     submittedBy: User;
@@ -1502,6 +1504,7 @@ export class DatabaseStorage implements IStorage {
     birthYearTo?: number;
     search?: string;
     gender?: string;
+    includeUnknownBirthYear?: boolean;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]> {
     // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
@@ -1519,13 +1522,51 @@ export class DatabaseStorage implements IStorage {
         conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
       }
 
+      // Birth year filtering with conditional NULL handling
+      // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
       if (filters?.birthYearFrom && filters?.birthYearTo) {
-        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
-        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+        // When both from and to are specified, combine them into a single OR condition
+        // to avoid redundant NULL checks
+        if (filters?.includeUnknownBirthYear) {
+          conditions.push(
+            or(
+              and(
+                sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+                sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+              )!,
+              isNull(users.birthDate)
+            )!
+          );
+        } else {
+          conditions.push(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!
+          );
+        }
       } else if (filters?.birthYearFrom) {
-        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+        if (filters?.includeUnknownBirthYear) {
+          conditions.push(
+            or(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              isNull(users.birthDate)
+            )!
+          );
+        } else {
+          conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+        }
       } else if (filters?.birthYearTo) {
-        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+        if (filters?.includeUnknownBirthYear) {
+          conditions.push(
+            or(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+              isNull(users.birthDate)
+            )!
+          );
+        } else {
+          conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+        }
       }
 
       if (filters?.gender && filters.gender !== "all") {
@@ -1554,13 +1595,51 @@ export class DatabaseStorage implements IStorage {
     // For regular queries, get athletes with their team information
     const conditions = [eq(userOrganizations.role, 'athlete')];
 
+    // Birth year filtering with conditional NULL handling
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
     if (filters?.birthYearFrom && filters?.birthYearTo) {
-      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
-      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      // When both from and to are specified, combine them into a single OR condition
+      // to avoid redundant NULL checks
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(
+          and(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+          )!
+        );
+      }
     } else if (filters?.birthYearFrom) {
-      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+      }
     } else if (filters?.birthYearTo) {
-      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+      }
     }
 
     if (filters?.search) {
@@ -1971,6 +2050,7 @@ export class DatabaseStorage implements IStorage {
     gender?: string;
     position?: string;
     includeUnverified?: boolean;
+    includeUnknownBirthYear?: boolean;
   }): Promise<any[]> {
     // First, query measurements with user data (no team joins yet)
     const query = db.select({
@@ -2024,11 +2104,32 @@ export class DatabaseStorage implements IStorage {
     if (filters?.dateTo) {
       conditions.push(lte(measurements.date, filters.dateTo));
     }
+    // Birth year filtering (applied to users table)
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
+    // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
     if (filters?.birthYearFrom) {
-      conditions.push(gte(users.birthYear, filters.birthYearFrom));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            isNull(users.birthDate)
+          )
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+      }
     }
     if (filters?.birthYearTo) {
-      conditions.push(lte(users.birthYear, filters.birthYearTo));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+            isNull(users.birthDate)
+          )
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+      }
     }
     if (filters?.search) {
       conditions.push(sql`${users.fullName} ILIKE ${'%' + filters.search + '%'}`);
@@ -2245,11 +2346,13 @@ export class DatabaseStorage implements IStorage {
     if (!user) throw new Error("User not found");
 
     const measurementDate = new Date(measurement.date);
-    let age = measurementDate.getFullYear() - (user.birthYear || 0);
+    let age = 0;
 
-    // Use birthDate for more precise age calculation if available
+    // Calculate age from birthDate (source of truth)
+    // Note: birthYear field is not reliably maintained
     if (user.birthDate) {
       const birthDate = new Date(user.birthDate);
+      age = measurementDate.getFullYear() - birthDate.getFullYear();
       const birthdayThisYear = new Date(measurementDate.getFullYear(), birthDate.getMonth(), birthDate.getDate());
       if (measurementDate < birthdayThisYear) {
         age -= 1;

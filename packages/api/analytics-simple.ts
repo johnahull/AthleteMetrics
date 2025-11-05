@@ -479,11 +479,27 @@ export class AnalyticsService {
       }
 
       // Add birth year range filtering if specified
-      if (request.filters.birthYearFrom) {
-        whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom}`);
-      }
-      if (request.filters.birthYearTo) {
-        whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo}`);
+      // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
+      if (request.filters.birthYearFrom && request.filters.birthYearTo) {
+        // When both from and to are specified, combine them into a single condition
+        // to avoid redundant NULL checks
+        if (request.filters.includeUnknownBirthYear) {
+          whereConditions.push(sql`((EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom} AND EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo}) OR ${users.birthDate} IS NULL)`);
+        } else {
+          whereConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom} AND EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo})`);
+        }
+      } else if (request.filters.birthYearFrom) {
+        if (request.filters.includeUnknownBirthYear) {
+          whereConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom} OR ${users.birthDate} IS NULL)`);
+        } else {
+          whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) >= ${request.filters.birthYearFrom}`);
+        }
+      } else if (request.filters.birthYearTo) {
+        if (request.filters.includeUnknownBirthYear) {
+          whereConditions.push(sql`(EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo} OR ${users.birthDate} IS NULL)`);
+        } else {
+          whereConditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate}) <= ${request.filters.birthYearTo}`);
+        }
       }
 
       // Add date range filtering if specified

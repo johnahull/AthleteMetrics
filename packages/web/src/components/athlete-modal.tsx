@@ -405,9 +405,10 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                       Birth Date <span className="text-red-500">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
+                      <Input
+                        {...field}
                         type="date"
+                        min="1900-01-01"
                         disabled={isPending}
                         data-testid="input-athlete-birthdate"
                         value={field.value || ""}

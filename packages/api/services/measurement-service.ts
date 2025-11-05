@@ -36,6 +36,7 @@ export interface MeasurementFilters {
   gender?: string;
   position?: string;
   includeUnverified?: boolean;
+  includeUnknownBirthYear?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -130,11 +131,13 @@ export class MeasurementService {
       if (!user) throw new Error('User not found');
 
       const measurementDate = new Date(measurement.date);
-      let age = measurementDate.getFullYear() - (user.birthYear || 0);
+      let age = 0;
 
-      // Use birthDate for more precise age calculation if available
+      // Calculate age from birthDate (source of truth)
+      // Note: birthYear field is not reliably maintained
       if (user.birthDate) {
         const birthDate = new Date(user.birthDate);
+        age = measurementDate.getFullYear() - birthDate.getFullYear();
         const birthdayThisYear = new Date(
           measurementDate.getFullYear(),
           birthDate.getMonth(),
@@ -548,6 +551,54 @@ export class MeasurementService {
       conditions.push(eq(measurements.isVerified, true));
     }
 
+    // Birth year filtering (applied to users table)
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
+    // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
+    if (filters?.birthYearFrom !== undefined && filters?.birthYearTo !== undefined) {
+      // When both from and to are specified, combine them into a single OR condition
+      // to avoid redundant NULL checks
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(
+          and(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+          )!
+        );
+      }
+    } else if (filters?.birthYearFrom !== undefined) {
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+      }
+    } else if (filters?.birthYearTo !== undefined) {
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+      }
+    }
+
     // Pagination parameters with safety limits to prevent memory exhaustion
     const limit = Math.min(filters?.limit || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
     const offset = Math.min(filters?.offset || 0, PAGINATION.MAX_OFFSET);
@@ -608,6 +659,7 @@ export class MeasurementService {
         .offset(offset),
       db.select({ count: sql<number>`count(*)::int` })
         .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
         .where(whereClause)
     ]);
 

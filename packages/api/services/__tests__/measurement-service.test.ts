@@ -46,6 +46,7 @@ describe('MeasurementService', () => {
       firstName: 'Test',
       lastName: 'Athlete',
       fullName: 'Test Athlete',
+      birthDate: new Date('2000-01-01').toISOString(),
       birthYear: 2000,
       sports: ['Soccer'],
     }).returning();
@@ -604,6 +605,230 @@ describe('MeasurementService', () => {
         const date = new Date(m.date);
         return date >= new Date('2024-02-01') && date <= new Date('2024-02-28');
       })).toBe(true);
+    });
+
+    describe('Birth Year Filtering', () => {
+      let user1995Id: string;
+      let user2005Id: string;
+      let userNoBirthYearId: string;
+
+      beforeEach(async () => {
+        const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Create user born in 1995
+        const [user1995] = await db.insert(users).values({
+          username: `athlete1995${uniqueSuffix}`,
+          emails: ['athlete1995@test.com'],
+          password: 'hashedpassword',
+          firstName: 'Athlete',
+          lastName: '1995',
+          fullName: 'Athlete 1995',
+          birthDate: new Date('1995-06-15').toISOString(),
+          birthYear: 1995,
+          sports: ['Soccer'],
+        }).returning();
+        user1995Id = user1995.id;
+
+        // Create user born in 2005
+        const [user2005] = await db.insert(users).values({
+          username: `athlete2005${uniqueSuffix}`,
+          emails: ['athlete2005@test.com'],
+          password: 'hashedpassword',
+          firstName: 'Athlete',
+          lastName: '2005',
+          fullName: 'Athlete 2005',
+          birthDate: new Date('2005-03-20').toISOString(),
+          birthYear: 2005,
+          sports: ['Soccer'],
+        }).returning();
+        user2005Id = user2005.id;
+
+        // Create user without birth year (NULL birthDate)
+        const [userNoBirthYear] = await db.insert(users).values({
+          username: `athleteNoBY${uniqueSuffix}`,
+          emails: ['athletenoby@test.com'],
+          password: 'hashedpassword',
+          firstName: 'Athlete',
+          lastName: 'NoBY',
+          fullName: 'Athlete NoBY',
+          birthDate: null,
+          birthYear: null,
+          sports: ['Soccer'],
+        }).returning();
+        userNoBirthYearId = userNoBirthYear.id;
+
+        // Create measurements for each user
+        await db.insert(measurements).values([
+          {
+            userId: user1995Id,
+            submittedBy: testSubmitterId,
+            date: new Date('2024-01-15').toISOString(),
+            metric: 'FLY10_TIME',
+            value: '1.35',
+            units: 's',
+            age: 29,
+            isVerified: true,
+            organizationId: testOrgId,
+          },
+          {
+            userId: user2005Id,
+            submittedBy: testSubmitterId,
+            date: new Date('2024-01-15').toISOString(),
+            metric: 'FLY10_TIME',
+            value: '1.50',
+            units: 's',
+            age: 19,
+            isVerified: true,
+            organizationId: testOrgId,
+          },
+          {
+            userId: userNoBirthYearId,
+            submittedBy: testSubmitterId,
+            date: new Date('2024-01-15').toISOString(),
+            metric: 'FLY10_TIME',
+            value: '1.45',
+            units: 's',
+            age: 0, // Age is 0 when birth year is NULL (cannot be calculated)
+            isVerified: true,
+            organizationId: testOrgId,
+          },
+        ]);
+      });
+
+      afterEach(async () => {
+        // Cleanup test users and measurements
+        // Use try-catch to prevent test suite failures if cleanup fails
+        try {
+          // Delete measurements first (foreign key constraint)
+          await db.delete(measurements).where(eq(measurements.userId, user1995Id));
+          await db.delete(measurements).where(eq(measurements.userId, user2005Id));
+          await db.delete(measurements).where(eq(measurements.userId, userNoBirthYearId));
+          // Then delete users
+          await db.delete(users).where(eq(users.id, user1995Id));
+          await db.delete(users).where(eq(users.id, user2005Id));
+          await db.delete(users).where(eq(users.id, userNoBirthYearId));
+        } catch (error) {
+          console.error('Test cleanup failed:', error);
+        }
+      });
+
+      it('should filter measurements by birthYearFrom', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          includeUnknownBirthYear: true,
+        }, true);
+
+        // Should include user2005 (2005 >= 2000) and userNoBirthYear (NULL included)
+        // Should exclude user1995 (1995 < 2000)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(userNoBirthYearId);
+        expect(userIds).not.toContain(user1995Id);
+      });
+
+      it('should filter measurements by birthYearTo', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearTo: 2000,
+          includeUnknownBirthYear: true,
+        }, true);
+
+        // Should include user1995 (1995 <= 2000) and userNoBirthYear (NULL included)
+        // Should exclude user2005 (2005 > 2000)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user1995Id);
+        expect(userIds).toContain(userNoBirthYearId);
+        expect(userIds).not.toContain(user2005Id);
+      });
+
+      it('should filter measurements by birth year range', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          birthYearTo: 2010,
+          includeUnknownBirthYear: true,
+        }, true);
+
+        // Should include user2005 (2000 <= 2005 <= 2010) and userNoBirthYear (NULL included)
+        // Should exclude user1995 (1995 < 2000)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(userNoBirthYearId);
+        expect(userIds).not.toContain(user1995Id);
+      });
+
+      it('should include users with NULL birthYear when filtering', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2020, // Very restrictive filter
+          includeUnknownBirthYear: true,
+        }, true);
+
+        // Should still include userNoBirthYear (NULL included when includeUnknownBirthYear is true)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(userNoBirthYearId);
+
+        // Should exclude all others
+        expect(userIds).not.toContain(user1995Id);
+        expect(userIds).not.toContain(user2005Id);
+      });
+
+      it('should return correct count with birth year filters', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          birthYearTo: 2010,
+          includeUnknownBirthYear: true,
+        }, true);
+
+        // Should include: user2005 (2005 in range), userNoBirthYear (NULL included),
+        // and testUserId (2000 in range from parent beforeEach)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(userNoBirthYearId);
+        expect(userIds).toContain(testUserId); // Parent test user born 2000
+
+        // Should have 3 measurements total
+        expect(result.total).toBeGreaterThanOrEqual(3);
+        expect(result.measurements.length).toBeGreaterThanOrEqual(3);
+      });
+
+      it('should exclude users with NULL birthYear when includeUnknownBirthYear is false', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          birthYearTo: 2010,
+          includeUnknownBirthYear: false,
+        }, true);
+
+        // Should include users in range (user2005, testUserId) but NOT userNoBirthYear
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(testUserId); // Parent test user born 2000
+        expect(userIds).not.toContain(userNoBirthYearId); // NULL excluded when false
+
+        // Should exclude user1995 (out of range)
+        expect(userIds).not.toContain(user1995Id);
+      });
+
+      it('should exclude users with NULL birthYear when includeUnknownBirthYear is undefined', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          birthYearTo: 2010,
+          // includeUnknownBirthYear is undefined (default behavior)
+        }, true);
+
+        // Should include users in range but NOT userNoBirthYear (default excludes NULL)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(testUserId); // Parent test user born 2000
+        expect(userIds).not.toContain(userNoBirthYearId); // NULL excluded by default
+
+        // Should exclude user1995 (out of range)
+        expect(userIds).not.toContain(user1995Id);
+      });
     });
   });
 });
