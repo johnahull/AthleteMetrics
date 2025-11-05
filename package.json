@@ -29,6 +29,7 @@
     "test:staging:validate": "playwright test tests/e2e/validate-staging.spec.ts --config=playwright.staging.config.ts",
     "test:testing": "playwright test --config=playwright.testing.config.ts",
     "test:testing:validate": "playwright test tests/e2e/validate-staging.spec.ts --config=playwright.testing.config.ts",
+    "test:sendgrid": "tsx scripts/test-sendgrid.ts",
     "deploy:testing": "node scripts/validate-testing-env.js && railway up --environment testing --service athletemetrics-testing",
     "logs:testing": "railway logs --environment testing",
     "shell:testing": "railway run --environment testing bash",

@@ -5726,5 +5726,128 @@ export async function registerRoutes(app: Express) {
     }
   });
 
+  // TESTING ENDPOINT: Send test emails (development/staging only)
+  app.post("/api/test/send-email", requireAuth, async (req, res) => {
+    try {
+      // Only allow in development and staging environments
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({
+          success: false,
+          error: 'This endpoint is not available in production environments'
+        });
+      }
+
+      const { emailType, recipientEmail } = req.body;
+
+      // Validate required parameters
+      if (!emailType) {
+        return res.status(400).json({
+          success: false,
+          error: 'emailType is required. Valid types: invitation, welcome, verification, password-reset'
+        });
+      }
+
+      if (!recipientEmail) {
+        return res.status(400).json({
+          success: false,
+          error: 'recipientEmail is required'
+        });
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(recipientEmail)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Please provide a valid email address'
+        });
+      }
+
+      // Validate email type
+      const validEmailTypes = ['invitation', 'welcome', 'verification', 'password-reset'];
+      if (!validEmailTypes.includes(emailType)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid emailType. Must be one of: ${validEmailTypes.join(', ')}`
+        });
+      }
+
+      let emailSent = false;
+      const appUrl = process.env.APP_URL || 'http://localhost:5000';
+
+      // Send appropriate test email based on type
+      switch (emailType) {
+        case 'invitation': {
+          const invitationToken = `test-invitation-${Date.now()}`;
+          const testInvitationData = {
+            recipientName: 'Test User',
+            inviterName: 'Admin User',
+            organizationName: 'Test Organization',
+            invitationLink: `${appUrl}/accept-invitation?token=${invitationToken}`,
+            expiryDays: 7,
+            role: 'coach'
+          };
+          emailSent = await emailService.sendInvitation(recipientEmail, testInvitationData);
+          break;
+        }
+
+        case 'welcome': {
+          const testWelcomeData = {
+            userName: 'Test User',
+            organizationName: 'Test Organization',
+            role: 'coach'
+          };
+          emailSent = await emailService.sendWelcome(recipientEmail, testWelcomeData);
+          break;
+        }
+
+        case 'verification': {
+          const verificationToken = `test-verification-${Date.now()}`;
+          const testVerificationData = {
+            userName: 'Test User',
+            verificationLink: `${appUrl}/verify-email?token=${verificationToken}`
+          };
+          emailSent = await emailService.sendEmailVerification(recipientEmail, testVerificationData);
+          break;
+        }
+
+        case 'password-reset': {
+          const resetToken = `test-reset-${Date.now()}`;
+          const testResetData = {
+            userName: 'Test User',
+            resetLink: `${appUrl}/reset-password?token=${resetToken}`
+          };
+          emailSent = await emailService.sendPasswordReset(recipientEmail, testResetData);
+          break;
+        }
+      }
+
+      if (emailSent) {
+        res.json({
+          success: true,
+          message: `Test ${emailType} email sent successfully`,
+          emailType,
+          recipientEmail,
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'SendGrid is not configured. Email was logged to console but not sent.',
+          emailType,
+          recipientEmail,
+          note: 'Please configure SENDGRID_API_KEY and SENDGRID_FROM_EMAIL environment variables'
+        });
+      }
+
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to send test email',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   return server;
 }
