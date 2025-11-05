@@ -95,6 +95,7 @@ COMMENT ON COLUMN organization_metrics.custom_label IS 'Organization-specific cu
 -- ============================================================================
 
 -- Insert default metrics as system defaults (cannot be deleted)
+-- Use ON CONFLICT DO NOTHING for idempotency (safe to re-run)
 INSERT INTO site_metrics (code, label, category, unit, lower_is_better, is_system_default, is_active, display_order, description, sport_associations, decimal_precision, color, icon)
 VALUES
   ('FLY10_TIME', '10-Yard Fly Time', 'speed', 's', true, true, true, 1,
@@ -127,7 +128,8 @@ VALUES
 
   ('TOP_SPEED', 'Top Speed', 'speed', 'mph', false, true, true, 8,
    'Maximum running velocity in miles per hour.',
-   ARRAY['Soccer'], 2, 'teal', 'Gauge');
+   ARRAY['Soccer'], 2, 'teal', 'Gauge')
+ON CONFLICT (code) DO NOTHING;
 
 -- Log seed completion
 DO $$
