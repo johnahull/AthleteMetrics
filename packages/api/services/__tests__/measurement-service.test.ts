@@ -697,12 +697,19 @@ describe('MeasurementService', () => {
 
       afterEach(async () => {
         // Cleanup test users and measurements
-        await db.delete(measurements).where(eq(measurements.userId, user1995Id));
-        await db.delete(measurements).where(eq(measurements.userId, user2005Id));
-        await db.delete(measurements).where(eq(measurements.userId, userNoBirthYearId));
-        await db.delete(users).where(eq(users.id, user1995Id));
-        await db.delete(users).where(eq(users.id, user2005Id));
-        await db.delete(users).where(eq(users.id, userNoBirthYearId));
+        // Use try-catch to prevent test suite failures if cleanup fails
+        try {
+          // Delete measurements first (foreign key constraint)
+          await db.delete(measurements).where(eq(measurements.userId, user1995Id));
+          await db.delete(measurements).where(eq(measurements.userId, user2005Id));
+          await db.delete(measurements).where(eq(measurements.userId, userNoBirthYearId));
+          // Then delete users
+          await db.delete(users).where(eq(users.id, user1995Id));
+          await db.delete(users).where(eq(users.id, user2005Id));
+          await db.delete(users).where(eq(users.id, userNoBirthYearId));
+        } catch (error) {
+          console.error('Test cleanup failed:', error);
+        }
       });
 
       it('should filter measurements by birthYearFrom', async () => {

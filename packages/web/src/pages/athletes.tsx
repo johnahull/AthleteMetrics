@@ -94,6 +94,22 @@ export default function Athletes() {
   }, [filters.teamId, filters.birthYearFrom, filters.birthYearTo, debouncedSearch, sortColumn, sortDirection]);
 
   const { toast } = useToast();
+
+  // Validate birth year range
+  useEffect(() => {
+    if (filters.birthYearFrom && filters.birthYearTo) {
+      const fromYear = parseInt(filters.birthYearFrom, 10);
+      const toYear = parseInt(filters.birthYearTo, 10);
+
+      if (fromYear > toYear) {
+        toast({
+          title: "Invalid Birth Year Range",
+          description: "Birth year 'From' must be less than or equal to birth year 'To'.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [filters.birthYearFrom, filters.birthYearTo, toast]);
   const queryClient = useQueryClient();
 
   const { data: teams = [] } = useQuery({

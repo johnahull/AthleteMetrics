@@ -1525,22 +1525,25 @@ export class DatabaseStorage implements IStorage {
       // Birth year filtering with conditional NULL handling
       // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
       if (filters?.birthYearFrom && filters?.birthYearTo) {
+        // When both from and to are specified, combine them into a single OR condition
+        // to avoid redundant NULL checks
         if (filters?.includeUnknownBirthYear) {
           conditions.push(
             or(
-              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
-              isNull(users.birthDate)
-            )!
-          );
-          conditions.push(
-            or(
-              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+              and(
+                sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+                sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+              )!,
               isNull(users.birthDate)
             )!
           );
         } else {
-          conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
-          conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+          conditions.push(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!
+          );
         }
       } else if (filters?.birthYearFrom) {
         if (filters?.includeUnknownBirthYear) {

@@ -23,15 +23,35 @@ export interface GroupingDimensions {
   schoolGrades?: string[];
 }
 
-// Simplified analytics filters - only essential fields used by the system
+/**
+ * Simplified analytics filters - only essential fields used by the system
+ */
 export interface AnalyticsFilters {
+  /** Organization context for all queries */
   organizationId: string;
-  athleteIds?: string[]; // For specific athlete selection
-  teams?: string[]; // Filter by team membership
+
+  /** For specific athlete selection */
+  athleteIds?: string[];
+
+  /** Filter by team membership */
+  teams?: string[];
+
+  /** Filter by gender */
   genders?: ('Male' | 'Female' | 'Not Specified')[];
-  birthYearFrom?: number; // Birth year range start
-  birthYearTo?: number; // Birth year range end
-  includeUnknownBirthYear?: boolean; // Include athletes with NULL birthDate
+
+  /** Birth year range start */
+  birthYearFrom?: number;
+
+  /** Birth year range end */
+  birthYearTo?: number;
+
+  /**
+   * Whether to include athletes with NULL birthDate in results when filtering by birth year.
+   *
+   * @default false - Athletes with unknown birth years are excluded from filtered results
+   * @example true - Include athletes without birth dates in filtered results
+   */
+  includeUnknownBirthYear?: boolean;
 }
 
 // Metrics selection with priority

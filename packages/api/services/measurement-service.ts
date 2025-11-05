@@ -554,26 +554,45 @@ export class MeasurementService {
     // Birth year filtering (applied to users table)
     // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
     // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
-    if (filters?.birthYearFrom !== undefined) {
+    if (filters?.birthYearFrom !== undefined && filters?.birthYearTo !== undefined) {
+      // When both from and to are specified, combine them into a single OR condition
+      // to avoid redundant NULL checks
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(
+          and(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+          )!
+        );
+      }
+    } else if (filters?.birthYearFrom !== undefined) {
       if (filters?.includeUnknownBirthYear) {
         conditions.push(
           or(
             sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
             isNull(users.birthDate)
-          )
+          )!
         );
       } else {
         conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
       }
-    }
-
-    if (filters?.birthYearTo !== undefined) {
+    } else if (filters?.birthYearTo !== undefined) {
       if (filters?.includeUnknownBirthYear) {
         conditions.push(
           or(
             sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
             isNull(users.birthDate)
-          )
+          )!
         );
       } else {
         conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
