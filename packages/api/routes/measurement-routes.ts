@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
+import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { z } from "zod";
 import { ZodError } from "zod";
@@ -40,8 +41,11 @@ const measurementQuerySchema = z.object({
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  // Accept both date (YYYY-MM-DD) and datetime (ISO 8601) formats for flexibility
+  // Using shared date validation schema
+  dateFrom: dateStringSchema.optional(),
+  dateTo: dateStringSchema.optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z
     .string()
@@ -73,6 +77,7 @@ interface MeasurementFilters {
   metric?: string;
   dateFrom?: string;
   dateTo?: string;
+  gender?: string;
   includeUnverified?: boolean;
   includeUnknownBirthYear?: boolean;
   birthYearFrom?: number;
@@ -107,6 +112,7 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.metric && { metric: validatedParams.metric }),
         ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
         ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
+        ...(validatedParams.gender && { gender: validatedParams.gender }),
         includeUnverified: validatedParams.includeUnverified === 'true',
         ...(validatedParams.includeUnknownBirthYear !== undefined && { includeUnknownBirthYear: validatedParams.includeUnknownBirthYear }),
         ...(validatedParams.birthYearFrom !== undefined && { birthYearFrom: validatedParams.birthYearFrom }),

@@ -1646,6 +1646,15 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
     }
 
+    if (filters?.gender && filters.gender !== "all") {
+      // Validate gender value before using it in the query
+      const validGenders = ['Male', 'Female', 'Not Specified'] as const;
+      if (!validGenders.includes(filters.gender as any)) {
+        throw new Error(`Invalid gender value: ${filters.gender}`);
+      }
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+    }
+
     if (filters?.organizationId) {
       conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
