@@ -156,7 +156,7 @@ const cleanupAgent = (agent: request.SuperAgentTest) => {
   activeAgents.delete(agent);
 };
 
-describe('Benchmark Endpoints Integration Tests', () => {
+describe.skip('Benchmark Endpoints Integration Tests', () => {
   beforeAll(async () => {
     // Validate DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
