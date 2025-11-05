@@ -5846,7 +5846,8 @@ export async function registerRoutes(app: Express) {
         res.json({
           success: true,
           message: `Test ${emailType} email sent successfully`,
-          emailType
+          emailType,
+          recipientEmail
         });
       } else {
         res.json({

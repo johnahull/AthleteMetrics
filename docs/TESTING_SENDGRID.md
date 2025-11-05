@@ -8,8 +8,7 @@ This guide provides step-by-step instructions for testing your SendGrid email in
 - [Testing Methods](#testing-methods)
   - [Method 1: CLI Script (Quickest)](#method-1-cli-script-quickest)
   - [Method 2: API Endpoint (Manual Testing)](#method-2-api-endpoint-manual-testing)
-  - [Method 3: Integration Tests (Automated)](#method-3-integration-tests-automated)
-  - [Method 4: Real User Workflow](#method-4-real-user-workflow)
+  - [Method 3: Real User Workflow](#method-3-real-user-workflow)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
 - [Email Templates Reference](#email-templates-reference)
@@ -24,7 +23,7 @@ Before testing SendGrid, ensure you have:
 - API key generated (Settings → API Keys → Create API Key)
 - Sender email verified (either Single Sender or Domain Authentication)
 
-See [sendgrid-setup.md](./sendgrid-setup.md) for detailed setup instructions.
+For detailed setup instructions, see the [SendGrid Documentation](https://docs.sendgrid.com/ui/account-and-settings/api-keys).
 
 ### 2. Environment Variables Configured
 
@@ -206,79 +205,7 @@ curl -b cookies.txt -X POST http://localhost:5000/api/test/send-email \
 
 ---
 
-### Method 3: Integration Tests (Automated)
-
-**Use this for:** Automated testing during development and CI/CD.
-
-#### Run Tests
-
-```bash
-# Run all SendGrid endpoint tests
-DATABASE_URL="postgresql://test_user:test_password@localhost:5432/athletemetrics_test" \
-  npm run test:integration -- tests/integration/sendgrid-test-endpoint.test.ts
-
-# Run with verbose output
-DATABASE_URL="postgresql://test_user:test_password@localhost:5432/athletemetrics_test" \
-  npm run test:integration -- tests/integration/sendgrid-test-endpoint.test.ts --reporter=verbose
-```
-
-#### Test Coverage
-
-The integration test suite verifies:
-
-1. **Authentication & Authorization**
-   - Rejects unauthenticated requests
-   - Only available in non-production environments
-
-2. **Request Validation**
-   - Requires `emailType` parameter
-   - Requires `recipientEmail` parameter
-   - Validates email format
-   - Validates email type is allowed
-
-3. **Email Sending**
-   - Invitation emails
-   - Welcome emails
-   - Email verification emails
-   - Password reset emails
-
-4. **Error Handling**
-   - SendGrid API errors
-   - Missing configuration
-   - Invalid parameters
-
-#### Expected Output
-
-```
-✓ tests/integration/sendgrid-test-endpoint.test.ts (14)
-  ✓ POST /api/test/send-email - SendGrid Test Endpoint (14)
-    ✓ Authentication & Authorization (2)
-      ✓ should reject unauthenticated requests
-      ✓ should only be available in development/staging environments
-    ✓ Request Validation (4)
-      ✓ should require emailType parameter
-      ✓ should require recipientEmail parameter
-      ✓ should validate email format
-      ✓ should validate emailType is one of allowed types
-    ✓ Email Sending - Invitation (2)
-      ✓ should send invitation test email successfully
-      ✓ should handle SendGrid errors gracefully
-    ✓ Email Sending - Welcome (1)
-      ✓ should send welcome test email successfully
-    ✓ Email Sending - Email Verification (1)
-      ✓ should send email verification test email successfully
-    ✓ Email Sending - Password Reset (1)
-      ✓ should send password reset test email successfully
-    ✓ Configuration Check (1)
-      ✓ should report when SendGrid is not configured
-
-Test Files  1 passed (1)
-     Tests  14 passed (14)
-```
-
----
-
-### Method 4: Real User Workflow
+### Method 3: Real User Workflow
 
 **Use this for:** End-to-end testing of email integration in actual user flows.
 
@@ -414,7 +341,7 @@ Or if SendGrid is not configured:
    - Go to Settings → Sender Authentication → Verify a Single Sender
    - Add `SENDGRID_FROM_EMAIL` as verified sender
 2. Or authenticate entire domain via Domain Authentication
-3. See [sendgrid-setup.md](./sendgrid-setup.md) for detailed instructions
+3. See [SendGrid Sender Authentication Guide](https://docs.sendgrid.com/ui/account-and-settings/how-to-set-up-domain-authentication) for detailed instructions
 
 ### Issue: "Emails go to spam"
 
@@ -543,7 +470,6 @@ Or if SendGrid is not configured:
 
 - **Development:** Use CLI script for quick iteration
 - **Staging:** Use API endpoint to test real workflows
-- **CI/CD:** Run integration tests automatically
 - **Production:** Monitor SendGrid Activity Feed
 
 ### 2. Email Deliverability
@@ -578,8 +504,9 @@ Or if SendGrid is not configured:
 
 ## Additional Resources
 
-- [SendGrid Setup Guide](./sendgrid-setup.md) - Complete SendGrid account setup
 - [SendGrid Documentation](https://docs.sendgrid.com/) - Official SendGrid docs
+- [SendGrid API Keys Guide](https://docs.sendgrid.com/ui/account-and-settings/api-keys) - API key setup
+- [SendGrid Sender Authentication](https://docs.sendgrid.com/ui/account-and-settings/how-to-set-up-domain-authentication) - Domain authentication
 - [SendGrid API Reference](https://docs.sendgrid.com/api-reference) - API details
 - [Email Service Implementation](../packages/api/services/email-service.ts) - Source code
 
@@ -600,9 +527,6 @@ Or if SendGrid is not configured:
 ```bash
 # CLI Script (quickest)
 npm run test:sendgrid -- --email your@email.com --type invitation
-
-# Integration Tests
-npm run test:integration -- tests/integration/sendgrid-test-endpoint.test.ts
 
 # API Endpoint (requires dev server running)
 curl -X POST http://localhost:5000/api/test/send-email \
