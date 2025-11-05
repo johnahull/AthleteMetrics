@@ -165,16 +165,20 @@ describe('Publish Page - Date Filter', () => {
 
         if (dateFrom || dateTo) {
           filteredMeasurements = measurements.filter((m: any) => {
-            const measurementDate = new Date(m.date);
+            // Measurement dates are stored as YYYY-MM-DD strings
+            // API sends ISO datetime, so extract date part for comparison
+            const measurementDateStr = m.date; // Already YYYY-MM-DD
 
             if (dateFrom) {
-              const fromDate = new Date(dateFrom);
-              if (measurementDate < fromDate) return false;
+              // Extract date part from ISO datetime (YYYY-MM-DDTHH:MM:SS.SSSZ -> YYYY-MM-DD)
+              const fromDateStr = dateFrom.split('T')[0];
+              if (measurementDateStr < fromDateStr) return false;
             }
 
             if (dateTo) {
-              const toDate = new Date(dateTo);
-              if (measurementDate > toDate) return false;
+              // Extract date part from ISO datetime
+              const toDateStr = dateTo.split('T')[0];
+              if (measurementDateStr > toDateStr) return false;
             }
 
             return true;
@@ -460,7 +464,7 @@ describe('Publish Page - Date Filter', () => {
       });
     });
 
-    it('should set dateFrom to start of day (00:00:00.000Z)', async () => {
+    it('should set dateFrom to start of day in local timezone', async () => {
       const user = userEvent.setup();
       setupFetchMocks(mockMeasurementsWithDates);
       renderWithProviders(<Publish />);
@@ -473,14 +477,33 @@ describe('Publish Page - Date Filter', () => {
 
       await waitFor(() => {
         const calls = fetchMock.mock.calls;
-        const callWithDate = calls.find((call: any) =>
-          call[0].includes('dateFrom=2024-01-15T00:00:00.000Z')
+        const callWithDates = calls.find((call: any) =>
+          call[0].includes('dateFrom=') && call[0].includes('/api/measurements')
         );
-        expect(callWithDate).toBeTruthy();
+        expect(callWithDates).toBeTruthy();
+
+        // Verify it's ISO datetime and has correct date
+        const url = callWithDates[0];
+        const urlObj = new URL(url, 'http://localhost');
+        const dateFrom = urlObj.searchParams.get('dateFrom');
+
+        // Should be ISO datetime format
+        expect(dateFrom).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+        // Date part should be 2024-01-15
+        expect(dateFrom?.split('T')[0]).toBe('2024-01-15');
+
+        // Time part should be start of day (00:00:00.000) in local timezone
+        // Parse the ISO string and check it's midnight in local time
+        const parsedDate = new Date(dateFrom!);
+        expect(parsedDate.getHours()).toBe(0);
+        expect(parsedDate.getMinutes()).toBe(0);
+        expect(parsedDate.getSeconds()).toBe(0);
+        expect(parsedDate.getMilliseconds()).toBe(0);
       });
     });
 
-    it('should set dateTo to end of day (23:59:59.999Z)', async () => {
+    it('should set dateTo to end of day in local timezone', async () => {
       const user = userEvent.setup();
       setupFetchMocks(mockMeasurementsWithDates);
       renderWithProviders(<Publish />);
@@ -493,10 +516,29 @@ describe('Publish Page - Date Filter', () => {
 
       await waitFor(() => {
         const calls = fetchMock.mock.calls;
-        const callWithDate = calls.find((call: any) =>
-          call[0].includes('dateTo=2024-02-01T23:59:59.999Z')
+        const callWithDates = calls.find((call: any) =>
+          call[0].includes('dateTo=') && call[0].includes('/api/measurements')
         );
-        expect(callWithDate).toBeTruthy();
+        expect(callWithDates).toBeTruthy();
+
+        // Verify it's ISO datetime and has correct date
+        const url = callWithDates[0];
+        const urlObj = new URL(url, 'http://localhost');
+        const dateTo = urlObj.searchParams.get('dateTo');
+
+        // Should be ISO datetime format
+        expect(dateTo).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+        // Parse the ISO string and verify it's end of day in LOCAL timezone
+        // (not UTC timezone which may differ due to timezone offset)
+        const parsedDate = new Date(dateTo!);
+        expect(parsedDate.getFullYear()).toBe(2024);
+        expect(parsedDate.getMonth()).toBe(1); // 0-indexed, so 1 = February
+        expect(parsedDate.getDate()).toBe(1);
+        expect(parsedDate.getHours()).toBe(23);
+        expect(parsedDate.getMinutes()).toBe(59);
+        expect(parsedDate.getSeconds()).toBe(59);
+        expect(parsedDate.getMilliseconds()).toBe(999);
       });
     });
   });

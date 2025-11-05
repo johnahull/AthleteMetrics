@@ -46,9 +46,9 @@ test.describe('Publish Page - Date Filter E2E', () => {
     const errorMessage = page.locator('text=/error|crash|failed/i').first();
     await expect(errorMessage).not.toBeVisible();
 
-    // Results table should be visible (might be empty or have data)
-    const resultsSection = page.locator('text=Results');
-    await expect(resultsSection).toBeVisible();
+    // Results heading should be visible (might be empty or have data)
+    const resultsHeading = page.getByRole('heading', { name: /Results -/ });
+    await expect(resultsHeading).toBeVisible();
   });
 
   test('should filter measurements by date range correctly', async ({ page }) => {
@@ -106,9 +106,9 @@ test.describe('Publish Page - Date Filter E2E', () => {
     // Wait for query to complete
     await page.waitForTimeout(2000);
 
-    // Should not crash
-    const resultsSection = page.locator('text=Results');
-    await expect(resultsSection).toBeVisible();
+    // Should not crash - check results heading is visible
+    const resultsHeading = page.getByRole('heading', { name: /Results -/ });
+    await expect(resultsHeading).toBeVisible();
   });
 
   test('should reset date filters when Reset Filters is clicked', async ({ page }) => {
