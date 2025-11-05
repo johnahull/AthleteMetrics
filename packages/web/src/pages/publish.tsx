@@ -58,8 +58,17 @@ export default function Publish() {
 
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
-      if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
-      if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+
+      // Only include birth year filters if they're valid 4-digit years
+      const birthYearFromNum = parseInt(filters.birthYearFrom);
+      const birthYearToNum = parseInt(filters.birthYearTo);
+      if (filters.birthYearFrom && birthYearFromNum >= 1900 && birthYearFromNum <= 2100) {
+        params.append('birthYearFrom', filters.birthYearFrom);
+      }
+      if (filters.birthYearTo && birthYearToNum >= 1900 && birthYearToNum <= 2100) {
+        params.append('birthYearTo', filters.birthYearTo);
+      }
+
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
