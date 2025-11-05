@@ -404,6 +404,7 @@ export default function Athletes() {
       birthYearFrom: "",
       birthYearTo: "",
       search: "",
+      includeUnknownBirthYear: false,
     });
     setCurrentPage(1); // Reset to page 1 when clearing filters
   };
