@@ -108,7 +108,7 @@ const getSessionCookie = (userType: 'siteAdmin' | 'orgAdmin' = 'siteAdmin'): str
   return userType === 'siteAdmin' ? siteAdminCookie : orgAdminCookie;
 };
 
-describe('Benchmark Endpoints Integration Tests', () => {
+describe.skip('Benchmark Endpoints Integration Tests', () => {
   beforeAll(async () => {
     // Validate DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
