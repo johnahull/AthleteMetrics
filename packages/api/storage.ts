@@ -1646,6 +1646,10 @@ export class DatabaseStorage implements IStorage {
       conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
     }
 
+    if (filters?.gender && filters.gender !== "all") {
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+    }
+
     if (filters?.organizationId) {
       conditions.push(eq(userOrganizations.organizationId, filters.organizationId));
     }
