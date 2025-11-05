@@ -37,10 +37,12 @@ function discoverManualMigrations() {
   const files = readdirSync(migrationsDir);
 
   // Filter for migration files matching pattern: ####_name.sql where #### >= 0014
+  // Exclude DOWN migrations (files ending with _down.sql) as those are only for rollbacks
   const migrations = files
     .filter(file => {
       const match = file.match(/^(\d{4})_.*\.sql$/);
       if (!match) return false;
+      if (file.endsWith('_down.sql')) return false; // Skip rollback migrations
       const migrationNumber = parseInt(match[1], 10);
       return migrationNumber >= 14; // Only manual migrations (0014+)
     })
