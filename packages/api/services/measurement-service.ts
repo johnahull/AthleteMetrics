@@ -549,12 +549,23 @@ export class MeasurementService {
     }
 
     // Birth year filtering (applied to users table)
+    // Note: Include users with NULL birthYear to avoid excluding users without birth year data
     if (filters?.birthYearFrom !== undefined) {
-      conditions.push(gte(users.birthYear, filters.birthYearFrom));
+      conditions.push(
+        or(
+          gte(users.birthYear, filters.birthYearFrom),
+          isNull(users.birthYear)
+        )
+      );
     }
 
     if (filters?.birthYearTo !== undefined) {
-      conditions.push(lte(users.birthYear, filters.birthYearTo));
+      conditions.push(
+        or(
+          lte(users.birthYear, filters.birthYearTo),
+          isNull(users.birthYear)
+        )
+      );
     }
 
     // Pagination parameters with safety limits to prevent memory exhaustion

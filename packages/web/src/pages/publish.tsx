@@ -29,8 +29,8 @@ export default function Publish() {
 
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
-    birthYearFrom: "2000",
-    birthYearTo: new Date().getFullYear().toString(),
+    birthYearFrom: "",
+    birthYearTo: "",
     metric: "",
     sport: "",
     dateFrom: "",

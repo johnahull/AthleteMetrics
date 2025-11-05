@@ -49,7 +49,18 @@ const measurementQuerySchema = z.object({
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
   limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).optional(),
   offset: z.coerce.number().int().min(0).max(PAGINATION.MAX_OFFSET).optional(),
-});
+}).refine(
+  (data) => {
+    if (data.birthYearFrom !== undefined && data.birthYearTo !== undefined) {
+      return data.birthYearFrom <= data.birthYearTo;
+    }
+    return true;
+  },
+  {
+    message: "birthYearFrom must be less than or equal to birthYearTo",
+    path: ["birthYearFrom"],
+  }
+);
 
 interface MeasurementFilters {
   userId?: string;
