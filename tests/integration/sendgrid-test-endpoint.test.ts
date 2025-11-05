@@ -148,10 +148,11 @@ describe('POST /api/test/send-email', () => {
           recipientEmail
         });
       } else {
-        res.status(500).json({
+        res.json({
           success: false,
-          error: 'Email service is not configured',
-          emailType
+          message: 'Email service is not configured. Email was logged to console but not sent.',
+          emailType,
+          note: 'Contact administrator to configure email service'
         });
       }
     });

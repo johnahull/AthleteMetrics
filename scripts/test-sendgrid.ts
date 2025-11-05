@@ -98,10 +98,14 @@ async function testSendGrid() {
 
   let hasAllRequired = true;
 
+  // API key masking constants
+  const API_KEY_PREFIX_LENGTH = 10;
+  const API_KEY_SUFFIX_LENGTH = 4;
+
   for (const [key, value] of Object.entries(requiredVars)) {
     if (value) {
       if (key === 'SENDGRID_API_KEY') {
-        const masked = value.substring(0, 10) + '...' + value.substring(value.length - 4);
+        const masked = value.substring(0, API_KEY_PREFIX_LENGTH) + '...' + value.substring(value.length - API_KEY_SUFFIX_LENGTH);
         printSuccess(`${key}: ${masked}`);
       } else {
         printSuccess(`${key}: ${value}`);

@@ -5744,6 +5744,11 @@ export async function registerRoutes(app: Express) {
   });
 
   // TESTING ENDPOINT: Send test emails (development/staging only)
+  interface TestEmailRequest {
+    emailType: 'invitation' | 'welcome' | 'verification' | 'password-reset';
+    recipientEmail: string;
+  }
+
   app.post("/api/test/send-email", testEmailLimiter, requireSiteAdmin, async (req, res) => {
     try {
       // Only allow in development and staging environments
@@ -5754,7 +5759,7 @@ export async function registerRoutes(app: Express) {
         });
       }
 
-      const { emailType, recipientEmail } = req.body;
+      const { emailType, recipientEmail } = req.body as TestEmailRequest;
 
       // Validate required parameters
       if (!emailType) {
