@@ -793,6 +793,42 @@ describe('MeasurementService', () => {
         expect(result.total).toBeGreaterThanOrEqual(3);
         expect(result.measurements.length).toBeGreaterThanOrEqual(3);
       });
+
+      it('should exclude users with NULL birthYear when includeUnknownBirthYear is false', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          birthYearTo: 2010,
+          includeUnknownBirthYear: false,
+        }, true);
+
+        // Should include users in range (user2005, testUserId) but NOT userNoBirthYear
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(testUserId); // Parent test user born 2000
+        expect(userIds).not.toContain(userNoBirthYearId); // NULL excluded when false
+
+        // Should exclude user1995 (out of range)
+        expect(userIds).not.toContain(user1995Id);
+      });
+
+      it('should exclude users with NULL birthYear when includeUnknownBirthYear is undefined', async () => {
+        const result = await measurementService.getMeasurements({
+          metric: 'FLY10_TIME',
+          birthYearFrom: 2000,
+          birthYearTo: 2010,
+          // includeUnknownBirthYear is undefined (default behavior)
+        }, true);
+
+        // Should include users in range but NOT userNoBirthYear (default excludes NULL)
+        const userIds = result.measurements.map(m => m.userId);
+        expect(userIds).toContain(user2005Id);
+        expect(userIds).toContain(testUserId); // Parent test user born 2000
+        expect(userIds).not.toContain(userNoBirthYearId); // NULL excluded by default
+
+        // Should exclude user1995 (out of range)
+        expect(userIds).not.toContain(user1995Id);
+      });
     });
   });
 });
