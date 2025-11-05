@@ -145,8 +145,8 @@ async function testSendGrid() {
     process.exit(1);
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(recipientEmail)) {
+  const { isValidEmail } = await import('../packages/shared/email-validation.js');
+  if (!isValidEmail(recipientEmail)) {
     printError(`Invalid email format: ${recipientEmail}`);
     process.exit(1);
   }

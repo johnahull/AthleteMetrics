@@ -5772,8 +5772,8 @@ export async function registerRoutes(app: Express) {
       }
 
       // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(recipientEmail)) {
+      const { isValidEmail } = await import('@shared/email-validation.js');
+      if (!isValidEmail(recipientEmail)) {
         return res.status(400).json({
           success: false,
           error: 'Please provide a valid email address'
