@@ -34,26 +34,16 @@ import bcrypt from 'bcrypt';
 let app: Express;
 let testOrgId: string;
 let testSiteAdminId: string;
-let testSiteAdminUsername: string; // Store site admin username for login
+let siteAdminCookie: string; // Session cookie for site admin
 let testOrgAdminId: string;
 let testOrgAdminUsername: string; // Store org admin username for login
+let orgAdminCookie: string; // Session cookie for org admin
 let testSiteBenchmarkId: string;
 let testCustomBenchmarkId: string;
-let activeAgents: Set<request.SuperAgentTest> = new Set();
 
 // Test data setup
 const setupTestData = async () => {
-  // Admin user is already created by initializeDefaultUser() in registerRoutes()
-  // Just fetch it for reference (don't create it manually)
-  const adminUsername = process.env.ADMIN_USER || 'admin';
-
-  const adminUsers = await db.select().from(users).where(eq(users.username, adminUsername)).limit(1);
-  if (adminUsers.length === 0) {
-    throw new Error('Admin user not found after initialization. This should not happen.');
-  }
-
-  testSiteAdminId = adminUsers[0].id;
-  testSiteAdminUsername = adminUsername;
+  // Note: Admin user validation moved to beforeAll() before this function is called
 
   // Create test organization with benchmarks enabled
   const orgResult = await db.insert(organizations).values({
@@ -113,50 +103,12 @@ const cleanupTestData = async () => {
   // It may be used by other tests
 };
 
-const createAuthenticatedSession = async (userType: 'siteAdmin' | 'orgAdmin' = 'siteAdmin') => {
-  const agent = request.agent(app);
-  activeAgents.add(agent);
-
-  const credentials = userType === 'siteAdmin'
-    ? { username: testSiteAdminUsername, password: process.env.ADMIN_PASSWORD || 'TestPassword123!' }
-    : { username: testOrgAdminUsername, password: 'TestPassword123!' };
-
-  // For orgAdmin, verify the user exists before attempting login
-  if (userType === 'orgAdmin') {
-    const userCheck = await db.select().from(users).where(eq(users.username, testOrgAdminUsername)).limit(1);
-    console.log('OrgAdmin user check:', {
-      username: testOrgAdminUsername,
-      exists: userCheck.length > 0,
-      user: userCheck[0] ? {
-        username: userCheck[0].username,
-        isActive: userCheck[0].isActive,
-        isSiteAdmin: userCheck[0].isSiteAdmin
-      } : null
-    });
-  }
-
-  const loginResponse = await agent
-    .post('/api/auth/login')
-    .send(credentials);
-
-  if (loginResponse.status !== 200) {
-    console.error('Login failed:', {
-      userType,
-      username: credentials.username,
-      status: loginResponse.status,
-      body: loginResponse.body
-    });
-  }
-
-  expect(loginResponse.status).toBe(200);
-  return agent;
+// Helper to get session cookie for a user type
+const getSessionCookie = (userType: 'siteAdmin' | 'orgAdmin' = 'siteAdmin'): string => {
+  return userType === 'siteAdmin' ? siteAdminCookie : orgAdminCookie;
 };
 
-const cleanupAgent = (agent: request.SuperAgentTest) => {
-  activeAgents.delete(agent);
-};
-
-describe.skip('Benchmark Endpoints Integration Tests', () => {
+describe('Benchmark Endpoints Integration Tests', () => {
   beforeAll(async () => {
     // Validate DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
@@ -171,37 +123,66 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
 
-    // Register routes first - this calls initializeDefaultUser() to create admin
+    // Register routes - this calls initializeDefaultUser() to create admin
     await registerRoutes(app);
 
-    // Setup test data after routes are registered
-    // This ensures admin user exists (created by initializeDefaultUser)
+    // Validate admin user exists (like organization-routes.test.ts)
+    const adminUser = await db.select().from(users)
+      .where(eq(users.username, process.env.ADMIN_USER || 'admin'))
+      .limit(1);
+    if (adminUser.length === 0) {
+      throw new Error('Admin user not found after initialization');
+    }
+    testSiteAdminId = adminUser[0].id;
+
+    // Validate admin can login and get session cookie
+    const siteAdminLoginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: process.env.ADMIN_USER || 'admin',
+        password: process.env.ADMIN_PASSWORD || 'TestPassword123!',
+      });
+
+    if (siteAdminLoginResponse.status !== 200 || !siteAdminLoginResponse.headers['set-cookie']) {
+      throw new Error(
+        `Site admin login failed (status: ${siteAdminLoginResponse.status}). ` +
+        `Ensure ADMIN_PASSWORD environment variable matches the initialized admin user password.`
+      );
+    }
+
+    siteAdminCookie = siteAdminLoginResponse.headers['set-cookie'][0];
+
+    // Setup test data (creates organization and org admin)
     await setupTestData();
+
+    // Login org admin to get session cookie
+    const orgAdminLoginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: testOrgAdminUsername,
+        password: 'TestPassword123!',
+      });
+
+    if (orgAdminLoginResponse.status !== 200 || !orgAdminLoginResponse.headers['set-cookie']) {
+      throw new Error(`Org admin login failed (status: ${orgAdminLoginResponse.status})`);
+    }
+
+    orgAdminCookie = orgAdminLoginResponse.headers['set-cookie'][0];
   });
 
   afterAll(async () => {
-    // Clean up all active agents
-    activeAgents.forEach(agent => cleanupAgent(agent));
-
     await cleanupTestData();
-  });
-
-  afterEach(() => {
-    // Clean up any active agents after each test
-    activeAgents.forEach(agent => cleanupAgent(agent));
-    activeAgents.clear();
   });
 
   describe('Site Benchmark Endpoints', () => {
     describe('GET /api/benchmarks', () => {
       it('should return site benchmarks for authenticated users', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.get('/api/benchmarks');
+        const response = await request(app).get('/api/benchmarks').set('Cookie', cookie);
 
         expect(response.status).toBe(200);
         expect(Array.isArray(response.body)).toBe(true);
-        cleanupAgent(agent);
       });
 
       it('should return 401 for unauthenticated users', async () => {
@@ -211,23 +192,22 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
       });
 
       it('should filter inactive benchmarks for non-site-admins', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const responseWithInactive = await agent.get('/api/benchmarks?includeInactive=true');
-        const responseWithoutInactive = await agent.get('/api/benchmarks?includeInactive=false');
+        const responseWithInactive = await request(app).get('/api/benchmarks?includeInactive=true').set('Cookie', cookie);
+        const responseWithoutInactive = await request(app).get('/api/benchmarks?includeInactive=false').set('Cookie', cookie);
 
         expect(responseWithInactive.status).toBe(200);
         expect(responseWithoutInactive.status).toBe(200);
-        cleanupAgent(agent);
       });
     });
 
     describe('GET /api/benchmarks/:id', () => {
       it('should return specific benchmark for authenticated users', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Create a test benchmark first
-        const createResponse = await agent.post('/api/benchmarks').send({
+        const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           metricCode: 'FLY10_TIME',
           name: 'Test Benchmark',
           description: 'Test description',
@@ -239,21 +219,19 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         expect(createResponse.status).toBe(201);
         testSiteBenchmarkId = createResponse.body.id;
 
-        const response = await agent.get(`/api/benchmarks/${testSiteBenchmarkId}`);
+        const response = await request(app).get(`/api/benchmarks/${testSiteBenchmarkId}`).set('Cookie', cookie);
 
         expect(response.status).toBe(200);
         expect(response.body.id).toBe(testSiteBenchmarkId);
         expect(response.body.name).toBe('Test Benchmark');
-        cleanupAgent(agent);
       });
 
       it('should return 404 for non-existent benchmark', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.get('/api/benchmarks/00000000-0000-0000-0000-000000000000');
+        const response = await request(app).get('/api/benchmarks/00000000-0000-0000-0000-000000000000').set('Cookie', cookie);
 
         expect(response.status).toBe(404);
-        cleanupAgent(agent);
       });
 
       // Rate limiting test removed - redundant with dedicated rate-limiting-security.test.ts
@@ -263,9 +241,9 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
 
     describe('POST /api/benchmarks', () => {
       it('should create benchmark for site admin', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.post('/api/benchmarks').send({
+        const response = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           metricCode: 'FLY10_TIME',
           name: 'New Benchmark',
           description: 'New description',
@@ -277,28 +255,26 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         expect(response.status).toBe(201);
         expect(response.body.name).toBe('New Benchmark');
         testSiteBenchmarkId = response.body.id;
-        cleanupAgent(agent);
       });
 
       it('should return 400 for invalid data', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.post('/api/benchmarks').send({
+        const response = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           // Missing required fields
           name: 'Invalid Benchmark',
         });
 
         expect(response.status).toBe(400);
-        cleanupAgent(agent);
       });
     });
 
     describe('PATCH /api/benchmarks/:id', () => {
       it('should update benchmark for site admin', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Create benchmark first
-        const createResponse = await agent.post('/api/benchmarks').send({
+        const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           metricCode: 'FLY10_TIME',
           name: 'Update Test',
           description: 'Original description',
@@ -309,7 +285,7 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
 
         testSiteBenchmarkId = createResponse.body.id;
 
-        const updateResponse = await agent.patch(`/api/benchmarks/${testSiteBenchmarkId}`).send({
+        const updateResponse = await request(app).patch(`/api/benchmarks/${testSiteBenchmarkId}`).set('Cookie', cookie).send({
           name: 'Updated Name',
           description: 'Updated description',
         });
@@ -317,16 +293,15 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         expect(updateResponse.status).toBe(200);
         expect(updateResponse.body.name).toBe('Updated Name');
         expect(updateResponse.body.description).toBe('Updated description');
-        cleanupAgent(agent);
       });
     });
 
     describe('DELETE /api/benchmarks/:id', () => {
       it('should delete benchmark for site admin', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Create benchmark first
-        const createResponse = await agent.post('/api/benchmarks').send({
+        const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           metricCode: 'FLY10_TIME',
           name: 'Delete Test',
           description: 'To be deleted',
@@ -337,14 +312,13 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
 
         const benchmarkId = createResponse.body.id;
 
-        const deleteResponse = await agent.delete(`/api/benchmarks/${benchmarkId}`);
+        const deleteResponse = await request(app).delete(`/api/benchmarks/${benchmarkId}`).set('Cookie', cookie);
 
         expect(deleteResponse.status).toBe(204);
 
         // Verify it's deleted
-        const getResponse = await agent.get(`/api/benchmarks/${benchmarkId}`);
+        const getResponse = await request(app).get(`/api/benchmarks/${benchmarkId}`).set('Cookie', cookie);
         expect(getResponse.status).toBe(404);
-        cleanupAgent(agent);
       });
     });
   });
@@ -352,31 +326,29 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
   describe('Custom Benchmark Endpoints', () => {
     describe('GET /api/organizations/:organizationId/benchmarks/custom', () => {
       it('should return custom benchmarks for organization', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.get(`/api/organizations/${testOrgId}/benchmarks/custom`);
+        const response = await request(app).get(`/api/organizations/${testOrgId}/benchmarks/custom`).set('Cookie', cookie);
 
         expect(response.status).toBe(200);
         expect(Array.isArray(response.body)).toBe(true);
-        cleanupAgent(agent);
       });
 
       it('should return 403 for unauthorized organization access', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.get('/api/organizations/00000000-0000-0000-0000-000000000000/benchmarks/custom');
+        const response = await request(app).get('/api/organizations/00000000-0000-0000-0000-000000000000/benchmarks/custom').set('Cookie', cookie);
 
         expect([403, 404]).toContain(response.status);
-        cleanupAgent(agent);
       });
     });
 
     describe('POST /api/organizations/:organizationId/benchmarks/custom', () => {
       it('should create custom benchmark for organization', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent
-          .post(`/api/organizations/${testOrgId}/benchmarks/custom`)
+        const response = await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/custom`).set('Cookie', cookie)
           .send({
             metricCode: 'FLY10_TIME',
             name: 'Custom Benchmark',
@@ -389,15 +361,14 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         expect(response.status).toBe(201);
         expect(response.body.name).toBe('Custom Benchmark');
         testCustomBenchmarkId = response.body.id;
-        cleanupAgent(agent);
       });
 
       it('should prioritize URL organizationId over body', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Try to send different organizationId in body (should be ignored)
-        const response = await agent
-          .post(`/api/organizations/${testOrgId}/benchmarks/custom`)
+        const response = await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/custom`).set('Cookie', cookie)
           .send({
             organizationId: '00000000-0000-0000-0000-000000000000', // Should be ignored
             metricCode: 'FLY10_TIME',
@@ -411,7 +382,6 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         expect(response.status).toBe(201);
         // Verify it was created with the URL organizationId
         expect(response.body.organizationId).toBe(testOrgId);
-        cleanupAgent(agent);
       });
     });
   });
@@ -419,22 +389,21 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
   describe('Benchmark Enablement Endpoints', () => {
     describe('GET /api/organizations/:organizationId/benchmarks', () => {
       it('should return enabled benchmarks for organization', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent.get(`/api/organizations/${testOrgId}/benchmarks`);
+        const response = await request(app).get(`/api/organizations/${testOrgId}/benchmarks`).set('Cookie', cookie);
 
         expect(response.status).toBe(200);
         expect(Array.isArray(response.body)).toBe(true);
-        cleanupAgent(agent);
       });
     });
 
     describe('POST /api/organizations/:organizationId/benchmarks/:id/enable', () => {
       it('should enable site benchmark for organization', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Create site benchmark first
-        const createResponse = await agent.post('/api/benchmarks').send({
+        const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           metricCode: 'FLY10_TIME',
           name: 'Enable Test Benchmark',
           description: 'For enablement test',
@@ -446,34 +415,32 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         const benchmarkId = createResponse.body.id;
         testSiteBenchmarkId = benchmarkId;
 
-        const enableResponse = await agent
-          .post(`/api/organizations/${testOrgId}/benchmarks/${benchmarkId}/enable`)
+        const enableResponse = await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/${benchmarkId}/enable`).set('Cookie', cookie)
           .send({ benchmarkType: 'site' });
 
         expect(enableResponse.status).toBe(201);
         expect(enableResponse.body.benchmarkId).toBe(benchmarkId);
         expect(enableResponse.body.isEnabled).toBe(true);
-        cleanupAgent(agent);
       });
 
       it('should return 400 for missing benchmarkType', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
-        const response = await agent
-          .post(`/api/organizations/${testOrgId}/benchmarks/00000000-0000-0000-0000-000000000000/enable`)
+        const response = await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/00000000-0000-0000-0000-000000000000/enable`).set('Cookie', cookie)
           .send({});
 
         expect(response.status).toBe(400);
-        cleanupAgent(agent);
       });
 
       it('should handle concurrent benchmark enablement without display_order conflicts', { timeout: 30000 }, async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Create 5 benchmarks
         const benchmarkIds = [];
         for (let i = 0; i < 5; i++) {
-          const createResponse = await agent.post('/api/benchmarks').send({
+          const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
             metricCode: 'FLY10_TIME',
             name: `Concurrent Test Benchmark ${i}`,
             description: `For concurrent enablement test ${i}`,
@@ -486,8 +453,8 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
 
         // Enable all benchmarks concurrently
         const enablePromises = benchmarkIds.map(id =>
-          agent
-            .post(`/api/organizations/${testOrgId}/benchmarks/${id}/enable`)
+          request(app)
+            .post(`/api/organizations/${testOrgId}/benchmarks/${id}/enable`).set('Cookie', cookie)
             .send({ benchmarkType: 'site' })
         );
 
@@ -504,16 +471,15 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         const uniqueOrders = new Set(displayOrders);
         expect(uniqueOrders.size).toBe(displayOrders.length);
 
-        cleanupAgent(agent);
       });
     });
 
     describe('POST /api/organizations/:organizationId/benchmarks/:id/disable', () => {
       it('should disable benchmark for organization', async () => {
-        const agent = await createAuthenticatedSession('siteAdmin');
+        const cookie = getSessionCookie('siteAdmin');
 
         // Create and enable benchmark first
-        const createResponse = await agent.post('/api/benchmarks').send({
+        const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
           metricCode: 'FLY10_TIME',
           name: 'Disable Test Benchmark',
           description: 'For disable test',
@@ -525,28 +491,27 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         const benchmarkId = createResponse.body.id;
         testSiteBenchmarkId = benchmarkId;
 
-        await agent
-          .post(`/api/organizations/${testOrgId}/benchmarks/${benchmarkId}/enable`)
+        await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/${benchmarkId}/enable`).set('Cookie', cookie)
           .send({ benchmarkType: 'site' });
 
-        const disableResponse = await agent
-          .post(`/api/organizations/${testOrgId}/benchmarks/${benchmarkId}/disable`)
+        const disableResponse = await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/${benchmarkId}/disable`).set('Cookie', cookie)
           .send({ benchmarkType: 'site' });
 
         expect(disableResponse.status).toBe(200);
         expect(disableResponse.body.isEnabled).toBe(false);
-        cleanupAgent(agent);
       });
     });
   });
 
   describe('Authorization & Security', () => {
     it('should prevent authorization bypass via body organizationId', async () => {
-      const agent = await createAuthenticatedSession('siteAdmin');
+      const cookie = getSessionCookie('siteAdmin');
 
       // Create a benchmark with mismatched organizationId in body
-      const response = await agent
-        .post(`/api/organizations/${testOrgId}/benchmarks/custom`)
+      const response = await request(app)
+        .post(`/api/organizations/${testOrgId}/benchmarks/custom`).set('Cookie', cookie)
         .send({
           organizationId: '00000000-0000-0000-0000-000000000000', // Different org ID in body
           metricCode: 'FLY10_TIME',
@@ -560,14 +525,13 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
       // Should succeed and use URL org ID
       expect(response.status).toBe(201);
       expect(response.body.organizationId).toBe(testOrgId);
-      cleanupAgent(agent);
     });
 
     it('should enforce timing-safe benchmark visibility checks', async () => {
-      const agent = await createAuthenticatedSession('siteAdmin');
+      const cookie = getSessionCookie('siteAdmin');
 
       // Create an inactive benchmark
-      const createResponse = await agent.post('/api/benchmarks').send({
+      const createResponse = await request(app).post('/api/benchmarks').set('Cookie', cookie).send({
         metricCode: 'FLY10_TIME',
         name: 'Timing Test Benchmark',
         description: 'For timing attack test',
@@ -581,11 +545,11 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
 
       // Measure response times (should be similar for existing vs non-existing)
       const start1 = Date.now();
-      await agent.get(`/api/benchmarks/${benchmarkId}`);
+      await request(app).get(`/api/benchmarks/${benchmarkId}`).set('Cookie', cookie);
       const time1 = Date.now() - start1;
 
       const start2 = Date.now();
-      await agent.get('/api/benchmarks/00000000-0000-0000-0000-000000000000');
+      await request(app).get('/api/benchmarks/00000000-0000-0000-0000-000000000000').set('Cookie', cookie);
       const time2 = Date.now() - start2;
 
       // Response times should be similar (within 200ms tolerance)
@@ -593,7 +557,6 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
       // This validates the timing-safe implementation prevents information leakage
       // In production with stable infrastructure, variations would be minimal
       expect(Math.abs(time1 - time2)).toBeLessThan(200);
-      cleanupAgent(agent);
     });
   });
 });
