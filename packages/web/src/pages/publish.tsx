@@ -16,6 +16,7 @@ import {
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
+import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
@@ -73,7 +74,22 @@ export default function Publish() {
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
 
       // Convert date strings (YYYY-MM-DD) to ISO datetime format for backend validation
-      // Parse in local timezone to avoid off-by-one-day errors for users in negative UTC offsets
+      // IMPORTANT TIMEZONE HANDLING:
+      // HTML5 date inputs are timezone-agnostic (YYYY-MM-DD format only).
+      // We interpret them in the user's LOCAL timezone to match their calendar selection.
+      // The backend then extracts the date-only portion (YYYY-MM-DD) for comparison
+      // with PostgreSQL DATE columns, which are also timezone-agnostic.
+      //
+      // Why local timezone is correct:
+      // - User selects "2024-03-15" in their local timezone
+      // - We create a Date object representing midnight local time
+      // - Convert to ISO (UTC) for transmission
+      // - Backend extracts "2024-03-15" for database query
+      // - Result: User gets measurements from their selected calendar date
+      //
+      // Edge cases:
+      // - DST transitions: Date selection still represents the calendar date
+      // - Extreme timezones (UTC+/-12): Backend date extraction handles correctly
       if (filters.dateFrom) {
         const [year, month, day] = filters.dateFrom.split('-').map(Number);
         const dateFromLocal = new Date(year, month - 1, day, 0, 0, 0);
@@ -480,7 +496,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
               <Input
                 type="date"
-                min="1970-01-01"
+                min={DATE_CONSTANTS.MIN_MEASUREMENT_DATE}
                 value={filters.dateFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
                 data-testid="input-date-from"
@@ -492,7 +508,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
               <Input
                 type="date"
-                min="1970-01-01"
+                min={DATE_CONSTANTS.MIN_MEASUREMENT_DATE}
                 value={filters.dateTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
                 data-testid="input-date-to"

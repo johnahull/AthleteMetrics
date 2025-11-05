@@ -20,3 +20,25 @@ export const TEAM_NAME_CONSTRAINTS = new Set([
   'teams_organization_id_name_unique',
   'teams_organization_id_name_key'
 ] as const);
+
+/**
+ * Date-related constants
+ */
+export const DATE_CONSTANTS = {
+  /**
+   * Minimum allowed measurement date (Unix epoch)
+   * Represents "no practical minimum" for measurement dates in the system
+   */
+  MIN_MEASUREMENT_DATE: '1970-01-01',
+
+  /**
+   * Regular expression for validating YYYY-MM-DD date format
+   */
+  DATE_ONLY_REGEX: /^\d{4}-\d{2}-\d{2}$/,
+
+  /**
+   * Time portion constants for datetime conversions
+   */
+  START_OF_DAY: 'T00:00:00.000Z',
+  END_OF_DAY: 'T23:59:59.999Z',
+} as const;

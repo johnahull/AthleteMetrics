@@ -15,6 +15,7 @@ import {
   type Team,
   type Organization,
 } from '@shared/schema';
+import { parseDateFilter } from '@shared/date-utils';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
 import { PAGINATION } from '../constants/pagination';
@@ -536,8 +537,23 @@ export class MeasurementService {
     }
 
     if (filters?.organizationId) {
-      // Include measurements with matching organizationId OR NULL organizationId
-      // NULL organization IDs represent legacy measurements before organization tracking
+      // LEGACY DATA HANDLING:
+      // Include measurements with matching organizationId OR NULL organizationId.
+      // NULL organization IDs represent legacy measurements before organization tracking was implemented.
+      //
+      // SECURITY CONSIDERATION:
+      // This means ALL organizations can see legacy (NULL) measurements. This is intentional for
+      // backward compatibility, as legacy measurements were created before multi-tenant isolation.
+      //
+      // FUTURE IMPROVEMENT:
+      // Consider backfilling organizationId for legacy measurements by associating them with
+      // their team's organization. Once backfilled, remove the NULL check for stricter isolation.
+      // See: docs/LEGACY_DATA_MIGRATION.md (if exists) or create a ticket for data migration.
+      //
+      // CURRENT BEHAVIOR:
+      // - Organization A sees: measurements with org_id = A + measurements with org_id = NULL
+      // - Organization B sees: measurements with org_id = B + measurements with org_id = NULL
+      // - Site admins see: all measurements (allowCrossOrganization = true bypasses this filter)
       conditions.push(
         or(
           eq(measurements.organizationId, filters.organizationId),
@@ -553,26 +569,16 @@ export class MeasurementService {
     if (filters?.dateFrom) {
       // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
       // PostgreSQL date column only stores date part, not time
-      const dateOnly = filters.dateFrom.split('T')[0];
-
-      // Defense-in-depth: Validate date format even though validated at route layer
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
-        throw new Error('Invalid date format in service layer');
-      }
-
+      // Defense-in-depth: Parse and validate even though validated at route layer
+      const dateOnly = parseDateFilter(filters.dateFrom);
       conditions.push(gte(measurements.date, dateOnly));
     }
 
     if (filters?.dateTo) {
       // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
       // PostgreSQL date column only stores date part, not time
-      const dateOnly = filters.dateTo.split('T')[0];
-
-      // Defense-in-depth: Validate date format even though validated at route layer
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
-        throw new Error('Invalid date format in service layer');
-      }
-
+      // Defense-in-depth: Parse and validate even though validated at route layer
+      const dateOnly = parseDateFilter(filters.dateTo);
       conditions.push(lte(measurements.date, dateOnly));
     }
 

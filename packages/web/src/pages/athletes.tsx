@@ -740,7 +740,7 @@ export default function Athletes() {
                 value={filters.birthYearFrom || 'any'}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearFrom: value === 'any' ? '' : value }))}
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-birth-year-from">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
@@ -757,7 +757,7 @@ export default function Athletes() {
                 value={filters.birthYearTo || 'any'}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearTo: value === 'any' ? '' : value }))}
               >
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-birth-year-to">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>

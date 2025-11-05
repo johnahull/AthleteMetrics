@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
+import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { z } from "zod";
 import { ZodError } from "zod";
@@ -41,28 +42,9 @@ const measurementQuerySchema = z.object({
   organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
   // Accept both date (YYYY-MM-DD) and datetime (ISO 8601) formats for flexibility
-  dateFrom: z.string().refine((val) => {
-    // Accept YYYY-MM-DD or ISO datetime formats
-    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateOnlyRegex.test(val)) {
-      const parsed = new Date(val + 'T00:00:00.000Z');
-      return !isNaN(parsed.getTime());
-    }
-    // Try parsing as ISO datetime
-    const parsed = new Date(val);
-    return !isNaN(parsed.getTime());
-  }, { message: "Invalid date format. Expected YYYY-MM-DD or ISO datetime." }).optional(),
-  dateTo: z.string().refine((val) => {
-    // Accept YYYY-MM-DD or ISO datetime formats
-    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (dateOnlyRegex.test(val)) {
-      const parsed = new Date(val + 'T23:59:59.999Z');
-      return !isNaN(parsed.getTime());
-    }
-    // Try parsing as ISO datetime
-    const parsed = new Date(val);
-    return !isNaN(parsed.getTime());
-  }, { message: "Invalid date format. Expected YYYY-MM-DD or ISO datetime." }).optional(),
+  // Using shared date validation schema
+  dateFrom: dateStringSchema.optional(),
+  dateTo: dateStringSchema.optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z
