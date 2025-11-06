@@ -3160,17 +3160,25 @@ export async function registerRoutes(app: Express) {
       }
 
       // Check permissions using unified function
-      console.log('[DEBUG] Invitation permission check:', {
+      const debugInfo = {
         invitedById,
         role,
         organizationId,
-        sessionUser: req.session.user
-      });
+        sessionUserId: req.session.user?.id,
+        sessionUsername: req.session.user?.username
+      };
+      console.log('[DEBUG] Invitation permission check:', debugInfo);
+
       const permissionCheck = await checkInvitationPermissions(invitedById, 'general', role, organizationId);
       console.log('[DEBUG] Permission check result:', permissionCheck);
+
       if (!permissionCheck.allowed) {
         console.error('[DEBUG] Permission denied:', permissionCheck.reason);
-        return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
+        // Include debug info in response for troubleshooting
+        return res.status(403).json({
+          message: permissionCheck.reason || "Insufficient permissions to invite users",
+          debug: { ...debugInfo, permissionCheck }
+        });
       }
 
       // Validate team IDs if provided
