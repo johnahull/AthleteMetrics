@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "engines": {
-    "node": ">=20.19.0",
-    "npm": ">=10.0.0"
-  },
   "workspaces": [
     "packages/*"
   ],
@@ -80,12 +76,9 @@
     "bufferutil": "^4.0.9"
   },
   "overrides": {
-    "esbuild": "^0.25.0",
-    "validator": "^13.15.20"
+    "esbuild": "^0.25.0"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.0.31",
-    "drizzle-orm": "^0.39.3",
-    "postgres": "^3.4.7"
+    "@anthropic-ai/claude-code": "^2.0.31"
   }
 }
