@@ -27,10 +27,10 @@ runs:
         path: |
           node_modules
           packages/*/node_modules
-        # v2 suffix invalidates old pre-workspace caches
-        key: ${{ runner.os }}-node-${{ inputs.node-version }}-v2-${{ hashFiles('package-lock.json') }}${{ inputs.cache-key-suffix }}
+        # v3 suffix invalidates caches with drizzle-zod dependency changes
+        key: ${{ runner.os }}-node-${{ inputs.node-version }}-v3-${{ hashFiles('package-lock.json') }}${{ inputs.cache-key-suffix }}
         restore-keys: |
-          ${{ runner.os }}-node-${{ inputs.node-version }}-v2-
+          ${{ runner.os }}-node-${{ inputs.node-version }}-v3-
 
     - name: Install dependencies
       if: steps.cache-node-modules.outputs.cache-hit != 'true'
