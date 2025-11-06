@@ -30,23 +30,6 @@ describe('StatisticsSummaryCard', () => {
 
       expect(screen.getByText(/no data available/i)).toBeInTheDocument();
     });
-
-    it('should display "No data" message when no measurements match the metric', () => {
-      const measurements: MockMeasurement[] = [
-        { id: '1', metric: 'VERTICAL_JUMP', value: '30.5', units: 'in' },
-        { id: '2', metric: 'VERTICAL_JUMP', value: '32.1', units: 'in' },
-      ];
-
-      render(
-        <StatisticsSummaryCard
-          measurements={measurements}
-          metric="FLY10_TIME"
-          title="10-Yard Fly Time Statistics"
-        />
-      );
-
-      expect(screen.getByText(/no data available/i)).toBeInTheDocument();
-    });
   });
 
   describe('Statistics Display', () => {
@@ -205,27 +188,6 @@ describe('StatisticsSummaryCard', () => {
       expect(allTwos.length).toBeGreaterThan(0); // Count (may also appear in StdDev)
       const allThirty = screen.getAllByText(/30/);
       expect(allThirty.length).toBeGreaterThan(0); // Mean
-    });
-
-    it('should filter measurements by metric correctly', () => {
-      const mixedMeasurements: MockMeasurement[] = [
-        { id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' },
-        { id: '2', metric: 'FLY10_TIME', value: '1.10', units: 's' },
-        { id: '3', metric: 'VERTICAL_JUMP', value: '32.0', units: 'in' },
-        { id: '4', metric: 'FLY10_TIME', value: '1.15', units: 's' },
-      ];
-
-      render(
-        <StatisticsSummaryCard
-          measurements={mixedMeasurements}
-          metric="VERTICAL_JUMP"
-        />
-      );
-
-      // Should only count VERTICAL_JUMP measurements
-      expect(screen.getByText('Count (N)')).toBeInTheDocument();
-      const allTwos = screen.getAllByText('2');
-      expect(allTwos.length).toBeGreaterThan(0);
     });
   });
 

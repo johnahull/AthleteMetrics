@@ -53,9 +53,8 @@ export function StatisticsSummaryCard({
   metric,
   title,
 }: StatisticsSummaryCardProps) {
-  // Filter measurements by metric and extract numeric values
-  const filteredMeasurements = measurements.filter(m => m.metric === metric);
-  const values = filteredMeasurements.map(m => parseFloat(m.value));
+  // Extract numeric values from measurements (already filtered by caller)
+  const values = measurements.map(m => parseFloat(m.value));
 
   // Calculate statistics
   const stats = calculateStatistics(values);
