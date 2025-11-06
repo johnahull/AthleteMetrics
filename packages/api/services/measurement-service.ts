@@ -594,7 +594,13 @@ export class MeasurementService {
 
     // Sport filtering (applied to users table with array containment)
     // PostgreSQL array operator @> checks if left array contains right array
+    // SECURITY: Drizzle's sql template tag automatically parameterizes ${filters.sport}
+    // to prevent SQL injection. The value is bound as a parameter, not concatenated.
     if (filters?.sport) {
+      // Additional validation: Ensure sport value is reasonable
+      if (filters.sport.length > 100) {
+        throw new Error('Sport parameter exceeds maximum length');
+      }
       conditions.push(sql`${users.sports} @> ARRAY[${filters.sport}]::text[]`);
     }
 

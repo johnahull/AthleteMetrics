@@ -492,6 +492,14 @@ describe('Measurement API Filters Integration Tests', () => {
       );
     }
 
+    // SECURITY: Ensure tests only run in test environment
+    if (process.env.NODE_ENV !== 'test') {
+      throw new Error(
+        'Integration tests can only run in test environment (NODE_ENV=test). ' +
+        'This prevents accidental deletion of production data.'
+      );
+    }
+
     // Create test app
     app = express();
     app.use(express.json());
@@ -503,6 +511,7 @@ describe('Measurement API Filters Integration Tests', () => {
     // Clean up legacy NULL organizationId measurements to prevent test pollution
     // These measurements are included by MeasurementService for backward compatibility
     // but interfere with test expectations
+    // SAFETY: Only executes when NODE_ENV=test (checked above)
     await db.delete(measurements).where(isNull(measurements.organizationId));
 
     // Setup test data
