@@ -133,7 +133,7 @@ type OrganizationProfile = {
     isUsed: string;
     expiresAt: string;
     createdAt: string;
-    emailSent?: boolean;
+    emailSent: boolean;
     emailSentAt?: string;
   }>;
 };
@@ -612,64 +612,6 @@ export default function OrganizationProfile() {
     }
   }, [organization, userOrganizations, id]);
 
-  // Function to send invitation for a user
-  const sendInvitation = async (email: string, roles: string[]) => {
-    try {
-      const response = await fetch(`/api/invitations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          role: roles[0], // Take the first role from the array
-          organizationId: id
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to send invitation");
-      }
-
-      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
-      toast({
-        title: "Invitation sent",
-        description: `Invitation sent to ${email}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Function to delete a user from the organization
-  const deleteUser = async (userId: string, userName: string) => {
-    try {
-      const response = await fetch(`/api/organizations/${id}/users/${userId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to delete user");
-      }
-
-      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
-      toast({
-        title: "User deleted",
-        description: `${userName} has been removed from the organization`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
   // Function to delete a pending invitation
   const deletePendingUser = async (invitationId: string, email: string) => {
     try {
@@ -898,7 +840,7 @@ export default function OrganizationProfile() {
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   {invitation.emailSent
-                                    ? `Email sent ${invitation.emailSentAt ? new Date(invitation.emailSentAt).toLocaleString() : ''}`
+                                    ? `Email sent ${invitation.emailSentAt ? new Date(invitation.emailSentAt).toLocaleString() : 'recently'}`
                                     : 'Email not sent - use copy button to share link'}
                                 </TooltipContent>
                               </Tooltip>
