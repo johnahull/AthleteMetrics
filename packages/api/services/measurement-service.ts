@@ -562,10 +562,6 @@ export class MeasurementService {
       );
     }
 
-    if (filters?.gender) {
-      conditions.push(eq(users.gender, filters.gender as 'Male' | 'Female' | 'Not Specified'));
-    }
-
     if (filters?.dateFrom) {
       // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
       // PostgreSQL date column only stores date part, not time
@@ -584,6 +580,28 @@ export class MeasurementService {
 
     if (!filters?.includeUnverified) {
       conditions.push(eq(measurements.isVerified, true));
+    }
+
+    // Team filtering (teamIds array)
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      conditions.push(inArray(measurements.teamId, filters.teamIds));
+    }
+
+    // Gender filtering (applied to users table)
+    if (filters?.gender) {
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+    }
+
+    // Sport filtering (applied to users table with array containment)
+    // PostgreSQL array operator @> checks if left array contains right array
+    // SECURITY: Drizzle's sql template tag automatically parameterizes ${filters.sport}
+    // to prevent SQL injection. The value is bound as a parameter, not concatenated.
+    if (filters?.sport) {
+      // Additional validation: Ensure sport value is reasonable
+      if (filters.sport.length > 100) {
+        throw new Error('Sport parameter exceeds maximum length');
+      }
+      conditions.push(sql`${users.sports} @> ARRAY[${filters.sport}]::text[]`);
     }
 
     // Birth year filtering (applied to users table)

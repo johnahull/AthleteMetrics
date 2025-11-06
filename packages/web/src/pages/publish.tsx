@@ -20,6 +20,7 @@ import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 
 export default function Publish() {
   const queryClient = useQueryClient();
@@ -630,6 +631,15 @@ export default function Publish() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Statistics Summary */}
+      {filters.metric && sortedMeasurements && sortedMeasurements.length > 0 && (
+        <StatisticsSummaryCard
+          key={`stats-${filters.metric}-${sortedMeasurements.length}`}
+          measurements={sortedMeasurements}
+          metric={filters.metric}
+        />
+      )}
 
       {/* Bulk Actions Toolbar */}
       {selectedMeasurements.size > 0 && (

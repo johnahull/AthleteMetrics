@@ -41,11 +41,21 @@ const measurementQuerySchema = z.object({
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
+  teamIds: z.string().optional().refine(
+    (val) => !val || val.split(',').every(id => {
+      const trimmedId = id.trim();
+      // UUID v4 regex pattern
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      return uuidPattern.test(trimmedId);
+    }),
+    { message: "teamIds must be comma-separated valid UUIDs" }
+  ), // Comma-separated UUIDs
+  sport: z.string().min(1).max(100).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   // Accept both date (YYYY-MM-DD) and datetime (ISO 8601) formats for flexibility
   // Using shared date validation schema
   dateFrom: dateStringSchema.optional(),
   dateTo: dateStringSchema.optional(),
-  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z
     .string()
@@ -75,9 +85,11 @@ interface MeasurementFilters {
   userId?: string;
   athleteId?: string;
   metric?: string;
+  teamIds?: string[];
+  sport?: string;
+  gender?: string;
   dateFrom?: string;
   dateTo?: string;
-  gender?: string;
   includeUnverified?: boolean;
   includeUnknownBirthYear?: boolean;
   birthYearFrom?: number;
@@ -110,9 +122,11 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.userId && { userId: validatedParams.userId }),
         ...(validatedParams.athleteId && { athleteId: validatedParams.athleteId }),
         ...(validatedParams.metric && { metric: validatedParams.metric }),
+        ...(validatedParams.teamIds && { teamIds: validatedParams.teamIds.split(',').map(id => id.trim()) }),
+        ...(validatedParams.sport && { sport: validatedParams.sport }),
+        ...(validatedParams.gender && { gender: validatedParams.gender }),
         ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
         ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
-        ...(validatedParams.gender && { gender: validatedParams.gender }),
         includeUnverified: validatedParams.includeUnverified === 'true',
         ...(validatedParams.includeUnknownBirthYear !== undefined && { includeUnknownBirthYear: validatedParams.includeUnknownBirthYear }),
         ...(validatedParams.birthYearFrom !== undefined && { birthYearFrom: validatedParams.birthYearFrom }),
