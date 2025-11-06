@@ -562,10 +562,6 @@ export class MeasurementService {
       );
     }
 
-    if (filters?.gender) {
-      conditions.push(eq(users.gender, filters.gender as 'Male' | 'Female' | 'Not Specified'));
-    }
-
     if (filters?.dateFrom) {
       // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
       // PostgreSQL date column only stores date part, not time
