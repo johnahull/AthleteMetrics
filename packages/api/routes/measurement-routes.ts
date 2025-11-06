@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
+import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { z } from "zod";
 import { ZodError } from "zod";
@@ -43,8 +44,10 @@ const measurementQuerySchema = z.object({
   teamIds: z.string().optional(), // Comma-separated UUIDs
   sport: z.string().optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  // Accept both date (YYYY-MM-DD) and datetime (ISO 8601) formats for flexibility
+  // Using shared date validation schema
+  dateFrom: dateStringSchema.optional(),
+  dateTo: dateStringSchema.optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z
     .string()
