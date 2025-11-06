@@ -551,6 +551,22 @@ export class MeasurementService {
       conditions.push(eq(measurements.isVerified, true));
     }
 
+    // Team filtering (teamIds array)
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      conditions.push(inArray(measurements.teamId, filters.teamIds));
+    }
+
+    // Gender filtering (applied to users table)
+    if (filters?.gender) {
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+    }
+
+    // Sport filtering (applied to users table with array containment)
+    // PostgreSQL array operator @> checks if left array contains right array
+    if (filters?.sport) {
+      conditions.push(sql`${users.sports} @> ARRAY[${filters.sport}]::text[]`);
+    }
+
     // Birth year filtering (applied to users table)
     // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
     // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
