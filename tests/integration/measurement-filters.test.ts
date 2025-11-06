@@ -26,7 +26,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { db } from '../../packages/api/db';
 import { users, organizations, teams, userTeams, measurements, userOrganizations } from '@shared/schema';
-import { eq, inArray, and } from 'drizzle-orm';
+import { eq, inArray, and, isNull } from 'drizzle-orm';
 
 // Test app and data
 let app: Express;
@@ -499,6 +499,11 @@ describe('Measurement API Filters Integration Tests', () => {
 
     // Register routes
     await registerRoutes(app);
+
+    // Clean up legacy NULL organizationId measurements to prevent test pollution
+    // These measurements are included by MeasurementService for backward compatibility
+    // but interfere with test expectations
+    await db.delete(measurements).where(isNull(measurements.organizationId));
 
     // Setup test data
     await setupTestData();
