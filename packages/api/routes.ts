@@ -2984,7 +2984,10 @@ export async function registerRoutes(app: Express) {
       const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
       const inviter = await storage.getUser(invitedById);
       const organization = await storage.getOrganization(invitation.organizationId);
-      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+
+      // Generate base URL and remove trailing slash to prevent double slashes
+      const baseUrl = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      const inviteLink = `${baseUrl}/accept-invitation?token=${invitation.token}`;
 
       const emailSent = await emailService.sendInvitation(invitation.email, {
         recipientName: invitation.firstName && invitation.lastName
@@ -3108,9 +3111,10 @@ export async function registerRoutes(app: Express) {
         // Generate invite links and send emails
         const inviteLinks = [];
         const emailResults = [];
+        const baseUrl = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 
         for (const inv of invitations) {
-          const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${inv.token}`;
+          const inviteLink = `${baseUrl}/accept-invitation?token=${inv.token}`;
           inviteLinks.push(inviteLink);
 
           // Send invitation email using shared helper
@@ -3187,7 +3191,8 @@ export async function registerRoutes(app: Express) {
       });
 
       // Generate invite link
-      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+      const baseUrl = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+      const inviteLink = `${baseUrl}/accept-invitation?token=${invitation.token}`;
 
       // Send invitation email using shared helper
       const emailSent = await sendInvitationEmailWithTracking(invitation, invitedById, req);
@@ -5795,7 +5800,7 @@ export async function registerRoutes(app: Express) {
       }
 
       let emailSent = false;
-      const appUrl = process.env.APP_URL || 'http://localhost:5000';
+      const appUrl = (process.env.APP_URL || 'http://localhost:5000').replace(/\/$/, '');
 
       // Send appropriate test email based on type
       switch (emailType) {
