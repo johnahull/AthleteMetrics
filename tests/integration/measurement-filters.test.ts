@@ -105,10 +105,15 @@ const setupTestData = async () => {
   // This user will be used for BOTH authentication AND submittedBy field in measurements
   // We don't add it to createdUserIds so it won't be deleted before sessions are closed
   testSubmitterUsername = `test_submitter_${Date.now()}`;
+
+  // Hash password using bcrypt (same as initializeDefaultUser)
+  const bcrypt = await import('bcrypt');
+  const hashedPassword = await bcrypt.default.hash(testSubmitterPassword, 14);
+
   const [submitter] = await db.insert(users).values({
     username: testSubmitterUsername,
     emails: [`submitter_${Date.now()}@test.com`],
-    password: testSubmitterPassword,
+    password: hashedPassword,
     firstName: 'Test',
     lastName: 'Submitter',
     fullName: 'Test Submitter',
