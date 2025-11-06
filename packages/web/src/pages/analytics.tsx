@@ -580,12 +580,12 @@ export default function Analytics() {
       {/* Statistics Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <StatisticsSummaryCard
-          measurements={measurements || []}
+          measurements={(measurements || []).filter((m: any) => m.metric === 'FLY10_TIME')}
           metric="FLY10_TIME"
           title="10-Yard Fly Time Statistics"
         />
         <StatisticsSummaryCard
-          measurements={measurements || []}
+          measurements={(measurements || []).filter((m: any) => m.metric === 'VERTICAL_JUMP')}
           metric="VERTICAL_JUMP"
           title="Vertical Jump Statistics"
         />

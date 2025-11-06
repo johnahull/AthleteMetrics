@@ -5,15 +5,9 @@
 
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { calculateStatistics } from '@/utils/statistics';
-
-interface Measurement {
-  id: string;
-  metric: string;
-  value: string;
-  units: string;
-  [key: string]: any;
-}
+import { calculateStatistics } from '@shared/analytics-utils';
+import type { Measurement } from '@shared/schema';
+import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 
 interface StatisticsSummaryCardProps {
   measurements: Measurement[];
@@ -31,21 +25,10 @@ function formatNumber(value: number, decimals: number = 2): string {
 }
 
 /**
- * Generate default title from metric name
+ * Generate default title from metric name using shared utility
  */
 function getDefaultTitle(metric: string): string {
-  const metricNames: Record<string, string> = {
-    FLY10_TIME: '10-Yard Fly Time',
-    VERTICAL_JUMP: 'Vertical Jump',
-    AGILITY_505: '5-0-5 Agility',
-    AGILITY_5105: '5-10-5 Agility',
-    T_TEST: 'T-Test Agility',
-    DASH_40YD: '40-Yard Dash',
-    RSI: 'Reactive Strength Index',
-  };
-
-  const name = metricNames[metric] || metric.replace(/_/g, ' ');
-  return `${name} Statistics`;
+  return `${getMetricDisplayName(metric)} Statistics`;
 }
 
 export function StatisticsSummaryCard({
@@ -60,7 +43,8 @@ export function StatisticsSummaryCard({
     return calculateStatistics(values);
   }, [measurements]);
 
-  // Determine display title
+  // Get units for this metric
+  const units = getMetricUnits(metric);
   const displayTitle = title || getDefaultTitle(metric);
 
   // Handle empty state
@@ -79,6 +63,9 @@ export function StatisticsSummaryCard({
     );
   }
 
+  // Calculate IQR from percentiles
+  const iqr = stats.percentiles.p75 - stats.percentiles.p25;
+
   return (
     <Card>
       <CardHeader>
@@ -95,45 +82,45 @@ export function StatisticsSummaryCard({
           {/* Mean */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Mean</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.mean, 2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.mean, 2)}{units}</div>
           </div>
 
           {/* Median */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Median</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.median, 2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.median, 2)}{units}</div>
           </div>
 
           {/* Standard Deviation */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Std Dev</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.stdDev, 2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.std, 2)}{units}</div>
           </div>
 
           {/* Range */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Range</div>
             <div className="text-2xl font-bold">
-              {formatNumber(stats.min, 2)} - {formatNumber(stats.max, 2)}
+              {formatNumber(stats.min, 2)}{units} - {formatNumber(stats.max, 2)}{units}
             </div>
           </div>
 
-          {/* Q1 */}
+          {/* Q1 (25th percentile) */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Q1 (25th)</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.q1, 2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.percentiles.p25, 2)}{units}</div>
           </div>
 
-          {/* Q3 */}
+          {/* Q3 (75th percentile) */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Q3 (75th)</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.q3, 2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(stats.percentiles.p75, 2)}{units}</div>
           </div>
 
           {/* IQR */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">IQR</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.iqr, 2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(iqr, 2)}{units}</div>
           </div>
         </div>
       </CardContent>

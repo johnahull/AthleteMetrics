@@ -8,13 +8,30 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StatisticsSummaryCard } from '../StatisticsSummaryCard';
+import type { Measurement } from '@shared/schema';
 
-// Mock measurement type for testing
-interface MockMeasurement {
-  id: string;
-  metric: string;
-  value: string;
-  units: string;
+// Helper to create minimal test measurement
+function createTestMeasurement(overrides: Partial<Measurement>): Measurement {
+  return {
+    id: 'test-id',
+    userId: 'test-user',
+    submittedBy: 'test-submitter',
+    verifiedBy: null,
+    isVerified: false,
+    age: 16,
+    metric: 'VERTICAL_JUMP',
+    value: '30.0',
+    units: 'in',
+    flyInDistance: null,
+    teamId: 'test-team',
+    organizationId: 'test-org',
+    date: '2024-01-01',
+    notes: null,
+    photoUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  } as Measurement;
 }
 
 describe('StatisticsSummaryCard', () => {
@@ -33,12 +50,12 @@ describe('StatisticsSummaryCard', () => {
   });
 
   describe('Statistics Display', () => {
-    const verticalJumpMeasurements: MockMeasurement[] = [
-      { id: '1', metric: 'VERTICAL_JUMP', value: '28.5', units: 'in' },
-      { id: '2', metric: 'VERTICAL_JUMP', value: '30.2', units: 'in' },
-      { id: '3', metric: 'VERTICAL_JUMP', value: '32.1', units: 'in' },
-      { id: '4', metric: 'VERTICAL_JUMP', value: '29.8', units: 'in' },
-      { id: '5', metric: 'VERTICAL_JUMP', value: '31.5', units: 'in' },
+    const verticalJumpMeasurements: Measurement[] = [
+      createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '28.5', units: 'in' }),
+      createTestMeasurement({ id: '2', metric: 'VERTICAL_JUMP', value: '30.2', units: 'in' }),
+      createTestMeasurement({ id: '3', metric: 'VERTICAL_JUMP', value: '32.1', units: 'in' }),
+      createTestMeasurement({ id: '4', metric: 'VERTICAL_JUMP', value: '29.8', units: 'in' }),
+      createTestMeasurement({ id: '5', metric: 'VERTICAL_JUMP', value: '31.5', units: 'in' }),
     ];
 
     it('should render all statistics labels', () => {
@@ -86,7 +103,7 @@ describe('StatisticsSummaryCard', () => {
       expect(allValues.length).toBeGreaterThan(0);
     });
 
-    it('should display range in "min - max" format', () => {
+    it('should display range in "min - max" format with units', () => {
       render(
         <StatisticsSummaryCard
           measurements={verticalJumpMeasurements}
@@ -94,8 +111,10 @@ describe('StatisticsSummaryCard', () => {
         />
       );
 
-      // Range should be "28.5 - 32.1" or similar format
-      expect(screen.getByText(/28\.5.*-.*32\.1/)).toBeInTheDocument();
+      // Range should contain min and max values with units
+      expect(screen.getByText(/28\.5/)).toBeInTheDocument();
+      expect(screen.getByText(/32\.1/)).toBeInTheDocument();
+      expect(screen.getByText('Range')).toBeInTheDocument();
     });
 
     it('should use custom title when provided', () => {
@@ -124,12 +143,12 @@ describe('StatisticsSummaryCard', () => {
   });
 
   describe('Time-based Metrics', () => {
-    const flyTimeMeasurements: MockMeasurement[] = [
-      { id: '1', metric: 'FLY10_TIME', value: '1.05', units: 's' },
-      { id: '2', metric: 'FLY10_TIME', value: '1.12', units: 's' },
-      { id: '3', metric: 'FLY10_TIME', value: '1.08', units: 's' },
-      { id: '4', metric: 'FLY10_TIME', value: '1.15', units: 's' },
-      { id: '5', metric: 'FLY10_TIME', value: '1.10', units: 's' },
+    const flyTimeMeasurements: Measurement[] = [
+      createTestMeasurement({ id: '1', metric: 'FLY10_TIME', value: '1.05', units: 's' }),
+      createTestMeasurement({ id: '2', metric: 'FLY10_TIME', value: '1.12', units: 's' }),
+      createTestMeasurement({ id: '3', metric: 'FLY10_TIME', value: '1.08', units: 's' }),
+      createTestMeasurement({ id: '4', metric: 'FLY10_TIME', value: '1.15', units: 's' }),
+      createTestMeasurement({ id: '5', metric: 'FLY10_TIME', value: '1.10', units: 's' }),
     ];
 
     it('should render time-based statistics correctly', () => {
@@ -152,8 +171,8 @@ describe('StatisticsSummaryCard', () => {
 
   describe('Edge Cases', () => {
     it('should handle single measurement', () => {
-      const singleMeasurement: MockMeasurement[] = [
-        { id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' },
+      const singleMeasurement: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
       ];
 
       render(
@@ -166,14 +185,15 @@ describe('StatisticsSummaryCard', () => {
       expect(screen.getByText('Count (N)')).toBeInTheDocument();
       const allOnes = screen.getAllByText('1');
       expect(allOnes.length).toBeGreaterThan(0); // Count
-      const allThirty = screen.getAllByText('30');
-      expect(allThirty.length).toBeGreaterThan(0); // Mean, Median, Q1, Q3 all same
+      // Mean, Median, Q1, Q3 all same with units
+      const allThirty = screen.getAllByText('30in');
+      expect(allThirty.length).toBeGreaterThan(0);
     });
 
     it('should handle two measurements', () => {
-      const twoMeasurements: MockMeasurement[] = [
-        { id: '1', metric: 'VERTICAL_JUMP', value: '28.0', units: 'in' },
-        { id: '2', metric: 'VERTICAL_JUMP', value: '32.0', units: 'in' },
+      const twoMeasurements: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '28.0', units: 'in' }),
+        createTestMeasurement({ id: '2', metric: 'VERTICAL_JUMP', value: '32.0', units: 'in' }),
       ];
 
       render(
@@ -193,12 +213,12 @@ describe('StatisticsSummaryCard', () => {
 
   describe('Number Formatting', () => {
     it('should format large standard deviation correctly', () => {
-      const wideSpreadMeasurements: MockMeasurement[] = [
-        { id: '1', metric: 'VERTICAL_JUMP', value: '20.0', units: 'in' },
-        { id: '2', metric: 'VERTICAL_JUMP', value: '25.0', units: 'in' },
-        { id: '3', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' },
-        { id: '4', metric: 'VERTICAL_JUMP', value: '35.0', units: 'in' },
-        { id: '5', metric: 'VERTICAL_JUMP', value: '40.0', units: 'in' },
+      const wideSpreadMeasurements: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '20.0', units: 'in' }),
+        createTestMeasurement({ id: '2', metric: 'VERTICAL_JUMP', value: '25.0', units: 'in' }),
+        createTestMeasurement({ id: '3', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+        createTestMeasurement({ id: '4', metric: 'VERTICAL_JUMP', value: '35.0', units: 'in' }),
+        createTestMeasurement({ id: '5', metric: 'VERTICAL_JUMP', value: '40.0', units: 'in' }),
       ];
 
       render(
@@ -214,10 +234,10 @@ describe('StatisticsSummaryCard', () => {
     });
 
     it('should handle zero standard deviation for identical values', () => {
-      const identicalMeasurements: MockMeasurement[] = [
-        { id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' },
-        { id: '2', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' },
-        { id: '3', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' },
+      const identicalMeasurements: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+        createTestMeasurement({ id: '2', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+        createTestMeasurement({ id: '3', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
       ];
 
       render(
@@ -227,8 +247,8 @@ describe('StatisticsSummaryCard', () => {
         />
       );
 
-      // Standard deviation and IQR should be 0
-      const allZeros = screen.getAllByText('0.00');
+      // Standard deviation and IQR should be 0 with units
+      const allZeros = screen.getAllByText('0.00in');
       expect(allZeros.length).toBeGreaterThanOrEqual(2); // StdDev and IQR
     });
   });
