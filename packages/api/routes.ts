@@ -186,9 +186,11 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 
   // Check inviter's roles in the organization
   const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
+  console.log('[DEBUG] getUserRoles result:', { inviterId, organizationId, inviterRoles });
 
   // Organization admins can invite anyone within their organization
   if (inviterRoles.includes("org_admin")) {
+    console.log('[DEBUG] User is org_admin, allowing invitation');
     return { allowed: true };
   }
 
@@ -203,10 +205,12 @@ const checkInvitationPermissions = async (inviterId: string, invitationType: 'ge
 
   // If user has roles but none with invitation permissions
   if (inviterRoles.length > 0) {
+    console.log('[DEBUG] User has roles but insufficient permissions:', inviterRoles);
     return { allowed: false, reason: "Insufficient permissions to send invitations" };
   }
 
   // If no organization context and not site admin, deny
+  console.log('[DEBUG] No roles found for user in organization');
   return { allowed: false, reason: "Insufficient permissions to send invitations" };
 };
 
@@ -3156,8 +3160,16 @@ export async function registerRoutes(app: Express) {
       }
 
       // Check permissions using unified function
+      console.log('[DEBUG] Invitation permission check:', {
+        invitedById,
+        role,
+        organizationId,
+        sessionUser: req.session.user
+      });
       const permissionCheck = await checkInvitationPermissions(invitedById, 'general', role, organizationId);
+      console.log('[DEBUG] Permission check result:', permissionCheck);
       if (!permissionCheck.allowed) {
+        console.error('[DEBUG] Permission denied:', permissionCheck.reason);
         return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
       }
 
