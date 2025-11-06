@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { mutations } from "@/lib/api";
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
@@ -46,34 +47,12 @@ export function InvitationModal({
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      const response = await fetch(`/api/invitations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          role,
-          organizationId,
-          teamIds: []
-        }),
+      return mutations.createInvitation({
+        ...data,
+        role,
+        organizationId,
+        teamIds: []
       });
-
-      if (!response.ok) {
-        let errorMessage = "Failed to send invitation";
-        try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch (parseError) {
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        return response.json();
-      } else {
-        throw new Error("Server returned non-JSON response");
-      }
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
