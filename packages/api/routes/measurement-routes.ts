@@ -40,6 +40,9 @@ const measurementQuerySchema = z.object({
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
+  teamIds: z.string().optional(), // Comma-separated UUIDs
+  sport: z.string().optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
@@ -71,6 +74,9 @@ interface MeasurementFilters {
   userId?: string;
   athleteId?: string;
   metric?: string;
+  teamIds?: string[];
+  sport?: string;
+  gender?: string;
   dateFrom?: string;
   dateTo?: string;
   includeUnverified?: boolean;
@@ -105,6 +111,9 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.userId && { userId: validatedParams.userId }),
         ...(validatedParams.athleteId && { athleteId: validatedParams.athleteId }),
         ...(validatedParams.metric && { metric: validatedParams.metric }),
+        ...(validatedParams.teamIds && { teamIds: validatedParams.teamIds.split(',').map(id => id.trim()) }),
+        ...(validatedParams.sport && { sport: validatedParams.sport }),
+        ...(validatedParams.gender && { gender: validatedParams.gender }),
         ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
         ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
         includeUnverified: validatedParams.includeUnverified === 'true',
