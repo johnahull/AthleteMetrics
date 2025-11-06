@@ -604,8 +604,8 @@ describe('Measurement API Filters Integration Tests', () => {
     it('should return empty array when no measurements match team filter', async () => {
       const agent = await createAuthenticatedSession();
 
-      // Use a non-existent UUID
-      const fakeTeamId = '00000000-0000-0000-0000-000000000000';
+      // Use a non-existent but valid v4 UUID (version=4, variant=8)
+      const fakeTeamId = '00000000-0000-4000-8000-000000000000';
       const response = await agent
         .get(`/api/measurements?metric=FLY10_TIME&teamIds=${fakeTeamId}&organizationId=${testOrgId}`)
         .expect(200);

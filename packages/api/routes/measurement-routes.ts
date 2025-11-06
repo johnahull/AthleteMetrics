@@ -44,8 +44,9 @@ const measurementQuerySchema = z.object({
   teamIds: z.string().optional().refine(
     (val) => !val || val.split(',').every(id => {
       const trimmedId = id.trim();
-      // UUID regex pattern (accepts all UUID versions)
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      // UUID regex pattern (accepts v1, v3, v4, v5 - standard UUID versions per RFC 4122)
+      // Version field: [1-5], Variant field: [89ab]
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       return uuidPattern.test(trimmedId);
     }),
     { message: "teamIds must be comma-separated valid UUIDs" }
