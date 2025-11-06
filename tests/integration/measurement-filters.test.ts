@@ -35,6 +35,8 @@ let team1Id: string;
 let team2Id: string;
 let adminUserId: string;
 let testSubmitterId: string; // Separate variable for test submitter (cleaned up AFTER sessions)
+let testSubmitterUsername: string; // Username for test submitter (for authentication)
+let testSubmitterPassword: string = 'TestPassword123!'; // Password for test submitter
 let athlete1Id: string;
 let athlete2Id: string;
 let athlete3Id: string;
@@ -57,8 +59,8 @@ const createAuthenticatedSession = async () => {
   const loginResponse = await agent
     .post('/api/auth/login')
     .send({
-      username: process.env.ADMIN_USER || 'admin',
-      password: process.env.ADMIN_PASSWORD || 'TestPassword123!'
+      username: testSubmitterUsername,
+      password: testSubmitterPassword
     });
 
   expect(loginResponse.status).toBe(200);
@@ -100,16 +102,17 @@ const setupTestData = async () => {
   createdTeamIds.push(team2.id);
 
   // Create dedicated test submitter user (cleaned up separately AFTER sessions)
-  // This user will be used for submittedBy field in measurements
+  // This user will be used for BOTH authentication AND submittedBy field in measurements
   // We don't add it to createdUserIds so it won't be deleted before sessions are closed
+  testSubmitterUsername = `test_submitter_${Date.now()}`;
   const [submitter] = await db.insert(users).values({
-    username: `test_submitter_${Date.now()}`,
+    username: testSubmitterUsername,
     emails: [`submitter_${Date.now()}@test.com`],
-    password: 'TestPassword123!',
+    password: testSubmitterPassword,
     firstName: 'Test',
     lastName: 'Submitter',
     fullName: 'Test Submitter',
-    isSiteAdmin: false,
+    isSiteAdmin: true, // Need admin privileges to access measurements API
     isActive: true,
   }).returning();
   adminUserId = submitter.id;
