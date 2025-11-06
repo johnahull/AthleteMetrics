@@ -34,6 +34,9 @@ let testOrgId: string;
 let team1Id: string;
 let team2Id: string;
 let adminUserId: string;
+let testSubmitterId: string; // Separate variable for test submitter (cleaned up AFTER sessions)
+let testSubmitterUsername: string; // Username for test submitter (for authentication)
+let testSubmitterPassword: string = 'TestPassword123!'; // Password for test submitter
 let athlete1Id: string;
 let athlete2Id: string;
 let athlete3Id: string;
@@ -56,8 +59,8 @@ const createAuthenticatedSession = async () => {
   const loginResponse = await agent
     .post('/api/auth/login')
     .send({
-      username: process.env.ADMIN_USER || 'admin',
-      password: process.env.ADMIN_PASSWORD || 'TestPassword123!'
+      username: testSubmitterUsername,
+      password: testSubmitterPassword
     });
 
   expect(loginResponse.status).toBe(200);
@@ -98,11 +101,29 @@ const setupTestData = async () => {
   team2Id = team2.id;
   createdTeamIds.push(team2.id);
 
-  // Get admin user (created by initializeDefaultUser)
-  const adminUser = await db.select().from(users).where(eq(users.username, process.env.ADMIN_USER || 'admin')).limit(1);
-  if (adminUser.length > 0) {
-    adminUserId = adminUser[0].id;
-  }
+  // Create dedicated test submitter user (cleaned up separately AFTER sessions)
+  // This user will be used for BOTH authentication AND submittedBy field in measurements
+  // We don't add it to createdUserIds so it won't be deleted before sessions are closed
+  testSubmitterUsername = `test_submitter_${Date.now()}`;
+
+  // Hash password using bcrypt (same as initializeDefaultUser)
+  const bcrypt = await import('bcrypt');
+  const hashedPassword = await bcrypt.default.hash(testSubmitterPassword, 14);
+
+  const [submitter] = await db.insert(users).values({
+    username: testSubmitterUsername,
+    emails: [`submitter_${Date.now()}@test.com`],
+    password: hashedPassword,
+    firstName: 'Test',
+    lastName: 'Submitter',
+    fullName: 'Test Submitter',
+    isSiteAdmin: true, // Need admin privileges to access measurements API
+    isActive: true,
+  }).returning();
+  adminUserId = submitter.id;
+  testSubmitterId = submitter.id;
+  // NOTE: We intentionally do NOT add submitter.id to createdUserIds
+  // It will be cleaned up separately in afterAll AFTER all sessions are closed
 
   // Create test athletes with varying attributes
   // Athlete 1: Male, Football, Team 1
@@ -527,14 +548,24 @@ describe('Measurement API Filters Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
+    // Cleanup test data (athletes, teams, measurements, organizations)
     await cleanupTestData();
 
-    // Ensure all agents are cleaned up
+    // Ensure all agents/sessions are cleaned up
     activeAgents.forEach(agent => {
       cleanupAgent(agent);
     });
     activeAgents.clear();
+
+    // Clean up test submitter AFTER all sessions are closed
+    // This prevents FK constraint violations from active sessions
+    try {
+      if (testSubmitterId) {
+        await db.delete(users).where(eq(users.id, testSubmitterId));
+      }
+    } catch (error) {
+      console.error('Error cleaning up test submitter:', error);
+    }
   });
 
   describe('Team Filter Tests', () => {
@@ -573,7 +604,7 @@ describe('Measurement API Filters Integration Tests', () => {
     it('should return empty array when no measurements match team filter', async () => {
       const agent = await createAuthenticatedSession();
 
-      // Use a non-existent UUID
+      // Use a non-existent UUID (nil UUID per RFC 4122)
       const fakeTeamId = '00000000-0000-0000-0000-000000000000';
       const response = await agent
         .get(`/api/measurements?metric=FLY10_TIME&teamIds=${fakeTeamId}&organizationId=${testOrgId}`)

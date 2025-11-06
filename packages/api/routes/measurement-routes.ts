@@ -44,8 +44,10 @@ const measurementQuerySchema = z.object({
   teamIds: z.string().optional().refine(
     (val) => !val || val.split(',').every(id => {
       const trimmedId = id.trim();
-      // UUID v4 regex pattern
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      // UUID format validation (8-4-4-4-12 hex pattern)
+      // Accepts all RFC 4122 UUIDs including nil UUID (00000000-0000-0000-0000-000000000000)
+      // Security: Database foreign key validation is the primary security boundary
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       return uuidPattern.test(trimmedId);
     }),
     { message: "teamIds must be comma-separated valid UUIDs" }
