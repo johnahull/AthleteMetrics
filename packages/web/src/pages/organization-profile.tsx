@@ -171,10 +171,8 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const createUserMutation = useMutation({
     mutationFn: async (data: CreateUserForm) => {
-      return apiRequest(`/organizations/${organizationId}/users`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const res = await apiRequest("POST", `/api/organizations/${organizationId}/users`, data);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
@@ -206,10 +204,8 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      return apiRequest(`/invitations`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const res = await apiRequest("POST", `/api/invitations`, data);
+      return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
@@ -721,19 +717,8 @@ export default function OrganizationProfile() {
   // Function to resend invitation using the proper resend endpoint
   const resendInvitation = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/invitations/${invitationId}/resend`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to resend invitation");
-      }
-
-      const data = await response.json();
+      const res = await apiRequest("POST", `/api/invitations/${invitationId}/resend`);
+      const data = await res.json();
 
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
 
