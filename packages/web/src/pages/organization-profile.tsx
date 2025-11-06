@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit, Settings } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Building2, Users, UserCog, MapPin, Mail, MailCheck, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -132,6 +133,8 @@ type OrganizationProfile = {
     isUsed: string;
     expiresAt: string;
     createdAt: string;
+    emailSent?: boolean;
+    emailSentAt?: string;
   }>;
 };
 
@@ -735,20 +738,14 @@ export default function OrganizationProfile() {
     }
   };
 
-  // Function to resend invitation
-  const resendInvitation = async (email: string, role: string) => {
+  // Function to resend invitation using the proper resend endpoint
+  const resendInvitation = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/invitations`, {
+      const response = await fetch(`/api/invitations/${invitationId}/resend`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          email,
-          role: role,
-          organizationId: id,
-          teamIds: []
-        }),
       });
 
       if (!response.ok) {
@@ -756,10 +753,18 @@ export default function OrganizationProfile() {
         throw new Error(error.message || "Failed to resend invitation");
       }
 
+      const data = await response.json();
+
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+
+      // Show different messages based on email delivery status
+      const message = data.emailSent
+        ? `Invitation email resent to ${email}`
+        : `Invitation extended for ${email} - email delivery failed. Use the copy link button to share manually.`;
+
       toast({
-        title: "Invitation resent",
-        description: `New invitation sent to ${email}`,
+        title: "Success",
+        description: message,
       });
     } catch (error: any) {
       toast({
@@ -914,6 +919,26 @@ export default function OrganizationProfile() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {/* Email status indicator */}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center">
+                                    {invitation.emailSent ? (
+                                      <MailCheck className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Mail className="h-4 w-4 text-gray-400" />
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {invitation.emailSent
+                                    ? `Email sent ${invitation.emailSentAt ? new Date(invitation.emailSentAt).toLocaleString() : ''}`
+                                    : 'Email not sent - use copy button to share link'}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
                             <Badge variant="outline" className="text-xs">
                               {invitation.role === 'org_admin' ? 'Admin' : 'Coach'} {isExpired ? '(Expired)' : '(Pending)'}
                             </Badge>
@@ -936,28 +961,46 @@ export default function OrganizationProfile() {
                               <div className="flex items-center gap-1 ml-2">
                                 {/* Resend invitation button for expired invitations */}
                                 {isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => resendInvitation(invitation.email, invitation.role)}
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    data-testid={`resend-invitation-${invitation.id}`}
-                                  >
-                                    <RefreshCw className="h-3 w-3" />
-                                  </Button>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => resendInvitation(invitation.id, invitation.email)}
+                                          className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                          data-testid={`resend-invitation-${invitation.id}`}
+                                        >
+                                          <RefreshCw className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Resend invitation</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 )}
 
-                                {/* Copy invitation URL button (only for non-expired) */}
+                                {/* Copy invitation URL button - now visible for ALL invitations */}
                                 {!isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    data-testid={`copy-invitation-${invitation.id}`}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
+                                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          data-testid={`copy-invitation-${invitation.id}`}
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {invitation.emailSent
+                                          ? 'Copy invitation link (already sent via email)'
+                                          : 'Copy invitation link to share manually'}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 )}
 
                                 {/* Delete pending invitation button */}

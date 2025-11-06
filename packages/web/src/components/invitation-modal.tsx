@@ -75,15 +75,22 @@ export function InvitationModal({
         throw new Error("Server returned non-JSON response");
       }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
       form.reset();
       onOpenChange(false);
+
+      // Show different messages based on email delivery status
+      const message = data.emailSent
+        ? `Invitation email sent to ${data.email}`
+        : `Invitation created for ${data.email} - email delivery failed. Use the copy link button to share manually.`;
+
       toast({
         title: "Success",
-        description: "Invitation sent successfully"
+        description: message,
+        variant: data.emailSent ? "default" : "default"
       });
       onSuccess?.();
     },
