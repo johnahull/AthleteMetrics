@@ -3,7 +3,7 @@
  * Displays comprehensive statistics for measurement data
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@/utils/statistics';
 
@@ -54,10 +54,11 @@ export function StatisticsSummaryCard({
   title,
 }: StatisticsSummaryCardProps) {
   // Extract numeric values from measurements (already filtered by caller)
-  const values = measurements.map(m => parseFloat(m.value));
-
-  // Calculate statistics
-  const stats = calculateStatistics(values);
+  // Memoize to prevent unnecessary recalculations
+  const stats = useMemo(() => {
+    const values = measurements.map(m => parseFloat(m.value));
+    return calculateStatistics(values);
+  }, [measurements]);
 
   // Determine display title
   const displayTitle = title || getDefaultTitle(metric);

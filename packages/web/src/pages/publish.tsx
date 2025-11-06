@@ -607,6 +607,7 @@ export default function Publish() {
       {/* Statistics Summary */}
       {filters.metric && sortedMeasurements && sortedMeasurements.length > 0 && (
         <StatisticsSummaryCard
+          key={`stats-${filters.metric}-${sortedMeasurements.length}`}
           measurements={sortedMeasurements}
           metric={filters.metric}
         />
