@@ -171,16 +171,10 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const createUserMutation = useMutation({
     mutationFn: async (data: CreateUserForm) => {
-      const response = await fetch(`/api/organizations/${organizationId}/users`, {
+      return apiRequest(`/organizations/${organizationId}/users`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create user");
-      }
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
@@ -212,35 +206,21 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      const response = await fetch(`/api/invitations`, {
+      return apiRequest(`/invitations`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-
-      if (!response.ok) {
-        let errorMessage = "Failed to send invitation";
-        try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch (parseError) {
-          // If response is not JSON, use status text
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        return response.json();
-      } else {
-        throw new Error("Server returned non-JSON response");
-      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
       invitationForm.reset();
-      toast({ title: "Success", description: "Invitation sent successfully" });
+
+      // Show different messages based on email delivery status
+      const message = data.emailSent
+        ? `Invitation email sent to ${data.email}`
+        : `Invitation created for ${data.email} - email delivery failed. Use the copy link button to share manually.`;
+
+      toast({ title: "Success", description: message });
     },
     onError: (error: any) => {
       // Sanitize error messages to avoid exposing internal details
