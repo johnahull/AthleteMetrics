@@ -18,8 +18,9 @@ import { mutations } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
+import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
-import { Gender, SoccerPosition, type Team } from "@shared/schema";
+import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -574,6 +575,20 @@ export default function Analytics() {
         <DistributionChart data={fly10Data} title="Fly-10 Time Distribution" metric="FLY10_TIME" />
         <DistributionChart data={verticalData} title="Vertical Jump Distribution" metric="VERTICAL_JUMP" />
         <ScatterChart data={measurements || []} />
+      </div>
+
+      {/* Statistics Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <StatisticsSummaryCard
+          measurements={(measurements || []).filter((m: Measurement) => m.metric === 'FLY10_TIME')}
+          metric="FLY10_TIME"
+          title="10-Yard Fly Time Statistics"
+        />
+        <StatisticsSummaryCard
+          measurements={(measurements || []).filter((m: Measurement) => m.metric === 'VERTICAL_JUMP')}
+          metric="VERTICAL_JUMP"
+          title="Vertical Jump Statistics"
+        />
       </div>
 
       {/* Statistics Tables */}

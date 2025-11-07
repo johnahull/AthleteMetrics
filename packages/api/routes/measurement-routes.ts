@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
+import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { z } from "zod";
 import { ZodError } from "zod";
@@ -40,8 +41,23 @@ const measurementQuerySchema = z.object({
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
   metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI']).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  teamIds: z.string().optional().refine(
+    (val) => !val || val.split(',').every(id => {
+      const trimmedId = id.trim();
+      // UUID format validation (8-4-4-4-12 hex pattern)
+      // Accepts all RFC 4122 UUIDs including nil UUID (00000000-0000-0000-0000-000000000000)
+      // Security: Database foreign key validation is the primary security boundary
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidPattern.test(trimmedId);
+    }),
+    { message: "teamIds must be comma-separated valid UUIDs" }
+  ), // Comma-separated UUIDs
+  sport: z.string().min(1).max(100).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  // Accept both date (YYYY-MM-DD) and datetime (ISO 8601) formats for flexibility
+  // Using shared date validation schema
+  dateFrom: dateStringSchema.optional(),
+  dateTo: dateStringSchema.optional(),
   includeUnverified: z.enum(['true', 'false']).optional(),
   includeUnknownBirthYear: z
     .string()
@@ -71,6 +87,9 @@ interface MeasurementFilters {
   userId?: string;
   athleteId?: string;
   metric?: string;
+  teamIds?: string[];
+  sport?: string;
+  gender?: string;
   dateFrom?: string;
   dateTo?: string;
   includeUnverified?: boolean;
@@ -105,6 +124,9 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.userId && { userId: validatedParams.userId }),
         ...(validatedParams.athleteId && { athleteId: validatedParams.athleteId }),
         ...(validatedParams.metric && { metric: validatedParams.metric }),
+        ...(validatedParams.teamIds && { teamIds: validatedParams.teamIds.split(',').map(id => id.trim()) }),
+        ...(validatedParams.sport && { sport: validatedParams.sport }),
+        ...(validatedParams.gender && { gender: validatedParams.gender }),
         ...(validatedParams.dateFrom && { dateFrom: validatedParams.dateFrom }),
         ...(validatedParams.dateTo && { dateTo: validatedParams.dateTo }),
         includeUnverified: validatedParams.includeUnverified === 'true',

@@ -430,9 +430,25 @@ describe('Athletes Page - Pagination', () => {
         expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument();
       });
 
-      // Apply a birth year filter
-      const birthYearFrom = screen.getAllByRole('combobox')[1];
+      // Apply a birth year filter - wait for the dropdown to be available
+      await waitFor(() => {
+        const birthYearLabel = screen.getByText('Birth Year From');
+        expect(birthYearLabel).toBeInTheDocument();
+      });
+
+      // Find all comboboxes and select the birth year from filter (should be index 1 after team filter)
+      const allComboboxes = screen.getAllByRole('combobox');
+      const birthYearFrom = allComboboxes.find((cb) => {
+        const label = cb.closest('div')?.querySelector('label');
+        return label?.textContent === 'Birth Year From';
+      });
+
+      if (!birthYearFrom) {
+        throw new Error('Could not find Birth Year From combobox');
+      }
+
       fireEvent.click(birthYearFrom);
+
       const year2010 = await screen.findByRole('option', { name: '2010' });
       fireEvent.click(year2010);
 
