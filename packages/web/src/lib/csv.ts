@@ -271,18 +271,23 @@ export function validateAthleteCSV(row: any): { valid: boolean; errors: string[]
 // Export the validation functions for use elsewhere
 export { isValidEmail, isValidPhoneNumber, smartPlaceContactData };
 
-export function validateMeasurementCSV(row: any): { valid: boolean; errors: string[] } {
+/**
+ * Validate a measurement CSV row
+ * @param row The CSV row data to validate
+ * @param validMetrics Optional array of valid metric codes (for org-level validation). If not provided, uses default system metrics.
+ */
+export function validateMeasurementCSV(row: any, validMetrics?: string[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
+
   // Validate athlete identification
   if (!row.firstName || !row.firstName.trim()) {
     errors.push('First name is required');
   }
-  
+
   if (!row.lastName || !row.lastName.trim()) {
     errors.push('Last name is required');
   }
-  
+
   if (!row.birthYear || isNaN(parseInt(row.birthYear))) {
     errors.push('Valid birth year is required');
   } else {
@@ -291,7 +296,7 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
       errors.push('Birth year must be between 1990 and 2020');
     }
   }
-  
+
   // Validate measurement date
   if (!row.date || !row.date.trim()) {
     errors.push('Date is required');
@@ -301,7 +306,7 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
       errors.push('Date must be in YYYY-MM-DD format');
     }
   }
-  
+
   // Validate age
   if (!row.age || isNaN(parseInt(row.age))) {
     errors.push('Valid age is required');
@@ -311,13 +316,13 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
       errors.push('Age must be between 10 and 25');
     }
   }
-  
-  // Validate metric type
-  const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED'];
-  if (!row.metric || !validMetrics.includes(row.metric)) {
-    errors.push(`Metric must be one of: ${validMetrics.join(', ')}`);
+
+  // Validate metric type - use provided valid metrics or fall back to system defaults
+  const allowedMetrics = validMetrics || ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED'];
+  if (!row.metric || !allowedMetrics.includes(row.metric)) {
+    errors.push(`Metric must be one of: ${allowedMetrics.join(', ')}`);
   }
-  
+
   // Validate value
   if (!row.value || isNaN(parseFloat(row.value))) {
     errors.push('Valid numeric value is required');
@@ -327,18 +332,18 @@ export function validateMeasurementCSV(row: any): { valid: boolean; errors: stri
       errors.push('Value must be positive');
     }
   }
-  
+
   // Validate units
   const validUnits = ['s', 'in', 'mph', ''];
   if (row.units && !validUnits.includes(row.units)) {
     errors.push('Units must be "s" for time, "in" for distance, "mph" for speed, or empty for dimensionless');
   }
-  
+
   // Validate flyInDistance if provided
   if (row.flyInDistance && row.flyInDistance.trim() && isNaN(parseFloat(row.flyInDistance))) {
     errors.push('Fly-in distance must be a valid number');
   }
-  
+
   return {
     valid: errors.length === 0,
     errors,

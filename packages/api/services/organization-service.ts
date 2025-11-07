@@ -3,8 +3,8 @@
  */
 
 import { BaseService } from "./base-service";
-import { insertOrganizationSchema } from "@shared/schema";
-import type { Organization, InsertOrganization, User, UserOrganization } from "@shared/schema";
+import { insertOrganizationSchema, updateOrganizationSchema } from "@shared/schema";
+import type { Organization, InsertOrganization, UpdateOrganization, User, UserOrganization } from "@shared/schema";
 import crypto from "crypto";
 
 export interface OrganizationFilters {
@@ -92,10 +92,103 @@ export class OrganizationService extends BaseService {
 
       // Validate input
       const validatedData = insertOrganizationSchema.parse(orgData);
-      
+
       return await this.storage.createOrganization(validatedData);
     } catch (error) {
       console.error("OrganizationService.createOrganization:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update organization settings (site admin only)
+   * Used for settings page to update basic info, feature flags, and status
+   */
+  async updateOrganization(
+    organizationId: string,
+    updates: UpdateOrganization,
+    requestingUserId: string,
+    context: { ipAddress?: string; userAgent?: string } = {}
+  ): Promise<Organization> {
+    try {
+      // Verify permissions - only site admins can update organization settings
+      if (!(await this.isSiteAdmin(requestingUserId))) {
+        throw new Error("Unauthorized: Only site administrators can update organization settings");
+      }
+
+      // Verify organization exists
+      const org = await this.storage.getOrganization(organizationId);
+      if (!org) {
+        throw new Error("Organization not found");
+      }
+
+      // Validate input with Zod schema
+      // This includes validation for feature flag dependencies (allowCustomBenchmarks requires benchmarksEnabled)
+      const validatedUpdates = updateOrganizationSchema.parse(updates);
+
+      // Check name uniqueness if name is being updated
+      if (validatedUpdates.name && validatedUpdates.name !== org.name) {
+        const existingOrg = await this.storage.getOrganizationByName(validatedUpdates.name);
+        if (existingOrg && existingOrg.id !== organizationId) {
+          throw new Error("An organization with this name already exists");
+        }
+      }
+
+      // Update organization in database
+      const updatedOrg = await this.storage.updateOrganization(organizationId, validatedUpdates);
+
+      // Sanitize all user inputs and organization data for audit log (prevent log injection)
+      const sanitizedOrgName = sanitizeForAuditLog(org.name);
+      const changesSummary: Record<string, any> = {};
+
+      if (validatedUpdates.name && validatedUpdates.name !== org.name) {
+        changesSummary.nameChanged = {
+          from: sanitizedOrgName,
+          to: sanitizeForAuditLog(validatedUpdates.name)
+        };
+      }
+      if (validatedUpdates.description !== undefined && validatedUpdates.description !== org.description) {
+        changesSummary.descriptionChanged = true;
+      }
+      if (validatedUpdates.location !== undefined && validatedUpdates.location !== org.location) {
+        changesSummary.locationChanged = true;
+      }
+      if (validatedUpdates.isActive !== undefined && validatedUpdates.isActive !== org.isActive) {
+        changesSummary.isActiveChanged = {
+          from: org.isActive,
+          to: validatedUpdates.isActive
+        };
+      }
+      if (validatedUpdates.benchmarksEnabled !== undefined && validatedUpdates.benchmarksEnabled !== org.benchmarksEnabled) {
+        changesSummary.benchmarksEnabledChanged = {
+          from: org.benchmarksEnabled,
+          to: validatedUpdates.benchmarksEnabled
+        };
+      }
+      if (validatedUpdates.allowCustomBenchmarks !== undefined && validatedUpdates.allowCustomBenchmarks !== org.allowCustomBenchmarks) {
+        changesSummary.allowCustomBenchmarksChanged = {
+          from: org.allowCustomBenchmarks,
+          to: validatedUpdates.allowCustomBenchmarks
+        };
+      }
+
+      // Create audit log with request context
+      await this.storage.createAuditLog({
+        userId: requestingUserId,
+        action: 'organization_updated',
+        resourceType: 'organization',
+        resourceId: organizationId,
+        details: JSON.stringify({
+          organizationName: sanitizedOrgName,
+          changes: changesSummary
+        }),
+        ipAddress: context.ipAddress || null,
+        userAgent: context.userAgent || null,
+      });
+
+      return updatedOrg;
+    } catch (error) {
+      console.error("OrganizationService.updateOrganization:", error);
       throw error;
     }
   }

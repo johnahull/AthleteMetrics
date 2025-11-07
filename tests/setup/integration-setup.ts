@@ -13,7 +13,7 @@ process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password123456789';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';  // MUST match benchmark-integration.test.ts
 
 // DATABASE_URL validation with production/staging protection
 const dbUrl = process.env.DATABASE_URL || '';

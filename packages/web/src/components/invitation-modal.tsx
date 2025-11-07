@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { mutations } from "@/lib/api";
+import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
@@ -46,51 +48,46 @@ export function InvitationModal({
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      const response = await fetch(`/api/invitations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          role,
-          organizationId,
-          teamIds: []
-        }),
+      return mutations.createInvitation({
+        ...data,
+        role,
+        organizationId,
+        teamIds: []
       });
-
-      if (!response.ok) {
-        let errorMessage = "Failed to send invitation";
-        try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch (parseError) {
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        return response.json();
-      } else {
-        throw new Error("Server returned non-JSON response");
-      }
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invitations/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
       form.reset();
       onOpenChange(false);
-      toast({
-        title: "Success",
-        description: "Invitation sent successfully"
-      });
+
+      // Type narrowing: this modal creates single invitations
+      if ('email' in data && 'emailSent' in data) {
+        // Show different messages based on email delivery status
+        const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
+
+        toast({
+          title,
+          description,
+          variant: "default"
+        });
+      } else {
+        // Fallback for unexpected response type
+        toast({
+          title: "Success",
+          description: data.message,
+          variant: "default"
+        });
+      }
       onSuccess?.();
     },
     onError: (error: any) => {
       let userMessage = "Failed to send invitation. Please try again.";
 
-      if (error.message?.toLowerCase().includes('already') ||
+      if (error.message?.toLowerCase().includes('csrf')) {
+        userMessage = "Security token expired. Please refresh the page and try again.";
+      } else if (error.message?.toLowerCase().includes('already') ||
           error.message?.toLowerCase().includes('exists')) {
         userMessage = "An invitation for this email already exists or user already registered.";
       } else if (error.message?.toLowerCase().includes('invalid email')) {

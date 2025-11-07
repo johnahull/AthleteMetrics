@@ -7,6 +7,7 @@ interface NavigationItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  testId?: string; // Optional custom test ID
 }
 
 interface NavigationMenuProps {
@@ -28,7 +29,7 @@ export function NavigationMenu({ navigation, currentLocation }: NavigationMenuPr
                   ? "bg-primary text-white" 
                   : "text-gray-700 hover:bg-gray-100"
               )}
-              data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+              data-testid={item.testId || `nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
             >
               <item.icon className="h-5 w-5" />
               <span>{item.name}</span>

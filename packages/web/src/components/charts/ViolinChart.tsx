@@ -7,7 +7,7 @@ import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { Chart as ChartJS, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { getDateKey } from '@/utils/date-utils';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Button } from '@/components/ui/button';
@@ -76,6 +76,8 @@ export function ViolinChart({
   className,
   selectedGroups
 }: ViolinChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -914,7 +916,7 @@ export function ViolinChart({
   }, [processedData, data]);
 
   const metric = data && data.length > 0 ? data[0]?.metric : undefined;
-  const metricConfig = metric ? METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG] : null;
+  const metricConfig = metric ? getMetricConfig(metric) : null;
 
   devLog.log('ViolinChart render', {
     dataLength: data.length,
@@ -1020,15 +1022,15 @@ export function ViolinChart({
               <div className="text-xs text-gray-300">{tooltip.teamName}</div>
             )}
             <div className="mt-1">
-              {tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG] && (
+              {tooltip.metric && getMetricConfig(tooltip.metric) && (
                 <span className="text-xs text-gray-300">
-                  {METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG].label}:{' '}
+                  {getMetricConfig(tooltip.metric)?.label}:{' '}
                 </span>
               )}
               <span className="font-bold">
                 {tooltip.metric && isFly10Metric(tooltip.metric)
                   ? formatFly10Dual(tooltip.value, 'time-first')
-                  : `${tooltip.value.toFixed(2)}${tooltip.metric && METRIC_CONFIG[tooltip.metric as keyof typeof METRIC_CONFIG]?.unit || ''}`}
+                  : `${tooltip.value.toFixed(2)}${tooltip.metric && getMetricConfig(tooltip.metric)?.unit || ''}`}
               </span>
             </div>
           </div>

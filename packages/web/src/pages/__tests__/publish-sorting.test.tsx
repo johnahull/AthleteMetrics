@@ -4,6 +4,39 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Publish from '../publish';
 
+// Mock useAuth hook
+vi.mock('@/lib/auth', () => ({
+  useAuth: () => ({
+    user: { id: 'test-user', username: 'testuser', isSiteAdmin: true },
+    isAuthenticated: true,
+  }),
+}));
+
+// Mock useMetricConfig hook
+vi.mock('@/hooks/use-metric-config', () => ({
+  useMetricConfig: () => ({
+    getMetricConfig: (code: string) => ({
+      code,
+      label: code === 'FLY10_TIME' ? 'Fly-10 Time' : code,
+      unit: 's',
+      category: 'Speed',
+      displayOrder: 1,
+    }),
+  }),
+}));
+
+// Mock useAvailableMetrics hook
+vi.mock('@/hooks/use-available-metrics', () => ({
+  useAvailableMetrics: () => ({
+    metrics: [
+      { code: 'FLY10_TIME', label: 'Fly-10 Time', unit: 's', category: 'Speed' },
+      { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in', category: 'Power' },
+      { code: 'DASH_40YD', label: '40-Yard Dash', unit: 's', category: 'Speed' },
+    ],
+    isLoading: false,
+  }),
+}));
+
 // Mock measurements for sorting tests
 const mockMeasurements = [
   {
@@ -79,7 +112,18 @@ describe('Publish Page - Column Sorting', () => {
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
-        queries: { retry: false },
+        queries: {
+          retry: false,
+          // Add default queryFn that uses fetch
+          queryFn: async ({ queryKey }) => {
+            const url = typeof queryKey[0] === 'string' ? queryKey[0] : '';
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error('Network response was not ok');
+            }
+            return response.json();
+          },
+        },
       },
     });
 

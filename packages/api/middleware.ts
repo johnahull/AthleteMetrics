@@ -55,7 +55,13 @@ export const requireSiteAdmin = async (req: any, res: Response, next: NextFuncti
 export const requireOrganizationAccess = (roleRequired?: string) => {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const user = req.session?.user || req.user;
-    const organizationId = req.params.organizationId || req.query.organizationId || req.body.organizationId;
+    // SECURITY: Prioritize URL parameter to prevent authorization bypass via body manipulation
+    // URL parameters are more trustworthy as they're part of the route definition
+    let organizationId = req.params.organizationId;
+    if (!organizationId) {
+      // Fallback to query/body only if not in URL (rare case for non-RESTful endpoints)
+      organizationId = req.query.organizationId as string || req.body.organizationId;
+    }
 
     if (!user?.id) {
       return res.status(401).json({ message: "User not authenticated" });

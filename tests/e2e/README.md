@@ -156,6 +156,7 @@ npm run test:staging -- tests/e2e/athlete-crud.spec.ts
 npm run test:staging -- tests/e2e/measurement-entry.spec.ts
 npm run test:staging -- tests/e2e/csv-import.spec.ts
 npm run test:staging -- tests/e2e/permissions.spec.ts
+npm run test:staging -- tests/e2e/analytics-time-series-violin.spec.ts
 
 # Testing
 npm run test:testing -- tests/e2e/auth-flows.spec.ts
@@ -163,6 +164,7 @@ npm run test:testing -- tests/e2e/athlete-crud.spec.ts
 npm run test:testing -- tests/e2e/measurement-entry.spec.ts
 npm run test:testing -- tests/e2e/csv-import.spec.ts
 npm run test:testing -- tests/e2e/permissions.spec.ts
+npm run test:testing -- tests/e2e/analytics-time-series-violin.spec.ts
 ```
 
 ### Debug Mode
@@ -214,7 +216,10 @@ tests/e2e/
 ├── athlete-crud.spec.ts   # Athlete CRUD tests (8 tests)
 ├── measurement-entry.spec.ts # Measurement tests (8 tests)
 ├── csv-import.spec.ts     # CSV import tests (10 tests)
-└── permissions.spec.ts    # RBAC/permissions tests (10 tests)
+├── permissions.spec.ts    # RBAC/permissions tests (10 tests)
+├── analytics-time-series-violin.spec.ts # Time-series violin chart tests (9 tests)
+├── staging-full-flow.spec.ts # Full flow validation tests
+└── visual-regression.spec.ts # Visual regression tests
 ```
 
 ## Test Coverage
@@ -274,6 +279,17 @@ tests/e2e/
 - Cross-org data isolation
 - Permission-based navigation
 - Role inheritance
+
+#### Analytics - Time-Series Violin Chart (9 tests)
+- Navigation to Coach Analytics page
+- Analysis type selection (Multi-Athlete / Intra-Group)
+- Chart type selection from dropdown
+- Chart rendering verification
+- Date selector visibility and functionality
+- Legend items verification (Distribution, Athletes, Personal Best, Median, Quartiles, Mean)
+- Statistics table expand/collapse
+- Interactive tooltip on hover
+- Error handling for insufficient data
 
 ## TDD Workflow
 
@@ -370,6 +386,18 @@ When adding new E2E tests:
 5. Document any new environment variables
 6. Ensure tests pass locally before committing
 7. Update this README if adding new test categories
+
+## Deployment Verification
+
+After deploying to staging, verify the deployment with:
+
+```bash
+# Quick health check
+npm run test:staging:validate
+
+# Full E2E test suite
+npm run test:staging
+```
 
 ## Support
 

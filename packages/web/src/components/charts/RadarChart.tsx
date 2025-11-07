@@ -17,7 +17,7 @@ import type {
   StatisticalSummary,
   ChartDataPoint
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { AthleteSelector } from './components/AthleteSelector';
 import { useAthleteSelection } from '@/hooks/useAthleteSelection';
@@ -53,6 +53,8 @@ export function RadarChart({
   onAthleteSelectionChange,
   maxAthletes = 5
 }: RadarChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   // Get available athletes for selection
   const availableAthletes = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -138,7 +140,7 @@ export function RadarChart({
             const rawPercentile = ((point.value - stats.min) / (stats.max - stats.min)) * 100;
 
             // For "lower is better" metrics, invert percentile so high percentile = better performance
-            const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
+            const metricConfig = getMetricConfig(point.metric);
             const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
 
             athlete.percentileRanks[point.metric] = Math.max(0, Math.min(100, percentile));
@@ -164,7 +166,7 @@ export function RadarChart({
 
     // Create labels from metric config
     const labels = metrics.map(metric => 
-      METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
+      getMetricConfig(metric)?.label || metric
     );
 
     // Calculate group averages for comparison
@@ -298,8 +300,8 @@ export function RadarChart({
               actualValue = athlete?.metrics[metric] || 0;
             }
 
-            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-            const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+            const unit = getMetricConfig(metric)?.unit || '';
+            const label = getMetricConfig(metric)?.label || metric;
 
             // Format value with dual display for FLY10_TIME
             const formattedValue = isFly10Metric(metric)
@@ -446,8 +448,8 @@ export function RadarChart({
               const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
               const value = athlete?.metrics[metric];
               const percentile = athlete?.percentileRanks?.[metric];
-              const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-              const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+              const unit = getMetricConfig(metric)?.unit || '';
+              const label = getMetricConfig(metric)?.label || metric;
 
               return (
                 <div key={metric} className="space-y-1">

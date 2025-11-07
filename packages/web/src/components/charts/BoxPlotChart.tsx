@@ -25,7 +25,7 @@ import type {
   BoxPlotData,
   GroupDefinition
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conversion';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
@@ -65,6 +65,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   showAthleteNames = false,
   selectedGroups
 }: BoxPlotChartProps) {
+  const { getMetricConfig } = useMetricConfig();
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const [localShowAthleteNames, setLocalShowAthleteNames] = useState(showAthleteNames);
   const [isStatsExpanded, setIsStatsExpanded] = useState(false);
@@ -192,7 +193,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       }, {} as Record<string, any[]>);
       
       Object.keys(metricGroups).forEach((metric, metricIndex) => {
-        labels[metricIndex] = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+        labels[metricIndex] = getMetricConfig(metric)?.label || metric;
         
         metricGroups[metric].forEach((point, groupIndex) => {
           if (!point.additionalData?.groupStats) return;
@@ -226,7 +227,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           
           // Box rectangle (Q1 to Q3)
           datasets.push({
-            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+            label: `${groupName} - ${getMetricConfig(metric)?.label || metric} Box`,
             data: [
               { x: xPos - boxWidth/2, y: q1 },
               { x: xPos + boxWidth/2, y: q1 },
@@ -246,7 +247,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           
           // Median line
           datasets.push({
-            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+            label: `${groupName} - ${getMetricConfig(metric)?.label || metric} Median`,
             data: [
               { x: xPos - boxWidth/2, y: stats.median },
               { x: xPos + boxWidth/2, y: stats.median }
@@ -262,7 +263,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           
           // Whiskers (using min/max from stats)
           datasets.push({
-            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+            label: `${groupName} - ${getMetricConfig(metric)?.label || metric} Lower Whisker`,
             data: [
               { x: xPos, y: q1 },
               { x: xPos, y: stats.min }
@@ -277,7 +278,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           });
           
           datasets.push({
-            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+            label: `${groupName} - ${getMetricConfig(metric)?.label || metric} Upper Whisker`,
             data: [
               { x: xPos, y: q3 },
               { x: xPos, y: stats.max }
@@ -293,7 +294,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           
           // Mean point
           datasets.push({
-            label: `${groupName} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Mean`,
+            label: `${groupName} - ${getMetricConfig(metric)?.label || metric} Mean`,
             data: [{ x: xPos, y: stats.mean }],
             type: 'scatter',
             backgroundColor: 'white',
@@ -474,7 +475,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         Object.keys(metricGroups).forEach((metric, metricIndex) => {
           if (groupIndex === 0) {
             // Only add label once (for first group)
-            labels[metricIndex] = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+            labels[metricIndex] = getMetricConfig(metric)?.label || metric;
           }
 
           const values = metricGroups[metric].sort((a, b) => a - b);
@@ -538,7 +539,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
           // Box rectangle (Q1 to Q3)
           datasets.push({
-            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+            label: `${group.name} - ${getMetricConfig(metric)?.label || metric} Box`,
             data: [
               { x: xPos - boxWidth/2, y: stats.percentiles.p25 },
               { x: xPos + boxWidth/2, y: stats.percentiles.p25 },
@@ -558,7 +559,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
           // Median line
           datasets.push({
-            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+            label: `${group.name} - ${getMetricConfig(metric)?.label || metric} Median`,
             data: [
               { x: xPos - boxWidth/2, y: stats.percentiles.p50 },
               { x: xPos + boxWidth/2, y: stats.percentiles.p50 }
@@ -579,7 +580,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
           // Lower whisker
           datasets.push({
-            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+            label: `${group.name} - ${getMetricConfig(metric)?.label || metric} Lower Whisker`,
             data: [
               { x: xPos, y: stats.percentiles.p25 },
               { x: xPos, y: lowerWhisker }
@@ -595,7 +596,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
           // Upper whisker
           datasets.push({
-            label: `${group.name} - ${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+            label: `${group.name} - ${getMetricConfig(metric)?.label || metric} Upper Whisker`,
             data: [
               { x: xPos, y: stats.percentiles.p75 },
               { x: xPos, y: upperWhisker }
@@ -782,7 +783,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
         // Box rectangle (Q1 to Q3)
         datasets.push({
-          label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Box`,
+          label: `${getMetricConfig(metric)?.label || metric} Box`,
           data: [
             // Bottom left corner of box
             { x: xPos - boxWidth/2, y: stats.percentiles.p25 },
@@ -807,7 +808,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
         // Median line
         datasets.push({
-          label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Median`,
+          label: `${getMetricConfig(metric)?.label || metric} Median`,
           data: [
             { x: xPos - boxWidth/2, y: stats.percentiles.p50 },
             { x: xPos + boxWidth/2, y: stats.percentiles.p50 }
@@ -828,7 +829,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
         // Lower whisker (enhanced visibility)
         datasets.push({
-          label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Lower Whisker`,
+          label: `${getMetricConfig(metric)?.label || metric} Lower Whisker`,
           data: [
             { x: xPos, y: stats.percentiles.p25 },
             { x: xPos, y: lowerWhisker }
@@ -844,7 +845,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
         // Upper whisker (enhanced visibility)
         datasets.push({
-          label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Upper Whisker`,
+          label: `${getMetricConfig(metric)?.label || metric} Upper Whisker`,
           data: [
             { x: xPos, y: stats.percentiles.p75 },
             { x: xPos, y: upperWhisker }
@@ -898,7 +899,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           const regularPoints = allPoints.filter(p => !p.isOutlier);
           if (regularPoints.length > 0) {
             datasets.push({
-              label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Data Points`,
+              label: `${getMetricConfig(metric)?.label || metric} Data Points`,
               data: regularPoints,
               type: 'scatter',
               backgroundColor: CHART_CONFIG.COLORS.PRIMARY_ALPHA,
@@ -914,7 +915,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           const outlierPoints = allPoints.filter(p => p.isOutlier);
           if (outlierPoints.length > 0) {
             datasets.push({
-              label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
+              label: `${getMetricConfig(metric)?.label || metric} Outliers`,
               data: outlierPoints,
               type: 'scatter',
               backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
@@ -929,7 +930,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           // Original behavior - only show outliers
           if (outliers.length > 0) {
             datasets.push({
-              label: `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric} Outliers`,
+              label: `${getMetricConfig(metric)?.label || metric} Outliers`,
               data: outliers.map(value => ({ x: xPos, y: value })),
               type: 'scatter',
               backgroundColor: 'rgba(239, 68, 68, 0.6)',
@@ -970,7 +971,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
     return {
       labels: labels.map(metric =>
-        METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
+        getMetricConfig(metric)?.label || metric
       ),
       datasets
     };
@@ -1170,7 +1171,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // Get metric from rawData first, fallback to statistics keys
             const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
-            const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+            const unit = getMetricConfig(metric)?.unit || '';
             const value = context.parsed.y;
 
             // Format value with dual display for FLY10_TIME
@@ -1180,7 +1181,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // Enhanced label for individual athlete points
             if (rawData && rawData.athleteName) {
-              const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric || 'Value';
+              const metricLabel = getMetricConfig(metric)?.label || metric || 'Value';
               return `${metricLabel}: ${formattedValue}`;
             }
 
@@ -1214,7 +1215,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 const rank = allValues.filter(v => v < yValue).length;
 
                 // For "lower is better" metrics, invert percentile so high percentile = better performance
-                const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const metricConfig = getMetricConfig(metric);
                 const rawPercentile = (rank / allValues.length) * 100;
                 const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
 
@@ -1230,9 +1231,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             // Add statistical summary for all points
             if (stats) {
               result.push(
-                `Mean: ${stats.mean.toFixed(2)}${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || ''}`,
-                `Median: ${stats.median.toFixed(2)}${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || ''}`,
-                `Std Dev: ${stats.std.toFixed(2)}${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || ''}`
+                `Mean: ${stats.mean.toFixed(2)}${getMetricConfig(metric)?.unit || ''}`,
+                `Median: ${stats.median.toFixed(2)}${getMetricConfig(metric)?.unit || ''}`,
+                `Std Dev: ${stats.std.toFixed(2)}${getMetricConfig(metric)?.unit || ''}`
               );
             }
 
@@ -1292,10 +1293,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             if (metrics.length === 1) {
               const metric = metrics[0];
               if (isFly10Metric(metric)) {
-                return `${METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || 'Value'} (s / mph)`;
+                return `${getMetricConfig(metric)?.label || 'Value'} (s / mph)`;
               }
-              const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-              const label = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || 'Value';
+              const unit = getMetricConfig(metric)?.unit || '';
+              const label = getMetricConfig(metric)?.label || 'Value';
               return unit ? `${label} (${unit})` : label;
             }
             return 'Value';
@@ -1310,7 +1311,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               if (isFly10Metric(metric)) {
                 return formatFly10Dual(Number(value), 'time-first');
               }
-              const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
+              const unit = getMetricConfig(metric)?.unit || '';
               return `${Number(value).toFixed(2)}${unit}`;
             }
             return Number(value).toFixed(2);
@@ -1365,7 +1366,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     }
 
     const currentMetric = data.length > 0 ? (data[0]?.metric ?? '') : '';
-    const metricConfig = currentMetric ? METRIC_CONFIG[currentMetric as keyof typeof METRIC_CONFIG] : null;
+    const metricConfig = currentMetric ? getMetricConfig(currentMetric) : null;
 
     // Collect group stats for all groups
     const groupsWithStats = selectedGroups.map((group, index) => {

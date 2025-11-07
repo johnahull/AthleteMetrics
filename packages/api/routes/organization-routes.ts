@@ -50,6 +50,8 @@ function sanitizeError(error: unknown, fallback: string): string {
 const RATE_LIMITS = {
   /** Conservative: Prevent organization spam while allowing legitimate admin work */
   ORG_CREATION: 5,
+  /** Conservative: Prevent abuse while allowing frequent settings updates */
+  ORG_UPDATE: 5,
   /** Moderate: Balance safety with usability for user management */
   USER_DELETION: 10,
   /** Very conservative: Destructive operation requiring extra caution */
@@ -61,6 +63,20 @@ const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: RATE_LIMITS.ORG_CREATION,
   message: { message: "Too many organization creation attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false; // Always enforce rate limiting in production
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
+});
+
+// Rate limiting for organization updates
+const updateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: RATE_LIMITS.ORG_UPDATE,
+  message: { message: "Too many organization update attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: (req) => {
@@ -186,13 +202,52 @@ export function registerOrganizationRoutes(app: Express) {
   app.post("/api/organizations", createLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const organization = await organizationService.createOrganization(
-        req.body, 
+        req.body,
         req.session.user!.id
       );
       res.status(201).json(organization);
     } catch (error) {
       console.error("Create organization error:", error);
       res.status(400).json({ message: sanitizeError(error, "Failed to create organization") });
+    }
+  });
+
+  /**
+   * Update organization settings (site admin only)
+   * Used by settings page to update basic info, feature flags, and status
+   */
+  app.patch("/api/organizations/:id", updateLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      const updatedOrganization = await organizationService.updateOrganization(
+        organizationId,
+        req.body,
+        req.session.user!.id,
+        context
+      );
+
+      res.json(updatedOrganization);
+    } catch (error) {
+      console.error("Update organization error:", error);
+      const message = sanitizeError(error, "Failed to update organization");
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
+        : message.includes("already exists") ? 400
+        : message.includes("Invalid") ? 400
+        : 500;
+      res.status(statusCode).json({ message });
     }
   });
 

@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Building2, Users, UserCog, MapPin, Mail, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Building2, Users, UserCog, MapPin, Mail, MailCheck, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,7 +21,13 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { mutations } from "@/lib/api";
 import { validateUsername } from "@shared/username-validation";
+import OrganizationMetricsCard from "@/components/organization-metrics-card";
+import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
+
+// Constants
+const EMAIL_SENT_NO_TIMESTAMP_FALLBACK = 'recently';
 
 // Mock components and types (replace with actual imports if available)
 const LoadingSpinner = ({ text }: { text: string }) => (
@@ -131,6 +138,8 @@ type OrganizationProfile = {
     isUsed: string;
     expiresAt: string;
     createdAt: string;
+    emailSent: boolean;
+    emailSentAt?: string;
   }>;
 };
 
@@ -167,16 +176,8 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const createUserMutation = useMutation({
     mutationFn: async (data: CreateUserForm) => {
-      const response = await fetch(`/api/organizations/${organizationId}/users`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create user");
-      }
-      return response.json();
+      const res = await apiRequest("POST", `/api/organizations/${organizationId}/users`, data);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
@@ -208,38 +209,31 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      const response = await fetch(`/api/invitations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        let errorMessage = "Failed to send invitation";
-        try {
-          const error = await response.json();
-          errorMessage = error.message || errorMessage;
-        } catch (parseError) {
-          // If response is not JSON, use status text
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        return response.json();
-      } else {
-        throw new Error("Server returned non-JSON response");
-      }
+      return await mutations.createInvitation(data);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
       invitationForm.reset();
-      toast({ title: "Success", description: "Invitation sent successfully" });
+
+      // Type narrowing: this form creates single invitations
+      if ('email' in data && 'emailSent' in data) {
+        // Show different messages based on email delivery status
+        const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
+
+        toast({ title, description });
+      } else {
+        // Fallback for unexpected response type
+        toast({
+          title: "Success",
+          description: data.message
+        });
+      }
     },
     onError: (error: any) => {
       // Sanitize error messages to avoid exposing internal details
+      // NOTE: This uses string matching on error.message which is fragile.
+      // Future improvement: Backend should return structured error codes
+      // (e.g., { code: 'USER_EXISTS', message: '...' }) for more reliable error handling
       let userMessage = "Failed to send invitation. Please try again.";
 
       if (error.message?.toLowerCase().includes('already') ||
@@ -278,7 +272,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="flex items-center gap-2">
+        <Button className="flex items-center gap-2" data-testid="button-manage-users">
           <Plus className="h-4 w-4" />
           Manage Users
         </Button>
@@ -632,75 +626,10 @@ export default function OrganizationProfile() {
     }
   }, [organization, userOrganizations, id]);
 
-  // Function to send invitation for a user
-  const sendInvitation = async (email: string, roles: string[]) => {
-    try {
-      const response = await fetch(`/api/invitations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          role: roles[0], // Take the first role from the array
-          organizationId: id
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to send invitation");
-      }
-
-      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
-      toast({
-        title: "Invitation sent",
-        description: `Invitation sent to ${email}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Function to delete a user from the organization
-  const deleteUser = async (userId: string, userName: string) => {
-    try {
-      const response = await fetch(`/api/organizations/${id}/users/${userId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to delete user");
-      }
-
-      await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
-      toast({
-        title: "User deleted",
-        description: `${userName} has been removed from the organization`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
   // Function to delete a pending invitation
   const deletePendingUser = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/invitations/${invitationId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to delete invitation");
-      }
+      await apiRequest("DELETE", `/api/invitations/${invitationId}`);
 
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       toast({
@@ -719,7 +648,7 @@ export default function OrganizationProfile() {
   // Function to copy invitation URL to clipboard
   const copyInvitationUrl = async (token: string, email: string) => {
     try {
-      const inviteUrl = `${window.location.origin}/accept-invitation?token=${token}`;
+      const inviteUrl = `${window.location.origin}/accept-invitation?token=${encodeURIComponent(token)}`;
       await navigator.clipboard.writeText(inviteUrl);
       toast({
         title: "Copied to clipboard",
@@ -734,31 +663,20 @@ export default function OrganizationProfile() {
     }
   };
 
-  // Function to resend invitation
-  const resendInvitation = async (email: string, role: string) => {
+  // Function to resend invitation using the proper resend endpoint
+  const resendInvitation = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/invitations`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          role: role,
-          organizationId: id,
-          teamIds: []
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to resend invitation");
-      }
+      const res = await apiRequest("POST", `/api/invitations/${invitationId}/resend`);
+      const data = await res.json();
 
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
+
+      // Show different messages based on email delivery status
+      const { title, description } = getInvitationStatusMessage(data.emailSent, email, 'resent');
+
       toast({
-        title: "Invitation resent",
-        description: `New invitation sent to ${email}`,
+        title,
+        description,
       });
     } catch (error: any) {
       toast({
@@ -848,12 +766,22 @@ export default function OrganizationProfile() {
                 Organization Profile and Settings
               </CardDescription>
             </div>
-            {canEdit && (
-              <Button onClick={handleEdit}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit Profile
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {user?.isSiteAdmin && (
+                <Link href={`/organizations/${id}/settings`}>
+                  <Button variant="outline">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Button>
+                </Link>
+              )}
+              {canEdit && (
+                <Button onClick={handleEdit}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit Profile
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -903,6 +831,29 @@ export default function OrganizationProfile() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {/* Email status indicator */}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className="flex items-center"
+                                    data-testid={invitation.emailSent ? `email-status-sent-${invitation.id}` : `email-status-not-sent-${invitation.id}`}
+                                  >
+                                    {invitation.emailSent ? (
+                                      <MailCheck className="h-4 w-4 text-green-600" />
+                                    ) : (
+                                      <Mail className="h-4 w-4 text-gray-400" />
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent data-testid={`email-status-tooltip-${invitation.id}`}>
+                                  {invitation.emailSent
+                                    ? `Email sent ${invitation.emailSentAt ? new Date(invitation.emailSentAt).toLocaleString() : EMAIL_SENT_NO_TIMESTAMP_FALLBACK}`
+                                    : 'Email not sent - use copy button to share link'}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
                             <Badge variant="outline" className="text-xs">
                               {invitation.role === 'org_admin' ? 'Admin' : 'Coach'} {isExpired ? '(Expired)' : '(Pending)'}
                             </Badge>
@@ -925,28 +876,46 @@ export default function OrganizationProfile() {
                               <div className="flex items-center gap-1 ml-2">
                                 {/* Resend invitation button for expired invitations */}
                                 {isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => resendInvitation(invitation.email, invitation.role)}
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    data-testid={`resend-invitation-${invitation.id}`}
-                                  >
-                                    <RefreshCw className="h-3 w-3" />
-                                  </Button>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => resendInvitation(invitation.id, invitation.email)}
+                                          className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                          data-testid={`resend-invitation-${invitation.id}`}
+                                        >
+                                          <RefreshCw className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Resend invitation</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 )}
 
-                                {/* Copy invitation URL button (only for non-expired) */}
+                                {/* Copy invitation URL button - now visible for ALL invitations */}
                                 {!isExpired && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    data-testid={`copy-invitation-${invitation.id}`}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => copyInvitationUrl(invitation.token, invitation.email)}
+                                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          data-testid={`copy-invitation-${invitation.id}`}
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {invitation.emailSent
+                                          ? 'Copy invitation link (already sent via email)'
+                                          : 'Copy invitation link to share manually'}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 )}
 
                                 {/* Delete pending invitation button */}
@@ -1018,6 +987,11 @@ export default function OrganizationProfile() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Metrics Configuration Section - Visible to Site Admins and Org Admins */}
+      {(user?.isSiteAdmin || isOrgAdmin) && (
+        <OrganizationMetricsCard organizationId={id!} canEdit={canEdit} />
       )}
 
     </div>

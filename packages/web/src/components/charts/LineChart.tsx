@@ -17,7 +17,7 @@ import type {
   ChartConfiguration,
   StatisticalSummary
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,8 @@ export function LineChart({
   onAthleteSelectionChange,
   maxAthletes = 10
 }: LineChartProps) {
+  const { getMetricConfig } = useMetricConfig();
+
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
   const [showGroupAverage, setShowGroupAverage] = useState(true);
@@ -73,7 +75,7 @@ export function LineChart({
 
     // Sort athletes by performance for smart defaults
     const metric = data[0]?.metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const metricConfig = getMetricConfig(metric);
     const lowerIsBetter = metricConfig?.lowerIsBetter || false;
 
     const sortedData = [...data].sort((a, b) => {
@@ -237,8 +239,9 @@ export function LineChart({
     }
 
     const metric = trendsToShow[0].metric;
-    const unit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const metricLabel = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+    const metricConfig = getMetricConfig(metric);
+    const unit = metricConfig?.unit || '';
+    const metricLabel = metricConfig?.label || metric;
 
     return {
       labels,
@@ -577,7 +580,7 @@ export function LineChart({
 
                 const first = athleteTrend.data[0].value;
                 const last = athleteTrend.data[athleteTrend.data.length - 1].value;
-                const isLowerBetter = METRIC_CONFIG[athleteTrend.metric as keyof typeof METRIC_CONFIG]?.lowerIsBetter;
+                const isLowerBetter = getMetricConfig(athleteTrend.metric)?.lowerIsBetter;
 
                 const improvement = isLowerBetter ? first - last : last - first;
                 const trend = improvement > 0 ? '↗️ Improving' : improvement < 0 ? '↘️ Declining' : '→ Stable';

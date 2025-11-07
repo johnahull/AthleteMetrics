@@ -104,7 +104,8 @@ test.describe('CSV Import Tests', () => {
 
     // Get initial athlete count (navigate to athletes page)
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="checkbox-athlete-"], .empty-state, text=/no athletes/i', { timeout: 5000 });
     const initialCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
 
     // Go back to import
@@ -128,7 +129,11 @@ test.describe('CSV Import Tests', () => {
 
     // Navigate to athletes page and verify count increased
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes to load
+    await expect(async () => {
+      const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
+      expect(finalCount).toBeGreaterThan(initialCount);
+    }).toPass({ timeout: 5000 });
     const finalCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
     expect(finalCount).toBeGreaterThan(initialCount);
   });
@@ -207,7 +212,8 @@ test.describe('CSV Import Tests', () => {
 
     // Navigate to teams page and verify new teams
     await page.goto(`${STAGING_URL}/teams`);
-    await page.waitForLoadState('networkidle');
+    // Wait for teams page to load
+    await page.waitForSelector('[data-testid^="team-"], .team-card, tr, .empty-state', { timeout: 5000 });
 
     const teamsExist = await page.locator('[data-testid^="team-"], .team-card, tr').count();
     expect(teamsExist).toBeGreaterThan(0);
@@ -275,7 +281,7 @@ test.describe('CSV Import Tests', () => {
     await page.click('[data-testid="csv-confirm-import"]');
 
     // Wait for import to complete
-    await page.waitForLoadState('networkidle');
+    await page.waitForSelector('text=/import.*complete|success|finished/i', { timeout: 15000 });
   });
 
   test('should support cancel import flow', async ({ page }) => {

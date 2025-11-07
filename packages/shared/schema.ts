@@ -12,6 +12,9 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   location: text("location"),
   isActive: boolean("is_active").default(true).notNull(),
+  // Benchmark feature flags (added in migration 0024)
+  benchmarksEnabled: boolean("benchmarks_enabled").default(false).notNull(),
+  allowCustomBenchmarks: boolean("allow_custom_benchmarks").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -91,6 +94,139 @@ export const userTeams = pgTable("user_teams", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Site-level metric definitions (master catalog)
+export const siteMetrics = pgTable("site_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 50 }).notNull().unique(), // "FLY10_TIME", "CUSTOM_SPRINT_20M"
+  label: varchar("label", { length: 100 }).notNull(), // "10-Yard Fly Time"
+  category: varchar("category", { length: 50 }), // "speed", "agility", "strength", "power"
+  unit: varchar("unit", { length: 20 }), // "s", "in", "mph", "m"
+  lowerIsBetter: boolean("lower_is_better").default(true).notNull(),
+  isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot be deleted
+  isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
+  displayOrder: integer("display_order"),
+  description: text("description"),
+  // Advanced properties for sport-specific configuration
+  sportAssociations: text("sport_associations").array(), // ["Soccer", "Basketball"]
+  validationMin: decimal("validation_min", { precision: 10, scale: 3 }), // Minimum valid value
+  validationMax: decimal("validation_max", { precision: 10, scale: 3 }), // Maximum valid value
+  decimalPrecision: integer("decimal_precision").default(3).notNull(), // Decimal places for display
+  // Display settings
+  color: varchar("color", { length: 20 }), // Hex color or Tailwind class
+  icon: varchar("icon", { length: 50 }), // Icon identifier
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  activeIdx: index("site_metrics_active_idx").on(table.isActive),
+  codeIdx: index("site_metrics_code_idx").on(table.code),
+  categoryIdx: index("site_metrics_category_idx").on(table.category),
+}));
+
+// Organization-level metric enablement (org opt-in to site metrics)
+export const organizationMetrics = pgTable("organization_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  displayOrder: integer("display_order"), // Org-specific ordering
+  customLabel: varchar("custom_label", { length: 100 }), // Org can customize label
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueOrgMetric: unique().on(table.organizationId, table.metricCode),
+  orgIdx: index("org_metrics_org_idx").on(table.organizationId),
+  orgEnabledIdx: index("org_metrics_org_enabled_idx").on(table.organizationId, table.isEnabled),
+}));
+
+// Site-level benchmark definitions (master catalog)
+export const siteBenchmarks = pgTable("site_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
+  // Athlete attribute filters (NULL = applies to all)
+  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
+  ageMin: integer("age_min"),
+  ageMax: integer("age_max"),
+  position: varchar("position", { length: 50 }),
+  level: varchar("level", { length: 50 }),
+  // Control flags
+  isSystemDefault: boolean("is_system_default").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  displayOrder: integer("display_order").default(999).notNull(),
+  // Display settings
+  color: varchar("color", { length: 20 }),
+  icon: varchar("icon", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  metricIdx: index("site_benchmarks_metric_idx").on(table.metricCode),
+  activeIdx: index("site_benchmarks_active_idx").on(table.isActive),
+  metricActiveIdx: index("site_benchmarks_metric_active_idx").on(table.metricCode, table.isActive),
+  // Composite index for filtering with INCLUDE clause (migration 0024)
+  filtersIdx: index("site_benchmarks_filters_idx").on(table.metricCode, table.gender, table.level),
+  // Unique constraint for semantic conflict resolution (migration 0030)
+  uniqueMetricName: unique("site_benchmarks_metric_name_unique").on(table.metricCode, table.name),
+}));
+
+// Organization-specific custom benchmarks
+export const customBenchmarks = pgTable("custom_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(),
+  // Athlete attribute filters
+  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
+  ageMin: integer("age_min"),
+  ageMax: integer("age_max"),
+  position: varchar("position", { length: 50 }),
+  level: varchar("level", { length: 50 }),
+  // Control flags
+  isActive: boolean("is_active").default(true).notNull(),
+  displayOrder: integer("display_order").default(999).notNull(),
+  // Display settings
+  color: varchar("color", { length: 20 }),
+  icon: varchar("icon", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  orgIdx: index("custom_benchmarks_org_idx").on(table.organizationId),
+  metricIdx: index("custom_benchmarks_metric_idx").on(table.metricCode),
+  orgActiveIdx: index("custom_benchmarks_org_active_idx").on(table.organizationId, table.isActive),
+}));
+
+// Organization-level benchmark enablement
+export const organizationBenchmarks = pgTable("organization_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  benchmarkId: varchar("benchmark_id").notNull(),
+  benchmarkType: varchar("benchmark_type", { length: 10 }).notNull(), // 'site' or 'custom'
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  customName: varchar("custom_name", { length: 100 }),
+  displayOrder: integer("display_order").default(999).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueOrgBenchmark: unique().on(table.organizationId, table.benchmarkId, table.benchmarkType),
+  // Partial unique index for display_order (migration 0024)
+  displayOrderUnique: unique("org_benchmarks_display_order_unique").on(table.organizationId, table.displayOrder),
+  // Note: orgIdx removed as redundant (org_benchmarks_org_enabled_idx covers single-column queries via leftmost prefix rule)
+  orgEnabledIdx: index("org_benchmarks_org_enabled_idx").on(table.organizationId, table.isEnabled),
+  benchmarkIdx: index("org_benchmarks_benchmark_idx").on(table.benchmarkId, table.benchmarkType),
+  // Additional indexes from migrations 0026-0028
+  typeIdIdx: index("org_benchmarks_type_id_idx").on(table.benchmarkType, table.benchmarkId),
+  orgBenchmarkIdx: index("org_benchmarks_org_benchmark_idx").on(table.organizationId, table.benchmarkId),
+  enabledIdx: index("org_benchmarks_enabled_idx").on(table.isEnabled),
+}));
 
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -225,6 +361,28 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   teams: many(teams),
   userOrganizations: many(userOrganizations),
   invitations: many(invitations),
+  organizationMetrics: many(organizationMetrics),
+  customBenchmarks: many(customBenchmarks),
+  organizationBenchmarks: many(organizationBenchmarks),
+}));
+
+export const siteMetricsRelations = relations(siteMetrics, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [siteMetrics.createdBy],
+    references: [users.id],
+  }),
+  organizationMetrics: many(organizationMetrics),
+}));
+
+export const organizationMetricsRelations = relations(organizationMetrics, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationMetrics.organizationId],
+    references: [organizations.id],
+  }),
+  siteMetric: one(siteMetrics, {
+    fields: [organizationMetrics.metricCode],
+    references: [siteMetrics.code],
+  }),
 }));
 
 export const teamsRelations = relations(teams, ({ one, many }) => ({
@@ -319,6 +477,41 @@ export const emailVerificationTokensRelations = relations(emailVerificationToken
   }),
 }));
 
+export const siteBenchmarksRelations = relations(siteBenchmarks, ({ one, many }) => ({
+  metric: one(siteMetrics, {
+    fields: [siteBenchmarks.metricCode],
+    references: [siteMetrics.code],
+  }),
+  createdBy: one(users, {
+    fields: [siteBenchmarks.createdBy],
+    references: [users.id],
+  }),
+  organizationBenchmarks: many(organizationBenchmarks),
+}));
+
+export const customBenchmarksRelations = relations(customBenchmarks, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [customBenchmarks.organizationId],
+    references: [organizations.id],
+  }),
+  metric: one(siteMetrics, {
+    fields: [customBenchmarks.metricCode],
+    references: [siteMetrics.code],
+  }),
+  createdBy: one(users, {
+    fields: [customBenchmarks.createdBy],
+    references: [users.id],
+  }),
+  organizationBenchmarks: many(organizationBenchmarks),
+}));
+
+export const organizationBenchmarksRelations = relations(organizationBenchmarks, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationBenchmarks.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
   id: true,
@@ -331,6 +524,28 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
 export const updateOrganizationStatusSchema = z.object({
   isActive: z.boolean(),
 });
+
+// Organization general update schema (for settings page)
+export const updateOrganizationSchema = z.object({
+  name: z.string().min(1, "Organization name is required").max(200, "Organization name must be 200 characters or less").optional(),
+  description: z.string().max(1000, "Description must be 1000 characters or less").optional().nullable(),
+  location: z.string().max(200, "Location must be 200 characters or less").optional().nullable(),
+  isActive: z.boolean().optional(),
+  benchmarksEnabled: z.boolean().optional(),
+  allowCustomBenchmarks: z.boolean().optional(),
+}).refine(
+  (data) => {
+    // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
+    if (data.allowCustomBenchmarks === true && data.benchmarksEnabled === false) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "Custom benchmarks can only be enabled when benchmarks feature is enabled",
+    path: ["allowCustomBenchmarks"],
+  }
+);
 
 // Organization deletion validation schema
 export const deleteOrganizationSchema = z.object({
@@ -498,9 +713,201 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   season: z.string().optional(),
 });
 
+export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  code: z.string()
+    .min(1, "Metric code is required")
+    .max(50, "Metric code must be 50 characters or less")
+    .regex(/^[A-Z0-9_]+$/, "Metric code must contain only uppercase letters, numbers, and underscores")
+    .refine((code) => !code.startsWith("_"), "Metric code cannot start with underscore"),
+  label: z.string().min(1, "Label is required").max(100, "Label must be 100 characters or less"),
+  category: z.string().max(50, "Category must be 50 characters or less").optional(),
+  unit: z.string().max(20, "Unit must be 20 characters or less").optional(),
+  lowerIsBetter: z.boolean().default(true),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+  description: z.string().optional(),
+  sportAssociations: z.array(z.string()).optional(),
+  validationMin: z.number().optional(),
+  validationMax: z.number().optional(),
+  decimalPrecision: z.number().int().min(0).max(10).default(3),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+});
+
+export const updateSiteMetricSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  category: z.string().max(50).optional(),
+  unit: z.string().max(20).optional(),
+  lowerIsBetter: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+  description: z.string().optional(),
+  sportAssociations: z.array(z.string()).optional(),
+  validationMin: z.number().optional(),
+  validationMax: z.number().optional(),
+  decimalPrecision: z.number().int().min(0).max(10).optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+});
+
+export const insertOrganizationMetricSchema = createInsertSchema(organizationMetrics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  metricCode: z.string().min(1, "Metric code is required"),
+  isEnabled: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+  customLabel: z.string().max(100).optional(),
+});
+
+export const updateOrganizationMetricSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+  customLabel: z.string().max(100).optional(),
+});
+
+// Benchmark Schemas
+export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  metricCode: z.string().min(1, "Metric code is required").max(50),
+  name: z.string().min(1, "Benchmark name is required").max(100),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive("Benchmark value must be positive"),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const updateSiteBenchmarkSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive().optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true,
+  updatedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  metricCode: z.string().min(1, "Metric code is required").max(50),
+  name: z.string().min(1, "Benchmark name is required").max(100),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive("Benchmark value must be positive"),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const updateCustomBenchmarkSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  benchmarkValue: z.number().positive().optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  icon: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
+export const insertOrganizationBenchmarkSchema = createInsertSchema(organizationBenchmarks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  benchmarkId: z.string().min(1, "Benchmark ID is required"),
+  benchmarkType: z.enum(['site', 'custom']),
+  isEnabled: z.boolean().default(true),
+  customName: z.string().max(100).optional(),
+  displayOrder: z.number().int().optional(),
+});
+
+export const updateOrganizationBenchmarkSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  customName: z.string().max(100).optional(),
+  displayOrder: z.number().int().optional(),
+});
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
+export type UpdateOrganization = z.infer<typeof updateOrganizationSchema>;
 export type UpdateOrganizationStatus = z.infer<typeof updateOrganizationStatusSchema>;
 export type DeleteOrganization = z.infer<typeof deleteOrganizationSchema>;
 
@@ -555,6 +962,44 @@ export type InsertEmailVerificationToken = typeof emailVerificationTokens.$infer
 
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
+
+export type InsertSiteMetric = z.infer<typeof insertSiteMetricSchema>;
+export type SiteMetric = typeof siteMetrics.$inferSelect;
+export type UpdateSiteMetric = z.infer<typeof updateSiteMetricSchema>;
+
+export type InsertOrganizationMetric = z.infer<typeof insertOrganizationMetricSchema>;
+export type OrganizationMetric = typeof organizationMetrics.$inferSelect;
+export type UpdateOrganizationMetric = z.infer<typeof updateOrganizationMetricSchema>;
+
+export type InsertSiteBenchmark = z.infer<typeof insertSiteBenchmarkSchema>;
+export type SiteBenchmark = typeof siteBenchmarks.$inferSelect;
+export type UpdateSiteBenchmark = z.infer<typeof updateSiteBenchmarkSchema>;
+
+export type InsertCustomBenchmark = z.infer<typeof insertCustomBenchmarkSchema>;
+export type CustomBenchmark = typeof customBenchmarks.$inferSelect;
+export type UpdateCustomBenchmark = z.infer<typeof updateCustomBenchmarkSchema>;
+
+export type InsertOrganizationBenchmark = z.infer<typeof insertOrganizationBenchmarkSchema>;
+export type OrganizationBenchmark = typeof organizationBenchmarks.$inferSelect;
+export type UpdateOrganizationBenchmark = z.infer<typeof updateOrganizationBenchmarkSchema>;
+
+// Enriched type for organization benchmarks with full benchmark details
+export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
+  // Benchmark details (from either site_benchmarks or custom_benchmarks)
+  name: string;
+  metricCode: string;
+  description: string | null;
+  benchmarkValue: number;
+  comparisonOperator: 'lte' | 'gte' | 'eq';
+  // Athlete filters
+  ageMin: number | null;
+  ageMax: number | null;
+  gender: 'Male' | 'Female' | 'Not Specified' | null;
+  position: string | null;
+  level: 'college' | 'high_school' | 'club' | null;
+  // Status (from site benchmarks only, custom benchmarks don't have isActive)
+  isActive?: boolean;
+};
 
 // Enums
 export const MetricType = {

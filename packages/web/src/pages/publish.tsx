@@ -16,10 +16,19 @@ import {
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
+import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 
 export default function Publish() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Get available metrics using centralized hook (filters by active+enabled)
+  const { metrics: availableMetrics } = useAvailableMetrics();
+
   const [filters, setFilters] = useState({
     teamIds: [] as string[],
     birthYearFrom: "",
@@ -39,9 +48,6 @@ export default function Publish() {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: any[] };
@@ -54,12 +60,48 @@ export default function Publish() {
 
       const params = new URLSearchParams();
       if (filters.teamIds.length > 0) params.append('teamIds', filters.teamIds.join(','));
-      if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
-      if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+
+      // Only include birth year filters if they're valid 4-digit years
+      const birthYearFromNum = parseInt(filters.birthYearFrom);
+      const birthYearToNum = parseInt(filters.birthYearTo);
+      if (filters.birthYearFrom && birthYearFromNum >= 1900 && birthYearFromNum <= 2100) {
+        params.append('birthYearFrom', filters.birthYearFrom);
+      }
+      if (filters.birthYearTo && birthYearToNum >= 1900 && birthYearToNum <= 2100) {
+        params.append('birthYearTo', filters.birthYearTo);
+      }
+
       if (filters.metric) params.append('metric', filters.metric);
       if (filters.sport && filters.sport !== "all") params.append('sport', filters.sport);
-      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
-      if (filters.dateTo) params.append('dateTo', filters.dateTo);
+
+      // Convert date strings (YYYY-MM-DD) to ISO datetime format for backend validation
+      // IMPORTANT TIMEZONE HANDLING:
+      // HTML5 date inputs are timezone-agnostic (YYYY-MM-DD format only).
+      // We interpret them in the user's LOCAL timezone to match their calendar selection.
+      // The backend then extracts the date-only portion (YYYY-MM-DD) for comparison
+      // with PostgreSQL DATE columns, which are also timezone-agnostic.
+      //
+      // Why local timezone is correct:
+      // - User selects "2024-03-15" in their local timezone
+      // - We create a Date object representing midnight local time
+      // - Convert to ISO (UTC) for transmission
+      // - Backend extracts "2024-03-15" for database query
+      // - Result: User gets measurements from their selected calendar date
+      //
+      // Edge cases:
+      // - DST transitions: Date selection still represents the calendar date
+      // - Extreme timezones (UTC+/-12): Backend date extraction handles correctly
+      if (filters.dateFrom) {
+        const [year, month, day] = filters.dateFrom.split('-').map(Number);
+        const dateFromLocal = new Date(year, month - 1, day, 0, 0, 0);
+        params.append('dateFrom', dateFromLocal.toISOString());
+      }
+      if (filters.dateTo) {
+        const [year, month, day] = filters.dateTo.split('-').map(Number);
+        const dateToLocal = new Date(year, month - 1, day, 23, 59, 59, 999);
+        params.append('dateTo', dateToLocal.toISOString());
+      }
+
       if (filters.gender && filters.gender !== "all") params.append('gender', filters.gender);
 
       const response = await fetch(`/api/measurements?${params}`, {
@@ -427,21 +469,25 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Metric <span className="text-red-500">*</span>
               </label>
-              <Select 
-                value={filters.metric} 
+              <Select
+                value={filters.metric}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, metric: value }))}
               >
                 <SelectTrigger data-testid="select-metric">
                   <SelectValue placeholder="Select metric..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
-                  <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                  <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
-                  <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
-                  <SelectItem value="T_TEST">T-Test</SelectItem>
-                  <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
-                  <SelectItem value="RSI">Reactive Strength Index</SelectItem>
+                  {availableMetrics.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No metrics available
+                    </div>
+                  ) : (
+                    availableMetrics.map((m) => (
+                      <SelectItem key={m.code} value={m.code}>
+                        {m.label}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -451,6 +497,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
               <Input
                 type="date"
+                min={DATE_CONSTANTS.MIN_MEASUREMENT_DATE}
                 value={filters.dateFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
                 data-testid="input-date-from"
@@ -462,6 +509,7 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
               <Input
                 type="date"
+                min={DATE_CONSTANTS.MIN_MEASUREMENT_DATE}
                 value={filters.dateTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
                 data-testid="input-date-to"
@@ -497,9 +545,21 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year From</label>
               <Input
                 type="number"
-                placeholder="2000"
+                min="1970"
+                max={new Date().getFullYear()}
+                placeholder={`e.g., ${new Date().getFullYear() - 25}`}
                 value={filters.birthYearFrom}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearFrom: e.target.value }))}
+                onFocus={(e) => {
+                  // If empty, don't let browser default to min value
+                  if (!e.target.value) {
+                    e.target.removeAttribute('min');
+                  }
+                }}
+                onBlur={(e) => {
+                  // Restore min after blur
+                  e.target.setAttribute('min', '1970');
+                }}
                 data-testid="input-birth-year-from"
               />
             </div>
@@ -509,9 +569,21 @@ export default function Publish() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year To</label>
               <Input
                 type="number"
-                placeholder="2010"
+                min="1970"
+                max={new Date().getFullYear()}
+                placeholder={`e.g., ${new Date().getFullYear() - 15}`}
                 value={filters.birthYearTo}
                 onChange={(e) => setFilters(prev => ({ ...prev, birthYearTo: e.target.value }))}
+                onFocus={(e) => {
+                  // If empty, don't let browser default to min value
+                  if (!e.target.value) {
+                    e.target.removeAttribute('min');
+                  }
+                }}
+                onBlur={(e) => {
+                  // Restore min after blur
+                  e.target.setAttribute('min', '1970');
+                }}
                 data-testid="input-birth-year-to"
               />
             </div>
@@ -559,6 +631,15 @@ export default function Publish() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Statistics Summary */}
+      {filters.metric && sortedMeasurements && sortedMeasurements.length > 0 && (
+        <StatisticsSummaryCard
+          key={`stats-${filters.metric}-${sortedMeasurements.length}`}
+          measurements={sortedMeasurements}
+          metric={filters.metric}
+        />
+      )}
 
       {/* Bulk Actions Toolbar */}
       {selectedMeasurements.size > 0 && (

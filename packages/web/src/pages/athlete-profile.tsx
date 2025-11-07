@@ -591,6 +591,7 @@ export default function AthleteProfile() {
                     <FormControl>
                       <Input
                         type="date"
+                        min="1970-01-01"
                         {...field}
                         data-testid="input-edit-date"
                       />

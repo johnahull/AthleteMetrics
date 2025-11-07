@@ -1,6 +1,7 @@
 /**
  * Reusable Metrics Selector Component
  * Smart component for selecting primary and additional metrics
+ * Now supports dynamic metrics from organization configuration
  */
 
 import React, { useMemo } from 'react';
@@ -11,9 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
-import { METRIC_CONFIG } from '@shared/analytics-types';
-import type { MetricSelection, AnalysisType } from '@shared/analytics-types';
+import type { MetricSelection, AnalysisType, DynamicMetricConfig } from '@shared/analytics-types';
 import { MetricIndicator } from './MetricIndicator';
+import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 
 // Mutually exclusive metrics - selecting one prevents selecting the other
 // FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
@@ -67,7 +68,27 @@ export function MetricsSelector({
   metricsAvailability = {},
   maxMetricCount
 }: MetricsSelectorProps) {
-  const availableMetrics = Object.keys(METRIC_CONFIG);
+  // Get available metrics using centralized hook (filters by active+enabled)
+  const { metrics: availableMetricsList } = useAvailableMetrics();
+
+  // Build dynamic metric configs
+  const dynamicMetrics = useMemo((): DynamicMetricConfig[] => {
+    return availableMetricsList.map(m => ({
+      code: m.code,
+      label: m.label,
+      category: m.category,
+      unit: m.unit,
+      lowerIsBetter: m.lowerIsBetter,
+      isActive: true, // Already filtered by hook
+      isSystemDefault: false, // Not exposed by hook, but not needed for display
+    }));
+  }, [availableMetricsList]);
+
+  const availableMetrics = dynamicMetrics.map(m => m.code);
+  const metricConfigMap = useMemo(
+    () => Object.fromEntries(dynamicMetrics.map(m => [m.code, m])),
+    [dynamicMetrics]
+  );
 
   // Memoize multi-group check to avoid recalculating in map loop
   const isMultiGroupMode = analysisType === 'multi_group';
@@ -159,7 +180,7 @@ export function MetricsSelector({
             </SelectTrigger>
             <SelectContent>
               {availableMetrics.map(metric => {
-                const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const config = metricConfigMap[metric];
                 const count = metricsAvailability[metric] || 0;
                 const hasData = count > 0;
 
@@ -200,7 +221,7 @@ export function MetricsSelector({
             </div>
             <div className="flex flex-wrap gap-2">
               {metrics.additional.map(metric => {
-                const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const config = metricConfigMap[metric];
                 return (
                   <Badge key={metric} variant="secondary" className="flex items-center gap-1">
                     {config?.label || metric}
@@ -242,7 +263,7 @@ export function MetricsSelector({
                 !metrics.additional.includes(metric)
               )
               .map((metric: string) => {
-                const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+                const config = metricConfigMap[metric];
                 const count = metricsAvailability[metric] || 0;
                 const hasData = count > 0;
 
@@ -273,7 +294,7 @@ export function MetricsSelector({
                       className={`text-xs leading-tight cursor-pointer flex flex-col gap-0.5 ${
                         !hasData || isExcluded ? 'text-muted-foreground' : ''
                       }`}
-                      title={isExcluded ? `Cannot select with ${METRIC_CONFIG[exclusiveMetric as keyof typeof METRIC_CONFIG]?.label}` : !hasData ? 'No data available' : undefined}
+                      title={isExcluded ? `Cannot select with ${metricConfigMap[exclusiveMetric]?.label}` : !hasData ? 'No data available' : undefined}
                     >
                       <span>
                         {config?.label || metric}

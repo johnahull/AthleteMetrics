@@ -46,15 +46,16 @@ test.describe('RBAC/Permissions Tests', () => {
       // Login as athlete
       await loginWithCredentials(page, TEST_USERS.athlete.username, TEST_USERS.athlete.password);
 
-      // Should redirect to athlete's own profile
-      await page.waitForLoadState('networkidle');
+      // Should redirect to athlete's own profile - wait for URL change
+      await page.waitForURL(/\/athlete|\/profile/i, { timeout: 5000 });
 
       // URL should contain athlete's ID or profile route
       expect(page.url()).toMatch(/\/athlete|\/profile/i);
 
       // Should NOT be able to access athletes management page
       await page.goto(`${STAGING_URL}/athletes`);
-      await page.waitForLoadState('networkidle');
+      // Wait for page to load (either redirected or access denied)
+      await page.waitForSelector('text=/access.*denied|unauthorized|403/i, [data-testid^="checkbox-athlete-"]', { timeout: 5000 }).catch(() => {});
 
       // Should either redirect or show access denied
       const isRedirected = page.url().includes('/athlete') || page.url().includes('/profile');
@@ -65,12 +66,14 @@ test.describe('RBAC/Permissions Tests', () => {
 
     test('athlete should not see other athletes data', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.athlete.username, TEST_USERS.athlete.password);
-      await page.waitForLoadState('networkidle');
+      // Wait for redirect after login
+      await page.waitForURL(/\/athlete|\/profile|\/login/i, { timeout: 5000 });
 
       // Try to access another athlete's profile (if we know an ID)
       // For now, just verify they can't browse all athletes
       await page.goto(`${STAGING_URL}/athletes`);
-      await page.waitForLoadState('networkidle');
+      // Wait for page response
+      await page.waitForSelector('[data-testid^="checkbox-athlete-"], text=/access.*denied/i, .empty-state', { timeout: 5000 }).catch(() => {});
 
       // Should not see athletes list
       const athletesList = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -100,7 +103,8 @@ test.describe('RBAC/Permissions Tests', () => {
 
       // Try to access organizations page
       await page.goto(`${STAGING_URL}/organizations`);
-      await page.waitForLoadState('networkidle');
+      // Wait for organizations page to load
+      await page.waitForSelector('[data-testid="button-add-organization"], main, .organization-list', { timeout: 5000 });
 
       // Should either redirect or show limited access
       const hasFullAccess = await page.locator('[data-testid="button-add-organization"]').count();
@@ -176,7 +180,8 @@ test.describe('RBAC/Permissions Tests', () => {
 
       // Try to access admin-only route
       const response = await page.goto(`${STAGING_URL}/admin`);
-      await page.waitForLoadState('networkidle');
+      // Wait for page to load or redirect
+      await page.waitForSelector('main, text=/access.*denied|unauthorized|403/i', { timeout: 5000 }).catch(() => {});
 
       // Should either:
       // 1. Return 403 status
@@ -206,11 +211,11 @@ test.describe('RBAC/Permissions Tests', () => {
         // Select a different organization
         await page.click('[role="option"]').catch(() => page.locator('option').nth(1).click());
 
-        await page.waitForLoadState('networkidle');
+        // Wait for organization context switch to complete
+        await page.waitForTimeout(1000); // Brief wait for context switch
 
         // Data should be filtered by new organization
-        // Verify by checking if page reloads or updates
-        await page.waitForLoadState('networkidle');
+        // Context switch complete
       }
     });
   });
@@ -233,7 +238,8 @@ test.describe('RBAC/Permissions Tests', () => {
       if (hasSwitcher > 0) {
         await orgSwitcher.click();
         await page.click('[role="option"]').catch(() => page.locator('option').nth(1).click());
-        await page.waitForLoadState('networkidle');
+        // Wait for context switch and athletes list to update
+        await page.waitForTimeout(1000);
 
         const newAthleteCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
 
@@ -263,7 +269,8 @@ test.describe('RBAC/Permissions Tests', () => {
     test('should show/hide navigation items based on role', async ({ page }) => {
       // Test with athlete (limited access)
       await loginWithCredentials(page, TEST_USERS.athlete.username, TEST_USERS.athlete.password);
-      await page.waitForLoadState('networkidle');
+      // Wait for page to load after login
+      await page.waitForSelector('nav, main', { timeout: 5000 });
 
       // Should NOT see admin navigation items
       const adminNavItems = await page.locator('nav a:has-text("Organizations"), nav a:has-text("Admin")').count();
@@ -272,7 +279,8 @@ test.describe('RBAC/Permissions Tests', () => {
       // Logout and login as site admin
       await logout(page);
       await loginWithCredentials(page, TEST_USERS.siteAdmin.username, TEST_USERS.siteAdmin.password);
-      await page.waitForLoadState('networkidle');
+      // Wait for page to load after login
+      await page.waitForSelector('nav, main', { timeout: 5000 });
 
       // SHOULD see admin navigation items
       const siteAdminNavItems = await page.locator('nav a:has-text("Organizations"), nav').count();
@@ -333,7 +341,8 @@ test.describe('Enhanced RBAC Edge Cases', () => {
   test('athlete cannot access admin pages via URL manipulation', async ({ page }) => {
     // Login as athlete
     await loginWithCredentials(page, TEST_USERS.athlete.username, TEST_USERS.athlete.password);
-    await page.waitForLoadState('networkidle');
+    // Wait for login to complete
+    await page.waitForURL(/\/athlete|\/profile|\/dashboard/i, { timeout: 5000 });
 
     // List of admin-only routes to test
     const adminRoutes = [
@@ -346,7 +355,8 @@ test.describe('Enhanced RBAC Edge Cases', () => {
     for (const route of adminRoutes) {
       // Try to access admin route
       const response = await page.goto(`${STAGING_URL}${route}`);
-      await page.waitForLoadState('networkidle');
+      // Wait for page to load or redirect
+      await page.waitForSelector('main, text=/access.*denied|unauthorized|403/i', { timeout: 3000 }).catch(() => {});
 
       // Should be blocked (403, unauthorized, or redirected)
       const is403 = response?.status() === 403;
@@ -398,7 +408,8 @@ test.describe('Enhanced RBAC Edge Cases', () => {
     const orgOptions = await page.locator('[role="option"], option').all();
     if (orgOptions.length > 1) {
       await orgOptions[1].click();
-      await page.waitForLoadState('networkidle');
+      // Wait for organization context switch
+      await page.waitForTimeout(1000);
 
       // Get athlete count for second organization
       const org2AthleteCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -430,7 +441,8 @@ test.describe('Enhanced RBAC Edge Cases', () => {
 
     // Try to access protected route
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for redirect to login
+    await page.waitForURL(/\/login/, { timeout: 5000 });
 
     // Should redirect to login page
     expect(page.url()).toContain('/login');
@@ -486,7 +498,8 @@ test.describe('Enhanced RBAC Edge Cases', () => {
 
     // Try to access protected route
     await page.goto(`${STAGING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    // Wait for redirect to login
+    await page.waitForURL(/\/login/, { timeout: 5000 });
 
     // Should redirect to login (session invalidated after logout)
     expect(page.url()).toContain('/login');
@@ -502,7 +515,8 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
     // Attempt SQL injection via athlete ID parameter
     const maliciousId = "1' OR '1'='1";
     await page.goto(`${STAGING_URL}/athletes/${encodeURIComponent(maliciousId)}`);
-    await page.waitForLoadState('networkidle');
+    // Wait for error page or content to load
+    await page.waitForSelector('text=/not found|404|error|invalid/i, main', { timeout: 5000 }).catch(() => {});
 
     // Should return 404 or error page, NOT expose all athletes
     const is404 = await page.locator('text=/not found|404/i').count() > 0;
@@ -523,7 +537,8 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
     // Attempt SQL injection via team ID parameter
     const maliciousId = "1' OR '1'='1' --";
     await page.goto(`${STAGING_URL}/teams/${encodeURIComponent(maliciousId)}`);
-    await page.waitForLoadState('networkidle');
+    // Wait for error page or content to load
+    await page.waitForSelector('text=/not found|404|error|invalid/i, main', { timeout: 5000 }).catch(() => {});
 
     // Should return 404 or error page
     const is404 = await page.locator('text=/not found|404/i').count() > 0;
@@ -551,14 +566,13 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
 
     // Submit form
     await page.click('[data-testid="submit-athlete"], button:has-text("Save")');
-    await page.waitForLoadState('networkidle');
-
-    // Wait a moment for athlete to be created and UI to update
+    // Wait for form submission and success/error state
     await page.waitForTimeout(CHART_ANIMATION_TIMEOUT);
 
     // Navigate to athletes page and search for the test athlete
     await goToAthletes(page);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="checkbox-athlete-"], .athlete-list, .empty-state', { timeout: 5000 });
 
     // Look for athlete in list by last name
     const athleteRow = page.locator(`text=TestXSS${testTimestamp}`).first();
@@ -584,7 +598,8 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
     // Login as org admin who can create teams
     await loginWithCredentials(page, TEST_USERS.orgAdmin.username, TEST_USERS.orgAdmin.password);
     await page.goto(`${STAGING_URL}/teams`);
-    await page.waitForLoadState('networkidle');
+    // Wait for teams page to load
+    await page.waitForSelector('[data-testid="add-team-button"], button:has-text("Add Team"), .team-list, main', { timeout: 5000 });
 
     // Try to create team with XSS payload
     const addTeamButton = page.locator('[data-testid="add-team-button"], button:has-text("Add Team")');
@@ -600,7 +615,8 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
       await page.fill('[data-testid="team-name"], input[name="name"]', `${xssPayload} TestTeam${testTimestamp}`);
 
       await page.click('[data-testid="submit-team"], button:has-text("Save")');
-      await page.waitForLoadState('networkidle');
+      // Wait for form submission to complete
+      await page.waitForTimeout(1000);
 
       // Verify XSS payload is sanitized
       const hasImgTag = await page.locator('img[src="x"][onerror]').count();

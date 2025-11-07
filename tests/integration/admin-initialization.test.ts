@@ -59,8 +59,16 @@ describe('Admin User Initialization', () => {
   });
 
   afterEach(() => {
-    // Restore environment variables
-    process.env = originalEnv;
+    // Restore environment variables properly
+    // Cannot reassign process.env directly, must restore individual properties
+    Object.keys(process.env).forEach(key => {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    });
+    Object.keys(originalEnv).forEach(key => {
+      process.env[key] = originalEnv[key];
+    });
 
     // Restore all mocks
     vi.restoreAllMocks();

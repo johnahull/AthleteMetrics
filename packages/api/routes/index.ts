@@ -10,6 +10,8 @@ import { registerTeamRoutes } from "./team-routes";
 import { registerAthleteRoutes } from "./athlete-routes";
 import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAnalyticsRoutes } from "./analytics-routes";
+import { registerMetricRoutes } from "./metric-routes";
+import { registerBenchmarkRoutes } from "./benchmark-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -37,9 +39,15 @@ export function registerAllRoutes(app: Express) {
   // Analytics routes
   registerAnalyticsRoutes(app);
 
+  // Metric management routes
+  registerMetricRoutes(app);
+
+  // Benchmark management routes
+  registerBenchmarkRoutes(app);
+
   // TODO: Add remaining route modules
   // registerImportRoutes(app);
-  
+
   console.log("✅ All routes registered successfully");
 }
 
@@ -56,8 +64,10 @@ export function getRouteStats() {
       athletes: "✅ Registered",
       measurements: "✅ Registered (new service)",
       analytics: "✅ Registered (new service)",
+      metrics: "✅ Registered (new service)",
+      benchmarks: "✅ Registered (new service)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 7/8 modules refactored"
+    status: "Migration nearly complete - 9/10 modules refactored"
   };
 }

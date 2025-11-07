@@ -1,7 +1,15 @@
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  siteMetrics, organizationMetrics,
+  siteBenchmarks, customBenchmarks, organizationBenchmarks,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
+  type SiteMetric, type OrganizationMetric,
+  type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
+  type InsertSiteMetric, type InsertOrganizationMetric,
+  type InsertSiteBenchmark, type InsertCustomBenchmark, type InsertOrganizationBenchmark,
+  type UpdateSiteMetric, type UpdateOrganizationMetric,
+  type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -38,6 +46,7 @@ export interface IStorage {
   // Organizations
   getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationByName(name: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
@@ -107,6 +116,7 @@ export interface IStorage {
     birthYearTo?: number;
     search?: string;
     gender?: string;
+    includeUnknownBirthYear?: boolean;
     page?: number;
     limit?: number;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
@@ -130,6 +140,7 @@ export interface IStorage {
     search?: string;
     sport?: string;
     includeUnverified?: boolean;
+    includeUnknownBirthYear?: boolean;
   }): Promise<(Measurement & {
     user: User;
     submittedBy: User;
@@ -204,6 +215,44 @@ export interface IStorage {
   // Audit Logging
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]>;
+
+  // Site Metrics (Master Metric Catalog)
+  getSiteMetrics(filters?: { includeInactive?: boolean }): Promise<SiteMetric[]>;
+  getSiteMetric(code: string): Promise<SiteMetric | undefined>;
+  createSiteMetric(metric: InsertSiteMetric, createdBy: string): Promise<SiteMetric>;
+  updateSiteMetric(code: string, metric: Partial<UpdateSiteMetric>): Promise<SiteMetric>;
+  toggleSiteMetricStatus(code: string, isActive: boolean): Promise<SiteMetric>;
+  deleteSiteMetric(code: string): Promise<void>;
+
+  // Organization Metrics (Org-level metric enablement)
+  getOrganizationMetrics(organizationId: string, filters?: { enabledOnly?: boolean }): Promise<(OrganizationMetric & { siteMetric: SiteMetric })[]>;
+  getOrganizationMetric(organizationId: string, metricCode: string): Promise<OrganizationMetric | undefined>;
+  enableMetricForOrganization(organizationId: string, metricCode: string): Promise<OrganizationMetric>;
+  disableMetricForOrganization(organizationId: string, metricCode: string): Promise<OrganizationMetric>;
+  updateOrganizationMetric(organizationId: string, metricCode: string, data: Partial<UpdateOrganizationMetric>): Promise<OrganizationMetric>;
+  bulkEnableMetricsForOrganization(organizationId: string, metricCodes: string[]): Promise<OrganizationMetric[]>;
+
+  // Site Benchmarks (Master Benchmark Catalog)
+  getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]>;
+  getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
+  getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]>;
+  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
+  updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark>;
+  toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark>;
+  deleteSiteBenchmark(id: string): Promise<void>;
+
+  // Custom Benchmarks (Org-specific benchmarks)
+  getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]>;
+  getCustomBenchmark(id: string): Promise<CustomBenchmark | undefined>;
+  createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark>;
+  updateCustomBenchmark(organizationId: string, benchmarkId: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark>;
+  deleteCustomBenchmark(organizationId: string, benchmarkId: string): Promise<void>;
+
+  // Organization Benchmarks (Org-level benchmark enablement)
+  getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]>;
+  getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]>;
+  enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
+  disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -640,6 +689,11 @@ export class DatabaseStorage implements IStorage {
 
   async getOrganization(id: string): Promise<Organization | undefined> {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org || undefined;
+  }
+
+  async getOrganizationByName(name: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.name, name));
     return org || undefined;
   }
 
@@ -1242,7 +1296,7 @@ export class DatabaseStorage implements IStorage {
     playerId?: string;
     expiresAt: Date;
   }): Promise<Invitation> {
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
 
@@ -1450,6 +1504,7 @@ export class DatabaseStorage implements IStorage {
     birthYearTo?: number;
     search?: string;
     gender?: string;
+    includeUnknownBirthYear?: boolean;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]> {
     // For "none" team filter, get athletes not assigned to any team within the organization
     if (filters?.teamId === 'none') {
@@ -1467,13 +1522,51 @@ export class DatabaseStorage implements IStorage {
         conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
       }
 
+      // Birth year filtering with conditional NULL handling
+      // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
       if (filters?.birthYearFrom && filters?.birthYearTo) {
-        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
-        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+        // When both from and to are specified, combine them into a single OR condition
+        // to avoid redundant NULL checks
+        if (filters?.includeUnknownBirthYear) {
+          conditions.push(
+            or(
+              and(
+                sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+                sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+              )!,
+              isNull(users.birthDate)
+            )!
+          );
+        } else {
+          conditions.push(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!
+          );
+        }
       } else if (filters?.birthYearFrom) {
-        conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+        if (filters?.includeUnknownBirthYear) {
+          conditions.push(
+            or(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              isNull(users.birthDate)
+            )!
+          );
+        } else {
+          conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+        }
       } else if (filters?.birthYearTo) {
-        conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+        if (filters?.includeUnknownBirthYear) {
+          conditions.push(
+            or(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+              isNull(users.birthDate)
+            )!
+          );
+        } else {
+          conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+        }
       }
 
       if (filters?.gender && filters.gender !== "all") {
@@ -1502,17 +1595,64 @@ export class DatabaseStorage implements IStorage {
     // For regular queries, get athletes with their team information
     const conditions = [eq(userOrganizations.role, 'athlete')];
 
+    // Birth year filtering with conditional NULL handling
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
     if (filters?.birthYearFrom && filters?.birthYearTo) {
-      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
-      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      // When both from and to are specified, combine them into a single OR condition
+      // to avoid redundant NULL checks
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(
+          and(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+          )!
+        );
+      }
     } else if (filters?.birthYearFrom) {
-      conditions.push(gte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearFrom));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+      }
     } else if (filters?.birthYearTo) {
-      conditions.push(lte(sql`EXTRACT(YEAR FROM ${users.birthDate})`, filters.birthYearTo));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+      }
     }
 
     if (filters?.search) {
       conditions.push(sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${'%' + filters.search + '%'}`);
+    }
+
+    if (filters?.gender && filters.gender !== "all") {
+      // Validate gender value before using it in the query
+      const validGenders = ['Male', 'Female', 'Not Specified'] as const;
+      if (!validGenders.includes(filters.gender as any)) {
+        throw new Error(`Invalid gender value: ${filters.gender}`);
+      }
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
     }
 
     if (filters?.organizationId) {
@@ -1919,6 +2059,7 @@ export class DatabaseStorage implements IStorage {
     gender?: string;
     position?: string;
     includeUnverified?: boolean;
+    includeUnknownBirthYear?: boolean;
   }): Promise<any[]> {
     // First, query measurements with user data (no team joins yet)
     const query = db.select({
@@ -1972,11 +2113,32 @@ export class DatabaseStorage implements IStorage {
     if (filters?.dateTo) {
       conditions.push(lte(measurements.date, filters.dateTo));
     }
+    // Birth year filtering (applied to users table)
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
+    // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
     if (filters?.birthYearFrom) {
-      conditions.push(gte(users.birthYear, filters.birthYearFrom));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            isNull(users.birthDate)
+          )
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+      }
     }
     if (filters?.birthYearTo) {
-      conditions.push(lte(users.birthYear, filters.birthYearTo));
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+            isNull(users.birthDate)
+          )
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+      }
     }
     if (filters?.search) {
       conditions.push(sql`${users.fullName} ILIKE ${'%' + filters.search + '%'}`);
@@ -2193,11 +2355,13 @@ export class DatabaseStorage implements IStorage {
     if (!user) throw new Error("User not found");
 
     const measurementDate = new Date(measurement.date);
-    let age = measurementDate.getFullYear() - (user.birthYear || 0);
+    let age = 0;
 
-    // Use birthDate for more precise age calculation if available
+    // Calculate age from birthDate (source of truth)
+    // Note: birthYear field is not reliably maintained
     if (user.birthDate) {
       const birthDate = new Date(user.birthDate);
+      age = measurementDate.getFullYear() - birthDate.getFullYear();
       const birthdayThisYear = new Date(measurementDate.getFullYear(), birthDate.getMonth(), birthDate.getDate());
       if (measurementDate < birthdayThisYear) {
         age -= 1;
@@ -2933,6 +3097,896 @@ export class DatabaseStorage implements IStorage {
 
     // Start async cleanup (non-blocking)
     attemptCleanup(1);
+  }
+
+  // ========================================================================
+  // SITE METRICS (Master Metric Catalog)
+  // ========================================================================
+
+  async getSiteMetrics(filters?: { includeInactive?: boolean }): Promise<SiteMetric[]> {
+    const conditions = [];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(siteMetrics.isActive, true));
+    }
+
+    const results = await db
+      .select()
+      .from(siteMetrics)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(siteMetrics.displayOrder), asc(siteMetrics.label));
+
+    return results;
+  }
+
+  async getSiteMetric(code: string): Promise<SiteMetric | undefined> {
+    const [metric] = await db
+      .select()
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, code))
+      .limit(1);
+
+    return metric;
+  }
+
+  async createSiteMetric(metric: InsertSiteMetric, createdBy: string): Promise<SiteMetric> {
+    try {
+      const [created] = await db
+        .insert(siteMetrics)
+        .values({
+          ...metric,
+          // Convert numeric validation values to strings for decimal columns
+          validationMin: metric.validationMin !== undefined ? String(metric.validationMin) : undefined,
+          validationMax: metric.validationMax !== undefined ? String(metric.validationMax) : undefined,
+          createdBy,
+          createdAt: new Date(),
+        })
+        .returning();
+
+      return created;
+    } catch (error: any) {
+      // Handle unique constraint violation (duplicate metric code)
+      if (error.code === '23505') {
+        throw new Error(`Metric with code ${metric.code} already exists`);
+      }
+      throw error;
+    }
+  }
+
+  async updateSiteMetric(code: string, metric: Partial<UpdateSiteMetric>): Promise<SiteMetric> {
+    const [updated] = await db
+      .update(siteMetrics)
+      .set({
+        ...metric,
+        // Convert numeric validation values to strings for decimal columns
+        validationMin: metric.validationMin !== undefined ? String(metric.validationMin) : undefined,
+        validationMax: metric.validationMax !== undefined ? String(metric.validationMax) : undefined,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteMetrics.code, code))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site metric with code ${code} not found`);
+    }
+
+    return updated;
+  }
+
+  async toggleSiteMetricStatus(code: string, isActive: boolean): Promise<SiteMetric> {
+    const [updated] = await db
+      .update(siteMetrics)
+      .set({
+        isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteMetrics.code, code))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site metric with code ${code} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteSiteMetric(code: string): Promise<void> {
+    // Check if metric is a system default (cannot be deleted)
+    const [metric] = await db
+      .select()
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, code))
+      .limit(1);
+
+    if (!metric) {
+      throw new Error(`Site metric with code ${code} not found`);
+    }
+
+    if (metric.isSystemDefault) {
+      throw new Error(`Cannot delete system default metric: ${code}`);
+    }
+
+    // Check if metric is used in any measurements
+    const [measurementCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(measurements)
+      .where(eq(measurements.metric, code));
+
+    if (measurementCount.count > 0) {
+      throw new Error(
+        `Cannot delete metric ${code}: ${measurementCount.count} measurement(s) exist. ` +
+        `Disable the metric instead to hide it from new measurements.`
+      );
+    }
+
+    // Delete the metric (this will cascade to organization_metrics)
+    await db.delete(siteMetrics).where(eq(siteMetrics.code, code));
+  }
+
+  // ========================================================================
+  // ORGANIZATION METRICS (Org-level metric enablement)
+  // ========================================================================
+
+  async getOrganizationMetrics(
+    organizationId: string,
+    filters?: { enabledOnly?: boolean }
+  ): Promise<(OrganizationMetric & { siteMetric: SiteMetric })[]> {
+    const conditions = [
+      eq(organizationMetrics.organizationId, organizationId),
+      eq(siteMetrics.isActive, true) // Only return metrics that are active at site level
+    ];
+
+    if (filters?.enabledOnly) {
+      conditions.push(eq(organizationMetrics.isEnabled, true));
+    }
+
+    const results = await db
+      .select()
+      .from(organizationMetrics)
+      .innerJoin(siteMetrics, eq(organizationMetrics.metricCode, siteMetrics.code))
+      .where(and(...conditions))
+      .orderBy(
+        asc(organizationMetrics.displayOrder),
+        asc(siteMetrics.displayOrder),
+        asc(siteMetrics.label)
+      );
+
+    return results.map(row => ({
+      ...row.organization_metrics,
+      siteMetric: row.site_metrics,
+    }));
+  }
+
+  async getOrganizationMetric(
+    organizationId: string,
+    metricCode: string
+  ): Promise<OrganizationMetric | undefined> {
+    const [result] = await db
+      .select()
+      .from(organizationMetrics)
+      .where(
+        and(
+          eq(organizationMetrics.organizationId, organizationId),
+          eq(organizationMetrics.metricCode, metricCode)
+        )
+      )
+      .limit(1);
+
+    return result;
+  }
+
+  async enableMetricForOrganization(
+    organizationId: string,
+    metricCode: string
+  ): Promise<OrganizationMetric> {
+    // Check if already exists
+    const existing = await this.getOrganizationMetric(organizationId, metricCode);
+
+    if (existing) {
+      // Update to enabled if it exists
+      return this.updateOrganizationMetric(organizationId, metricCode, { isEnabled: true });
+    }
+
+    // Create new entry
+    const [created] = await db
+      .insert(organizationMetrics)
+      .values({
+        organizationId,
+        metricCode,
+        isEnabled: true,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async disableMetricForOrganization(
+    organizationId: string,
+    metricCode: string
+  ): Promise<OrganizationMetric> {
+    return this.updateOrganizationMetric(organizationId, metricCode, { isEnabled: false });
+  }
+
+  async updateOrganizationMetric(
+    organizationId: string,
+    metricCode: string,
+    data: Partial<UpdateOrganizationMetric>
+  ): Promise<OrganizationMetric> {
+    const [updated] = await db
+      .update(organizationMetrics)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationMetrics.organizationId, organizationId),
+          eq(organizationMetrics.metricCode, metricCode)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(
+        `Organization metric not found for org ${organizationId} and metric ${metricCode}`
+      );
+    }
+
+    return updated;
+  }
+
+  async bulkEnableMetricsForOrganization(
+    organizationId: string,
+    metricCodes: string[]
+  ): Promise<OrganizationMetric[]> {
+    // Use transaction to ensure atomicity
+    return await db.transaction(async (tx: any) => {
+      // Validate all metrics exist and are active in a single query
+      const activeMetrics = await tx
+        .select()
+        .from(siteMetrics)
+        .where(
+          and(
+            inArray(siteMetrics.code, metricCodes),
+            eq(siteMetrics.isActive, true)
+          )
+        );
+
+      // Check if all requested metrics were found and are active
+      if (activeMetrics.length !== metricCodes.length) {
+        const foundCodes = activeMetrics.map((m: any) => m.code);
+        const missingCodes = metricCodes.filter(code => !foundCodes.includes(code));
+        throw new Error(
+          `Some metrics are not found or not active: ${missingCodes.join(', ')}`
+        );
+      }
+
+      // Enable each metric (upsert to handle existing records)
+      const results: OrganizationMetric[] = [];
+      for (const metricCode of metricCodes) {
+        // Check if already exists
+        const [existing] = await tx
+          .select()
+          .from(organizationMetrics)
+          .where(
+            and(
+              eq(organizationMetrics.organizationId, organizationId),
+              eq(organizationMetrics.metricCode, metricCode)
+            )
+          )
+          .limit(1);
+
+        if (existing) {
+          // Update to enabled if it exists
+          const [updated] = await tx
+            .update(organizationMetrics)
+            .set({
+              isEnabled: true,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(organizationMetrics.organizationId, organizationId),
+                eq(organizationMetrics.metricCode, metricCode)
+              )
+            )
+            .returning();
+          results.push(updated);
+        } else {
+          // Create new entry
+          const [created] = await tx
+            .insert(organizationMetrics)
+            .values({
+              organizationId,
+              metricCode,
+              isEnabled: true,
+              createdAt: new Date(),
+            })
+            .returning();
+          results.push(created);
+        }
+      }
+
+      return results;
+    });
+  }
+
+  // ========================================================================
+  // SITE BENCHMARKS (Master benchmark catalog)
+  // ========================================================================
+
+  async getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]> {
+    const conditions = [];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(siteBenchmarks.isActive, true));
+    }
+
+    const results = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(siteBenchmarks.displayOrder), asc(siteBenchmarks.name));
+
+    return results;
+  }
+
+  async getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined> {
+    const [benchmark] = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(eq(siteBenchmarks.id, id))
+      .limit(1);
+
+    return benchmark;
+  }
+
+  async getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]> {
+    if (ids.length === 0) return [];
+
+    const benchmarks = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(inArray(siteBenchmarks.id, ids));
+
+    return benchmarks;
+  }
+
+  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
+    const [created] = await db
+      .insert(siteBenchmarks)
+      .values({
+        ...benchmark,
+        // Convert numeric values to strings for decimal columns with proper precision (DECIMAL(10,3))
+        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        createdBy,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark> {
+    const [updated] = await db
+      .update(siteBenchmarks)
+      .set({
+        ...benchmark,
+        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteBenchmarks.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site benchmark with id ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark> {
+    const [updated] = await db
+      .update(siteBenchmarks)
+      .set({
+        isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteBenchmarks.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site benchmark with id ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteSiteBenchmark(id: string): Promise<void> {
+    // Delete the benchmark in a single query with WHERE clause checking isSystemDefault
+    // This prevents TOCTOU race condition and ensures atomicity
+    const deleted = await db
+      .delete(siteBenchmarks)
+      .where(
+        and(
+          eq(siteBenchmarks.id, id),
+          eq(siteBenchmarks.isSystemDefault, false)
+        )
+      )
+      .returning();
+
+    if (!deleted || deleted.length === 0) {
+      // Check if benchmark exists and is a system default
+      const [benchmark] = await db
+        .select()
+        .from(siteBenchmarks)
+        .where(eq(siteBenchmarks.id, id))
+        .limit(1);
+
+      if (!benchmark) {
+        throw new Error(`Site benchmark with id ${id} not found`);
+      }
+
+      if (benchmark.isSystemDefault) {
+        throw new Error(`Cannot delete system default benchmark: ${id}`);
+      }
+
+      // If we get here, something else prevented the delete
+      throw new Error(`Failed to delete site benchmark: ${id}`);
+    }
+  }
+
+  // ========================================================================
+  // CUSTOM BENCHMARKS (Org-created benchmarks)
+  // ========================================================================
+
+  async getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]> {
+    const conditions = [eq(customBenchmarks.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(customBenchmarks.isActive, true));
+    }
+
+    const results = await db
+      .select()
+      .from(customBenchmarks)
+      .where(and(...conditions))
+      .orderBy(asc(customBenchmarks.displayOrder), asc(customBenchmarks.name));
+
+    return results;
+  }
+
+  async getCustomBenchmark(id: string): Promise<CustomBenchmark | undefined> {
+    const result = await db
+      .select()
+      .from(customBenchmarks)
+      .where(eq(customBenchmarks.id, id))
+      .limit(1);
+
+    return result[0];
+  }
+
+  async createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark> {
+    const [created] = await db
+      .insert(customBenchmarks)
+      .values({
+        ...benchmark,
+        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        createdBy,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async updateCustomBenchmark(organizationId: string, id: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark> {
+    const [updated] = await db
+      .update(customBenchmarks)
+      .set({
+        ...benchmark,
+        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(customBenchmarks.id, id),
+          eq(customBenchmarks.organizationId, organizationId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Custom benchmark with id ${id} not found for organization ${organizationId}`);
+    }
+
+    return updated;
+  }
+
+  async deleteCustomBenchmark(organizationId: string, id: string): Promise<void> {
+    const result = await db
+      .delete(customBenchmarks)
+      .where(
+        and(
+          eq(customBenchmarks.id, id),
+          eq(customBenchmarks.organizationId, organizationId)
+        )
+      )
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error(`Custom benchmark with id ${id} not found for organization ${organizationId}`);
+    }
+  }
+
+  // Organization Benchmarks Enablement
+
+  async getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]> {
+    const conditions = [eq(organizationBenchmarks.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(organizationBenchmarks.isEnabled, true));
+    }
+
+    return await db
+      .select()
+      .from(organizationBenchmarks)
+      .where(and(...conditions))
+      .orderBy(asc(organizationBenchmarks.createdAt));
+  }
+
+  async getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]> {
+    const conditions = [eq(organizationBenchmarks.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(organizationBenchmarks.isEnabled, true));
+    }
+
+    // Fetch site benchmarks with JOIN
+    const siteBenchmarksResults = await db
+      .select({
+        // Organization benchmark fields
+        id: organizationBenchmarks.id,
+        organizationId: organizationBenchmarks.organizationId,
+        benchmarkId: organizationBenchmarks.benchmarkId,
+        benchmarkType: organizationBenchmarks.benchmarkType,
+        isEnabled: organizationBenchmarks.isEnabled,
+        customName: organizationBenchmarks.customName,
+        displayOrder: organizationBenchmarks.displayOrder,
+        createdAt: organizationBenchmarks.createdAt,
+        updatedAt: organizationBenchmarks.updatedAt,
+        // Site benchmark details
+        name: siteBenchmarks.name,
+        metricCode: siteBenchmarks.metricCode,
+        description: siteBenchmarks.description,
+        benchmarkValue: siteBenchmarks.benchmarkValue,
+        comparisonOperator: siteBenchmarks.comparisonOperator,
+        gender: siteBenchmarks.gender,
+        ageMin: siteBenchmarks.ageMin,
+        ageMax: siteBenchmarks.ageMax,
+        position: siteBenchmarks.position,
+        level: siteBenchmarks.level,
+        isActive: siteBenchmarks.isActive,
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(siteBenchmarks, eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id))
+      .where(and(
+        eq(organizationBenchmarks.benchmarkType, 'site'),
+        ...conditions
+      ))
+      .orderBy(asc(organizationBenchmarks.createdAt));
+
+    // Fetch custom benchmarks with JOIN
+    const customBenchmarksResults = await db
+      .select({
+        // Organization benchmark fields
+        id: organizationBenchmarks.id,
+        organizationId: organizationBenchmarks.organizationId,
+        benchmarkId: organizationBenchmarks.benchmarkId,
+        benchmarkType: organizationBenchmarks.benchmarkType,
+        isEnabled: organizationBenchmarks.isEnabled,
+        customName: organizationBenchmarks.customName,
+        displayOrder: organizationBenchmarks.displayOrder,
+        createdAt: organizationBenchmarks.createdAt,
+        updatedAt: organizationBenchmarks.updatedAt,
+        // Custom benchmark details
+        name: customBenchmarks.name,
+        metricCode: customBenchmarks.metricCode,
+        description: customBenchmarks.description,
+        benchmarkValue: customBenchmarks.benchmarkValue,
+        comparisonOperator: customBenchmarks.comparisonOperator,
+        gender: customBenchmarks.gender,
+        ageMin: customBenchmarks.ageMin,
+        ageMax: customBenchmarks.ageMax,
+        position: customBenchmarks.position,
+        level: customBenchmarks.level,
+        isActive: customBenchmarks.isActive,
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(customBenchmarks, eq(organizationBenchmarks.benchmarkId, customBenchmarks.id))
+      .where(and(
+        eq(organizationBenchmarks.benchmarkType, 'custom'),
+        ...conditions
+      ))
+      .orderBy(asc(organizationBenchmarks.createdAt));
+
+    // Combine and format results
+    const allResults = [...siteBenchmarksResults, ...customBenchmarksResults];
+
+    // Convert to OrganizationBenchmarkWithDetails type
+    return allResults.map(row => ({
+      ...row,
+      benchmarkValue: Number(row.benchmarkValue),
+      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq',
+      gender: row.gender as 'Male' | 'Female' | 'Not Specified' | null,
+      level: row.level as 'college' | 'high_school' | 'club' | null,
+    }));
+  }
+
+  async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
+    // 1. Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(benchmarkId)) {
+      throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
+    }
+    if (!uuidRegex.test(organizationId)) {
+      throw new Error(`Invalid organization ID format: ${organizationId}`);
+    }
+
+    // 2. Validate that the benchmark exists and ownership (for custom)
+    if (benchmarkType === 'site') {
+      const benchmark = await this.getSiteBenchmark(benchmarkId);
+      if (!benchmark) {
+        throw new Error(`Site benchmark not found: ${benchmarkId}`);
+      }
+    } else {
+      const benchmark = await this.getCustomBenchmark(benchmarkId);
+      if (!benchmark) {
+        throw new Error(`Custom benchmark not found: ${benchmarkId}`);
+      }
+      // CRITICAL: Verify ownership for custom benchmarks
+      if (benchmark.organizationId !== organizationId) {
+        throw new Error(`Custom benchmark ${benchmarkId} does not belong to organization ${organizationId}`);
+      }
+    }
+
+    // Check if already exists
+    const [existing] = await db
+      .select()
+      .from(organizationBenchmarks)
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.benchmarkId, benchmarkId),
+          eq(organizationBenchmarks.benchmarkType, benchmarkType)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      // If already exists, just update to enabled
+      const [updated] = await db
+        .update(organizationBenchmarks)
+        .set({
+          isEnabled: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(organizationBenchmarks.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    // Use transaction with advisory lock to prevent race condition in display order assignment
+    // Advisory lock ensures only one transaction at a time can assign display_order for this organization
+    return await db.transaction(async (tx) => {
+      // Acquire advisory lock for this organization (automatically released at transaction end)
+      // Use hash of organizationId UUID to get a stable integer key
+      const orgIdHash = organizationId.split('-').reduce((acc, part) => acc + parseInt(part, 16), 0);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${orgIdHash})`);
+
+      // Now safely compute next display order (protected by advisory lock)
+      const existingBenchmarks = await tx
+        .select({ displayOrder: organizationBenchmarks.displayOrder })
+        .from(organizationBenchmarks)
+        .where(eq(organizationBenchmarks.organizationId, organizationId));
+
+      // Compute max display order locally
+      const maxDisplayOrder = existingBenchmarks.length > 0
+        ? Math.max(...existingBenchmarks.map((b: { displayOrder: number | null }) => b.displayOrder ?? 0))
+        : 0;
+
+      const nextDisplayOrder = maxDisplayOrder + 1;
+
+      // Create new enablement record with unique display order
+      const [created] = await tx
+        .insert(organizationBenchmarks)
+        .values({
+          organizationId,
+          benchmarkId,
+          benchmarkType,
+          isEnabled: true,
+          displayOrder: nextDisplayOrder,
+          createdAt: new Date(),
+        })
+        .returning();
+
+      return created;
+    });
+  }
+
+  async disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
+    const [updated] = await db
+      .update(organizationBenchmarks)
+      .set({
+        isEnabled: false,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.benchmarkId, benchmarkId),
+          eq(organizationBenchmarks.benchmarkType, benchmarkType)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Organization benchmark not found for organization ${organizationId} and benchmark ${benchmarkId}`);
+    }
+
+    return updated;
+  }
+
+  async updateOrganizationBenchmarkSettings(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom', settings: Partial<UpdateOrganizationBenchmark>): Promise<OrganizationBenchmark> {
+    const [updated] = await db
+      .update(organizationBenchmarks)
+      .set({
+        ...settings,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.benchmarkId, benchmarkId),
+          eq(organizationBenchmarks.benchmarkType, benchmarkType)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Organization benchmark not found for organization ${organizationId} and benchmark ${benchmarkId}`);
+    }
+
+    return updated;
+  }
+
+  // Evaluation Queries
+
+  async getApplicableBenchmarks(
+    organizationId: string,
+    metricCode: string,
+    athleteAttributes: {
+      gender?: string;
+      age?: number;
+      position?: string;
+      level?: string;
+    }
+  ): Promise<(SiteBenchmark | CustomBenchmark)[]> {
+    // Build filter conditions for athlete attributes
+    const buildAttributeFilters = (tableName: typeof siteBenchmarks | typeof customBenchmarks) => {
+      const conditions: SQL[] = [
+        eq(tableName.metricCode, metricCode),
+        eq(tableName.isActive, true)
+      ];
+
+      // Gender filter: NULL OR matches
+      if (athleteAttributes.gender) {
+        conditions.push(
+          or(
+            isNull(tableName.gender),
+            eq(tableName.gender, athleteAttributes.gender)
+          )!
+        );
+      }
+
+      // Age filter: (ageMin IS NULL OR ageMin <= age) AND (ageMax IS NULL OR ageMax >= age)
+      // Business Rule: If athlete age is undefined/NULL (no birth year), age-constrained
+      // benchmarks will NOT match. Only benchmarks with NULL age bounds will match.
+      // This ensures we don't compare athletes without age data against age-specific targets.
+      if (athleteAttributes.age !== undefined) {
+        conditions.push(
+          or(
+            isNull(tableName.ageMin),
+            lte(tableName.ageMin, athleteAttributes.age)
+          )!
+        );
+        conditions.push(
+          or(
+            isNull(tableName.ageMax),
+            gte(tableName.ageMax, athleteAttributes.age)
+          )!
+        );
+      }
+
+      // Position filter: NULL OR matches
+      if (athleteAttributes.position) {
+        conditions.push(
+          or(
+            isNull(tableName.position),
+            eq(tableName.position, athleteAttributes.position)
+          )!
+        );
+      }
+
+      // Level filter: NULL OR matches
+      if (athleteAttributes.level) {
+        conditions.push(
+          or(
+            isNull(tableName.level),
+            eq(tableName.level, athleteAttributes.level)
+          )!
+        );
+      }
+
+      return conditions;
+    };
+
+    // Get enabled site benchmarks for this organization
+    const enabledSiteBenchmarks = await db
+      .select({
+        benchmark: siteBenchmarks,
+        orgBenchmark: organizationBenchmarks
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(
+        siteBenchmarks,
+        and(
+          eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
+          eq(organizationBenchmarks.benchmarkType, 'site')
+        )
+      )
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.isEnabled, true),
+          ...buildAttributeFilters(siteBenchmarks)
+        )
+      );
+
+    // Get enabled custom benchmarks for this organization
+    const enabledCustomBenchmarks = await db
+      .select({
+        benchmark: customBenchmarks,
+        orgBenchmark: organizationBenchmarks
+      })
+      .from(organizationBenchmarks)
+      .innerJoin(
+        customBenchmarks,
+        and(
+          eq(organizationBenchmarks.benchmarkId, customBenchmarks.id),
+          eq(organizationBenchmarks.benchmarkType, 'custom')
+        )
+      )
+      .where(
+        and(
+          eq(organizationBenchmarks.organizationId, organizationId),
+          eq(organizationBenchmarks.isEnabled, true),
+          eq(customBenchmarks.organizationId, organizationId), // Security: ensure custom benchmark belongs to org
+          ...buildAttributeFilters(customBenchmarks)
+        )
+      );
+
+    // Combine results (UNION)
+    const allBenchmarks = [
+      ...enabledSiteBenchmarks.map(row => row.benchmark),
+      ...enabledCustomBenchmarks.map(row => row.benchmark)
+    ];
+
+    return allBenchmarks;
   }
 
 }

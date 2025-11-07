@@ -64,6 +64,8 @@ export default function Athletes() {
     birthYearFrom: "",
     birthYearTo: "",
     search: "",
+    gender: "all",
+    includeUnknownBirthYear: false,
   });
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -93,6 +95,22 @@ export default function Athletes() {
   }, [filters.teamId, filters.birthYearFrom, filters.birthYearTo, debouncedSearch, sortColumn, sortDirection]);
 
   const { toast } = useToast();
+
+  // Validate birth year range
+  useEffect(() => {
+    if (filters.birthYearFrom && filters.birthYearTo) {
+      const fromYear = parseInt(filters.birthYearFrom, 10);
+      const toYear = parseInt(filters.birthYearTo, 10);
+
+      if (fromYear > toYear) {
+        toast({
+          title: "Invalid Birth Year Range",
+          description: "Birth year 'From' must be less than or equal to birth year 'To'.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [filters.birthYearFrom, filters.birthYearTo, toast]);
   const queryClient = useQueryClient();
 
   const { data: teams = [] } = useQuery({
@@ -135,6 +153,8 @@ export default function Athletes() {
       if (filters.teamId && filters.teamId !== 'all') params.append('teamId', filters.teamId);
       if (filters.birthYearFrom) params.append('birthYearFrom', filters.birthYearFrom);
       if (filters.birthYearTo) params.append('birthYearTo', filters.birthYearTo);
+      if (filters.gender && filters.gender !== 'all') params.append('gender', filters.gender);
+      if (filters.includeUnknownBirthYear) params.append('includeUnknownBirthYear', 'true');
       if (debouncedSearch) params.append('search', debouncedSearch);
 
       // Always include organization context for proper filtering
@@ -402,6 +422,8 @@ export default function Athletes() {
       birthYearFrom: "",
       birthYearTo: "",
       search: "",
+      gender: "all",
+      includeUnknownBirthYear: false,
     });
     setCurrentPage(1); // Reset to page 1 when clearing filters
   };
@@ -699,14 +721,31 @@ export default function Athletes() {
               </Select>
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+              <Select value={filters.gender} onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}>
+                <SelectTrigger data-testid="select-gender-filter">
+                  <SelectValue placeholder="All Genders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Genders</SelectItem>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Not Specified">Not Specified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year From</label>
-              <Select value={filters.birthYearFrom} onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearFrom: value }))}>
-                <SelectTrigger>
+              <Select
+                value={filters.birthYearFrom || 'any'}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearFrom: value === 'any' ? '' : value }))}
+              >
+                <SelectTrigger data-testid="select-birth-year-from">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
+                  {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
@@ -714,17 +753,33 @@ export default function Athletes() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Birth Year To</label>
-              <Select value={filters.birthYearTo} onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearTo: value }))}>
-                <SelectTrigger>
+              <Select
+                value={filters.birthYearTo || 'any'}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, birthYearTo: value === 'any' ? '' : value }))}
+              >
+                <SelectTrigger data-testid="select-birth-year-to">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any</SelectItem>
-                  {Array.from({ length: 40 }, (_, i) => 2025 - i).map(year => (
+                  {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(year => (
                     <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center space-x-2 pt-6">
+              <Checkbox
+                id="includeUnknownBirthYear"
+                checked={filters.includeUnknownBirthYear}
+                onCheckedChange={(checked) => setFilters(prev => ({ ...prev, includeUnknownBirthYear: !!checked }))}
+              />
+              <label
+                htmlFor="includeUnknownBirthYear"
+                className="text-sm font-medium text-gray-700 cursor-pointer"
+              >
+                Include athletes with unknown birth year
+              </label>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
@@ -742,7 +797,7 @@ export default function Athletes() {
             </div>
           </div>
 
-          {(filters.teamId || filters.birthYearFrom || filters.birthYearTo || filters.search) && (
+          {(filters.teamId || filters.gender !== 'all' || filters.birthYearFrom || filters.birthYearTo || filters.search) && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
               <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-600">Applied filters:</span>
@@ -750,6 +805,11 @@ export default function Athletes() {
                   {filters.teamId && filters.teamId !== 'all' && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                       Team: {filters.teamId === 'none' ? 'Independent Athletes' : teams?.find((t: any) => t.id === filters.teamId)?.name}
+                    </span>
+                  )}
+                  {filters.gender && filters.gender !== 'all' && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                      Gender: {filters.gender}
                     </span>
                   )}
                   {filters.birthYearFrom && (

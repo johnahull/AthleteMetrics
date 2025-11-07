@@ -82,8 +82,8 @@ test.describe('Measurement Entry Tests', () => {
     // Submit the form
     await page.click('[data-testid="button-submit-measurement"], button[type="submit"]:has-text("Add"), button:has-text("Save Measurement")');
 
-    // Wait for submission
-    await page.waitForLoadState('networkidle');
+    // Wait for success message to appear
+    await page.waitForSelector('text=/measurement.*added|success|saved/i', { timeout: 5000 });
 
     // Verify success message
     const successMessage = await page.locator('text=/measurement.*added|success|saved/i').count();
@@ -109,19 +109,22 @@ test.describe('Measurement Entry Tests', () => {
     await page.fill('[data-testid="input-value"], input[name="value"]', testMeasurement.value.toString());
 
     await page.click('[data-testid="button-submit-measurement"], button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+    // Wait for success message
+    await page.waitForSelector('text=/measurement.*added|success|saved/i', { timeout: 5000 });
 
     // Navigate to athlete profile
     // This is simplified - actual implementation may vary
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 5000 });
 
     // Click first athlete
     const viewButton = page.locator('[data-testid^="button-view-athlete-"]').first();
     const viewButtonExists = await viewButton.count();
     if (viewButtonExists > 0) {
       await viewButton.click();
-      await page.waitForLoadState('networkidle');
+      // Wait for profile page to load
+      await page.waitForSelector('text=/FLY10|10-yard|fly time/i', { timeout: 5000 });
 
       // Verify measurement appears in profile
       const measurementInProfile = await page.locator('text=/FLY10|10-yard|fly time/i').count();
@@ -137,7 +140,8 @@ test.describe('Measurement Entry Tests', () => {
       // Button might be disabled, which is also valid
     });
 
-    await page.waitForLoadState('networkidle');
+    // Wait for validation error to appear
+    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i', { timeout: 3000 });
 
     // Should show validation error
     const validationError = await page.locator('.error, [role="alert"], text=/required|must|invalid/i').count();
@@ -162,11 +166,13 @@ test.describe('Measurement Entry Tests', () => {
 
     await page.fill('[data-testid="input-value"], input[name="value"]', testMeasurement.value.toString());
     await page.click('[data-testid="button-submit-measurement"], button[type="submit"]');
-    await page.waitForLoadState('networkidle');
+    // Wait for success message
+    await page.waitForSelector('text=/measurement.*added|success|saved/i', { timeout: 5000 });
 
     // Navigate to measurements view or athlete profile
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 5000 });
 
     // Find verify button (if it exists)
     const verifyButton = page.locator('[data-testid^="button-verify-measurement-"], button:has-text("Verify")');
@@ -174,7 +180,8 @@ test.describe('Measurement Entry Tests', () => {
 
     if (verifyExists > 0) {
       await verifyButton.first().click();
-      await page.waitForLoadState('networkidle');
+      // Wait for verification to complete
+      await page.waitForSelector('text=/verified|confirmed/i', { timeout: 3000 });
 
       // Verify success
       const verified = await page.locator('text=/verified|confirmed/i').count();
@@ -185,7 +192,8 @@ test.describe('Measurement Entry Tests', () => {
   test('should successfully edit an existing measurement', async ({ page }) => {
     // Navigate to measurements list or athlete profile
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 5000 });
 
     // View athlete profile
     const viewButton = page.locator('[data-testid^="button-view-athlete-"]').first();
@@ -193,7 +201,8 @@ test.describe('Measurement Entry Tests', () => {
 
     if (viewButtonExists > 0) {
       await viewButton.click();
-      await page.waitForLoadState('networkidle');
+      // Wait for profile page to load with measurements
+      await page.waitForSelector('[data-testid^="button-edit-measurement-"], button:has-text("Edit"), .measurement-row', { timeout: 5000 });
 
       // Find edit measurement button
       const editMeasurementButton = page.locator('[data-testid^="button-edit-measurement-"], button:has-text("Edit")');
@@ -211,7 +220,8 @@ test.describe('Measurement Entry Tests', () => {
 
         // Save changes
         await page.click('button[type="submit"]:has-text("Save"), button:has-text("Update")');
-        await page.waitForLoadState('networkidle');
+        // Wait for update success
+        await expect(page.locator(`text=${newValue}`)).toBeVisible({ timeout: 3000 });
 
         // Verify update success
         const updated = await page.locator(`text=${newValue}`).count();
@@ -223,14 +233,16 @@ test.describe('Measurement Entry Tests', () => {
   test('should successfully delete a measurement', async ({ page }) => {
     // Navigate to athlete profile
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 5000 });
 
     const viewButton = page.locator('[data-testid^="button-view-athlete-"]').first();
     const viewButtonExists = await viewButton.count();
 
     if (viewButtonExists > 0) {
       await viewButton.click();
-      await page.waitForLoadState('networkidle');
+      // Wait for profile page with measurements to load
+      await page.waitForSelector('[data-testid^="button-delete-measurement-"], .measurement-row, tr', { timeout: 5000 });
 
       // Get initial measurement count
       const initialCount = await page.locator('[data-testid^="button-delete-measurement-"], .measurement-row, tr').count();
@@ -249,7 +261,11 @@ test.describe('Measurement Entry Tests', () => {
           await confirmButton.click();
         }
 
-        await page.waitForLoadState('networkidle');
+        // Wait for deletion to complete
+        await expect(async () => {
+          const currentCount = await page.locator('[data-testid^="button-delete-measurement-"], .measurement-row, tr').count();
+          expect(currentCount).toBeLessThan(initialCount);
+        }).toPass({ timeout: 5000 });
 
         // Verify measurement was deleted
         const finalCount = await page.locator('[data-testid^="button-delete-measurement-"], .measurement-row, tr').count();
@@ -289,7 +305,8 @@ test.describe('Measurement Entry Tests', () => {
 
       // Submit
       await page.click('[data-testid="button-submit-measurement"], button[type="submit"]');
-      await page.waitForLoadState('networkidle');
+      // Wait for success message
+      await page.waitForSelector('text=/measurement.*added|success/i', { timeout: 5000 });
     }
 
     // Verify success messages appeared for all types
@@ -300,14 +317,16 @@ test.describe('Measurement Entry Tests', () => {
   test('should display measurement history for athlete', async ({ page }) => {
     // Navigate to athlete profile
     await page.goto(`${STAGING_URL}/athletes`);
-    await page.waitForLoadState('networkidle');
+    // Wait for athletes page to load
+    await page.waitForSelector('[data-testid^="button-view-athlete-"]', { timeout: 5000 });
 
     const viewButton = page.locator('[data-testid^="button-view-athlete-"]').first();
     const viewButtonExists = await viewButton.count();
 
     if (viewButtonExists > 0) {
       await viewButton.click();
-      await page.waitForLoadState('networkidle');
+      // Wait for profile page with measurement data to load
+      await page.waitForSelector('text=/measurement.*history|performance.*history|recent measurements|FLY10|VERTICAL|DASH|seconds|inches/i', { timeout: 5000 });
 
       // Look for measurement history section
       const historySection = await page.locator('text=/measurement.*history|performance.*history|recent measurements/i').count();

@@ -23,14 +23,35 @@ export interface GroupingDimensions {
   schoolGrades?: string[];
 }
 
-// Simplified analytics filters - only essential fields used by the system
+/**
+ * Simplified analytics filters - only essential fields used by the system
+ */
 export interface AnalyticsFilters {
+  /** Organization context for all queries */
   organizationId: string;
-  athleteIds?: string[]; // For specific athlete selection
-  teams?: string[]; // Filter by team membership
+
+  /** For specific athlete selection */
+  athleteIds?: string[];
+
+  /** Filter by team membership */
+  teams?: string[];
+
+  /** Filter by gender */
   genders?: ('Male' | 'Female' | 'Not Specified')[];
-  birthYearFrom?: number; // Birth year range start
-  birthYearTo?: number; // Birth year range end
+
+  /** Birth year range start */
+  birthYearFrom?: number;
+
+  /** Birth year range end */
+  birthYearTo?: number;
+
+  /**
+   * Whether to include athletes with NULL birthDate in results when filtering by birth year.
+   *
+   * @default false - Athletes with unknown birth years are excluded from filtered results
+   * @example true - Include athletes without birth dates in filtered results
+   */
+  includeUnknownBirthYear?: boolean;
 }
 
 // Metrics selection with priority
@@ -151,6 +172,7 @@ export type ChartType =
   | 'multi_line'
   | 'box_swarm_combo'
   | 'time_series_box_swarm'
+  | 'time_series_violin'
   | 'violin_plot';
 
 export interface ChartConfiguration {
@@ -381,7 +403,31 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   }
 };
 
-// Metric units and labels
+// Dynamic metric configuration interface
+// This replaces the hardcoded METRIC_CONFIG with API-fetched data
+export interface DynamicMetricConfig {
+  code: string;
+  label: string;
+  category?: string;
+  unit: string;
+  lowerIsBetter: boolean;
+  color?: string;
+  icon?: string;
+  description?: string;
+  isActive: boolean;
+  isSystemDefault: boolean;
+}
+
+// Organization-specific metric configuration
+export interface OrganizationMetricConfig extends DynamicMetricConfig {
+  isEnabled: boolean;
+  customLabel?: string;
+  displayOrder?: number;
+}
+
+// Legacy: Metric units and labels (DEPRECATED - use API-fetched metrics instead)
+// Kept for backward compatibility during migration
+// TODO: Remove after all components updated to use dynamic metrics
 export const METRIC_CONFIG = {
   FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', lowerIsBetter: true },
   VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', lowerIsBetter: false },

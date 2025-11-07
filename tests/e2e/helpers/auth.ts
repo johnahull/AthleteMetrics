@@ -8,7 +8,7 @@ import { Page, expect } from '@playwright/test';
 import { getUserByRole } from '../fixtures/test-users';
 import { clickWithFallback, clickWithMultipleFallbacks } from './selectors';
 
-const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
+const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
 /**
  * Login with specific credentials
@@ -26,7 +26,7 @@ export async function loginWithCredentials(
   shouldSucceed: boolean = true
 ): Promise<void> {
   // Navigate to login page
-  await page.goto(`${STAGING_URL}/login`);
+  await page.goto(`${TESTING_URL}/login`);
   await page.waitForLoadState('networkidle');
 
   // Wait for login form to be visible (React SPA needs time to mount)
@@ -138,7 +138,7 @@ export async function logout(page: Page): Promise<void> {
       error instanceof Error ? error.message : error
     );
     // If no logout button found, navigate to logout endpoint directly
-    await page.goto(`${STAGING_URL}/api/auth/logout`);
+    await page.goto(`${TESTING_URL}/api/auth/logout`);
   }
 
   await page.waitForLoadState('networkidle');

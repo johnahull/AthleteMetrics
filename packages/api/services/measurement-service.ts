@@ -15,6 +15,7 @@ import {
   type Team,
   type Organization,
 } from '@shared/schema';
+import { parseDateFilter } from '@shared/date-utils';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
 import { PAGINATION } from '../constants/pagination';
@@ -36,6 +37,7 @@ export interface MeasurementFilters {
   gender?: string;
   position?: string;
   includeUnverified?: boolean;
+  includeUnknownBirthYear?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -130,11 +132,13 @@ export class MeasurementService {
       if (!user) throw new Error('User not found');
 
       const measurementDate = new Date(measurement.date);
-      let age = measurementDate.getFullYear() - (user.birthYear || 0);
+      let age = 0;
 
-      // Use birthDate for more precise age calculation if available
+      // Calculate age from birthDate (source of truth)
+      // Note: birthYear field is not reliably maintained
       if (user.birthDate) {
         const birthDate = new Date(user.birthDate);
+        age = measurementDate.getFullYear() - birthDate.getFullYear();
         const birthdayThisYear = new Date(
           measurementDate.getFullYear(),
           birthDate.getMonth(),
@@ -533,19 +537,119 @@ export class MeasurementService {
     }
 
     if (filters?.organizationId) {
-      conditions.push(eq(measurements.organizationId, filters.organizationId));
+      // LEGACY DATA HANDLING:
+      // Include measurements with matching organizationId OR NULL organizationId.
+      // NULL organization IDs represent legacy measurements before organization tracking was implemented.
+      //
+      // SECURITY CONSIDERATION:
+      // This means ALL organizations can see legacy (NULL) measurements. This is intentional for
+      // backward compatibility, as legacy measurements were created before multi-tenant isolation.
+      //
+      // FUTURE IMPROVEMENT:
+      // Consider backfilling organizationId for legacy measurements by associating them with
+      // their team's organization. Once backfilled, remove the NULL check for stricter isolation.
+      // See: docs/LEGACY_DATA_MIGRATION.md (if exists) or create a ticket for data migration.
+      //
+      // CURRENT BEHAVIOR:
+      // - Organization A sees: measurements with org_id = A + measurements with org_id = NULL
+      // - Organization B sees: measurements with org_id = B + measurements with org_id = NULL
+      // - Site admins see: all measurements (allowCrossOrganization = true bypasses this filter)
+      conditions.push(
+        or(
+          eq(measurements.organizationId, filters.organizationId),
+          isNull(measurements.organizationId)
+        )!
+      );
     }
 
     if (filters?.dateFrom) {
-      conditions.push(gte(measurements.date, new Date(filters.dateFrom).toISOString()));
+      // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
+      // PostgreSQL date column only stores date part, not time
+      // Defense-in-depth: Parse and validate even though validated at route layer
+      const dateOnly = parseDateFilter(filters.dateFrom);
+      conditions.push(gte(measurements.date, dateOnly));
     }
 
     if (filters?.dateTo) {
-      conditions.push(lte(measurements.date, new Date(filters.dateTo).toISOString()));
+      // Convert ISO datetime to date-only string (YYYY-MM-DD) for comparison with date column
+      // PostgreSQL date column only stores date part, not time
+      // Defense-in-depth: Parse and validate even though validated at route layer
+      const dateOnly = parseDateFilter(filters.dateTo);
+      conditions.push(lte(measurements.date, dateOnly));
     }
 
     if (!filters?.includeUnverified) {
       conditions.push(eq(measurements.isVerified, true));
+    }
+
+    // Team filtering (teamIds array)
+    if (filters?.teamIds && filters.teamIds.length > 0) {
+      conditions.push(inArray(measurements.teamId, filters.teamIds));
+    }
+
+    // Gender filtering (applied to users table)
+    if (filters?.gender) {
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
+    }
+
+    // Sport filtering (applied to users table with array containment)
+    // PostgreSQL array operator @> checks if left array contains right array
+    // SECURITY: Drizzle's sql template tag automatically parameterizes ${filters.sport}
+    // to prevent SQL injection. The value is bound as a parameter, not concatenated.
+    if (filters?.sport) {
+      // Additional validation: Ensure sport value is reasonable
+      if (filters.sport.length > 100) {
+        throw new Error('Sport parameter exceeds maximum length');
+      }
+      conditions.push(sql`${users.sports} @> ARRAY[${filters.sport}]::text[]`);
+    }
+
+    // Birth year filtering (applied to users table)
+    // Note: Only include NULL birthDate users if explicitly requested via includeUnknownBirthYear
+    // Uses EXTRACT(YEAR FROM birthDate) as birthDate is the source of truth (birthYear is computed field)
+    if (filters?.birthYearFrom !== undefined && filters?.birthYearTo !== undefined) {
+      // When both from and to are specified, combine them into a single OR condition
+      // to avoid redundant NULL checks
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            and(
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+              sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+            )!,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(
+          and(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`
+          )!
+        );
+      }
+    } else if (filters?.birthYearFrom !== undefined) {
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer >= ${filters.birthYearFrom}`);
+      }
+    } else if (filters?.birthYearTo !== undefined) {
+      if (filters?.includeUnknownBirthYear) {
+        conditions.push(
+          or(
+            sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`,
+            isNull(users.birthDate)
+          )!
+        );
+      } else {
+        conditions.push(sql`EXTRACT(YEAR FROM ${users.birthDate})::integer <= ${filters.birthYearTo}`);
+      }
     }
 
     // Pagination parameters with safety limits to prevent memory exhaustion
@@ -608,6 +712,7 @@ export class MeasurementService {
         .offset(offset),
       db.select({ count: sql<number>`count(*)::int` })
         .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
         .where(whereClause)
     ]);
 
