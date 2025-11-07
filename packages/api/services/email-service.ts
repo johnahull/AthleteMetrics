@@ -217,6 +217,9 @@ export class EmailService {
    */
   private generateInvitationTemplate(data: InvitationEmailData): string {
     try {
+      // Generate the invitation URL once to ensure consistency between button and display text
+      const invitationUrl = data.invitationLink;
+
       return `
 <!DOCTYPE html>
 <html>
@@ -260,7 +263,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${data.invitationLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${invitationUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Accept Invitation
                     </a>
                   </td>
@@ -272,7 +275,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.invitationLink)}
+                ${invitationUrl}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
