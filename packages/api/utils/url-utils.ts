@@ -11,8 +11,23 @@ const TOKEN_VERSION = 'v4' as const;
  * Gets the base URL for the application, removing any trailing slash
  * to ensure consistent URL generation.
  *
+ * Priority order:
+ * 1. APP_URL environment variable (production/staging)
+ * 2. Request protocol and host (development fallback)
+ *
  * @param req - Express request object
  * @returns Base URL without trailing slash
+ *
+ * @example
+ * // With APP_URL set
+ * getBaseUrl(req) // => 'https://app.athletemetrics.com'
+ *
+ * // Without APP_URL (development)
+ * getBaseUrl(req) // => 'http://localhost:5000'
+ *
+ * // Handles trailing slashes
+ * process.env.APP_URL = 'https://example.com/'
+ * getBaseUrl(req) // => 'https://example.com'
  */
 export function getBaseUrl(req: Request): string {
   return (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');

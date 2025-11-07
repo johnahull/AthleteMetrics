@@ -592,6 +592,9 @@ export async function registerRoutes(app: Express) {
   // The Set stores session IDs that have been successfully synced
   const syncedSessions = new Set<string>();
 
+  // Session table name constant (used by connect-pg-simple)
+  const SESSION_TABLE = 'session';
+
   app.use(async (req: Request, res: Response, next: NextFunction) => {
     // Only sync if user is authenticated and session exists
     if (req.session && (req.session as any).user?.id) {
@@ -601,6 +604,11 @@ export async function registerRoutes(app: Express) {
       // Only update if the session has a user but the database column is not yet set
       // AND if we haven't already synced this session (tracked via in-memory cache)
       if (sessionUserId && req.sessionID && !syncedSessions.has(req.sessionID)) {
+        // Mark as syncing BEFORE the database query to prevent race conditions
+        // If multiple concurrent requests arrive for the same session, only the first
+        // will proceed with the UPDATE query
+        syncedSessions.add(req.sessionID);
+
         try {
           const { pgClient } = await import("./db");
 
@@ -608,17 +616,17 @@ export async function registerRoutes(app: Express) {
           // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
           // Note: postgres-js uses SQL template strings, not .query() method
           // IMPORTANT: Only sync if the user exists (prevents FK violations during test cleanup)
+          // Note: Table name is a constant but not parameterized in the query (postgres-js limitation)
           await pgClient`
-            UPDATE session
+            UPDATE ${pgClient.unsafe(SESSION_TABLE)}
             SET user_id = ${sessionUserId}
             WHERE sid = ${req.sessionID}
             AND user_id IS NULL
             AND EXISTS (SELECT 1 FROM users WHERE id = ${sessionUserId})
           `;
-
-          // Mark as synced in memory to prevent redundant database queries
-          syncedSessions.add(req.sessionID);
         } catch (error) {
+          // Remove from cache on failure so it can be retried on next request
+          syncedSessions.delete(req.sessionID);
           // Log error but don't block the request - session is still valid
           console.error('Failed to sync session userId:', error);
         }

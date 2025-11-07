@@ -216,7 +216,8 @@ export class EmailService {
    * Generate invitation email template
    */
   private generateInvitationTemplate(data: InvitationEmailData): string {
-    return `
+    try {
+      return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -294,14 +295,19 @@ export class EmailService {
   </table>
 </body>
 </html>
-    `.trim();
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate invitation email template:', error);
+      throw new Error('Failed to generate email template');
+    }
   }
 
   /**
    * Generate welcome email template
    */
   private generateWelcomeTemplate(data: WelcomeEmailData): string {
-    return `
+    try {
+      return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -353,14 +359,19 @@ export class EmailService {
   </table>
 </body>
 </html>
-    `.trim();
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate welcome email template:', error);
+      throw new Error('Failed to generate email template');
+    }
   }
 
   /**
    * Generate email verification template
    */
   private generateVerificationTemplate(data: EmailVerificationData): string {
-    return `
+    try {
+      return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -426,14 +437,19 @@ export class EmailService {
   </table>
 </body>
 </html>
-    `.trim();
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate verification email template:', error);
+      throw new Error('Failed to generate email template');
+    }
   }
 
   /**
    * Generate password reset template
    */
   private generatePasswordResetTemplate(data: PasswordResetData): string {
-    return `
+    try {
+      return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -499,7 +515,11 @@ export class EmailService {
   </table>
 </body>
 </html>
-    `.trim();
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate password reset email template:', error);
+      throw new Error('Failed to generate email template');
+    }
   }
 }
 
