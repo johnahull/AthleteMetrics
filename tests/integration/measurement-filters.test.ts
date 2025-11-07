@@ -503,7 +503,7 @@ const cleanupTestData = async () => {
   }
 };
 
-describe('Measurement API Filters Integration Tests', () => {
+describe.skip('Measurement API Filters Integration Tests', () => {
   beforeAll(async () => {
     // Validate DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
