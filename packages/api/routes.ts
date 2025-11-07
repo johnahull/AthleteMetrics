@@ -589,8 +589,27 @@ export async function registerRoutes(app: Express) {
   // the query on the userId column actually finds sessions to delete
   // In-memory cache to track which sessions have had their userId synced to the database
   // This prevents redundant UPDATE queries on every request in stateless deployments
-  // The Set stores session IDs that have been successfully synced
-  const syncedSessions = new Set<string>();
+  // Uses a Map to store session IDs with timestamps for TTL-based cleanup
+  // Max size: 10,000 entries | TTL: 24 hours (matches session cookie lifetime)
+  const syncedSessions = new Map<string, number>();
+  const SYNCED_SESSIONS_MAX_SIZE = 10000;
+  const SYNCED_SESSIONS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Cleanup expired entries periodically to prevent memory leak
+  // Runs every hour to remove sessions older than TTL
+  setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [sessionId, timestamp] of syncedSessions.entries()) {
+      if (now - timestamp > SYNCED_SESSIONS_TTL_MS) {
+        syncedSessions.delete(sessionId);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      console.log(`Cleaned ${cleaned} expired session sync entries from cache`);
+    }
+  }, 60 * 60 * 1000); // Run every hour
 
   // Session table name constant (used by connect-pg-simple)
   const SESSION_TABLE = 'session';
@@ -603,7 +622,11 @@ export async function registerRoutes(app: Express) {
       // Check if we need to update the database userId column
       // Only update if the session has a user but the database column is not yet set
       // AND if we haven't already synced this session (tracked via in-memory cache)
-      if (sessionUserId && req.sessionID && !syncedSessions.has(req.sessionID)) {
+      // Also check if cached entry has expired (older than TTL)
+      const cachedTimestamp = syncedSessions.get(req.sessionID);
+      const isExpired = cachedTimestamp && (Date.now() - cachedTimestamp > SYNCED_SESSIONS_TTL_MS);
+
+      if (sessionUserId && req.sessionID && (!cachedTimestamp || isExpired)) {
         try {
           const { pgClient } = await import("./db");
 
@@ -624,7 +647,14 @@ export async function registerRoutes(app: Express) {
           // Only add to cache if we actually updated a row (count > 0)
           // This prevents caching failed updates while still being race-safe
           if (result.count > 0) {
-            syncedSessions.add(req.sessionID);
+            // Implement simple LRU eviction: if at max size, remove oldest entry
+            if (syncedSessions.size >= SYNCED_SESSIONS_MAX_SIZE) {
+              const oldestKey = syncedSessions.keys().next().value;
+              if (oldestKey) {
+                syncedSessions.delete(oldestKey);
+              }
+            }
+            syncedSessions.set(req.sessionID, Date.now());
           }
         } catch (error) {
           // Log error but don't block the request - session is still valid
