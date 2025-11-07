@@ -42,16 +42,18 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
   });
 
   beforeEach(async () => {
+    // Use timestamp to ensure unique names across test runs
+    const timestamp = Date.now();
 
     // Create test organization
     const [org] = await db.insert(organizations).values({
-      name: 'Test Org for Admin Deletion'
+      name: `Test Org for Admin Deletion ${timestamp}`
     }).returning();
     testOrg = org;
 
     // Create test team
     const [team] = await db.insert(teams).values({
-      name: 'Test Team for Admin Deletion',
+      name: `Test Team for Admin Deletion ${timestamp}`,
       level: 'College',
       organizationId: testOrg.id
     }).returning();
@@ -59,11 +61,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     // Create site admin to be deleted
     const [admin] = await db.insert(users).values({
-      username: 'site_admin_to_delete',
+      username: `site_admin_to_delete_${timestamp}`,
       firstName: 'Admin',
       lastName: 'ToDelete',
       fullName: 'Admin ToDelete',
-      emails: ['admin@test.com'],
+      emails: [`admin_${timestamp}@test.com`],
       password: 'hashed_password',
       isSiteAdmin: true,
       birthDate: '1990-01-01'
@@ -72,11 +74,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     // Create an athlete that will be related to the admin
     const [ath] = await db.insert(users).values({
-      username: 'test_athlete',
+      username: `test_athlete_${timestamp}`,
       firstName: 'Test',
       lastName: 'Athlete',
       fullName: 'Test Athlete',
-      emails: ['athlete@test.com'],
+      emails: [`athlete_${timestamp}@test.com`],
       password: 'hashed_password',
       isSiteAdmin: false,
       birthDate: '2000-01-01'
@@ -85,11 +87,11 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
 
     // Create a coach that will be related to the admin
     const [coachUser] = await db.insert(users).values({
-      username: 'test_coach',
+      username: `test_coach_${timestamp}`,
       firstName: 'Test',
       lastName: 'Coach',
       fullName: 'Test Coach',
-      emails: ['coach@test.com'],
+      emails: [`coach_${timestamp}@test.com`],
       password: 'hashed_password',
       isSiteAdmin: false,
       birthDate: '1985-01-01'
@@ -931,15 +933,18 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
   let coach: User;
 
   beforeEach(async () => {
+    // Use timestamp to ensure unique names across test runs
+    const timestamp = Date.now();
+
     // Create test organization
     const [org] = await db.insert(organizations).values({
-      name: 'Test Org for Soft Delete'
+      name: `Test Org for Soft Delete ${timestamp}`
     }).returning();
     testOrg = org;
 
     // Create test team
     const [team] = await db.insert(teams).values({
-      name: 'Test Team for Soft Delete',
+      name: `Test Team for Soft Delete ${timestamp}`,
       organizationId: testOrg.id,
       level: 'HS'
     }).returning();
@@ -947,8 +952,8 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
     // Create athlete
     const [athleteUser] = await db.insert(users).values({
-      username: `athlete-soft-delete-${Date.now()}`,
-      emails: ['athlete-soft@test.com'],
+      username: `athlete-soft-delete-${timestamp}`,
+      emails: [`athlete-soft-${timestamp}@test.com`],
       password: 'password123',
       firstName: 'Test',
       lastName: 'Athlete',
@@ -958,8 +963,8 @@ describe('User Soft Delete (Level 2 Immutability)', () => {
 
     // Create coach
     const [coachUser] = await db.insert(users).values({
-      username: `coach-soft-delete-${Date.now()}`,
-      emails: ['coach-soft@test.com'],
+      username: `coach-soft-delete-${timestamp}`,
+      emails: [`coach-soft-${timestamp}@test.com`],
       password: 'password123',
       firstName: 'Test',
       lastName: 'Coach',

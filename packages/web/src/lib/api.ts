@@ -17,8 +17,43 @@ export interface ApiError extends Error {
   details?: any;
 }
 
+// Invitation API response types
+
+/** Single invitation response (regular email invitation) */
+export interface SingleInvitationResponse {
+  id: string;
+  email: string;
+  inviteLink: string;
+  /** Email delivery status. Always present (defaults to false in DB schema if send fails) */
+  emailSent: boolean;
+  message: string;
+}
+
+/** Bulk athlete invitation response (multiple emails for one athlete) */
+export interface BulkAthleteInvitationResponse {
+  invitations: Array<{ id: string; email: string }>;
+  inviteLinks: string[];
+  emailResults: Array<{ email: string; sent: boolean }>;
+  athlete: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+  message: string;
+}
+
+/** Union type for all invitation creation responses */
+export type CreateInvitationResponse = SingleInvitationResponse | BulkAthleteInvitationResponse;
+
+export interface ResendInvitationResponse {
+  success: boolean;
+  /** Email delivery status. Always present (defaults to false in DB schema if send fails) */
+  emailSent: boolean;
+  message: string;
+}
+
 // Constants for CSRF token handling
-const CSRF_TOKEN_CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const CSRF_TOKEN_CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes (industry standard)
 const CSRF_MAX_RETRIES = 2;
 const CSRF_RETRY_BASE_DELAY_MS = 100;
 
@@ -449,9 +484,10 @@ export const mutations = {
   changePassword: (data: any) => apiClient.put('/profile/password', data),
 
   // Invitations
-  createInvitation: (data: any) => apiClient.post('/invitations', data),
+  createInvitation: (data: any) => apiClient.post<CreateInvitationResponse>('/invitations', data),
+  resendInvitation: (id: string) => apiClient.post<ResendInvitationResponse>(`/invitations/${id}/resend`, {}),
   deleteInvitation: (id: string) => apiClient.delete(`/invitations/${id}`),
-  acceptInvitation: (token: string, data: any) => 
+  acceptInvitation: (token: string, data: any) =>
     apiClient.post(`/invitations/${token}/accept`, data),
 
   // Admin

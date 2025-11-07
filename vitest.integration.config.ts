@@ -29,6 +29,11 @@ export default mergeConfig(
         '**/.{idea,git,cache,output,temp}/**',
         '**/MultiLineChart.test.tsx', // Excluded - mocked version in unit tests, integration version not needed
       ],
+      // CRITICAL: Run integration tests sequentially to prevent database race conditions
+      // Integration tests share the same database and can interfere with each other
+      // when run in parallel (maxForks > 1). Foreign key violations occur when one
+      // test deletes an organization while another test tries to create a team.
+      fileParallelism: false, // Run test files one at a time
     },
   })
 );

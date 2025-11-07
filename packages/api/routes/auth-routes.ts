@@ -6,19 +6,19 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AuthService } from "../services/auth-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 // Session types are loaded globally
 
 const authService = new AuthService();
 
 // Rate limiting for authentication endpoints
-// Skip rate limiting in test environment to allow integration tests
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 5, // Limit each IP to 5 requests per windowMs
   message: { message: "Too many authentication attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
 });
 
 export function registerAuthRoutes(app: Express) {
@@ -30,7 +30,7 @@ export function registerAuthRoutes(app: Express) {
       const { username, password } = req.body;
 
       const result = await authService.login({ username, password });
-      
+
       if (!result.success) {
         return res.status(401).json({ message: result.error });
       }

@@ -10,6 +10,8 @@ import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { sanitizeCSVValue } from "./utils/csv-utils";
+import { generateInvitationLink, getBaseUrl } from "./utils/url-utils";
+import { shouldSkipRateLimiting } from "./utils/rate-limit-utils";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema, type Invitation } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { TEAM_NAME_CONSTRAINTS } from "@shared/constants";
@@ -585,6 +587,41 @@ export async function registerRoutes(app: Express) {
   // connect-pg-simple does NOT automatically sync custom columns - we must do this manually
   // This middleware ensures that when password changes trigger revokeAllUserSessions(),
   // the query on the userId column actually finds sessions to delete
+  // In-memory cache to track which sessions have had their userId synced to the database
+  // This prevents redundant UPDATE queries on every request in stateless deployments
+  // Uses a Map to store session IDs with timestamps for TTL-based cleanup
+  // Max size: 10,000 entries | TTL: 24 hours (matches session cookie lifetime)
+  const syncedSessions = new Map<string, number>();
+  const SYNCED_SESSIONS_MAX_SIZE = 10000;
+  const SYNCED_SESSIONS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Cleanup expired entries periodically to prevent memory leak
+  // Runs every hour to remove sessions older than TTL
+  setInterval(() => {
+    try {
+      const now = Date.now();
+      let cleaned = 0;
+      for (const [sessionId, timestamp] of syncedSessions.entries()) {
+        if (now - timestamp > SYNCED_SESSIONS_TTL_MS) {
+          syncedSessions.delete(sessionId);
+          cleaned++;
+        }
+      }
+      if (cleaned > 0) {
+        console.log(`Cleaned ${cleaned} expired session sync entries from cache`);
+      }
+    } catch (error) {
+      console.error('Error during session cache cleanup:', error);
+      // On error, clear the entire cache as a safety fallback
+      // This prevents corrupted state and allows clean restart
+      syncedSessions.clear();
+      console.warn('Session cache cleared due to cleanup error - will rebuild on next requests');
+    }
+  }, 60 * 60 * 1000); // Run every hour
+
+  // Session table name constant (used by connect-pg-simple)
+  const SESSION_TABLE = 'session';
+
   app.use(async (req: Request, res: Response, next: NextFunction) => {
     // Only sync if user is authenticated and session exists
     if (req.session && (req.session as any).user?.id) {
@@ -592,21 +629,44 @@ export async function registerRoutes(app: Express) {
 
       // Check if we need to update the database userId column
       // Only update if the session has a user but the database column is not yet set
-      if (sessionUserId && req.sessionID) {
+      // AND if we haven't already synced this session (tracked via in-memory cache)
+      // Also check if cached entry has expired (older than TTL)
+      const cachedTimestamp = syncedSessions.get(req.sessionID);
+      const isExpired = cachedTimestamp && (Date.now() - cachedTimestamp > SYNCED_SESSIONS_TTL_MS);
+
+      if (sessionUserId && req.sessionID && (!cachedTimestamp || isExpired)) {
         try {
           const { pgClient } = await import("./db");
 
           // Update the userId column in the database to match req.session.user.id
           // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
           // Note: postgres-js uses SQL template strings, not .query() method
-          await pgClient`
-            UPDATE session
+          // IMPORTANT: Only sync if the user exists (prevents FK violations during test cleanup)
+          // The WHERE user_id IS NULL condition makes this idempotent for multi-instance deployments
+          // Multiple instances may attempt the UPDATE, but only one will succeed
+          const result = await pgClient`
+            UPDATE ${pgClient.unsafe(SESSION_TABLE)}
             SET user_id = ${sessionUserId}
             WHERE sid = ${req.sessionID}
             AND user_id IS NULL
+            AND EXISTS (SELECT 1 FROM users WHERE id = ${sessionUserId})
           `;
+
+          // Only add to cache if we actually updated a row (count > 0)
+          // This prevents caching failed updates while still being race-safe
+          if (result.count > 0) {
+            // Implement simple LRU eviction: if at max size, remove oldest entry
+            if (syncedSessions.size >= SYNCED_SESSIONS_MAX_SIZE) {
+              const oldestKey = syncedSessions.keys().next().value;
+              if (oldestKey) {
+                syncedSessions.delete(oldestKey);
+              }
+            }
+            syncedSessions.set(req.sessionID, Date.now());
+          }
         } catch (error) {
           // Log error but don't block the request - session is still valid
+          // Don't add to cache on error so it can be retried on next request
           console.error('Failed to sync session userId:', error);
         }
       }
@@ -732,6 +792,7 @@ export async function registerRoutes(app: Express) {
     },
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    skip: (req) => shouldSkipRateLimiting(req, 'auth')
   });
 
   // Rate limiting for API endpoints (general usage)
@@ -2984,7 +3045,8 @@ export async function registerRoutes(app: Express) {
       const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
       const inviter = await storage.getUser(invitedById);
       const organization = await storage.getOrganization(invitation.organizationId);
-      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+
+      const inviteLink = generateInvitationLink(req, invitation.token);
 
       const emailSent = await emailService.sendInvitation(invitation.email, {
         recipientName: invitation.firstName && invitation.lastName
@@ -2998,11 +3060,33 @@ export async function registerRoutes(app: Express) {
       });
 
       // Update invitation with email sent status
+      // Retry up to 3 times with exponential backoff if database update fails
       if (emailSent) {
-        await storage.updateInvitation(invitation.id, {
-          emailSent: true,
-          emailSentAt: new Date()
-        });
+        let updateSuccess = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await storage.updateInvitation(invitation.id, {
+              emailSent: true,
+              emailSentAt: new Date()
+            });
+            updateSuccess = true;
+            break;
+          } catch (updateError) {
+            // Log the database update failure
+            console.error(`Failed to update email status for invitation ${invitation.id} (attempt ${attempt + 1}/3):`, updateError);
+
+            // Wait before retrying (exponential backoff: 100ms, 200ms, 400ms)
+            if (attempt < 2) {
+              await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+            }
+          }
+        }
+
+        // If all retries failed, log a warning but don't fail the operation
+        // since the email was actually sent successfully
+        if (!updateSuccess) {
+          console.warn(`WARNING: Email sent to ${invitation.email} but database status update failed after 3 attempts. Manual verification may be needed.`);
+        }
       }
 
       return emailSent;
@@ -3110,7 +3194,7 @@ export async function registerRoutes(app: Express) {
         const emailResults = [];
 
         for (const inv of invitations) {
-          const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${inv.token}`;
+          const inviteLink = generateInvitationLink(req, inv.token);
           inviteLinks.push(inviteLink);
 
           // Send invitation email using shared helper
@@ -3187,7 +3271,7 @@ export async function registerRoutes(app: Express) {
       });
 
       // Generate invite link
-      const inviteLink = `${process.env.APP_URL || req.protocol + '://' + req.get('host')}/accept-invitation?token=${invitation.token}`;
+      const inviteLink = generateInvitationLink(req, invitation.token);
 
       // Send invitation email using shared helper
       const emailSent = await sendInvitationEmailWithTracking(invitation, invitedById, req);
@@ -5795,7 +5879,6 @@ export async function registerRoutes(app: Express) {
       }
 
       let emailSent = false;
-      const appUrl = process.env.APP_URL || 'http://localhost:5000';
 
       // Send appropriate test email based on type
       switch (emailType) {
@@ -5806,7 +5889,7 @@ export async function registerRoutes(app: Express) {
             recipientName: 'Test User',
             inviterName: 'Admin User',
             organizationName: 'Test Organization',
-            invitationLink: `${appUrl}/accept-invitation?token=${invitationToken}`,
+            invitationLink: generateInvitationLink(req, invitationToken),
             expiryDays: 7,
             role: 'coach'
           };
@@ -5829,7 +5912,7 @@ export async function registerRoutes(app: Express) {
           const verificationToken = `test-verification-${crypto.randomBytes(8).toString('hex')}`;
           const testVerificationData = {
             userName: 'Test User',
-            verificationLink: `${appUrl}/verify-email?token=${verificationToken}`
+            verificationLink: `${getBaseUrl(req)}/verify-email?token=${verificationToken}`
           };
           emailSent = await emailService.sendEmailVerification(recipientEmail, testVerificationData);
           break;
@@ -5840,7 +5923,7 @@ export async function registerRoutes(app: Express) {
           const resetToken = `test-reset-${crypto.randomBytes(8).toString('hex')}`;
           const testResetData = {
             userName: 'Test User',
-            resetLink: `${appUrl}/reset-password?token=${resetToken}`
+            resetLink: `${getBaseUrl(req)}/reset-password?token=${resetToken}`
           };
           emailSent = await emailService.sendPasswordReset(recipientEmail, testResetData);
           break;
