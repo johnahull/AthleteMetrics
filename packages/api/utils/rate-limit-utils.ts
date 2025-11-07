@@ -35,8 +35,9 @@ export function shouldSkipRateLimiting(
 
   // Log rate limit bypasses for security monitoring (except in test env to avoid noise)
   if (shouldSkip && !isTestEnv) {
-    // Strip query parameters from path to prevent logging sensitive data (tokens, etc.)
-    const sanitizedPath = req.path.split('?')[0];
+    // Use route path template if available (e.g., '/api/users/:id'), otherwise strip query params
+    // This prevents logging sensitive data from path parameters or request bodies
+    const sanitizedPath = req.route?.path || req.path.split('?')[0];
 
     console.warn(`⚠️ Rate limiting bypassed for ${rateLimitType}:`, {
       ip: req.ip,
