@@ -21,13 +21,8 @@ const authLimiter = rateLimit({
   skip: (req) => {
     const isTestEnv = process.env.NODE_ENV === 'test';
 
-    // Log rate limit bypass for security monitoring (but not in test env to avoid noise)
-    if (isTestEnv && process.env.LOG_TEST_RATE_LIMIT_BYPASS === 'true') {
-      console.warn('⚠️ Rate limiting bypassed for authentication (test environment):', {
-        ip: req.ip,
-        path: req.path
-      });
-    }
+    // Unconditional logging for debugging CI test failures
+    console.log(`[AUTH-LIMITER] Skip check - NODE_ENV: ${process.env.NODE_ENV}, IP: ${req.ip}, shouldSkip: ${isTestEnv}`);
 
     return isTestEnv;
   },
@@ -40,12 +35,16 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
+      console.log(`[AUTH-LOGIN] Attempt - username: ${username}, NODE_ENV: ${process.env.NODE_ENV}, IP: ${req.ip}`);
 
       const result = await authService.login({ username, password });
-      
+
       if (!result.success) {
+        console.log(`[AUTH-LOGIN] Failed - username: ${username}, error: ${result.error}`);
         return res.status(401).json({ message: result.error });
       }
+
+      console.log(`[AUTH-LOGIN] Success - username: ${username}, userId: ${result.user?.id}`);
 
       const user = result.user!;
 
