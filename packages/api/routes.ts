@@ -604,11 +604,6 @@ export async function registerRoutes(app: Express) {
       // Only update if the session has a user but the database column is not yet set
       // AND if we haven't already synced this session (tracked via in-memory cache)
       if (sessionUserId && req.sessionID && !syncedSessions.has(req.sessionID)) {
-        // Mark as syncing BEFORE the database query to prevent race conditions
-        // If multiple concurrent requests arrive for the same session, only the first
-        // will proceed with the UPDATE query
-        syncedSessions.add(req.sessionID);
-
         try {
           const { pgClient } = await import("./db");
 
@@ -616,18 +611,24 @@ export async function registerRoutes(app: Express) {
           // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
           // Note: postgres-js uses SQL template strings, not .query() method
           // IMPORTANT: Only sync if the user exists (prevents FK violations during test cleanup)
-          // Note: Table name is a constant but not parameterized in the query (postgres-js limitation)
-          await pgClient`
+          // The WHERE user_id IS NULL condition makes this idempotent for multi-instance deployments
+          // Multiple instances may attempt the UPDATE, but only one will succeed
+          const result = await pgClient`
             UPDATE ${pgClient.unsafe(SESSION_TABLE)}
             SET user_id = ${sessionUserId}
             WHERE sid = ${req.sessionID}
             AND user_id IS NULL
             AND EXISTS (SELECT 1 FROM users WHERE id = ${sessionUserId})
           `;
+
+          // Only add to cache if we actually updated a row (count > 0)
+          // This prevents caching failed updates while still being race-safe
+          if (result.count > 0) {
+            syncedSessions.add(req.sessionID);
+          }
         } catch (error) {
-          // Remove from cache on failure so it can be retried on next request
-          syncedSessions.delete(req.sessionID);
           // Log error but don't block the request - session is still valid
+          // Don't add to cache on error so it can be retried on next request
           console.error('Failed to sync session userId:', error);
         }
       }
@@ -3021,16 +3022,32 @@ export async function registerRoutes(app: Express) {
       });
 
       // Update invitation with email sent status
+      // Retry up to 3 times with exponential backoff if database update fails
       if (emailSent) {
-        try {
-          await storage.updateInvitation(invitation.id, {
-            emailSent: true,
-            emailSentAt: new Date()
-          });
-        } catch (updateError) {
-          // Log the database update failure but don't fail the whole operation
-          // since the email was actually sent successfully
-          console.error(`Failed to update email status for invitation ${invitation.id}:`, updateError);
+        let updateSuccess = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await storage.updateInvitation(invitation.id, {
+              emailSent: true,
+              emailSentAt: new Date()
+            });
+            updateSuccess = true;
+            break;
+          } catch (updateError) {
+            // Log the database update failure
+            console.error(`Failed to update email status for invitation ${invitation.id} (attempt ${attempt + 1}/3):`, updateError);
+
+            // Wait before retrying (exponential backoff: 100ms, 200ms, 400ms)
+            if (attempt < 2) {
+              await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+            }
+          }
+        }
+
+        // If all retries failed, log a warning but don't fail the operation
+        // since the email was actually sent successfully
+        if (!updateSuccess) {
+          console.warn(`WARNING: Email sent to ${invitation.email} but database status update failed after 3 attempts. Manual verification may be needed.`);
         }
       }
 

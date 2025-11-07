@@ -39,11 +39,10 @@ export function shouldSkipRateLimiting(
     // This prevents logging sensitive data from path parameters or request bodies
     const sanitizedPath = req.route?.path || req.path.split('?')[0];
 
-    // Redact IP addresses in production to protect PII (GDPR/CCPA compliance)
-    // In production, only log first 7 characters + '***' (e.g., '192.168***')
-    const redactedIp = isProduction
-      ? (req.ip?.substring(0, 7) + '***' || 'unknown')
-      : req.ip;
+    // Always redact IP addresses to protect PII (GDPR/CCPA compliance)
+    // Log first 7 characters + '***' (e.g., '192.168***') in all environments
+    // This provides sufficient information for debugging while protecting user privacy
+    const redactedIp = req.ip?.substring(0, 7) + '***' || 'unknown';
 
     console.warn(`⚠️ Rate limiting bypassed for ${rateLimitType}:`, {
       ip: redactedIp,

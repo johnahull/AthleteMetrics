@@ -53,7 +53,7 @@ export interface ResendInvitationResponse {
 }
 
 // Constants for CSRF token handling
-const CSRF_TOKEN_CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const CSRF_TOKEN_CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes (industry standard)
 const CSRF_MAX_RETRIES = 2;
 const CSRF_RETRY_BASE_DELAY_MS = 100;
 
