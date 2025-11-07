@@ -136,7 +136,12 @@ export class EmailService {
         to: options.to,
         subject: options.subject,
         html: options.html,
-        text: options.text || this.stripHtml(options.html)
+        text: options.text || this.stripHtml(options.html),
+        trackingSettings: {
+          clickTracking: {
+            enable: false
+          }
+        }
       });
 
       console.log(`✅ Email sent successfully to ${options.to}`);
