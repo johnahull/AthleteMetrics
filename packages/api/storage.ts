@@ -1296,7 +1296,7 @@ export class DatabaseStorage implements IStorage {
     playerId?: string;
     expiresAt: Date;
   }): Promise<Invitation> {
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Expires in 7 days
 
