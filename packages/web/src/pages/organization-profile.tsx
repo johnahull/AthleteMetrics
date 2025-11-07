@@ -617,14 +617,7 @@ export default function OrganizationProfile() {
   // Function to delete a pending invitation
   const deletePendingUser = async (invitationId: string, email: string) => {
     try {
-      const response = await fetch(`/api/invitations/${invitationId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to delete invitation");
-      }
+      await apiRequest("DELETE", `/api/invitations/${invitationId}`);
 
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
       toast({
@@ -643,7 +636,7 @@ export default function OrganizationProfile() {
   // Function to copy invitation URL to clipboard
   const copyInvitationUrl = async (token: string, email: string) => {
     try {
-      const inviteUrl = `${window.location.origin}/accept-invitation?token=${token}`;
+      const inviteUrl = `${window.location.origin}/accept-invitation?token=${encodeURIComponent(token)}`;
       await navigator.clipboard.writeText(inviteUrl);
       toast({
         title: "Copied to clipboard",

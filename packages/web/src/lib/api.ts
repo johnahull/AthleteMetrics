@@ -22,12 +22,14 @@ export interface CreateInvitationResponse {
   id: string;
   email: string;
   inviteLink: string;
+  /** Email delivery status. Always present (defaults to false in DB schema if send fails) */
   emailSent: boolean;
   message: string;
 }
 
 export interface ResendInvitationResponse {
   success: boolean;
+  /** Email delivery status. Always present (defaults to false in DB schema if send fails) */
   emailSent: boolean;
   message: string;
 }
