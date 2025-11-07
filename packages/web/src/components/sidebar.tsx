@@ -51,7 +51,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
-    { name: "My Organization", href: "/organizations", icon: Building2 }
+    { name: "Settings", href: "/organizations", icon: Settings }
   ],
   coach: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -79,7 +79,7 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     if (isInOrganizationContext && organizationContext) {
       return [
         ...config,
-        { name: "My Organization", href: `/organizations/${organizationContext}`, icon: Building2 }
+        { name: "Settings", href: `/organizations/${organizationContext}`, icon: Settings }
       ];
     }
     return config;
@@ -95,14 +95,16 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     navigation.unshift({ name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound });
   }
   
-  // Update org admin and coach organization link with specific ID
-  if ((role === "org_admin" || role === "coach") && userOrganizations?.[0]?.organizationId) {
-    const orgIndex = navigation.findIndex(item => item.name === "My Organization");
+  // Update org admin organization link with specific ID
+  if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
+    const orgIndex = navigation.findIndex(item => item.name === "Settings");
     if (orgIndex !== -1) {
       navigation[orgIndex].href = `/organizations/${userOrganizations[0].organizationId}`;
     }
+  }
 
-    // Update benchmarks link with organization ID
+  // Update benchmarks link with organization ID for both org_admin and coach
+  if ((role === "org_admin" || role === "coach") && userOrganizations?.[0]?.organizationId) {
     const benchmarksIndex = navigation.findIndex(item => item.name === "Benchmarks");
     if (benchmarksIndex !== -1) {
       navigation[benchmarksIndex].href = `/organizations/${userOrganizations[0].organizationId}/benchmarks`;

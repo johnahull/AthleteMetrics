@@ -7,10 +7,14 @@ import PerformanceChart from "@/components/charts/performance-chart";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
 export default function Dashboard() {
   const { user, organizationContext, userOrganizations } = useAuth();
   const [, setLocation] = useLocation();
+  
+  // Get available metrics for the organization
+  const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
 
   // Use role from user session data
   const userRole = user?.role || 'athlete';
@@ -256,24 +260,25 @@ export default function Dashboard() {
       {/* Performance Metrics Cards - Best from Last 30 Days - Only show when org is selected */}
       {effectiveOrganizationId && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-        {/* Dynamic metric cards for all 7 test types */}
-        {['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'].map((metric) => {
-          const bestResult = stats[`best${metric}Last30Days`];
-          const MetricIcon = getMetricIcon(metric);
-          const metricColor = getMetricColor(metric);
+        {/* Dynamic metric cards for organization-enabled metrics only */}
+        {!metricsLoading && availableMetrics.map((metric) => {
+          const metricCode = metric.code;
+          const bestResult = stats[`best${metricCode}Last30Days`];
+          const MetricIcon = getMetricIcon(metricCode);
+          const metricColor = getMetricColor(metricCode);
           
           return (
-            <Card key={metric} className="bg-white">
+            <Card key={metricCode} className="bg-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">
-                      Best {getMetricDisplayName(metric)} (30d)
+                      Best {metric.label} (30d)
                     </p>
-                    <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metric.toLowerCase()}`}>
-                      {bestResult ? formatMetricValue(metric, parseFloat(bestResult.value)) : "N/A"}
+                    <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metricCode.toLowerCase()}`}>
+                      {bestResult ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metric.toLowerCase()}-athlete`}>
+                    <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metricCode.toLowerCase()}-athlete`}>
                       {bestResult?.userName || "No data"}
                     </p>
                   </div>
@@ -285,6 +290,23 @@ export default function Dashboard() {
             </Card>
           );
         })}
+        
+        {/* Loading state for metrics */}
+        {metricsLoading && (
+          <>
+            {[...Array(4)].map((_, i) => (
+              <Card key={`loading-${i}`} className="bg-white">
+                <CardContent className="p-6">
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
       </div>
       )}
 
