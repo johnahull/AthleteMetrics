@@ -18,7 +18,19 @@ const authLimiter = rateLimit({
   message: { message: "Too many authentication attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
+  skip: (req) => {
+    const isTestEnv = process.env.NODE_ENV === 'test';
+
+    // Log rate limit bypass for security monitoring (but not in test env to avoid noise)
+    if (isTestEnv && process.env.LOG_TEST_RATE_LIMIT_BYPASS === 'true') {
+      console.warn('⚠️ Rate limiting bypassed for authentication (test environment):', {
+        ip: req.ip,
+        path: req.path
+      });
+    }
+
+    return isTestEnv;
+  },
 });
 
 export function registerAuthRoutes(app: Express) {

@@ -740,7 +740,20 @@ export async function registerRoutes(app: Express) {
       // Production safeguard: Never bypass rate limiting in production environment
       const isProduction = process.env.NODE_ENV === 'production';
       const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
-      return isLocalhost || isTestEnv || bypassForDev;
+
+      const shouldSkip = isLocalhost || isTestEnv || bypassForDev;
+
+      // Log rate limit bypasses for security monitoring
+      if (shouldSkip && !isTestEnv) {
+        console.warn('⚠️ Rate limiting bypassed for authentication:', {
+          ip: req.ip,
+          reason: isLocalhost ? 'localhost' : 'BYPASS_GENERAL_RATE_LIMIT env var',
+          environment: process.env.NODE_ENV,
+          path: req.path
+        });
+      }
+
+      return shouldSkip;
     }
   });
 

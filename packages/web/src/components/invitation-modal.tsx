@@ -76,7 +76,9 @@ export function InvitationModal({
     onError: (error: any) => {
       let userMessage = "Failed to send invitation. Please try again.";
 
-      if (error.message?.toLowerCase().includes('already') ||
+      if (error.message?.toLowerCase().includes('csrf')) {
+        userMessage = "Security token expired. Please refresh the page and try again.";
+      } else if (error.message?.toLowerCase().includes('already') ||
           error.message?.toLowerCase().includes('exists')) {
         userMessage = "An invitation for this email already exists or user already registered.";
       } else if (error.message?.toLowerCase().includes('invalid email')) {
