@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { validateUsername } from "@shared/username-validation";
 import OrganizationMetricsCard from "@/components/organization-metrics-card";
+import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
 
 // Constants
 const EMAIL_SENT_NO_TIMESTAMP_FALLBACK = 'recently';
@@ -215,11 +216,9 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       invitationForm.reset();
 
       // Show different messages based on email delivery status
-      const message = data.emailSent
-        ? `Invitation email sent to ${data.email}`
-        : `Invitation created for ${data.email} - email delivery failed. Use the copy link button to share manually.`;
+      const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
 
-      toast({ title: "Success", description: message });
+      toast({ title, description });
     },
     onError: (error: any) => {
       // Sanitize error messages to avoid exposing internal details
@@ -668,13 +667,11 @@ export default function OrganizationProfile() {
       await queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
 
       // Show different messages based on email delivery status
-      const message = data.emailSent
-        ? `Invitation email resent to ${email}`
-        : `Invitation extended for ${email} - email delivery failed. Use the copy link button to share manually.`;
+      const { title, description } = getInvitationStatusMessage(data.emailSent, email, 'resent');
 
       toast({
-        title: "Success",
-        description: message,
+        title,
+        description,
       });
     } catch (error: any) {
       toast({

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { mutations } from "@/lib/api";
+import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
@@ -62,14 +63,12 @@ export function InvitationModal({
       onOpenChange(false);
 
       // Show different messages based on email delivery status
-      const message = data.emailSent
-        ? `Invitation email sent to ${data.email}`
-        : `Invitation created for ${data.email} - email delivery failed. Use the copy link button to share manually.`;
+      const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
 
       toast({
-        title: data.emailSent ? "Success" : "Invitation Created",
-        description: message,
-        variant: data.emailSent ? "default" : "default"
+        title,
+        description,
+        variant: "default"
       });
       onSuccess?.();
     },
