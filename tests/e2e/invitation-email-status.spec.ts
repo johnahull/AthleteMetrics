@@ -17,13 +17,16 @@ import { navigateTo } from './helpers/navigation';
 
 const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
-// Helper to generate unique test data
+// Helper to generate unique test data with improved isolation
+// Uses e2e_test prefix with timestamp to prevent accidental deletion of legitimate test data
 function generateTestInvitation() {
-  const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+  const timestamp = Date.now();
+  const randomId = Math.random().toString(36).substring(2);
+  const uniqueId = `${timestamp}_${randomId}`;
   return {
     firstName: `TestInvite_${uniqueId}`,
     lastName: `LastName_${uniqueId}`,
-    email: `test_invite_${uniqueId}@example.com`,
+    email: `e2e_test_${uniqueId}@example.com`,
   };
 }
 
@@ -73,8 +76,8 @@ test.describe('Invitation Email Status Tests', () => {
       if (response.ok()) {
         const invitations = await response.json();
         for (const inv of invitations) {
-          // Match test invitation emails (generated with test_invite_ prefix)
-          if (inv.email && inv.email.includes('test_invite_')) {
+          // Match test invitation emails (generated with e2e_test_ prefix for better isolation)
+          if (inv.email && inv.email.includes('e2e_test_')) {
             try {
               await page.request.delete(`${TESTING_URL}/api/invitations/${inv.id}`);
               console.log(`Cleaned up orphaned test invitation: ${inv.email}`);

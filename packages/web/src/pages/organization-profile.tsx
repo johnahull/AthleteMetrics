@@ -21,6 +21,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { mutations } from "@/lib/api";
 import { validateUsername } from "@shared/username-validation";
 import OrganizationMetricsCard from "@/components/organization-metrics-card";
 import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
@@ -208,8 +209,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
-      const res = await apiRequest("POST", `/api/invitations`, data);
-      return res.json();
+      return await mutations.createInvitation(data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
@@ -231,6 +231,9 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
     },
     onError: (error: any) => {
       // Sanitize error messages to avoid exposing internal details
+      // NOTE: This uses string matching on error.message which is fragile.
+      // Future improvement: Backend should return structured error codes
+      // (e.g., { code: 'USER_EXISTS', message: '...' }) for more reliable error handling
       let userMessage = "Failed to send invitation. Please try again.";
 
       if (error.message?.toLowerCase().includes('already') ||

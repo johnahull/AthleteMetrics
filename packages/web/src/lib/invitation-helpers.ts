@@ -1,3 +1,6 @@
+// Constants
+const MANUAL_SHARE_INSTRUCTION = 'Use the copy link button to share manually.';
+
 /**
  * Generates consistent invitation status messages for toasts
  * @param emailSent - Whether the email was successfully sent
@@ -20,7 +23,7 @@ export function getInvitationStatusMessage(
     const failureAction = action === 'resent' ? 'extended' : 'created';
     return {
       title: action === 'created' ? 'Invitation Created' : 'Success',
-      description: `Invitation ${failureAction} for ${email} - email delivery failed. Use the copy link button to share manually.`
+      description: `Invitation ${failureAction} for ${email} - email delivery failed. ${MANUAL_SHARE_INSTRUCTION}`
     };
   }
 }

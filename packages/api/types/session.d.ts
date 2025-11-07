@@ -32,5 +32,7 @@ declare module "express-session" {
     };
     isImpersonating?: boolean;
     impersonationStartTime?: Date;
+    // Session userId sync flag (prevents redundant DB queries)
+    userIdSynced?: boolean;
   }
 }

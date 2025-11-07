@@ -594,7 +594,8 @@ export async function registerRoutes(app: Express) {
 
       // Check if we need to update the database userId column
       // Only update if the session has a user but the database column is not yet set
-      if (sessionUserId && req.sessionID) {
+      // AND if we haven't already synced this session (tracked via userIdSynced flag)
+      if (sessionUserId && req.sessionID && !req.session.userIdSynced) {
         try {
           const { pgClient } = await import("./db");
 
@@ -609,6 +610,9 @@ export async function registerRoutes(app: Express) {
             AND user_id IS NULL
             AND EXISTS (SELECT 1 FROM users WHERE id = ${sessionUserId})
           `;
+
+          // Mark as synced to prevent redundant database queries on subsequent requests
+          req.session.userIdSynced = true;
         } catch (error) {
           // Log error but don't block the request - session is still valid
           console.error('Failed to sync session userId:', error);
