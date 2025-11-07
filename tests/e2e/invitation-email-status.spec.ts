@@ -57,12 +57,35 @@ test.describe('Invitation Email Status Tests', () => {
 
   // Cleanup: Delete test invitations created during test
   test.afterEach(async ({ page }) => {
+    // Primary cleanup: Delete invitations by tracked IDs (fast path)
     for (const invitationId of createdInvitationIds) {
       try {
         await page.request.delete(`${TESTING_URL}/api/invitations/${invitationId}`);
       } catch (error) {
         console.warn(`Failed to cleanup invitation ${invitationId}:`, error);
       }
+    }
+
+    // Fallback cleanup: Query and delete any orphaned test invitations by email pattern
+    // This handles cases where test crashes before invitation ID is tracked
+    try {
+      const response = await page.request.get(`${TESTING_URL}/api/organizations/${organizationId}/invitations`);
+      if (response.ok()) {
+        const invitations = await response.json();
+        for (const inv of invitations) {
+          // Match test invitation emails (generated with test_invite_ prefix)
+          if (inv.email && inv.email.includes('test_invite_')) {
+            try {
+              await page.request.delete(`${TESTING_URL}/api/invitations/${inv.id}`);
+              console.log(`Cleaned up orphaned test invitation: ${inv.email}`);
+            } catch (deleteError) {
+              console.warn(`Failed to cleanup orphaned invitation ${inv.id}:`, deleteError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to perform fallback cleanup:', error);
     }
   });
 
