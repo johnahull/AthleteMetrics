@@ -24,6 +24,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { validateUsername } from "@shared/username-validation";
 import OrganizationMetricsCard from "@/components/organization-metrics-card";
 
+// Constants
+const EMAIL_SENT_NO_TIMESTAMP_FALLBACK = 'recently';
+
 // Mock components and types (replace with actual imports if available)
 const LoadingSpinner = ({ text }: { text: string }) => (
   <div className="flex items-center justify-center py-12">
@@ -258,7 +261,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="flex items-center gap-2">
+        <Button className="flex items-center gap-2" data-testid="button-manage-users">
           <Plus className="h-4 w-4" />
           Manage Users
         </Button>
@@ -830,7 +833,10 @@ export default function OrganizationProfile() {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div className="flex items-center">
+                                  <div
+                                    className="flex items-center"
+                                    data-testid={invitation.emailSent ? `email-status-sent-${invitation.id}` : `email-status-not-sent-${invitation.id}`}
+                                  >
                                     {invitation.emailSent ? (
                                       <MailCheck className="h-4 w-4 text-green-600" />
                                     ) : (
@@ -838,9 +844,9 @@ export default function OrganizationProfile() {
                                     )}
                                   </div>
                                 </TooltipTrigger>
-                                <TooltipContent>
+                                <TooltipContent data-testid={`email-status-tooltip-${invitation.id}`}>
                                   {invitation.emailSent
-                                    ? `Email sent ${invitation.emailSentAt ? new Date(invitation.emailSentAt).toLocaleString() : 'recently'}`
+                                    ? `Email sent ${invitation.emailSentAt ? new Date(invitation.emailSentAt).toLocaleString() : EMAIL_SENT_NO_TIMESTAMP_FALLBACK}`
                                     : 'Email not sent - use copy button to share link'}
                                 </TooltipContent>
                               </Tooltip>

@@ -10,6 +10,7 @@ import { storage } from "./storage";
 import { PermissionChecker, ACTIONS, RESOURCES, ROLES } from "./permissions";
 import { validateUuidsOrThrow, validateUuidParams } from "./utils/validation";
 import { sanitizeCSVValue } from "./utils/csv-utils";
+import { generateInvitationLink, getBaseUrl } from "./utils/url-utils";
 import { insertOrganizationSchema, insertTeamSchema, insertAthleteSchema, insertMeasurementSchema, insertInvitationSchema, insertUserSchema, updateProfileSchema, changePasswordSchema, createSiteAdminSchema, userOrganizations, archiveTeamSchema, updateTeamMembershipSchema, type Invitation } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { TEAM_NAME_CONSTRAINTS } from "@shared/constants";
@@ -2985,9 +2986,7 @@ export async function registerRoutes(app: Express) {
       const inviter = await storage.getUser(invitedById);
       const organization = await storage.getOrganization(invitation.organizationId);
 
-      // Generate base URL and remove trailing slash to prevent double slashes
-      const baseUrl = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-      const inviteLink = `${baseUrl}/accept-invitation?token=${invitation.token}`;
+      const inviteLink = generateInvitationLink(req, invitation.token);
 
       const emailSent = await emailService.sendInvitation(invitation.email, {
         recipientName: invitation.firstName && invitation.lastName
@@ -3111,10 +3110,9 @@ export async function registerRoutes(app: Express) {
         // Generate invite links and send emails
         const inviteLinks = [];
         const emailResults = [];
-        const baseUrl = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 
         for (const inv of invitations) {
-          const inviteLink = `${baseUrl}/accept-invitation?token=${inv.token}`;
+          const inviteLink = generateInvitationLink(req, inv.token);
           inviteLinks.push(inviteLink);
 
           // Send invitation email using shared helper
@@ -3191,8 +3189,7 @@ export async function registerRoutes(app: Express) {
       });
 
       // Generate invite link
-      const baseUrl = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-      const inviteLink = `${baseUrl}/accept-invitation?token=${invitation.token}`;
+      const inviteLink = generateInvitationLink(req, invitation.token);
 
       // Send invitation email using shared helper
       const emailSent = await sendInvitationEmailWithTracking(invitation, invitedById, req);
@@ -5800,7 +5797,6 @@ export async function registerRoutes(app: Express) {
       }
 
       let emailSent = false;
-      const appUrl = (process.env.APP_URL || 'http://localhost:5000').replace(/\/$/, '');
 
       // Send appropriate test email based on type
       switch (emailType) {
@@ -5811,7 +5807,7 @@ export async function registerRoutes(app: Express) {
             recipientName: 'Test User',
             inviterName: 'Admin User',
             organizationName: 'Test Organization',
-            invitationLink: `${appUrl}/accept-invitation?token=${invitationToken}`,
+            invitationLink: generateInvitationLink(req, invitationToken),
             expiryDays: 7,
             role: 'coach'
           };
@@ -5834,7 +5830,7 @@ export async function registerRoutes(app: Express) {
           const verificationToken = `test-verification-${crypto.randomBytes(8).toString('hex')}`;
           const testVerificationData = {
             userName: 'Test User',
-            verificationLink: `${appUrl}/verify-email?token=${verificationToken}`
+            verificationLink: `${getBaseUrl(req)}/verify-email?token=${verificationToken}`
           };
           emailSent = await emailService.sendEmailVerification(recipientEmail, testVerificationData);
           break;
@@ -5845,7 +5841,7 @@ export async function registerRoutes(app: Express) {
           const resetToken = `test-reset-${crypto.randomBytes(8).toString('hex')}`;
           const testResetData = {
             userName: 'Test User',
-            resetLink: `${appUrl}/reset-password?token=${resetToken}`
+            resetLink: `${getBaseUrl(req)}/reset-password?token=${resetToken}`
           };
           emailSent = await emailService.sendPasswordReset(recipientEmail, testResetData);
           break;

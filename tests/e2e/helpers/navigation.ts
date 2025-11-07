@@ -246,6 +246,17 @@ export async function goToTeamPage(page: Page, teamId: string): Promise<void> {
 }
 
 /**
+ * Navigate to specific organization profile
+ *
+ * @param page - Playwright Page object
+ * @param organizationId - Organization ID
+ * @returns Promise<void>
+ */
+export async function goToOrganizationProfile(page: Page, organizationId: string): Promise<void> {
+  await navigateTo(page, `/organizations/${organizationId}`);
+}
+
+/**
  * Wait for navigation to complete
  * Useful after clicking links or buttons that trigger navigation
  *

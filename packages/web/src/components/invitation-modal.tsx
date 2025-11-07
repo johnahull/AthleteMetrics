@@ -67,7 +67,7 @@ export function InvitationModal({
         : `Invitation created for ${data.email} - email delivery failed. Use the copy link button to share manually.`;
 
       toast({
-        title: "Success",
+        title: data.emailSent ? "Success" : "Invitation Created",
         description: message,
         variant: data.emailSent ? "default" : "default"
       });
