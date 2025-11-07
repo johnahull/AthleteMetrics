@@ -18,14 +18,7 @@ const authLimiter = rateLimit({
   message: { message: "Too many authentication attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  skip: (req) => {
-    const isTestEnv = process.env.NODE_ENV === 'test';
-
-    // Unconditional logging for debugging CI test failures
-    console.log(`[AUTH-LIMITER] Skip check - NODE_ENV: ${process.env.NODE_ENV}, IP: ${req.ip}, shouldSkip: ${isTestEnv}`);
-
-    return isTestEnv;
-  },
+  skip: () => process.env.NODE_ENV === 'test',
 });
 
 export function registerAuthRoutes(app: Express) {
@@ -35,16 +28,12 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const { username, password } = req.body;
-      console.log(`[AUTH-LOGIN] Attempt - username: ${username}, NODE_ENV: ${process.env.NODE_ENV}, IP: ${req.ip}`);
 
       const result = await authService.login({ username, password });
 
       if (!result.success) {
-        console.log(`[AUTH-LOGIN] Failed - username: ${username}, error: ${result.error}`);
         return res.status(401).json({ message: result.error });
       }
-
-      console.log(`[AUTH-LOGIN] Success - username: ${username}, userId: ${result.user?.id}`);
 
       const user = result.user!;
 
