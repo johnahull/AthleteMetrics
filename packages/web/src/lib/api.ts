@@ -18,7 +18,9 @@ export interface ApiError extends Error {
 }
 
 // Invitation API response types
-export interface CreateInvitationResponse {
+
+/** Single invitation response (regular email invitation) */
+export interface SingleInvitationResponse {
   id: string;
   email: string;
   inviteLink: string;
@@ -26,6 +28,22 @@ export interface CreateInvitationResponse {
   emailSent: boolean;
   message: string;
 }
+
+/** Bulk athlete invitation response (multiple emails for one athlete) */
+export interface BulkAthleteInvitationResponse {
+  invitations: Array<{ id: string; email: string }>;
+  inviteLinks: string[];
+  emailResults: Array<{ email: string; sent: boolean }>;
+  athlete: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+  message: string;
+}
+
+/** Union type for all invitation creation responses */
+export type CreateInvitationResponse = SingleInvitationResponse | BulkAthleteInvitationResponse;
 
 export interface ResendInvitationResponse {
   success: boolean;

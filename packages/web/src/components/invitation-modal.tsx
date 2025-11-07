@@ -62,14 +62,24 @@ export function InvitationModal({
       form.reset();
       onOpenChange(false);
 
-      // Show different messages based on email delivery status
-      const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
+      // Type narrowing: this modal creates single invitations
+      if ('email' in data && 'emailSent' in data) {
+        // Show different messages based on email delivery status
+        const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
 
-      toast({
-        title,
-        description,
-        variant: "default"
-      });
+        toast({
+          title,
+          description,
+          variant: "default"
+        });
+      } else {
+        // Fallback for unexpected response type
+        toast({
+          title: "Success",
+          description: data.message,
+          variant: "default"
+        });
+      }
       onSuccess?.();
     },
     onError: (error: any) => {

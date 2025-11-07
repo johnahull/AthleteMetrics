@@ -215,10 +215,19 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
       queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
       invitationForm.reset();
 
-      // Show different messages based on email delivery status
-      const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
+      // Type narrowing: this form creates single invitations
+      if ('email' in data && 'emailSent' in data) {
+        // Show different messages based on email delivery status
+        const { title, description } = getInvitationStatusMessage(data.emailSent, data.email, 'created');
 
-      toast({ title, description });
+        toast({ title, description });
+      } else {
+        // Fallback for unexpected response type
+        toast({
+          title: "Success",
+          description: data.message
+        });
+      }
     },
     onError: (error: any) => {
       // Sanitize error messages to avoid exposing internal details

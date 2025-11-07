@@ -601,11 +601,13 @@ export async function registerRoutes(app: Express) {
           // Update the userId column in the database to match req.session.user.id
           // This uses a raw query because Drizzle doesn't have direct access to connect-pg-simple's session store
           // Note: postgres-js uses SQL template strings, not .query() method
+          // IMPORTANT: Only sync if the user exists (prevents FK violations during test cleanup)
           await pgClient`
             UPDATE session
             SET user_id = ${sessionUserId}
             WHERE sid = ${req.sessionID}
             AND user_id IS NULL
+            AND EXISTS (SELECT 1 FROM users WHERE id = ${sessionUserId})
           `;
         } catch (error) {
           // Log error but don't block the request - session is still valid
@@ -3003,10 +3005,16 @@ export async function registerRoutes(app: Express) {
 
       // Update invitation with email sent status
       if (emailSent) {
-        await storage.updateInvitation(invitation.id, {
-          emailSent: true,
-          emailSentAt: new Date()
-        });
+        try {
+          await storage.updateInvitation(invitation.id, {
+            emailSent: true,
+            emailSentAt: new Date()
+          });
+        } catch (updateError) {
+          // Log the database update failure but don't fail the whole operation
+          // since the email was actually sent successfully
+          console.error(`Failed to update email status for invitation ${invitation.id}:`, updateError);
+        }
       }
 
       return emailSent;
