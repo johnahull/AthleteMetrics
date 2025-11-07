@@ -733,6 +733,15 @@ export async function registerRoutes(app: Express) {
     },
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    skip: (req) => {
+      // Skip rate limiting for localhost and test environments
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      const isTestEnv = process.env.NODE_ENV === 'test';
+      // Production safeguard: Never bypass rate limiting in production environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      const bypassForDev = !isProduction && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+      return isLocalhost || isTestEnv || bypassForDev;
+    }
   });
 
   // Rate limiting for API endpoints (general usage)
