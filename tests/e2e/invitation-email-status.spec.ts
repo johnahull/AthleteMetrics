@@ -65,10 +65,17 @@ test.describe('Invitation Email Status Tests', () => {
   test.afterEach(async ({ page }) => {
     // Primary cleanup: Delete invitations by tracked IDs in parallel (fast path)
     await Promise.all(
-      createdInvitationIds.map(invitationId =>
-        page.request.delete(`${TESTING_URL}/api/invitations/${invitationId}`)
-          .catch(error => console.warn(`Failed to cleanup invitation ${invitationId}:`, error))
-      )
+      createdInvitationIds.map(async invitationId => {
+        try {
+          const response = await page.request.delete(`${TESTING_URL}/api/invitations/${invitationId}`);
+          // Only log if it's not a 404 (invitation may have been deleted by test)
+          if (!response.ok() && response.status() !== 404) {
+            console.warn(`Failed to cleanup invitation ${invitationId}: ${response.status()} ${response.statusText()}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to cleanup invitation ${invitationId}:`, error);
+        }
+      })
     );
 
     // Fallback cleanup: Query and delete any orphaned test invitations by email pattern

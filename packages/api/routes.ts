@@ -598,16 +598,24 @@ export async function registerRoutes(app: Express) {
   // Cleanup expired entries periodically to prevent memory leak
   // Runs every hour to remove sessions older than TTL
   setInterval(() => {
-    const now = Date.now();
-    let cleaned = 0;
-    for (const [sessionId, timestamp] of syncedSessions.entries()) {
-      if (now - timestamp > SYNCED_SESSIONS_TTL_MS) {
-        syncedSessions.delete(sessionId);
-        cleaned++;
+    try {
+      const now = Date.now();
+      let cleaned = 0;
+      for (const [sessionId, timestamp] of syncedSessions.entries()) {
+        if (now - timestamp > SYNCED_SESSIONS_TTL_MS) {
+          syncedSessions.delete(sessionId);
+          cleaned++;
+        }
       }
-    }
-    if (cleaned > 0) {
-      console.log(`Cleaned ${cleaned} expired session sync entries from cache`);
+      if (cleaned > 0) {
+        console.log(`Cleaned ${cleaned} expired session sync entries from cache`);
+      }
+    } catch (error) {
+      console.error('Error during session cache cleanup:', error);
+      // On error, clear the entire cache as a safety fallback
+      // This prevents corrupted state and allows clean restart
+      syncedSessions.clear();
+      console.warn('Session cache cleared due to cleanup error - will rebuild on next requests');
     }
   }, 60 * 60 * 1000); // Run every hour
 
