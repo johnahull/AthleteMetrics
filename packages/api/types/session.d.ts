@@ -32,7 +32,14 @@ declare module "express-session" {
     };
     isImpersonating?: boolean;
     impersonationStartTime?: Date;
-    // Session userId sync flag (prevents redundant DB queries)
+    /**
+     * Tracks whether the session's userId column in the database has been synced.
+     * Set to true after the first successful sync to prevent redundant database queries
+     * on subsequent requests for the same session.
+     *
+     * This flag optimizes performance by avoiding unnecessary UPDATE queries to the
+     * session table when the userId is already set.
+     */
     userIdSynced?: boolean;
   }
 }

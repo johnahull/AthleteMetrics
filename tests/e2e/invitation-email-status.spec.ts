@@ -17,8 +17,11 @@ import { navigateTo } from './helpers/navigation';
 
 const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
+// Test data isolation constants
+const E2E_TEST_EMAIL_PREFIX = 'e2e_test';
+
 // Helper to generate unique test data with improved isolation
-// Uses e2e_test prefix with timestamp to prevent accidental deletion of legitimate test data
+// Uses E2E_TEST_EMAIL_PREFIX with timestamp to prevent accidental deletion of legitimate test data
 function generateTestInvitation() {
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(2);
@@ -26,7 +29,7 @@ function generateTestInvitation() {
   return {
     firstName: `TestInvite_${uniqueId}`,
     lastName: `LastName_${uniqueId}`,
-    email: `e2e_test_${uniqueId}@example.com`,
+    email: `${E2E_TEST_EMAIL_PREFIX}_${uniqueId}@example.com`,
   };
 }
 
@@ -60,14 +63,13 @@ test.describe('Invitation Email Status Tests', () => {
 
   // Cleanup: Delete test invitations created during test
   test.afterEach(async ({ page }) => {
-    // Primary cleanup: Delete invitations by tracked IDs (fast path)
-    for (const invitationId of createdInvitationIds) {
-      try {
-        await page.request.delete(`${TESTING_URL}/api/invitations/${invitationId}`);
-      } catch (error) {
-        console.warn(`Failed to cleanup invitation ${invitationId}:`, error);
-      }
-    }
+    // Primary cleanup: Delete invitations by tracked IDs in parallel (fast path)
+    await Promise.all(
+      createdInvitationIds.map(invitationId =>
+        page.request.delete(`${TESTING_URL}/api/invitations/${invitationId}`)
+          .catch(error => console.warn(`Failed to cleanup invitation ${invitationId}:`, error))
+      )
+    );
 
     // Fallback cleanup: Query and delete any orphaned test invitations by email pattern
     // This handles cases where test crashes before invitation ID is tracked
@@ -76,8 +78,8 @@ test.describe('Invitation Email Status Tests', () => {
       if (response.ok()) {
         const invitations = await response.json();
         for (const inv of invitations) {
-          // Match test invitation emails (generated with e2e_test_ prefix for better isolation)
-          if (inv.email && inv.email.includes('e2e_test_')) {
+          // Match test invitation emails (generated with E2E_TEST_EMAIL_PREFIX for better isolation)
+          if (inv.email && inv.email.includes(E2E_TEST_EMAIL_PREFIX)) {
             try {
               await page.request.delete(`${TESTING_URL}/api/invitations/${inv.id}`);
               console.log(`Cleaned up orphaned test invitation: ${inv.email}`);

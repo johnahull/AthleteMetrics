@@ -22,8 +22,9 @@ function escapeHtml(unsafe: string | undefined | null): string {
 /**
  * Sanitize URL to prevent javascript: protocol and other injection attacks
  * Only allows http:, https:, and mailto: protocols
+ * For invitation links, validates the expected URL structure
  */
-function sanitizeUrl(url: string | undefined | null): string {
+function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation' | 'verification' | 'password-reset'): string {
   if (!url) return '#';
 
   const urlString = String(url).trim();
@@ -40,6 +41,22 @@ function sanitizeUrl(url: string | undefined | null): string {
   if (!allowedProtocols.test(urlString)) {
     // If no protocol, assume it's a relative URL - make it safe
     return '#';
+  }
+
+  // Additional validation for expected URL types
+  if (expectedType) {
+    const urlPatterns = {
+      invitation: /\/accept-invitation\?token=/,
+      verification: /\/verify-email\?token=/,
+      'password-reset': /\/reset-password\?token=/
+    };
+
+    const pattern = urlPatterns[expectedType];
+    if (pattern && !pattern.test(urlString)) {
+      console.warn(`⚠️ URL does not match expected ${expectedType} format:`, urlString.substring(0, 50));
+      // Still allow it through since the token validation happens elsewhere
+      // This is defense-in-depth, not a hard security boundary
+    }
   }
 
   return urlString;
@@ -242,7 +259,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${sanitizeUrl(data.invitationLink)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(data.invitationLink, 'invitation')}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Accept Invitation
                     </a>
                   </td>
@@ -375,7 +392,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${sanitizeUrl(data.verificationLink)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(data.verificationLink, 'verification')}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Verify Email
                     </a>
                   </td>
@@ -448,7 +465,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${sanitizeUrl(data.resetLink)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(data.resetLink, 'password-reset')}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       Reset Password
                     </a>
                   </td>

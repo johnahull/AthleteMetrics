@@ -35,11 +35,14 @@ export function shouldSkipRateLimiting(
 
   // Log rate limit bypasses for security monitoring (except in test env to avoid noise)
   if (shouldSkip && !isTestEnv) {
+    // Strip query parameters from path to prevent logging sensitive data (tokens, etc.)
+    const sanitizedPath = req.path.split('?')[0];
+
     console.warn(`⚠️ Rate limiting bypassed for ${rateLimitType}:`, {
       ip: req.ip,
       reason: isLocalhost ? 'localhost' : `BYPASS_${rateLimitType.toUpperCase()}_RATE_LIMIT env var`,
       environment: process.env.NODE_ENV,
-      path: req.path
+      path: sanitizedPath
     });
   }
 
