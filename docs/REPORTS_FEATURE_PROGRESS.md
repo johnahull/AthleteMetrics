@@ -37,39 +37,40 @@ Two report types for athletic performance analysis:
   - [x] Add relations and TypeScript types
 - [x] Generated migration: `drizzle/migrations/0001_messy_human_cannonball.sql`
 
-### Phase 2: E2E Tests First (TDD - RED 🔴)
+### Phase 2: E2E Tests First (TDD - RED 🔴) ✅
 
-- [ ] **Test Suite 1:** Coach Report Creation (`tests/e2e/coach-report-creation.spec.ts`)
-  - [ ] Navigate to reports page
-  - [ ] Create coach report wizard flow
-  - [ ] Select team, timeframe, metrics
-  - [ ] Configure benchmarks (site + custom + user-defined)
-  - [ ] Set composite index weights
-  - [ ] Verify performance snapshot table
-  - [ ] Verify metric rankings (1-to-n)
-  - [ ] Verify composite index rankings
+- [x] **Test Suite 1:** Coach Report Creation (`tests/e2e/coach-report-creation.spec.ts`)
+  - [x] Navigate to reports page (9 tests)
+  - [x] Create coach report wizard flow
+  - [x] Select team, timeframe, metrics
+  - [x] Configure benchmarks (site + custom + user-defined)
+  - [x] Set composite index weights
+  - [x] Verify performance snapshot table
+  - [x] Verify metric rankings (1-to-n)
+  - [x] Verify composite index rankings
 
-- [ ] **Test Suite 2:** Individual Report Creation (`tests/e2e/individual-report-creation.spec.ts`)
-  - [ ] Create individual report
-  - [ ] Select athletes/teams
-  - [ ] Choose metrics and benchmarks
-  - [ ] Verify athlete details display
-  - [ ] Verify performance table with percentiles
+- [x] **Test Suite 2:** Individual Report Creation (`tests/e2e/individual-report-creation.spec.ts`)
+  - [x] Create individual report (7 tests)
+  - [x] Select athletes/teams
+  - [x] Choose metrics and benchmarks
+  - [x] Verify athlete details display
+  - [x] Verify performance table with percentiles
 
-- [ ] **Test Suite 3:** PDF Export (`tests/e2e/report-pdf-export.spec.ts`)
-  - [ ] Generate report
-  - [ ] Export as PDF
-  - [ ] Verify PDF download
-  - [ ] Verify PDF content quality
+- [x] **Test Suite 3:** PDF Export (`tests/e2e/report-pdf-export.spec.ts`)
+  - [x] Generate report (7 tests)
+  - [x] Export as PDF
+  - [x] Verify PDF download
+  - [x] Verify PDF content quality
 
-- [ ] **Test Suite 4:** Public URL Sharing (`tests/e2e/report-public-sharing.spec.ts`)
-  - [ ] Create public link with expiration
-  - [ ] Access link without authentication
-  - [ ] Verify report displays correctly
-  - [ ] Revoke link
-  - [ ] Verify revoked link returns 404
+- [x] **Test Suite 4:** Public URL Sharing (`tests/e2e/report-public-sharing.spec.ts`)
+  - [x] Create public link with expiration (11 tests)
+  - [x] Access link without authentication
+  - [x] Verify report displays correctly
+  - [x] Revoke link
+  - [x] Verify revoked link returns 404
 
-**Expected Result:** All tests FAIL (features don't exist yet)
+**Total Tests Written:** 34 E2E tests
+**Expected Result:** ✅ All tests FAIL (features don't exist yet - this is expected in TDD RED phase)
 
 ### Phase 3: Backend Implementation (TDD - GREEN 🟢)
 
