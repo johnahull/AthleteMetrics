@@ -48,6 +48,11 @@ const OrganizationBenchmarks = React.lazy(() => import("./pages/organization-ben
 const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
 const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
 
+// Lazy load report pages
+const Reports = React.lazy(() => import("./pages/reports"));
+const ReportView = React.lazy(() => import("./pages/report-view"));
+const PublicReport = React.lazy(() => import("./pages/public-report"));
+
 function Router() {
   return (
     <Switch>
@@ -58,6 +63,7 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/verify-email" component={VerifyEmail} />
+      <Route path="/public/reports/:token" component={PublicReport} />
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
@@ -161,6 +167,16 @@ function Router() {
       <Route path="/profile">
         <RouteWrapper loadingText="Loading Profile...">
           <Profile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/:id">
+        <RouteWrapper loadingText="Loading Report...">
+          <ReportView />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports">
+        <RouteWrapper loadingText="Loading Reports...">
+          <Reports />
         </RouteWrapper>
       </Route>
       {/* Welcome page (/) must come after /dashboard to avoid route conflicts
