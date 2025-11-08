@@ -55,9 +55,10 @@ COPY packages/api/package.json ./packages/api/
 COPY packages/web/package.json ./packages/web/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install only production dependencies for API and shared workspaces
-# Note: Web dependencies are not needed at runtime since frontend is pre-built
-RUN npm ci --only=production --workspace=@athletemetrics/api --workspace=@athletemetrics/shared
+# Install all production dependencies
+# Note: Migration scripts at root level need drizzle-orm and other deps
+# Web workspace dependencies will be installed but frontend is pre-built
+RUN npm ci --omit=dev
 
 # Copy built application from builder stage
 # Note: @shared code is now bundled into dist/index.js via esbuild alias
