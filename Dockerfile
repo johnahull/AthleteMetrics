@@ -32,12 +32,20 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies for sharp and tesseract
+# Install runtime dependencies for sharp, tesseract, and canvas
+# Note: python3, make, g++ needed for canvas (chartjs-node-canvas)
 RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
     cairo \
+    cairo-dev \
     jpeg \
+    jpeg-dev \
     pango \
+    pango-dev \
     giflib \
+    giflib-dev \
     tesseract-ocr \
     tesseract-ocr-data-eng
 
