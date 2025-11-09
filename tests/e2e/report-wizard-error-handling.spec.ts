@@ -12,7 +12,7 @@ import { loginAsDefaultUser } from './helpers/auth';
  * - Metric field mapping (metricCode vs code)
  */
 
-const STAGING_URL = process.env.STAGING_URL || process.env.STAGING_URL || 'http://localhost:5000';
+const STAGING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
 function generateTestReport() {
   const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -224,7 +224,7 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
 
     test('should display error message when site benchmarks API fails', async ({ page }) => {
       // Intercept site benchmarks API
-      await page.route('**/api/benchmarks/site', route => {
+      await page.route('**/api/benchmarks', route => {
         route.fulfill({
           status: 500,
           body: JSON.stringify({ error: 'Internal Server Error' }),
@@ -273,7 +273,7 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       });
 
       // Intercept custom benchmarks API
-      await page.route(`**/api/organizations/${orgId}/custom-benchmarks`, route => {
+      await page.route(`**/api/organizations/${orgId}/benchmarks/custom`, route => {
         route.fulfill({
           status: 500,
           body: JSON.stringify({ error: 'Internal Server Error' }),
@@ -414,7 +414,7 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       });
 
       // Intercept both benchmark APIs and return empty arrays
-      await page.route('**/api/benchmarks/site', route => {
+      await page.route('**/api/benchmarks', route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -422,7 +422,7 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
         });
       });
 
-      await page.route(`**/api/organizations/${orgId}/custom-benchmarks`, route => {
+      await page.route(`**/api/organizations/${orgId}/benchmarks/custom`, route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
