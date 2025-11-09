@@ -17,7 +17,7 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import jsPDF from "jspdf";
@@ -771,6 +771,3 @@ function generatePDF(report: any, reportData: any): jsPDF {
 
   return doc;
 }
-
-// Import sql function for array queries
-import { sql } from "drizzle-orm";
