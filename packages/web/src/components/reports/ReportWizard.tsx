@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -86,6 +86,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   // Watch form values
   const reportType = watch("reportType");
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[ReportWizard] State changed - step:', step, 'reportType:', reportType);
+  }, [step, reportType]);
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
@@ -104,7 +109,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useQuery({
     queryKey: ["/api/teams", organizationContext],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/teams`);
+      const res = await apiRequest("GET", `/api/teams?organizationId=${organizationContext}`);
       return res.json();
     },
     enabled: !!organizationContext,
@@ -130,8 +135,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   });
 
   const handleNext = () => {
+    console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
     if (step < totalSteps) {
       setStep(step + 1);
+      console.log('[ReportWizard] Moving to step:', step + 1);
     }
   };
 
@@ -142,7 +149,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   };
 
   const onSubmit = async (data: ReportFormData) => {
+    console.log('[ReportWizard] onSubmit called - step:', step, 'reportType:', reportType, 'data:', data);
     if (!organizationContext) {
+      console.log('[ReportWizard] No organizationContext - aborting');
       return;
     }
 
@@ -212,7 +221,16 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
         <Progress value={progress} className="mb-4" />
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-6"
+          onKeyDown={(e) => {
+            // Prevent Enter key from submitting form except when explicitly clicking submit button
+            if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
+              e.preventDefault();
+            }
+          }}
+        >
           {/* Step 1: Report Type */}
           {step === 1 && (
             <div className="space-y-4">

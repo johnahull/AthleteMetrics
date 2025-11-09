@@ -141,8 +141,19 @@ export class ReportService extends BaseService {
 
     const config = report.config as ReportConfig;
 
+    console.log('[ReportService] Generating coach report:', {
+      reportId,
+      reportName: report.name,
+      organizationId: report.organizationId,
+      metrics: config.metrics,
+      timeframe: config.timeframe,
+      filters: config.filters,
+      compositeIndex: config.compositeIndex
+    });
+
     // Calculate date range from timeframe
     const { startDate, endDate } = this.calculateDateRange(config.timeframe);
+    console.log('[ReportService] Date range:', { startDate, endDate });
 
     // Get measurements based on filters
     const measurementData = await this.getFilteredMeasurements(
@@ -153,11 +164,22 @@ export class ReportService extends BaseService {
       endDate
     );
 
+    console.log('[ReportService] Fetched measurements:', {
+      count: measurementData.length,
+      uniqueUsers: new Set(measurementData.map(m => m.measurement.userId)).size,
+      metrics: [...new Set(measurementData.map(m => m.measurement.metric))]
+    });
+
     // Calculate team statistics
     const teamStatistics = this.calculateTeamStatistics(
       measurementData,
       config.metrics
     );
+
+    console.log('[ReportService] Calculated team statistics:', {
+      count: teamStatistics.length,
+      stats: teamStatistics
+    });
 
     // Get athlete rankings with percentiles
     const athleteRankings = await this.calculateAthleteRankings(
@@ -167,8 +189,13 @@ export class ReportService extends BaseService {
       reportId
     );
 
-    return {
-      reportType: 'coach',
+    console.log('[ReportService] Calculated athlete rankings:', {
+      count: athleteRankings.length,
+      rankings: athleteRankings
+    });
+
+    const result = {
+      reportType: 'coach' as const,
       reportConfig: config,
       teamStatistics,
       athleteRankings,
@@ -176,6 +203,13 @@ export class ReportService extends BaseService {
       teamIds: config.filters?.teamIds || [],
       athleteCount: athleteRankings.length,
     };
+
+    console.log('[ReportService] Returning coach report data:', {
+      teamStatisticsCount: result.teamStatistics.length,
+      athleteRankingsCount: result.athleteRankings.length
+    });
+
+    return result;
   }
 
   /**
@@ -677,7 +711,7 @@ export class ReportService extends BaseService {
   } {
     const now = new Date();
     let startDate: Date;
-    const endDate: Date = now;
+    let endDate: Date = now;
 
     if (timeframe.type === 'custom') {
       startDate = new Date(timeframe.customStart!);
@@ -705,6 +739,8 @@ export class ReportService extends BaseService {
       case 'all_time':
       default:
         startDate = new Date('2000-01-01');
+        // For all_time, include future dates
+        endDate = new Date('2099-12-31');
         break;
     }
 
@@ -731,7 +767,7 @@ export class ReportService extends BaseService {
     // Apply team filter
     if (filters?.teamIds && filters.teamIds.length > 0) {
       whereConditions.push(
-        sql`${measurements.teamId} = ANY(${filters.teamIds})`
+        inArray(measurements.teamId, filters.teamIds)
       );
     }
 

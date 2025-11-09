@@ -141,12 +141,23 @@ test.describe('Individual Report Creation - TDD Tests', () => {
   });
 
   test('should display athlete performance with team rank', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     // Create individual report via API
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'individual',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME'],
@@ -179,11 +190,22 @@ test.describe('Individual Report Creation - TDD Tests', () => {
   });
 
   test('should display percentile ranking for athlete', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'individual',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME', 'VERTICAL_JUMP']
@@ -206,11 +228,22 @@ test.describe('Individual Report Creation - TDD Tests', () => {
   });
 
   test('should display benchmark comparisons', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'individual',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME'],
@@ -239,11 +272,22 @@ test.describe('Individual Report Creation - TDD Tests', () => {
   });
 
   test('should show personal bests for athlete', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'individual',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'all_time' },
           metrics: ['FLY10_TIME', 'VERTICAL_JUMP']
@@ -266,12 +310,23 @@ test.describe('Individual Report Creation - TDD Tests', () => {
   });
 
   test('should list report for each selected athlete', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     // Create individual report for multiple athletes
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'individual',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME'],

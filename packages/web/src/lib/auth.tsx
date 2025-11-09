@@ -74,8 +74,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             if (orgResponse.ok) {
               const organizations = await orgResponse.json();
+              console.log('[AuthProvider] Fetched user organizations:', organizations);
               // Only auto-select if user has exactly one organization to avoid confusion
               if (organizations && organizations.length === 1) {
+                console.log('[AuthProvider] Auto-setting organizationContext to:', organizations[0].organizationId);
                 setOrganizationContext(organizations[0].organizationId);
               }
             }

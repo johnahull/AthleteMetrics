@@ -17,7 +17,7 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import jsPDF from "jspdf";
@@ -152,9 +152,7 @@ export function registerReportRoutes(app: Express) {
           reportsList = await db
             .select()
             .from(reports)
-            .where(
-              sql`${reports.organizationId} = ANY(${orgIds})`
-            )
+            .where(inArray(reports.organizationId, orgIds))
             .orderBy(desc(reports.createdAt));
         }
       }

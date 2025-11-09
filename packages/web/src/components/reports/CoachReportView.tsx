@@ -42,6 +42,7 @@ export function CoachReportView({ report }: CoachReportViewProps) {
     // Generate report data on mount
     generateReport.mutate(undefined, {
       onSuccess: (data) => {
+        console.log('[CoachReportView] Report generated successfully:', data);
         setReportData(data);
       },
     });
@@ -96,7 +97,16 @@ export function CoachReportView({ report }: CoachReportViewProps) {
     );
   }
 
-  const { data } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt } = reportData;
+
+  console.log('[CoachReportView] Rendering with data:', {
+    teamStatistics,
+    athleteRankings,
+    teamStatsLength: teamStatistics?.length,
+    athleteRankingsLength: athleteRankings?.length,
+    generatedAt,
+    fullReportData: reportData
+  });
 
   return (
     <div className="space-y-6">
@@ -110,7 +120,7 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                 <p className="text-muted-foreground mt-2">{report.description}</p>
               )}
               <p className="text-sm text-muted-foreground mt-2">
-                Generated on {format(new Date(reportData.generatedAt), "PPP")}
+                Generated on {format(new Date(generatedAt), "PPP")}
               </p>
             </div>
             <div className="flex gap-2">
@@ -127,8 +137,8 @@ export function CoachReportView({ report }: CoachReportViewProps) {
         </CardHeader>
       </Card>
 
-      {/* Performance Snapshot */}
-      {data.performanceSnapshot && (
+      {/* Team Statistics */}
+      {teamStatistics && teamStatistics.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Performance Snapshot</CardTitle>
@@ -145,31 +155,22 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.performanceSnapshot.map((metric: any) => (
-                  <TableRow key={metric.metricCode}>
-                    <TableCell className="font-medium">{metric.metricName}</TableCell>
+                {teamStatistics.map((stat: any) => (
+                  <TableRow key={stat.metric}>
+                    <TableCell className="font-medium">{stat.metric}</TableCell>
                     <TableCell>
-                      {metric.teamAverage?.toFixed(2) || "N/A"} {metric.unit}
+                      {stat.average?.toFixed(2) || "N/A"}
                     </TableCell>
                     <TableCell>
-                      {metric.benchmarks && metric.benchmarks.length > 0 ? (
-                        <div className="space-y-1">
-                          {metric.benchmarks.map((b: any, idx: number) => (
-                            <div key={idx} className="text-sm">
-                              {b.name}: {b.value} {metric.unit}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        "-"
-                      )}
+                      {/* Benchmarks will be added later */}
+                      -
                     </TableCell>
                     <TableCell>
-                      {metric.topPerformer ? (
+                      {stat.topPerformer ? (
                         <div>
-                          <div className="font-medium">{metric.topPerformer.name}</div>
+                          <div className="font-medium">{stat.topPerformer.userName}</div>
                           <div className="text-sm text-muted-foreground">
-                            {metric.topPerformer.value} {metric.unit}
+                            {stat.topPerformer.value?.toFixed(2)}
                           </div>
                         </div>
                       ) : (
@@ -177,8 +178,8 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                       )}
                     </TableCell>
                     <TableCell>
-                      {metric.range
-                        ? `${metric.range.min} - ${metric.range.max} ${metric.unit}`
+                      {stat.min && stat.max
+                        ? `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)}`
                         : "N/A"}
                     </TableCell>
                   </TableRow>
@@ -189,46 +190,8 @@ export function CoachReportView({ report }: CoachReportViewProps) {
         </Card>
       )}
 
-      {/* Metric Rankings */}
-      {data.metricRankings &&
-        Object.entries(data.metricRankings).map(([metricCode, rankings]: any) => (
-          <Card key={metricCode}>
-            <CardHeader>
-              <CardTitle>{rankings.metricName} Rankings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-16">Rank</TableHead>
-                    <TableHead>Athlete</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead>Score</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rankings.rankings.map((athlete: any, idx: number) => (
-                    <TableRow key={athlete.userId}>
-                      <TableCell>
-                        <Badge variant={idx < 3 ? "default" : "secondary"}>
-                          #{idx + 1}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{athlete.name}</TableCell>
-                      <TableCell>{athlete.teamName || "-"}</TableCell>
-                      <TableCell>
-                        {athlete.value?.toFixed(2)} {rankings.unit}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ))}
-
-      {/* Composite Index */}
-      {data.compositeIndex && (
+      {/* Athlete Rankings */}
+      {athleteRankings && athleteRankings.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>
@@ -244,16 +207,16 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.compositeIndex.rankings.map((athlete: any, idx: number) => (
+                {athleteRankings.map((athlete: any, idx: number) => (
                   <TableRow key={athlete.userId}>
                     <TableCell>
                       <Badge variant={idx < 3 ? "default" : "secondary"}>
                         #{idx + 1}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium">{athlete.name}</TableCell>
-                    <TableCell>{athlete.teamName || "-"}</TableCell>
-                    <TableCell>{athlete.compositeScore?.toFixed(2)}</TableCell>
+                    <TableCell className="font-medium">{athlete.userName}</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell>{athlete.compositeIndex?.toFixed(2) || "N/A"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

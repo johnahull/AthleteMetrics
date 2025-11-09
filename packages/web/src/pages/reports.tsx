@@ -34,7 +34,7 @@ export default function Reports() {
   const [showWizard, setShowWizard] = useState(false);
   const [deleteReportId, setDeleteReportId] = useState<string | null>(null);
 
-  const { data: reports, isLoading, error } = useReports();
+  const { data: reports, isLoading, error } = useReports(organizationContext || undefined);
   const deleteReport = useDeleteReport();
 
   // Check access

@@ -242,13 +242,24 @@ test.describe('Coach Report Creation - TDD Tests', () => {
   });
 
   test('should generate and display coach report', async ({ page }) => {
-    // First, create a report via API
+    // First, get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
+    // Create a report via API
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         description: testReport.description,
         reportType: 'coach',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME'],
@@ -281,12 +292,23 @@ test.describe('Coach Report Creation - TDD Tests', () => {
   });
 
   test('should display metric rankings (1-to-n)', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     // Create and generate a report
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME', 'VERTICAL_JUMP']
@@ -312,11 +334,22 @@ test.describe('Coach Report Creation - TDD Tests', () => {
   });
 
   test('should display composite index rankings when enabled', async ({ page }) => {
+    // Get user's organizationContext
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.organizationContext || null;
+      }
+      return null;
+    });
+
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],

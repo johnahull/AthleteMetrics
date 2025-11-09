@@ -76,11 +76,14 @@ interface CreateSnapshotData {
   expiresAt: string;
 }
 
-export function useReports() {
+export function useReports(organizationId?: string) {
   return useQuery<Report[]>({
-    queryKey: ["/api/reports"],
+    queryKey: ["/api/reports", organizationId],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/reports");
+      const url = organizationId
+        ? `/api/reports?organizationId=${organizationId}`
+        : "/api/reports";
+      const res = await apiRequest("GET", url);
       return res.json();
     },
   });
@@ -102,7 +105,7 @@ export function useCreateReport() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: CreateReportData) => {
+    mutationFn: async (data: CreateReportData & { organizationId: string }) => {
       const res = await apiRequest("POST", "/api/reports", data);
       return res.json();
     },

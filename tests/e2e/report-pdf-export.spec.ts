@@ -24,6 +24,18 @@ function generateTestReport() {
   };
 }
 
+// Helper to get user's organizationContext from page
+async function getUserOrgId(page: any): Promise<string | null> {
+  return await page.evaluate(() => {
+    const authData = localStorage.getItem('auth');
+    if (authData) {
+      const parsed = JSON.parse(authData);
+      return parsed.organizationContext || null;
+    }
+    return null;
+  });
+}
+
 test.describe('Report PDF Export - TDD Tests', () => {
   let createdReportIds: string[] = [];
 
@@ -44,11 +56,13 @@ test.describe('Report PDF Export - TDD Tests', () => {
 
   test('should show PDF export button on generated report', async ({ page }) => {
     // Create a report via API
+    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -72,11 +86,13 @@ test.describe('Report PDF Export - TDD Tests', () => {
   });
 
   test('should download PDF for coach report', async ({ page }) => {
+    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME', 'VERTICAL_JUMP']
@@ -111,11 +127,13 @@ test.describe('Report PDF Export - TDD Tests', () => {
   });
 
   test('should download PDF for individual report', async ({ page }) => {
+    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'individual',
+        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -143,11 +161,13 @@ test.describe('Report PDF Export - TDD Tests', () => {
   });
 
   test('should generate PDF via API endpoint', async ({ page }) => {
+    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -171,11 +191,13 @@ test.describe('Report PDF Export - TDD Tests', () => {
   });
 
   test('should include report data in PDF', async ({ page }) => {
+    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -199,11 +221,13 @@ test.describe('Report PDF Export - TDD Tests', () => {
   });
 
   test('should export PDF with charts included', async ({ page }) => {
+    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
+        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],

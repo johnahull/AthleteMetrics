@@ -95,13 +95,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should open share dialog with expiration options', async ({ page }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -127,13 +125,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should create public snapshot and return shareable URL', async ({ page }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -181,13 +177,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
 
   test('should access public report without authentication', async ({ page, context }) => {
     // First, create a report and snapshot while authenticated
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -236,13 +230,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should display frozen snapshot data (not live)', async ({ page, context }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -289,13 +281,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should revoke public link', async ({ page }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -333,13 +323,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should return 404 for expired public link', async ({ page, context }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -381,13 +369,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should track view count for public snapshots', async ({ page, context }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
@@ -444,13 +430,11 @@ test.describe('Report Public Sharing - TDD Tests', () => {
   });
 
   test('should copy public URL to clipboard', async ({ page }) => {
-    const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();
     const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
       data: {
         name: testReport.name,
         reportType: 'coach',
-        organizationId: userOrgId,
         config: {
           timeframe: { type: 'preset', preset: 'season' },
           metrics: ['FLY10_TIME']
