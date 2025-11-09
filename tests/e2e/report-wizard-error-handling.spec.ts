@@ -12,7 +12,7 @@ import { loginAsDefaultUser } from './helpers/auth';
  * - Metric field mapping (metricCode vs code)
  */
 
-const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
+const STAGING_URL = process.env.STAGING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
 function generateTestReport() {
   const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
