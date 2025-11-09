@@ -177,7 +177,12 @@ export default function Reports() {
           onClose={() => setShowWizard(false)}
           onSuccess={(reportId) => {
             setShowWizard(false);
-            setLocation(`/reports/${reportId}`);
+            // Handle batch reports (array of IDs) vs single report
+            if (Array.isArray(reportId)) {
+              setLocation(`/reports/multi?ids=${reportId.join(',')}`);
+            } else {
+              setLocation(`/reports/${reportId}`);
+            }
           }}
         />
       )}

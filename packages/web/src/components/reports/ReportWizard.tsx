@@ -63,7 +63,7 @@ type ReportFormData = z.infer<typeof reportConfigSchema>;
 interface ReportWizardProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (reportId: string) => void;
+  onSuccess: (reportId: string | string[]) => void;
 }
 
 export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
@@ -226,7 +226,15 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       organizationId: organizationContext,
     });
 
-    onSuccess(result.id);
+    // Handle batch creation (multiple athletes) vs single report
+    if ('reports' in result && Array.isArray(result.reports)) {
+      // Batch creation - pass array of report IDs
+      const reportIds = result.reports.map((r: any) => r.id);
+      onSuccess(reportIds);
+    } else {
+      // Single report creation
+      onSuccess(result.id);
+    }
   };
 
   const toggleMetric = (metricCode: string) => {

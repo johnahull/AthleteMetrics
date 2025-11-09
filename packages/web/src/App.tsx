@@ -51,6 +51,7 @@ const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"))
 // Lazy load report pages
 const Reports = React.lazy(() => import("./pages/reports"));
 const ReportView = React.lazy(() => import("./pages/report-view"));
+const MultiReportView = React.lazy(() => import("./pages/multi-report-view"));
 const PublicReport = React.lazy(() => import("./pages/public-report"));
 
 // Lazy load component test pages (development only)
@@ -170,6 +171,11 @@ function Router() {
       <Route path="/profile">
         <RouteWrapper loadingText="Loading Profile...">
           <Profile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/multi">
+        <RouteWrapper loadingText="Loading Reports...">
+          <MultiReportView />
         </RouteWrapper>
       </Route>
       <Route path="/reports/:id">
