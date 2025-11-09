@@ -134,7 +134,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     enabled: !!organizationContext,
   });
 
-  const handleNext = () => {
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.preventDefault();
     console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
     if (step < totalSteps) {
       setStep(step + 1);
@@ -150,6 +151,13 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   const onSubmit = async (data: ReportFormData) => {
     console.log('[ReportWizard] onSubmit called - step:', step, 'reportType:', reportType, 'data:', data);
+
+    // Prevent submission if not on final step
+    if (step !== totalSteps) {
+      console.error('[ReportWizard] Form submitted prematurely on step', step, '- blocking submission');
+      return;
+    }
+
     if (!organizationContext) {
       console.log('[ReportWizard] No organizationContext - aborting');
       return;
@@ -562,6 +570,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {/* Step 7: Composite Index (Coach Reports Only) */}
           {step === 7 && reportType === "coach" && (
             <div className="space-y-4">
+              <Label>Composite Index (Optional)</Label>
+              <p className="text-sm text-muted-foreground mb-4">
+                Create a weighted composite score across multiple metrics to rank athletes
+              </p>
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="enableCompositeIndex"
@@ -574,12 +586,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   Enable Composite Index
                 </Label>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Create a weighted composite score across multiple metrics
-              </p>
 
               {enableCompositeIndex && selectedMetrics.length > 0 && (
-                <div className="space-y-3 border rounded-lg p-4">
+                <div className="space-y-3 border rounded-lg p-4 bg-accent/50">
                   <p className="text-sm font-medium">
                     Assign weights to each metric (must sum to 1.0)
                   </p>
@@ -604,6 +613,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     </div>
                   ))}
                 </div>
+              )}
+
+              {!enableCompositeIndex && (
+                <p className="text-sm text-muted-foreground">
+                  Skip composite index to create a report without athlete rankings. Click "Create Report" to continue.
+                </p>
               )}
             </div>
           )}

@@ -77,11 +77,16 @@ interface TeamStatistics {
   min: number;
   max: number;
   standardDeviation: number;
+  units: string;
   topPerformer?: {
     userId: string;
     userName: string;
     value: number;
   };
+  benchmarks?: Array<{
+    name: string;
+    value: number;
+  }>;
 }
 
 interface BenchmarkComparison {
@@ -171,9 +176,12 @@ export class ReportService extends BaseService {
     });
 
     // Calculate team statistics
-    const teamStatistics = this.calculateTeamStatistics(
+    const teamStatistics = await this.calculateTeamStatistics(
       measurementData,
-      config.metrics
+      config.metrics,
+      config.benchmarks,
+      report.organizationId,
+      reportId
     );
 
     console.log('[ReportService] Calculated team statistics:', {
@@ -799,11 +807,21 @@ export class ReportService extends BaseService {
     return filteredResults;
   }
 
-  private calculateTeamStatistics(
+  private async calculateTeamStatistics(
     measurementData: any[],
-    metrics: string[]
-  ): TeamStatistics[] {
+    metrics: string[],
+    benchmarkConfig: ReportConfig['benchmarks'],
+    organizationId: string,
+    reportId: string
+  ): Promise<TeamStatistics[]> {
     const stats: TeamStatistics[] = [];
+
+    // Fetch all relevant benchmarks
+    const benchmarksByMetric = await this.getBenchmarksForReport(
+      benchmarkConfig,
+      organizationId,
+      reportId
+    );
 
     for (const metric of metrics) {
       const metricMeasurements = measurementData
@@ -812,6 +830,7 @@ export class ReportService extends BaseService {
           value: parseFloat(m.measurement.value),
           userId: m.measurement.userId,
           userName: m.user?.fullName || 'Unknown',
+          units: m.measurement.units,
         }))
         .filter((m) => !isNaN(m.value));
 
@@ -820,12 +839,16 @@ export class ReportService extends BaseService {
       }
 
       const values = metricMeasurements.map((m) => m.value);
+      const units = metricMeasurements[0]?.units || '';
 
       // Find best performer (depends on metric type)
       // For now, assume lower is better for time-based, higher for jumps
       const isLowerBetter = metric.includes('TIME') || metric.includes('TEST');
       const bestValue = isLowerBetter ? Math.min(...values) : Math.max(...values);
       const topPerformer = metricMeasurements.find((m) => m.value === bestValue);
+
+      // Get benchmarks for this metric
+      const metricBenchmarks = benchmarksByMetric[metric] || [];
 
       stats.push({
         metric,
@@ -841,7 +864,9 @@ export class ReportService extends BaseService {
               value: topPerformer.value,
             }
           : undefined,
-      });
+        benchmarks: metricBenchmarks.length > 0 ? metricBenchmarks : undefined,
+        units,
+      } as any);
     }
 
     return stats;
@@ -1000,6 +1025,102 @@ export class ReportService extends BaseService {
       percentageDiff,
       comparisonOperator,
     };
+  }
+
+  private async getBenchmarksForReport(
+    benchmarkConfig: ReportConfig['benchmarks'],
+    organizationId: string,
+    reportId: string
+  ): Promise<Record<string, Array<{ name: string; value: number }>>> {
+    const benchmarksByMetric: Record<string, Array<{ name: string; value: number }>> = {};
+
+    if (!benchmarkConfig) {
+      return benchmarksByMetric;
+    }
+
+    // Get user-defined benchmarks from the report
+    if (benchmarkConfig.userDefined && benchmarkConfig.userDefined.length > 0) {
+      for (const benchmark of benchmarkConfig.userDefined) {
+        if (!benchmarksByMetric[benchmark.metricCode]) {
+          benchmarksByMetric[benchmark.metricCode] = [];
+        }
+        benchmarksByMetric[benchmark.metricCode].push({
+          name: benchmark.label,
+          value: benchmark.value,
+        });
+      }
+    }
+
+    // Get site benchmarks
+    if (benchmarkConfig.site && benchmarkConfig.site.length > 0) {
+      const siteBenchmarksList = await db
+        .select({
+          benchmark: siteBenchmarks,
+        })
+        .from(siteBenchmarks)
+        .innerJoin(
+          organizationBenchmarks,
+          and(
+            eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
+            eq(organizationBenchmarks.benchmarkType, 'site'),
+            eq(organizationBenchmarks.organizationId, organizationId),
+            eq(organizationBenchmarks.isEnabled, true)
+          )
+        )
+        .where(
+          and(
+            eq(siteBenchmarks.isActive, true),
+            inArray(siteBenchmarks.id, benchmarkConfig.site)
+          )
+        );
+
+      for (const { benchmark } of siteBenchmarksList) {
+        if (!benchmarksByMetric[benchmark.metricCode]) {
+          benchmarksByMetric[benchmark.metricCode] = [];
+        }
+        benchmarksByMetric[benchmark.metricCode].push({
+          name: benchmark.name,
+          value: parseFloat(benchmark.benchmarkValue),
+        });
+      }
+    }
+
+    // Get custom benchmarks
+    if (benchmarkConfig.custom && benchmarkConfig.custom.length > 0) {
+      const customBenchmarksList = await db
+        .select({
+          benchmark: customBenchmarks,
+        })
+        .from(customBenchmarks)
+        .innerJoin(
+          organizationBenchmarks,
+          and(
+            eq(organizationBenchmarks.benchmarkId, customBenchmarks.id),
+            eq(organizationBenchmarks.benchmarkType, 'custom'),
+            eq(organizationBenchmarks.organizationId, organizationId),
+            eq(organizationBenchmarks.isEnabled, true)
+          )
+        )
+        .where(
+          and(
+            eq(customBenchmarks.organizationId, organizationId),
+            eq(customBenchmarks.isActive, true),
+            inArray(customBenchmarks.id, benchmarkConfig.custom)
+          )
+        );
+
+      for (const { benchmark } of customBenchmarksList) {
+        if (!benchmarksByMetric[benchmark.metricCode]) {
+          benchmarksByMetric[benchmark.metricCode] = [];
+        }
+        benchmarksByMetric[benchmark.metricCode].push({
+          name: benchmark.name,
+          value: parseFloat(benchmark.benchmarkValue),
+        });
+      }
+    }
+
+    return benchmarksByMetric;
   }
 
   private async getMetricInfo(metricCode: string) {

@@ -108,6 +108,19 @@ export function CoachReportView({ report }: CoachReportViewProps) {
     fullReportData: reportData
   });
 
+  // Collect all unique benchmark names across all metrics
+  const allBenchmarkNames = new Set<string>();
+  if (teamStatistics) {
+    teamStatistics.forEach((stat: any) => {
+      if (stat.benchmarks && Array.isArray(stat.benchmarks)) {
+        stat.benchmarks.forEach((benchmark: any) => {
+          allBenchmarkNames.add(benchmark.name);
+        });
+      }
+    });
+  }
+  const benchmarkColumns = Array.from(allBenchmarkNames);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -149,49 +162,68 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                 <TableRow>
                   <TableHead>Test</TableHead>
                   <TableHead>Team Average</TableHead>
-                  <TableHead>Benchmarks</TableHead>
+                  {benchmarkColumns.map((benchmarkName) => (
+                    <TableHead key={benchmarkName}>{benchmarkName}</TableHead>
+                  ))}
                   <TableHead>Top Performer</TableHead>
                   <TableHead>Range</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {teamStatistics.map((stat: any) => (
-                  <TableRow key={stat.metric}>
-                    <TableCell className="font-medium">{stat.metric}</TableCell>
-                    <TableCell>
-                      {stat.average?.toFixed(2) || "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      {/* Benchmarks will be added later */}
-                      -
-                    </TableCell>
-                    <TableCell>
-                      {stat.topPerformer ? (
-                        <div>
-                          <div className="font-medium">{stat.topPerformer.userName}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {stat.topPerformer.value?.toFixed(2)}
+                {teamStatistics.map((stat: any) => {
+                  // Create a map of benchmark values for this metric
+                  const benchmarkMap = new Map<string, number>();
+                  if (stat.benchmarks && Array.isArray(stat.benchmarks)) {
+                    stat.benchmarks.forEach((benchmark: any) => {
+                      benchmarkMap.set(benchmark.name, benchmark.value);
+                    });
+                  }
+
+                  return (
+                    <TableRow key={stat.metric}>
+                      <TableCell className="font-medium">{stat.metric}</TableCell>
+                      <TableCell>
+                        {stat.average !== null && stat.average !== undefined
+                          ? `${stat.average.toFixed(2)} ${stat.units || ''}`
+                          : "N/A"}
+                      </TableCell>
+                      {benchmarkColumns.map((benchmarkName) => (
+                        <TableCell key={benchmarkName}>
+                          {benchmarkMap.has(benchmarkName)
+                            ? `${benchmarkMap.get(benchmarkName)!.toFixed(2)} ${stat.units || ''}`
+                            : "-"}
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        {stat.topPerformer ? (
+                          <div>
+                            <div className="font-medium">{stat.topPerformer.userName}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
+                                ? `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`
+                                : "N/A"}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        "N/A"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {stat.min && stat.max
-                        ? `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)}`
-                        : "N/A"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        ) : (
+                          "N/A"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
+                          ? `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`
+                          : "N/A"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       )}
 
-      {/* Athlete Rankings */}
-      {athleteRankings && athleteRankings.length > 0 && (
+      {/* Athlete Rankings - Only show if composite index is enabled */}
+      {athleteRankings && athleteRankings.length > 0 && athleteRankings.some((a: any) => a.compositeIndex !== undefined) && (
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>
@@ -202,7 +234,6 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                 <TableRow>
                   <TableHead className="w-16">Rank</TableHead>
                   <TableHead>Athlete</TableHead>
-                  <TableHead>Team</TableHead>
                   <TableHead>Composite Score</TableHead>
                 </TableRow>
               </TableHeader>
@@ -215,7 +246,6 @@ export function CoachReportView({ report }: CoachReportViewProps) {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{athlete.userName}</TableCell>
-                    <TableCell>-</TableCell>
                     <TableCell>{athlete.compositeIndex?.toFixed(2) || "N/A"}</TableCell>
                   </TableRow>
                 ))}
