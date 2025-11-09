@@ -29,11 +29,13 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["coach", "individual"]),
   name: z.string().min(1, "Report name is required"),
   description: z.string().optional(),
+  athleteIds: z.array(z.string()).optional(),
   timeframeType: z.enum(["preset", "custom"]),
   timeframePreset: z.enum(["season", "year", "all_time"]).optional(),
   timeframeStart: z.string().optional(),
@@ -46,6 +48,14 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   enableCompositeIndex: z.boolean().default(false),
   compositeWeights: z.record(z.string(), z.number()).optional(),
+}).superRefine((data, ctx) => {
+  if (data.reportType === "individual" && (!data.athleteIds || data.athleteIds.length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "At least one athlete is required for individual reports",
+      path: ["athleteIds"],
+    });
+  }
 });
 
 type ReportFormData = z.infer<typeof reportConfigSchema>;
@@ -59,7 +69,7 @@ interface ReportWizardProps {
 export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const { organizationContext } = useAuth();
   const [step, setStep] = useState(1);
-  const totalSteps = 7;
+  const totalSteps = 8;
 
   const {
     register,
@@ -71,6 +81,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     resolver: zodResolver(reportConfigSchema),
     defaultValues: {
       reportType: "coach",
+      athleteIds: [],
       timeframeType: "preset",
       timeframePreset: "all_time",
       metrics: [],
@@ -137,15 +148,26 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
     console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
+
     if (step < totalSteps) {
-      setStep(step + 1);
+      // Skip athlete selection step for coach reports
+      if (step === 1 && reportType === "coach") {
+        setStep(3); // Skip step 2 (athlete selection)
+      } else {
+        setStep(step + 1);
+      }
       console.log('[ReportWizard] Moving to step:', step + 1);
     }
   };
 
   const handleBack = () => {
     if (step > 1) {
-      setStep(step - 1);
+      // Skip athlete selection step for coach reports when going back
+      if (step === 3 && reportType === "coach") {
+        setStep(1); // Skip step 2 (athlete selection)
+      } else {
+        setStep(step - 1);
+      }
     }
   };
 
@@ -171,6 +193,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           : { customStart: data.timeframeStart, customEnd: data.timeframeEnd }),
       },
       metrics: data.metrics,
+      athleteIds: data.athleteIds,
     };
 
     if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
@@ -272,8 +295,35 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 2: Basic Details */}
-          {step === 2 && (
+          {/* Step 2: Athlete Selection (Individual Reports Only) */}
+          {step === 2 && reportType === "individual" && (
+            <div className="space-y-4">
+              <Label>Select Athletes</Label>
+              <p className="text-sm text-muted-foreground">
+                Choose individual athletes or select entire teams. One report will be created for each athlete.
+              </p>
+
+              <TeamAthleteSelector
+                organizationId={organizationContext!}
+                selectedAthleteIds={watch("athleteIds") || []}
+                onSelectionChange={(ids) => setValue("athleteIds", ids)}
+              />
+
+              {errors.athleteIds && (
+                <p className="text-sm text-destructive">{errors.athleteIds.message}</p>
+              )}
+            </div>
+          )}
+
+          {/* Step 2 for Coach Reports - Skip to Step 3 */}
+          {step === 2 && reportType === "coach" && (
+            <div className="space-y-4">
+              <p className="text-muted-foreground">Athlete selection is only for individual reports. Proceeding to report details...</p>
+            </div>
+          )}
+
+          {/* Step 3: Basic Details */}
+          {step === 3 && (
             <div className="space-y-4">
               <div>
                 <Label htmlFor="name">Report Name *</Label>
@@ -298,8 +348,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 3: Timeframe */}
-          {step === 3 && (
+          {/* Step 4: Timeframe */}
+          {step === 4 && (
             <div className="space-y-4">
               <Label>Timeframe</Label>
               <RadioGroup
@@ -351,8 +401,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 4: Metrics Selection */}
-          {step === 4 && (
+          {/* Step 5: Metrics Selection */}
+          {step === 5 && (
             <div className="space-y-4">
               <Label>Select Metrics *</Label>
               {metricsLoading ? (
@@ -399,8 +449,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 5: Benchmarks (Optional) */}
-          {step === 5 && (
+          {/* Step 6: Benchmarks (Optional) */}
+          {step === 6 && (
             <div className="space-y-4">
               <Label>Benchmarks (Optional)</Label>
               <p className="text-sm text-muted-foreground">
@@ -500,8 +550,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 6: Filters (Optional) */}
-          {step === 6 && (
+          {/* Step 7: Filters (Optional) */}
+          {step === 7 && (
             <div className="space-y-4">
               <Label>Filters (Optional)</Label>
               <p className="text-sm text-muted-foreground">
@@ -567,8 +617,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 7: Composite Index (Coach Reports Only) */}
-          {step === 7 && reportType === "coach" && (
+          {/* Step 8: Composite Index (Coach Reports Only) */}
+          {step === 8 && reportType === "coach" && (
             <div className="space-y-4">
               <Label>Composite Index (Optional)</Label>
               <p className="text-sm text-muted-foreground mb-4">
@@ -623,8 +673,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 7 for Individual Reports - Summary */}
-          {step === 7 && reportType === "individual" && (
+          {/* Step 8 for Individual Reports - Summary */}
+          {step === 8 && reportType === "individual" && (
             <div className="space-y-4">
               <Label>Review</Label>
               <div className="border rounded-lg p-4 space-y-2">

@@ -14,6 +14,7 @@ import {
   reportBenchmarks,
   insertReportBenchmarkSchema,
   insertReportSnapshotSchema,
+  users,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -49,6 +50,8 @@ export function registerReportRoutes(app: Express) {
   /**
    * Create a new report
    * POST /api/reports
+   *
+   * For individual reports with multiple athleteIds, creates one report per athlete
    */
   app.post("/api/reports", reportLimiter, requireAuth, async (req, res) => {
     try {
@@ -75,7 +78,85 @@ export function registerReportRoutes(app: Express) {
           .json({ message: "Access denied to this organization" });
       }
 
-      // Create report
+      // Handle batch creation for individual reports with multiple athletes
+      if (
+        validatedData.reportType === "individual" &&
+        validatedData.config &&
+        (validatedData.config as any).athleteIds &&
+        Array.isArray((validatedData.config as any).athleteIds) &&
+        (validatedData.config as any).athleteIds.length > 0
+      ) {
+        const athleteIds = (validatedData.config as any).athleteIds as string[];
+
+        // Fetch athlete names for better report titles
+        const athletes = await db
+          .select({
+            id: users.id,
+            fullName: users.fullName,
+          })
+          .from(users)
+          .where(inArray(users.id, athleteIds));
+
+        // Validate all athletes exist
+        if (athletes.length !== athleteIds.length) {
+          const foundIds = new Set(athletes.map((a) => a.id));
+          const missingIds = athleteIds.filter((id) => !foundIds.has(id));
+          return res.status(400).json({
+            message: "Some athlete IDs are invalid",
+            missingIds,
+          });
+        }
+
+        const athleteMap = new Map(athletes.map((a) => [a.id, a.fullName]));
+
+        // Create one report per athlete
+        const createdReports = [];
+
+        try {
+          for (const athleteId of athleteIds) {
+            const athleteName = athleteMap.get(athleteId) || "Unknown Athlete";
+
+            // Create individual report config with single athleteId
+            const reportConfig = {
+              ...(validatedData.config as any),
+              athleteId, // Set single athleteId for this report
+            };
+
+            // Remove athleteIds array from config
+            delete reportConfig.athleteIds;
+
+            const [report] = await db
+              .insert(reports)
+              .values({
+                name: `${validatedData.name} - ${athleteName}`,
+                organizationId: validatedData.organizationId,
+                reportType: validatedData.reportType,
+                config: reportConfig,
+                description: validatedData.description,
+                isTemplate: validatedData.isTemplate || false,
+                createdBy: user.id,
+              })
+              .returning();
+
+            createdReports.push({
+              ...report,
+              athleteId,
+              athleteName,
+            });
+          }
+
+          return res.status(201).json({ reports: createdReports });
+        } catch (batchError) {
+          // If batch creation fails, attempt to clean up created reports
+          if (createdReports.length > 0) {
+            const createdIds = createdReports.map((r) => r.id);
+            await db.delete(reports).where(inArray(reports.id, createdIds));
+          }
+          throw batchError;
+        }
+      }
+
+      // Single report creation (existing behavior for coach reports or single athlete)
       const [report] = await db
         .insert(reports)
         .values({

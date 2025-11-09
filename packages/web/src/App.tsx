@@ -53,6 +53,9 @@ const Reports = React.lazy(() => import("./pages/reports"));
 const ReportView = React.lazy(() => import("./pages/report-view"));
 const PublicReport = React.lazy(() => import("./pages/public-report"));
 
+// Lazy load component test pages (development only)
+const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-team-selector"));
+
 function Router() {
   return (
     <Switch>
@@ -177,6 +180,12 @@ function Router() {
       <Route path="/reports">
         <RouteWrapper loadingText="Loading Reports...">
           <Reports />
+        </RouteWrapper>
+      </Route>
+      {/* Component test pages (development) */}
+      <Route path="/component-test/team-selector">
+        <RouteWrapper loadingText="Loading Component Test...">
+          <TeamAthleteSelectorTest />
         </RouteWrapper>
       </Route>
       {/* Welcome page (/) must come after /dashboard to avoid route conflicts
