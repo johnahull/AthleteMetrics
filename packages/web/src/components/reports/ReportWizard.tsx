@@ -91,17 +91,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const enableCompositeIndex = watch("enableCompositeIndex");
 
   // Fetch organization's enabled metrics
-  const { data: metrics } = useQuery({
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ["/api/metrics", organizationContext],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/metrics`);
+      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/metrics?enabledOnly=true`);
       return res.json();
     },
     enabled: !!organizationContext,
   });
 
   // Fetch teams
-  const { data: teams } = useQuery({
+  const { data: teams, isLoading: teamsLoading, error: teamsError } = useQuery({
     queryKey: ["/api/teams", organizationContext],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/organizations/${organizationContext}/teams`);
@@ -111,7 +111,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   });
 
   // Fetch site benchmarks
-  const { data: siteBenchmarks } = useQuery({
+  const { data: siteBenchmarks, isLoading: siteBenchmarksLoading, error: siteBenchmarksError } = useQuery({
     queryKey: ["/api/benchmarks/site"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/benchmarks/site");
@@ -120,7 +120,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   });
 
   // Fetch custom benchmarks
-  const { data: customBenchmarks } = useQuery({
+  const { data: customBenchmarks, isLoading: customBenchmarksLoading, error: customBenchmarksError } = useQuery({
     queryKey: ["/api/benchmarks/custom", organizationContext],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/organizations/${organizationContext}/custom-benchmarks`);
@@ -324,25 +324,42 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {step === 4 && (
             <div className="space-y-4">
               <Label>Select Metrics *</Label>
-              {!metrics ? (
-                <LoadingSpinner />
+              {metricsLoading ? (
+                <div className="flex justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : metricsError ? (
+                <div className="border border-destructive rounded-lg p-4 text-center">
+                  <p className="text-destructive">Failed to load metrics</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {metricsError instanceof Error ? metricsError.message : "Please try again"}
+                  </p>
+                </div>
+              ) : !metrics || metrics.length === 0 ? (
+                <div className="border rounded-lg p-4 text-center text-muted-foreground">
+                  <p>No metrics enabled for this organization</p>
+                  <p className="text-sm mt-1">Please enable metrics in Settings first</p>
+                </div>
               ) : (
                 <div className="space-y-2 border rounded-lg p-4 max-h-96 overflow-y-auto">
-                  {metrics.map((metric: any) => (
-                    <div key={metric.code} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={metric.code}
-                        checked={selectedMetrics?.includes(metric.code)}
-                        onCheckedChange={() => toggleMetric(metric.code)}
-                      />
-                      <Label htmlFor={metric.code} className="cursor-pointer flex-1">
-                        <div className="font-medium">{metric.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {metric.unit} • {metric.category}
-                        </div>
-                      </Label>
-                    </div>
-                  ))}
+                  {metrics.map((metric: any) => {
+                    const metricCode = metric.metricCode || metric.code;
+                    return (
+                      <div key={metricCode} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={metricCode}
+                          checked={selectedMetrics?.includes(metricCode)}
+                          onCheckedChange={() => toggleMetric(metricCode)}
+                        />
+                        <Label htmlFor={metricCode} className="cursor-pointer flex-1">
+                          <div className="font-medium">{metric.siteMetric?.name || metricCode}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {metric.siteMetric?.unit} • {metric.siteMetric?.category}
+                          </div>
+                        </Label>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {errors.metrics && (
@@ -359,66 +376,95 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 Select benchmarks to compare against in the report
               </p>
 
-              {siteBenchmarks && siteBenchmarks.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Site Benchmarks</h4>
-                  <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                    {siteBenchmarks.map((benchmark: any) => (
-                      <div key={benchmark.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`site-${benchmark.id}`}
-                          checked={watch("siteBenchmarks")?.includes(benchmark.id)}
-                          onCheckedChange={(checked) => {
-                            const current = watch("siteBenchmarks") || [];
-                            setValue(
-                              "siteBenchmarks",
-                              checked
-                                ? [...current, benchmark.id]
-                                : current.filter((id) => id !== benchmark.id)
-                            );
-                          }}
-                        />
-                        <Label
-                          htmlFor={`site-${benchmark.id}`}
-                          className="cursor-pointer"
-                        >
-                          {benchmark.name}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
+              {siteBenchmarksLoading || customBenchmarksLoading ? (
+                <div className="flex justify-center py-8">
+                  <LoadingSpinner />
                 </div>
-              )}
+              ) : (
+                <>
+                  {siteBenchmarksError && (
+                    <div className="border border-destructive rounded-lg p-4 text-center">
+                      <p className="text-sm text-destructive">Failed to load site benchmarks</p>
+                    </div>
+                  )}
 
-              {customBenchmarks && customBenchmarks.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Custom Benchmarks</h4>
-                  <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                    {customBenchmarks.map((benchmark: any) => (
-                      <div key={benchmark.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`custom-${benchmark.id}`}
-                          checked={watch("customBenchmarks")?.includes(benchmark.id)}
-                          onCheckedChange={(checked) => {
-                            const current = watch("customBenchmarks") || [];
-                            setValue(
-                              "customBenchmarks",
-                              checked
-                                ? [...current, benchmark.id]
-                                : current.filter((id) => id !== benchmark.id)
-                            );
-                          }}
-                        />
-                        <Label
-                          htmlFor={`custom-${benchmark.id}`}
-                          className="cursor-pointer"
-                        >
-                          {benchmark.name}
-                        </Label>
+                  {siteBenchmarks && siteBenchmarks.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2">Site Benchmarks</h4>
+                      <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
+                        {siteBenchmarks.map((benchmark: any) => (
+                          <div key={benchmark.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`site-${benchmark.id}`}
+                              checked={watch("siteBenchmarks")?.includes(benchmark.id)}
+                              onCheckedChange={(checked) => {
+                                const current = watch("siteBenchmarks") || [];
+                                setValue(
+                                  "siteBenchmarks",
+                                  checked
+                                    ? [...current, benchmark.id]
+                                    : current.filter((id) => id !== benchmark.id)
+                                );
+                              }}
+                            />
+                            <Label
+                              htmlFor={`site-${benchmark.id}`}
+                              className="cursor-pointer"
+                            >
+                              {benchmark.name}
+                            </Label>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  )}
+
+                  {customBenchmarksError && (
+                    <div className="border border-destructive rounded-lg p-4 text-center">
+                      <p className="text-sm text-destructive">Failed to load custom benchmarks</p>
+                    </div>
+                  )}
+
+                  {customBenchmarks && customBenchmarks.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-2">Custom Benchmarks</h4>
+                      <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
+                        {customBenchmarks.map((benchmark: any) => (
+                          <div key={benchmark.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`custom-${benchmark.id}`}
+                              checked={watch("customBenchmarks")?.includes(benchmark.id)}
+                              onCheckedChange={(checked) => {
+                                const current = watch("customBenchmarks") || [];
+                                setValue(
+                                  "customBenchmarks",
+                                  checked
+                                    ? [...current, benchmark.id]
+                                    : current.filter((id) => id !== benchmark.id)
+                                );
+                              }}
+                            />
+                            <Label
+                              htmlFor={`custom-${benchmark.id}`}
+                              className="cursor-pointer"
+                            >
+                              {benchmark.name}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!siteBenchmarksError && !customBenchmarksError &&
+                   (!siteBenchmarks || siteBenchmarks.length === 0) &&
+                   (!customBenchmarks || customBenchmarks.length === 0) && (
+                    <div className="border rounded-lg p-4 text-center text-muted-foreground">
+                      <p>No benchmarks available</p>
+                      <p className="text-sm mt-1">You can skip this step or create benchmarks in Settings</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -433,8 +479,18 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
               <div>
                 <Label>Teams</Label>
-                {!teams ? (
-                  <LoadingSpinner />
+                {teamsLoading ? (
+                  <div className="flex justify-center py-4">
+                    <LoadingSpinner />
+                  </div>
+                ) : teamsError ? (
+                  <div className="border border-destructive rounded-lg p-4 text-center">
+                    <p className="text-sm text-destructive">Failed to load teams</p>
+                  </div>
+                ) : !teams || teams.length === 0 ? (
+                  <div className="border rounded-lg p-4 text-center text-muted-foreground">
+                    <p className="text-sm">No teams available</p>
+                  </div>
                 ) : (
                   <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
                     {teams.map((team: any) => (
