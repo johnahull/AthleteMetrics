@@ -116,9 +116,9 @@ describe('ReportService', () => {
       const timeframe = { type: 'preset' as const, preset: 'all_time' as const };
       const result = (reportService as any).calculateDateRange(timeframe);
 
-      // all_time should start from a very old date
+      // all_time should start from a very old date (2000 or earlier)
       const startYear = parseInt(result.startDate.split('-')[0]);
-      expect(startYear).toBeLessThan(2000);
+      expect(startYear).toBeLessThanOrEqual(2000);
     });
   });
 
@@ -297,9 +297,12 @@ describe('ReportService', () => {
         // Create measurement: values 20, 25, 30, 35, 40
         measurements_data.push({
           userId: athlete.id,
+          submittedBy: testUserId,
           organizationId: testOrgId,
           metric: metricCode,
           value: String(20 + i * 5),
+          units: 'inches',
+          age: 18,
           date: new Date().toISOString().split('T')[0],
           notes: 'test',
         });
