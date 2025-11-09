@@ -112,9 +112,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   // Fetch site benchmarks
   const { data: siteBenchmarks, isLoading: siteBenchmarksLoading, error: siteBenchmarksError } = useQuery({
-    queryKey: ["/api/benchmarks/site"],
+    queryKey: ["/api/benchmarks"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/benchmarks/site");
+      const res = await apiRequest("GET", "/api/benchmarks");
       return res.json();
     },
   });
@@ -123,7 +123,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const { data: customBenchmarks, isLoading: customBenchmarksLoading, error: customBenchmarksError } = useQuery({
     queryKey: ["/api/benchmarks/custom", organizationContext],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/custom-benchmarks`);
+      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/benchmarks/custom`);
       return res.json();
     },
     enabled: !!organizationContext,
@@ -142,6 +142,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   };
 
   const onSubmit = async (data: ReportFormData) => {
+    if (!organizationContext) {
+      return;
+    }
+
     const config: any = {
       timeframe: {
         type: data.timeframeType,
@@ -179,6 +183,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       description: data.description,
       reportType: data.reportType,
       config,
+      organizationId: organizationContext,
     });
 
     onSuccess(result.id);
