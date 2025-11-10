@@ -156,14 +156,42 @@ export function registerReportRoutes(app: Express) {
         }
       }
 
-      // Single report creation (existing behavior for coach reports or single athlete)
+      // Single report creation (for coach reports or edge cases)
+      // For individual reports, normalize athleteIds array to single athleteId
+      let finalConfig = validatedData.config;
+
+      if (validatedData.reportType === "individual") {
+        const athleteIds = (validatedData.config as any)?.athleteIds;
+
+        // Validate that individual reports have an athlete
+        if (!athleteIds || !Array.isArray(athleteIds) || athleteIds.length === 0) {
+          return res.status(400).json({
+            message: "Individual reports require at least one athlete",
+          });
+        }
+
+        // If single athlete in array, normalize to athleteId (singular)
+        if (athleteIds.length === 1) {
+          finalConfig = {
+            ...(validatedData.config as any),
+            athleteId: athleteIds[0],
+          };
+          delete (finalConfig as any).athleteIds;
+        } else {
+          // Multiple athletes should have been handled by batch creation above
+          return res.status(400).json({
+            message: "Multiple athletes detected but batch creation was not triggered",
+          });
+        }
+      }
+
       const [report] = await db
         .insert(reports)
         .values({
           name: validatedData.name,
           organizationId: validatedData.organizationId,
           reportType: validatedData.reportType,
-          config: validatedData.config,
+          config: finalConfig,
           description: validatedData.description,
           isTemplate: validatedData.isTemplate || false,
           createdBy: user.id,
