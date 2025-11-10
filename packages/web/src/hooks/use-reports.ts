@@ -129,9 +129,13 @@ export function useCreateReport() {
 export function useGenerateReport(reportId: string) {
   const { toast } = useToast();
 
-  return useMutation<GeneratedReport>({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/reports/${reportId}/generate`);
+  return useMutation<GeneratedReport, Error, { athleteId?: string }>({
+    mutationFn: async (params: { athleteId?: string }) => {
+      console.log('[useGenerateReport] Received params:', params);
+      console.log('[useGenerateReport] athleteId value:', params?.athleteId);
+      const body = params?.athleteId ? { athleteId: params.athleteId } : {};
+      console.log('[useGenerateReport] Request body:', body);
+      const res = await apiRequest("POST", `/api/reports/${reportId}/generate`, body);
       return res.json();
     },
     onError: (error: Error) => {

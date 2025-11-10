@@ -40,8 +40,14 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   useEffect(() => {
     // Generate report data on mount
-    generateReport.mutate(undefined, {
+    // Extract athleteId from report config
+    const athleteId = report.config?.athleteId;
+    console.log('[IndividualReportView] Report config:', report.config);
+    console.log('[IndividualReportView] Extracted athleteId:', athleteId);
+    console.log('[IndividualReportView] Calling generateReport.mutate with:', { athleteId });
+    generateReport.mutate({ athleteId }, {
       onSuccess: (data) => {
+        console.log('[IndividualReportView] Report generated successfully');
         setReportData(data);
       },
     });
@@ -49,8 +55,13 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   const handleDownloadPDF = async () => {
     try {
+      const athleteId = report.config?.athleteId;
       const response = await fetch(`/api/reports/${report.id}/pdf`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ athleteId }),
       });
 
       if (!response.ok) {

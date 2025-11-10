@@ -40,7 +40,8 @@ export function CoachReportView({ report }: CoachReportViewProps) {
 
   useEffect(() => {
     // Generate report data on mount
-    generateReport.mutate(undefined, {
+    // Coach reports don't need athleteId - pass empty object
+    generateReport.mutate({}, {
       onSuccess: (data) => {
         console.log('[CoachReportView] Report generated successfully:', data);
         setReportData(data);
