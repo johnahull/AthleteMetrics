@@ -393,6 +393,7 @@ export const reports = pgTable("reports", {
 
   // Metadata
   isTemplate: boolean("is_template").default(false).notNull(),
+  isPinned: boolean("is_pinned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
@@ -400,6 +401,8 @@ export const reports = pgTable("reports", {
   createdByIdx: index("reports_created_by_idx").on(table.createdBy),
   typeIdx: index("reports_type_idx").on(table.reportType),
   orgTypeIdx: index("reports_org_type_idx").on(table.organizationId, table.reportType),
+  pinnedIdx: index("reports_pinned_idx").on(table.isPinned),
+  orgPinnedIdx: index("reports_org_pinned_idx").on(table.organizationId, table.isPinned),
 }));
 
 // Public report snapshots (shareable URLs)

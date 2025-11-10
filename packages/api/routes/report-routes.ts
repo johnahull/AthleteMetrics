@@ -18,7 +18,7 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import jsPDF from "jspdf";
@@ -220,8 +220,22 @@ export function registerReportRoutes(app: Express) {
   });
 
   /**
-   * Get all reports for user's organizations
+   * Get all reports for user's organizations with filtering, sorting, and pagination
    * GET /api/reports
+   *
+   * Query Parameters:
+   * - organizationId: Filter by organization
+   * - search: Search in name and description
+   * - reportType: Filter by 'coach' or 'individual'
+   * - dateFrom: Filter by creation date (ISO string)
+   * - dateTo: Filter by creation date (ISO string)
+   * - metrics: Comma-separated metric codes to filter by
+   * - teamIds: Comma-separated team IDs to filter by
+   * - pinned: Filter by pinned status (true/false)
+   * - sortBy: Field to sort by (name, createdAt, reportType)
+   * - sortOrder: Sort order (asc/desc), default: desc
+   * - limit: Number of results to return (default: 25, max: 100)
+   * - offset: Number of results to skip (default: 0)
    */
   app.get("/api/reports", reportLimiter, requireAuth, async (req, res) => {
     try {
@@ -230,51 +244,146 @@ export function registerReportRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const organizationId = req.query.organizationId as string | undefined;
+      // Parse query parameters
+      const {
+        organizationId,
+        search,
+        reportType,
+        dateFrom,
+        dateTo,
+        metrics,
+        teamIds,
+        pinned,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+        limit: limitParam = '25',
+        offset: offsetParam = '0',
+      } = req.query;
+
+      const limit = Math.min(parseInt(limitParam as string) || 25, 100);
+      const offset = parseInt(offsetParam as string) || 0;
 
       // Get user's organizations
       const userOrgs = await reportService["getUserOrganizations"](user.id);
       const orgIds = userOrgs.map((org) => org.organizationId);
 
-      // Site admins can access all reports
-      let reportsList;
+      // Build WHERE conditions
+      const conditions: SQL<unknown>[] = [];
+
+      // Organization filter (access control)
       if (isSiteAdmin(user)) {
         if (organizationId) {
-          reportsList = await db
-            .select()
-            .from(reports)
-            .where(eq(reports.organizationId, organizationId))
-            .orderBy(desc(reports.createdAt));
-        } else {
-          reportsList = await db
-            .select()
-            .from(reports)
-            .orderBy(desc(reports.createdAt));
+          conditions.push(eq(reports.organizationId, organizationId as string));
         }
+        // Site admins can see all if no org specified
       } else {
         if (organizationId) {
           // Verify user has access to this organization
-          if (!orgIds.includes(organizationId)) {
+          if (!orgIds.includes(organizationId as string)) {
             return res
               .status(403)
               .json({ message: "Access denied to this organization" });
           }
-          reportsList = await db
-            .select()
-            .from(reports)
-            .where(eq(reports.organizationId, organizationId))
-            .orderBy(desc(reports.createdAt));
+          conditions.push(eq(reports.organizationId, organizationId as string));
         } else {
           // Get reports for all user's organizations
-          reportsList = await db
-            .select()
-            .from(reports)
-            .where(inArray(reports.organizationId, orgIds))
-            .orderBy(desc(reports.createdAt));
+          conditions.push(inArray(reports.organizationId, orgIds));
         }
       }
 
-      res.json(reportsList);
+      // Search filter (name or description)
+      if (search && typeof search === 'string' && search.trim()) {
+        conditions.push(
+          sql`(${reports.name} ILIKE ${`%${search.trim()}%`} OR ${reports.description} ILIKE ${`%${search.trim()}%`})`
+        );
+      }
+
+      // Report type filter
+      if (reportType === 'coach' || reportType === 'individual') {
+        conditions.push(eq(reports.reportType, reportType));
+      }
+
+      // Date range filters
+      if (dateFrom && typeof dateFrom === 'string') {
+        conditions.push(sql`${reports.createdAt} >= ${dateFrom}`);
+      }
+      if (dateTo && typeof dateTo === 'string') {
+        conditions.push(sql`${reports.createdAt} <= ${dateTo}`);
+      }
+
+      // Metrics filter (check if config.metrics contains any of the specified metrics)
+      if (metrics && typeof metrics === 'string') {
+        const metricCodes = metrics.split(',').map(m => m.trim()).filter(Boolean);
+        if (metricCodes.length > 0) {
+          conditions.push(
+            sql`${reports.config}::jsonb->'metrics' ?| array[${sql.join(metricCodes.map(m => sql`${m}`), sql`, `)}]`
+          );
+        }
+      }
+
+      // Team filter (check if config.filters.teamIds contains any of the specified teams)
+      if (teamIds && typeof teamIds === 'string') {
+        const teamIdList = teamIds.split(',').map(t => t.trim()).filter(Boolean);
+        if (teamIdList.length > 0) {
+          conditions.push(
+            sql`${reports.config}::jsonb->'filters'->'teamIds' ?| array[${sql.join(teamIdList.map(t => sql`${t}`), sql`, `)}]`
+          );
+        }
+      }
+
+      // Pinned filter
+      if (pinned === 'true') {
+        conditions.push(eq(reports.isPinned, true));
+      } else if (pinned === 'false') {
+        conditions.push(eq(reports.isPinned, false));
+      }
+
+      // Build the WHERE clause
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Determine sort column and order
+      let orderByClause;
+      const sortDirection = sortOrder === 'asc' ? asc : desc;
+
+      switch (sortBy) {
+        case 'name':
+          orderByClause = sortDirection(reports.name);
+          break;
+        case 'reportType':
+          orderByClause = sortDirection(reports.reportType);
+          break;
+        case 'createdAt':
+        default:
+          orderByClause = sortDirection(reports.createdAt);
+          break;
+      }
+
+      // Execute query with pagination
+      const reportsList = await db
+        .select()
+        .from(reports)
+        .where(whereClause)
+        .orderBy(orderByClause)
+        .limit(limit)
+        .offset(offset);
+
+      // Get total count for pagination
+      const totalCountResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(reports)
+        .where(whereClause);
+
+      const totalCount = Number(totalCountResult[0]?.count || 0);
+
+      res.json({
+        reports: reportsList,
+        pagination: {
+          total: totalCount,
+          limit,
+          offset,
+          hasMore: offset + reportsList.length < totalCount,
+        },
+      });
     } catch (error) {
       console.error("Error fetching reports:", error);
       res.status(500).json({ message: "Failed to fetch reports" });
@@ -423,6 +532,132 @@ export function registerReportRoutes(app: Express) {
       } catch (error) {
         console.error("Error deleting report:", error);
         res.status(500).json({ message: "Failed to delete report" });
+      }
+    }
+  );
+
+  /**
+   * Pin a report for quick access
+   * PATCH /api/reports/:id/pin
+   */
+  app.patch(
+    "/api/reports/:id/pin",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Check if report exists and user has access
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Check pinned reports count (limit to 10)
+        const pinnedCount = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(reports)
+          .where(
+            and(
+              eq(reports.organizationId, report.organizationId),
+              eq(reports.isPinned, true)
+            )
+          )
+          .then((rows) => Number(rows[0]?.count || 0));
+
+        if (pinnedCount >= 10 && !report.isPinned) {
+          return res.status(400).json({
+            message: "Maximum of 10 pinned reports reached. Unpin another report first.",
+          });
+        }
+
+        // Pin the report
+        await db
+          .update(reports)
+          .set({ isPinned: true })
+          .where(eq(reports.id, reportId));
+
+        res.json({ message: "Report pinned successfully", isPinned: true });
+      } catch (error) {
+        console.error("Error pinning report:", error);
+        res.status(500).json({ message: "Failed to pin report" });
+      }
+    }
+  );
+
+  /**
+   * Unpin a report
+   * PATCH /api/reports/:id/unpin
+   */
+  app.patch(
+    "/api/reports/:id/unpin",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Check if report exists and user has access
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Unpin the report
+        await db
+          .update(reports)
+          .set({ isPinned: false })
+          .where(eq(reports.id, reportId));
+
+        res.json({ message: "Report unpinned successfully", isPinned: false });
+      } catch (error) {
+        console.error("Error unpinning report:", error);
+        res.status(500).json({ message: "Failed to unpin report" });
       }
     }
   );
