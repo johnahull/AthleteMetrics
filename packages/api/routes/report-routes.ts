@@ -62,10 +62,18 @@ export function registerReportRoutes(app: Express) {
 
       // Validate request body
       const { createdBy, id, createdAt, updatedAt, ...bodyData } = req.body;
+
+      console.log('[POST /api/reports] Request body:', JSON.stringify(req.body, null, 2));
+      console.log('[POST /api/reports] bodyData.config:', JSON.stringify(bodyData.config, null, 2));
+      console.log('[POST /api/reports] bodyData.config.athleteIds:', bodyData.config?.athleteIds);
+
       const validatedData = insertReportSchema.parse({
         ...bodyData,
         createdBy: user.id,
       });
+
+      console.log('[POST /api/reports] After validation - validatedData.config:', JSON.stringify(validatedData.config, null, 2));
+      console.log('[POST /api/reports] After validation - athleteIds:', (validatedData.config as any)?.athleteIds);
 
       // Validate organization access
       const hasAccess = await reportService["validateOrganizationAccess"](

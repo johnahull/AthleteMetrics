@@ -1104,6 +1104,9 @@ export const insertReportSchema = createInsertSchema(reports).omit({
       gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
       positions: z.array(z.string()).optional(),
     }).optional(),
+    // Individual report athlete identifiers
+    athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
+    athleteId: z.string().optional(), // Single athlete ID (stored in database)
   }),
   isTemplate: z.boolean().default(false),
 });
@@ -1137,6 +1140,9 @@ export const updateReportSchema = z.object({
       gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
       positions: z.array(z.string()).optional(),
     }).optional(),
+    // Individual report athlete identifiers
+    athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
+    athleteId: z.string().optional(), // Single athlete ID (stored in database)
   }).optional(),
   isTemplate: z.boolean().optional(),
 });
