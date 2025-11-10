@@ -43,8 +43,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   useEffect(() => {
     // Generate report data on mount
-    // Extract athleteId from report config
-    const athleteId = report.config?.athleteId;
+    // Extract athleteId from report config (athleteIds is stored as an array)
+    const athleteId = report.config?.athleteIds?.[0];
     console.log('[IndividualReportView] Report config:', report.config);
     console.log('[IndividualReportView] Extracted athleteId:', athleteId);
     console.log('[IndividualReportView] Calling generateReport.mutate with:', { athleteId });
@@ -58,7 +58,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   const handleDownloadPDF = async () => {
     try {
-      const athleteId = report.config?.athleteId;
+      const athleteId = report.config?.athleteIds?.[0];
       const response = await fetch(`/api/reports/${report.id}/pdf`, {
         method: "POST",
         headers: {
