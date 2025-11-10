@@ -17,7 +17,7 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { format } from "date-fns";
 
 // Version check - this log should appear immediately when the module loads
-console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v4');
+console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v5-REWRITE');
 
 interface Report {
   id: string;
@@ -57,11 +57,15 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
     generateReport.mutate({ athleteId }, {
       onSuccess: (data) => {
-        console.log('[IndividualReportView] Report generated successfully');
+        console.log('[IndividualReportView] Report generated successfully:', data);
         setReportData(data);
       },
+      onError: (error) => {
+        console.error('[IndividualReportView] Report generation failed:', error);
+        // Error toast is handled by the hook, but we log here for debugging
+      },
     });
-  }, [report.id]);
+  }, [report.id, report.config]);
 
   const handleDownloadPDF = async () => {
     try {
@@ -94,6 +98,15 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     }
   };
 
+  // Debug logging for mutation state
+  console.log('[IndividualReportView] Render state:', {
+    isPending: generateReport.isPending,
+    isError: generateReport.isError,
+    isSuccess: generateReport.isSuccess,
+    hasReportData: !!reportData,
+    error: generateReport.error
+  });
+
   if (generateReport.isPending || !reportData) {
     return (
       <Card>
@@ -101,6 +114,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           <div className="flex flex-col items-center gap-4">
             <LoadingSpinner />
             <p className="text-muted-foreground">Generating report...</p>
+            {generateReport.isPending && (
+              <p className="text-xs text-muted-foreground">Status: Pending</p>
+            )}
+            {!reportData && !generateReport.isPending && (
+              <p className="text-xs text-muted-foreground">Status: Waiting for data</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -114,12 +133,15 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           <p className="text-destructive text-center">
             Failed to generate report. Please try again.
           </p>
+          <p className="text-sm text-muted-foreground text-center mt-2">
+            Error: {generateReport.error?.message || 'Unknown error'}
+          </p>
         </CardContent>
       </Card>
     );
   }
 
-  const { data } = reportData;
+  const { athlete } = reportData;
 
   return (
     <div className="space-y-6">
@@ -132,13 +154,16 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
               {report.description && (
                 <p className="text-muted-foreground mt-2">{report.description}</p>
               )}
-              {data.athlete && (
+              {athlete && (
                 <div className="mt-4">
                   <h3 className="text-lg font-semibold">
-                    {data.athlete.firstName} {data.athlete.lastName}
+                    {athlete.userName}
                   </h3>
-                  {data.athlete.teamName && (
-                    <p className="text-muted-foreground">{data.athlete.teamName}</p>
+                  {athlete.age && (
+                    <p className="text-muted-foreground">Age: {athlete.age}</p>
+                  )}
+                  {athlete.gender && (
+                    <p className="text-muted-foreground">Gender: {athlete.gender}</p>
                   )}
                 </div>
               )}
@@ -161,7 +186,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
       </Card>
 
       {/* Performance Table */}
-      {data.performance && (
+      {athlete.measurements && Object.keys(athlete.measurements).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Performance Summary</CardTitle>
@@ -172,107 +197,57 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Team Rank</TableHead>
                   <TableHead>Percentile</TableHead>
-                  <TableHead>Benchmarks</TableHead>
+                  <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.performance.map((metric: any) => (
-                  <TableRow key={metric.metricCode}>
-                    <TableCell className="font-medium">{metric.metricName}</TableCell>
-                    <TableCell>
-                      {metric.bestValue?.toFixed(2) || "N/A"} {metric.unit}
-                    </TableCell>
-                    <TableCell>
-                      {metric.teamRank ? (
-                        <Badge>#{metric.teamRank}</Badge>
-                      ) : (
-                        "N/A"
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {metric.percentile ? `${metric.percentile.toFixed(0)}th` : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      {metric.benchmarks && metric.benchmarks.length > 0 ? (
-                        <div className="space-y-1">
-                          {metric.benchmarks.map((b: any, idx: number) => (
-                            <div key={idx} className="text-sm">
-                              <span className="font-medium">{b.name}:</span> {b.value}{" "}
-                              {metric.unit}
-                              {b.comparison && (
+                {Object.entries(athlete.measurements).map(([metricCode, value]) => {
+                  const percentile = athlete.percentiles[metricCode];
+                  const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
+
+                  return (
+                    <TableRow key={metricCode}>
+                      <TableCell className="font-medium">{metricCode}</TableCell>
+                      <TableCell>
+                        {typeof value === 'number' ? value.toFixed(2) : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {percentile !== undefined ? (
+                          <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                        ) : (
+                          "N/A"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {benchmarks.length > 0 ? (
+                          <div className="space-y-1">
+                            {benchmarks.map((b: any, idx: number) => (
+                              <div key={idx} className="text-sm">
+                                <span className="font-medium">{b.benchmarkName}:</span>{" "}
+                                {b.benchmarkValue.toFixed(2)}
                                 <Badge
-                                  variant={
-                                    b.comparison === "above" ? "default" : "secondary"
-                                  }
+                                  variant={b.meetsTarget ? "default" : "secondary"}
                                   className="ml-2"
                                 >
-                                  {b.comparison}
+                                  {b.meetsTarget ? "✓ Meets" : "✗ Below"}
                                 </Badge>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       )}
 
-      {/* Test History */}
-      {data.testHistory && data.testHistory.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Test History</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {Object.entries(
-                data.testHistory.reduce((acc: any, test: any) => {
-                  if (!acc[test.metricCode]) {
-                    acc[test.metricCode] = [];
-                  }
-                  acc[test.metricCode].push(test);
-                  return acc;
-                }, {})
-              ).map(([metricCode, tests]: any) => (
-                <div key={metricCode}>
-                  <h4 className="font-medium mb-2">{tests[0].metricName}</h4>
-                  <div className="space-y-2">
-                    {tests
-                      .sort(
-                        (a: any, b: any) =>
-                          new Date(b.testDate).getTime() -
-                          new Date(a.testDate).getTime()
-                      )
-                      .slice(0, 5)
-                      .map((test: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="flex justify-between items-center text-sm border-b pb-2"
-                        >
-                          <span className="text-muted-foreground">
-                            {format(new Date(test.testDate), "MMM d, yyyy")}
-                          </span>
-                          <span className="font-medium">
-                            {test.value} {tests[0].unit}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {showShareDialog && (
         <ShareReportDialog
