@@ -16,6 +16,9 @@ import { FileDown, Share2 } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { format } from "date-fns";
 
+// Version check - this log should appear immediately when the module loads
+console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v2');
+
 interface Report {
   id: string;
   organizationId: string;
