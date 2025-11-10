@@ -172,7 +172,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   };
 
   const onSubmit = async (data: ReportFormData) => {
-    console.log('[ReportWizard] onSubmit called - step:', step, 'reportType:', reportType, 'data:', data);
+    console.log('[ReportWizard] onSubmit called - step:', step, 'reportType:', reportType);
+    console.log('[ReportWizard] Form data:', JSON.stringify(data, null, 2));
+    console.log('[ReportWizard] athleteIds:', data.athleteIds);
+    console.log('[ReportWizard] athleteIds length:', data.athleteIds?.length);
 
     // Prevent submission if not on final step
     if (step !== totalSteps) {
@@ -185,6 +188,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       return;
     }
 
+    // Extra validation for individual reports
+    if (data.reportType === "individual") {
+      if (!data.athleteIds || data.athleteIds.length === 0) {
+        console.error('[ReportWizard] Individual report submitted with no athletes!');
+        console.error('[ReportWizard] This should have been caught by Zod validation');
+        // The Zod schema should have prevented this, but double-check
+        return;
+      }
+      console.log('[ReportWizard] Individual report has', data.athleteIds.length, 'athletes');
+    }
+
     const config: any = {
       timeframe: {
         type: data.timeframeType,
@@ -195,6 +209,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       metrics: data.metrics,
       athleteIds: data.athleteIds,
     };
+
+    console.log('[ReportWizard] Config being sent:', JSON.stringify(config, null, 2));
 
     if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
       config.benchmarks = {
@@ -314,7 +330,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               <TeamAthleteSelector
                 organizationId={organizationContext!}
                 selectedAthleteIds={watch("athleteIds") || []}
-                onSelectionChange={(ids) => setValue("athleteIds", ids)}
+                onSelectionChange={(ids) => {
+                  console.log('[ReportWizard] Athlete selection changed:', ids);
+                  console.log('[ReportWizard] Setting athleteIds to:', ids);
+                  setValue("athleteIds", ids);
+                  console.log('[ReportWizard] Current form value:', watch("athleteIds"));
+                }}
               />
 
               {errors.athleteIds && (
