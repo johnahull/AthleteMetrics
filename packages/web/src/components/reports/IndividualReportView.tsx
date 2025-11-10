@@ -17,7 +17,7 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { format } from "date-fns";
 
 // Version check - this log should appear immediately when the module loads
-console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v2');
+console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v4');
 
 interface Report {
   id: string;
@@ -43,11 +43,18 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   useEffect(() => {
     // Generate report data on mount
-    // Extract athleteId from report config (athleteIds is stored as an array)
-    const athleteId = report.config?.athleteIds?.[0];
+    // Extract athleteId from report config
+    // Try athleteId (singular, from batch creation) first, then athleteIds[0] (array, from single creation)
+    const athleteId = report.config?.athleteId || report.config?.athleteIds?.[0];
     console.log('[IndividualReportView] Report config:', report.config);
     console.log('[IndividualReportView] Extracted athleteId:', athleteId);
     console.log('[IndividualReportView] Calling generateReport.mutate with:', { athleteId });
+
+    if (!athleteId) {
+      console.error('[IndividualReportView] No athleteId found in report config!');
+      return;
+    }
+
     generateReport.mutate({ athleteId }, {
       onSuccess: (data) => {
         console.log('[IndividualReportView] Report generated successfully');
@@ -58,14 +65,16 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   const handleDownloadPDF = async () => {
     try {
-      const athleteId = report.config?.athleteIds?.[0];
-      const response = await fetch(`/api/reports/${report.id}/pdf`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ athleteId }),
-      });
+      // Extract athleteId (try singular first, then array)
+      const athleteId = report.config?.athleteId || report.config?.athleteIds?.[0];
+
+      if (!athleteId) {
+        console.error('[IndividualReportView] No athleteId found for PDF download');
+        return;
+      }
+
+      // PDF endpoint uses GET with query parameter, not POST
+      const response = await fetch(`/api/reports/${report.id}/pdf?athleteId=${athleteId}`);
 
       if (!response.ok) {
         throw new Error("Failed to download PDF");
