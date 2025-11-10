@@ -17,7 +17,8 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { format } from "date-fns";
 
 // Version check - this log should appear immediately when the module loads
-console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v5-REWRITE');
+console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v6-DEPS-FIX');
+console.log('🔍 If you see this, the new code is loaded! Check for more logs below.');
 
 interface Report {
   id: string;
@@ -37,15 +38,19 @@ interface IndividualReportViewProps {
 }
 
 export function IndividualReportView({ report }: IndividualReportViewProps) {
+  console.log('[IndividualReportView] COMPONENT RENDER - report:', report);
+
   const [showShareDialog, setShowShareDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
 
+  // Extract athleteId outside useEffect to avoid dependency issues
+  const athleteId = report.config?.athleteId || report.config?.athleteIds?.[0];
+
+  console.log('[IndividualReportView] athleteId extracted:', athleteId);
+
   useEffect(() => {
-    // Generate report data on mount
-    // Extract athleteId from report config
-    // Try athleteId (singular, from batch creation) first, then athleteIds[0] (array, from single creation)
-    const athleteId = report.config?.athleteId || report.config?.athleteIds?.[0];
+    console.log('[IndividualReportView] useEffect RUNNING');
     console.log('[IndividualReportView] Report config:', report.config);
     console.log('[IndividualReportView] Extracted athleteId:', athleteId);
     console.log('[IndividualReportView] Calling generateReport.mutate with:', { athleteId });
@@ -65,7 +70,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         // Error toast is handled by the hook, but we log here for debugging
       },
     });
-  }, [report.id, report.config]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.id, athleteId]);
 
   const handleDownloadPDF = async () => {
     try {
