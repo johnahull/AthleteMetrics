@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Clock, Pin, FileText, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, usePinReport } from '@/hooks/use-reports';
@@ -30,12 +30,36 @@ export function RecentReportsSection({
 }: RecentReportsSectionProps) {
   const [currentLimit, setCurrentLimit] = useState(limit);
 
+  // Memoize the filters object to prevent unnecessary re-renders
+  const queryFilters = useMemo(() => ({
+    search: filters?.search || undefined,
+    reportType: filters?.reportType === 'all' ? undefined : filters?.reportType,
+    dateFrom: filters?.dateFrom,
+    dateTo: filters?.dateTo,
+    metrics: filters?.metrics,
+    teamIds: filters?.teamIds,
+    pinned: false,
+  }), [filters?.search, filters?.reportType, filters?.dateFrom, filters?.dateTo, filters?.metrics, filters?.teamIds]);
+
+  // Memoize pagination params to ensure stable reference
+  const paginationParams = useMemo(() => ({
+    limit: currentLimit,
+    offset: 0,
+  }), [currentLimit]);
+
+  // Debug logging
+  console.log('[RecentReportsSection] Filters prop:', filters);
+  console.log('[RecentReportsSection] Query filters (memoized):', queryFilters);
+  console.log('[RecentReportsSection] Pagination params (memoized):', paginationParams);
+
   // Fetch reports excluding pinned ones
   const { data, isLoading, error } = useReportsWithFilters(
     organizationId || '',
-    { ...filters, pinned: false },
-    { limit: currentLimit, offset: 0 }
+    queryFilters,
+    paginationParams
   );
+
+  console.log('[RecentReportsSection] Data:', data);
 
   const pinReport = usePinReport();
 
