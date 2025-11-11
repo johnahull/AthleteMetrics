@@ -12,8 +12,10 @@ export interface TeamStatistic {
   metric: string;
   units?: string;
   average: number | null;
+  median: number | null;
   min: number | null;
   max: number | null;
+  standardDeviation: number | null;
   topPerformer: TopPerformer | null;
   benchmarks?: Benchmark[];
 }
@@ -33,22 +35,46 @@ export interface AthleteRanking {
   benchmarkComparisons?: Record<string, BenchmarkComparison[]>;
 }
 
-export interface CoachReportConfig {
+export interface TimeframeConfig {
+  type: 'preset' | 'custom';
+  preset?: 'season' | 'year' | 'all_time';
+  customStart?: string;
+  customEnd?: string;
+}
+
+export interface ReportFilters {
   teamIds?: string[];
+  gender?: string;
+  positions?: string[];
+}
+
+export interface TeamReportConfig {
+  timeframe: TimeframeConfig;
   metrics: string[];
+  filters?: ReportFilters;
   includeCompositeIndex?: boolean;
   benchmarks?: Array<{
     name: string;
     metricCode: string;
     value: number;
   }>;
+  compositeIndex?: {
+    enabled: boolean;
+    weights: Record<string, number>;
+  };
 }
 
-export interface CoachReportData {
+export interface TeamReportData {
+  reportType: 'team';
+  reportConfig: TeamReportConfig;
   teamStatistics: TeamStatistic[];
   athleteRankings: AthleteRanking[];
+  athleteCount: number;
+  teamIds: string[];
   generatedAt: string;
 }
+
+export type PdfFormat = 'visual' | 'simplified';
 
 export interface Report {
   id: string;
@@ -56,8 +82,8 @@ export interface Report {
   createdBy: string;
   name: string;
   description?: string;
-  reportType: "coach" | "individual";
-  config: CoachReportConfig;
+  reportType: "team" | "individual";
+  config: TeamReportConfig;
   isTemplate: boolean;
   createdAt: string;
   updatedAt?: string;

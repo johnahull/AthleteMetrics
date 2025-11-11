@@ -11,6 +11,7 @@ import {
   measurements,
   users,
   teams,
+  userTeams,
   siteBenchmarks,
   customBenchmarks,
   organizationBenchmarks,
@@ -64,6 +65,7 @@ interface AthletePerformance {
   gender?: 'Male' | 'Female' | 'Not Specified';
   positions?: string[];
   age?: number;
+  teams?: string[];
   measurements: Record<string, number>;
   percentiles: Record<string, number>;
   compositeIndex?: number;
@@ -98,8 +100,8 @@ interface BenchmarkComparison {
   comparisonOperator: string;
 }
 
-interface CoachReportData {
-  reportType: 'coach';
+interface TeamReportData {
+  reportType: 'team';
   reportConfig: ReportConfig;
   teamStatistics: TeamStatistics[];
   athleteRankings: AthletePerformance[];
@@ -117,12 +119,12 @@ interface IndividualReportData {
 
 export class ReportService extends BaseService {
   /**
-   * Generate a coach report with team-level aggregations and athlete rankings
+   * Generate a team report with team-level aggregations and athlete rankings
    */
-  async generateCoachReport(
+  async generateTeamReport(
     reportId: string,
     userId: string
-  ): Promise<CoachReportData> {
+  ): Promise<TeamReportData> {
     // Get report configuration
     const report = await db
       .select()
@@ -146,7 +148,7 @@ export class ReportService extends BaseService {
 
     const config = report.config as ReportConfig;
 
-    console.log('[ReportService] Generating coach report:', {
+    console.log('[ReportService] Generating team report:', {
       reportId,
       reportName: report.name,
       organizationId: report.organizationId,
@@ -175,6 +177,13 @@ export class ReportService extends BaseService {
       metrics: [...new Set(measurementData.map(m => m.measurement.metric))]
     });
 
+    // Get benchmarks for the report
+    const benchmarksByMetric = await this.getBenchmarksForReport(
+      config.benchmarks,
+      report.organizationId,
+      reportId
+    );
+
     // Calculate team statistics
     const teamStatistics = await this.calculateTeamStatistics(
       measurementData,
@@ -189,12 +198,13 @@ export class ReportService extends BaseService {
       stats: teamStatistics
     });
 
-    // Get athlete rankings with percentiles
+    // Get athlete rankings with percentiles and benchmark comparisons
     const athleteRankings = await this.calculateAthleteRankings(
       measurementData,
       config.metrics,
       config.compositeIndex,
-      reportId
+      reportId,
+      benchmarksByMetric
     );
 
     console.log('[ReportService] Calculated athlete rankings:', {
@@ -203,7 +213,7 @@ export class ReportService extends BaseService {
     });
 
     const result = {
-      reportType: 'coach' as const,
+      reportType: 'team' as const,
       reportConfig: config,
       teamStatistics,
       athleteRankings,
@@ -266,6 +276,22 @@ export class ReportService extends BaseService {
       throw new Error('Athlete not found');
     }
 
+    // Get athlete's active teams
+    const athleteTeams = await db
+      .select({
+        teamName: teams.name,
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(teams.id, userTeams.teamId))
+      .where(
+        and(
+          eq(userTeams.userId, athleteId),
+          eq(userTeams.isActive, true)
+        )
+      );
+
+    const teamNames = athleteTeams.map(t => t.teamName);
+
     // Get athlete measurements
     const athleteMeasurements = await db
       .select()
@@ -311,7 +337,8 @@ export class ReportService extends BaseService {
       athleteId,
       report.organizationId,
       reportId,
-      bestPerformances
+      bestPerformances,
+      config
     );
 
     const athletePerformance: AthletePerformance = {
@@ -322,6 +349,7 @@ export class ReportService extends BaseService {
       age: athlete.birthYear
         ? new Date().getFullYear() - athlete.birthYear
         : undefined,
+      teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
       percentiles,
       benchmarkComparisons,
@@ -431,7 +459,8 @@ export class ReportService extends BaseService {
     athleteId: string,
     organizationId: string,
     reportId: string,
-    athletePerformances: Record<string, number>
+    athletePerformances: Record<string, number>,
+    reportConfig: ReportConfig
   ): Promise<Record<string, BenchmarkComparison[]>> {
     const comparisons: Record<string, BenchmarkComparison[]> = {};
 
@@ -457,44 +486,62 @@ export class ReportService extends BaseService {
       .from(reportBenchmarks)
       .where(eq(reportBenchmarks.reportId, reportId));
 
-    // Get site benchmarks enabled for this organization
-    const siteBenchmarksList = await db
-      .select({
-        benchmark: siteBenchmarks,
-      })
-      .from(siteBenchmarks)
-      .innerJoin(
-        organizationBenchmarks,
-        and(
-          eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
-          eq(organizationBenchmarks.benchmarkType, 'site'),
-          eq(organizationBenchmarks.organizationId, organizationId),
-          eq(organizationBenchmarks.isEnabled, true)
-        )
-      )
-      .where(eq(siteBenchmarks.isActive, true));
+    // Get selected site benchmark IDs from report config
+    const selectedSiteBenchmarkIds = reportConfig.benchmarks?.site || [];
 
-    // Get custom benchmarks for this organization
-    const customBenchmarksList = await db
-      .select({
-        benchmark: customBenchmarks,
-      })
-      .from(customBenchmarks)
-      .innerJoin(
-        organizationBenchmarks,
-        and(
-          eq(organizationBenchmarks.benchmarkId, customBenchmarks.id),
-          eq(organizationBenchmarks.benchmarkType, 'custom'),
-          eq(organizationBenchmarks.organizationId, organizationId),
-          eq(organizationBenchmarks.isEnabled, true)
+    // Get site benchmarks enabled for this organization AND selected in the report
+    let siteBenchmarksList: Array<{ benchmark: typeof siteBenchmarks.$inferSelect }> = [];
+    if (selectedSiteBenchmarkIds.length > 0) {
+      siteBenchmarksList = await db
+        .select({
+          benchmark: siteBenchmarks,
+        })
+        .from(siteBenchmarks)
+        .innerJoin(
+          organizationBenchmarks,
+          and(
+            eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
+            eq(organizationBenchmarks.benchmarkType, 'site'),
+            eq(organizationBenchmarks.organizationId, organizationId),
+            eq(organizationBenchmarks.isEnabled, true)
+          )
         )
-      )
-      .where(
-        and(
-          eq(customBenchmarks.organizationId, organizationId),
-          eq(customBenchmarks.isActive, true)
+        .where(
+          and(
+            eq(siteBenchmarks.isActive, true),
+            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds)
+          )
+        );
+    }
+
+    // Get selected custom benchmark IDs from report config
+    const selectedCustomBenchmarkIds = reportConfig.benchmarks?.custom || [];
+
+    // Get custom benchmarks for this organization AND selected in the report
+    let customBenchmarksList: Array<{ benchmark: typeof customBenchmarks.$inferSelect }> = [];
+    if (selectedCustomBenchmarkIds.length > 0) {
+      customBenchmarksList = await db
+        .select({
+          benchmark: customBenchmarks,
+        })
+        .from(customBenchmarks)
+        .innerJoin(
+          organizationBenchmarks,
+          and(
+            eq(organizationBenchmarks.benchmarkId, customBenchmarks.id),
+            eq(organizationBenchmarks.benchmarkType, 'custom'),
+            eq(organizationBenchmarks.organizationId, organizationId),
+            eq(organizationBenchmarks.isEnabled, true)
+          )
         )
-      );
+        .where(
+          and(
+            eq(customBenchmarks.organizationId, organizationId),
+            eq(customBenchmarks.isActive, true),
+            inArray(customBenchmarks.id, selectedCustomBenchmarkIds)
+          )
+        );
+    }
 
     // Process all benchmarks
     for (const [metricCode, athleteValue] of Object.entries(
@@ -581,9 +628,9 @@ export class ReportService extends BaseService {
     }
 
     // Generate report data
-    let snapshotData: CoachReportData | IndividualReportData;
-    if (report.reportType === 'coach') {
-      snapshotData = await this.generateCoachReport(reportId, userId);
+    let snapshotData: TeamReportData | IndividualReportData;
+    if (report.reportType === 'team') {
+      snapshotData = await this.generateTeamReport(reportId, userId);
     } else {
       // For individual reports, we need an athleteId
       // This should be passed in the config or as a parameter
@@ -876,7 +923,8 @@ export class ReportService extends BaseService {
     measurementData: any[],
     metrics: string[],
     compositeIndexConfig: CompositeIndexConfig | undefined,
-    reportId: string
+    reportId: string,
+    benchmarksByMetric?: Record<string, Array<{ name: string; value: number }>>
   ): Promise<AthletePerformance[]> {
     // Group measurements by athlete
     const athleteMap = new Map<string, any>();
@@ -939,6 +987,29 @@ export class ReportService extends BaseService {
           athlete.percentiles[metric] = metricInfo.lowerIsBetter
             ? 100 - rank
             : rank;
+        }
+      }
+    }
+
+    // Populate benchmark comparisons if benchmarks are provided
+    if (benchmarksByMetric) {
+      for (const athlete of athletes) {
+        for (const metric of metrics) {
+          const value = athlete.measurements[metric];
+          if (value === undefined) continue;
+
+          const benchmarks = benchmarksByMetric[metric];
+          if (!benchmarks || benchmarks.length === 0) continue;
+
+          const metricInfo = await this.getMetricInfo(metric);
+
+          athlete.benchmarkComparisons[metric] = benchmarks.map(benchmark => ({
+            benchmarkName: benchmark.name,
+            benchmarkValue: benchmark.value,
+            meetsOrExceeds: metricInfo.lowerIsBetter
+              ? value <= benchmark.value
+              : value >= benchmark.value
+          }));
         }
       }
     }
@@ -1032,9 +1103,16 @@ export class ReportService extends BaseService {
     organizationId: string,
     reportId: string
   ): Promise<Record<string, Array<{ name: string; value: number }>>> {
+    console.log('[getBenchmarksForReport] Starting benchmark fetch:', {
+      benchmarkConfig,
+      organizationId,
+      reportId
+    });
+
     const benchmarksByMetric: Record<string, Array<{ name: string; value: number }>> = {};
 
     if (!benchmarkConfig) {
+      console.log('[getBenchmarksForReport] No benchmark config provided');
       return benchmarksByMetric;
     }
 
@@ -1087,6 +1165,40 @@ export class ReportService extends BaseService {
 
     // Get custom benchmarks
     if (benchmarkConfig.custom && benchmarkConfig.custom.length > 0) {
+      console.log('[getBenchmarksForReport] Fetching custom benchmarks:', {
+        benchmarkIds: benchmarkConfig.custom,
+        organizationId,
+        reportId
+      });
+
+      // Debug: Check if benchmarks exist in custom_benchmarks table
+      const customBenchmarksCheck = await db
+        .select()
+        .from(customBenchmarks)
+        .where(inArray(customBenchmarks.id, benchmarkConfig.custom));
+
+      console.log('[getBenchmarksForReport] DEBUG - Custom benchmarks in custom_benchmarks table:', {
+        count: customBenchmarksCheck.length,
+        benchmarks: customBenchmarksCheck.map(b => ({ id: b.id, name: b.name, isActive: b.isActive, orgId: b.organizationId }))
+      });
+
+      // Debug: Check if benchmarks exist in organization_benchmarks table
+      const orgBenchmarksCheck = await db
+        .select()
+        .from(organizationBenchmarks)
+        .where(
+          and(
+            inArray(organizationBenchmarks.benchmarkId, benchmarkConfig.custom),
+            eq(organizationBenchmarks.benchmarkType, 'custom'),
+            eq(organizationBenchmarks.organizationId, organizationId)
+          )
+        );
+
+      console.log('[getBenchmarksForReport] DEBUG - Custom benchmarks in organization_benchmarks table:', {
+        count: orgBenchmarksCheck.length,
+        benchmarks: orgBenchmarksCheck.map(b => ({ id: b.id, benchmarkId: b.benchmarkId, isEnabled: b.isEnabled }))
+      });
+
       const customBenchmarksList = await db
         .select({
           benchmark: customBenchmarks,
@@ -1109,6 +1221,11 @@ export class ReportService extends BaseService {
           )
         );
 
+      console.log('[getBenchmarksForReport] Custom benchmarks found:', {
+        count: customBenchmarksList.length,
+        benchmarks: customBenchmarksList.map(b => ({ id: b.benchmark.id, name: b.benchmark.name, metricCode: b.benchmark.metricCode }))
+      });
+
       for (const { benchmark } of customBenchmarksList) {
         if (!benchmarksByMetric[benchmark.metricCode]) {
           benchmarksByMetric[benchmark.metricCode] = [];
@@ -1119,6 +1236,11 @@ export class ReportService extends BaseService {
         });
       }
     }
+
+    console.log('[getBenchmarksForReport] Final benchmarks by metric:', {
+      totalMetrics: Object.keys(benchmarksByMetric).length,
+      benchmarksByMetric
+    });
 
     return benchmarksByMetric;
   }

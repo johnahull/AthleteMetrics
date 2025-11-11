@@ -12,12 +12,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Share2, Users, Calendar, TrendingUp, Activity } from "lucide-react";
+import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
-import type { Report, TeamReportData, TeamStatistic, AthleteRanking } from "@/types/report-types";
+import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
 
 interface TeamReportViewProps {
   report: Report;
@@ -25,6 +33,7 @@ interface TeamReportViewProps {
 
 export function TeamReportView({ report }: TeamReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [pdfFormat, setPdfFormat] = useState<PdfFormat>('simplified');
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
 
@@ -47,9 +56,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     });
   }, [report.id]);
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async (format: PdfFormat) => {
     try {
-      const response = await fetch(`/api/reports/${report.id}/pdf`, {
+      const response = await fetch(`/api/reports/${report.id}/pdf?format=${format}`, {
         method: "GET",
         credentials: "include",
       });
@@ -258,7 +267,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     const weightDescriptions = Object.entries(weights)
       .map(([metricCode, weight]) => {
         const metricName = getMetricDisplayName(metricCode);
-        const percentage = (weight * 100).toFixed(0);
+        const percentage = ((weight as number) * 100).toFixed(0);
         return `${metricName} (${percentage}%)`;
       })
       .join(', ');
@@ -346,10 +355,25 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleDownloadPDF}>
-                <FileDown className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Export PDF
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>PDF Format</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleDownloadPDF('visual')}>
+                    <span className="font-medium">Visual (Match UI)</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownloadPDF('simplified')}>
+                    <span className="font-medium">Simplified (Print-Friendly)</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="outline" onClick={() => setShowShareDialog(true)}>
                 <Share2 className="h-4 w-4 mr-2" />
                 Share

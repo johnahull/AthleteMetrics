@@ -23,6 +23,7 @@ import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
 
 // Rate limiting for report endpoints
 const reportLimiter = rateLimit({
@@ -873,16 +874,18 @@ export function registerReportRoutes(app: Express) {
     reportGenerationLimiter,
     requireAuth,
     async (req, res) => {
+      const reportId = req.params.id;
+      const athleteId = req.query.athleteId as string | undefined;
+      const format = (req.query.format as string) || 'simplified';
+      let report: any;
+
       try {
         const user = req.session.user;
         if (!user?.id) {
           return res.status(401).json({ message: "User not authenticated" });
         }
 
-        const reportId = req.params.id;
-        const athleteId = req.query.athleteId as string | undefined;
-
-        const report = await db
+        report = await db
           .select()
           .from(reports)
           .where(eq(reports.id, reportId))
@@ -911,20 +914,28 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate PDF
-        const pdf = generatePDF(report, reportData);
+        const pdf = generatePDF(report, reportData, format as 'visual' | 'simplified');
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
-          `attachment; filename="${report.name.replace(/[^a-z0-9]/gi, "_")}.pdf"`
+          `attachment; filename="${sanitizeFilename(report.name)}.pdf"`
         );
         res.send(Buffer.from(pdf.output("arraybuffer")));
       } catch (error) {
-        console.error("Error generating PDF:", error);
+        console.error("Error generating PDF:", {
+          reportId,
+          reportType: report?.reportType,
+          athleteId,
+          format,
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         res.status(500).json({
           message:
             error instanceof Error ? error.message : "Failed to generate PDF",
+          reportId, // Include for troubleshooting
         });
       }
     }
@@ -940,6 +951,7 @@ export function registerReportRoutes(app: Express) {
     async (req, res) => {
       try {
         const token = req.params.token;
+        const format = (req.query.format as string) || 'simplified';
 
         const snapshot = await reportService.getPublicSnapshot(token);
 
@@ -960,13 +972,13 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate PDF from snapshot data
-        const pdf = generatePDF(report, snapshot.snapshotData);
+        const pdf = generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified');
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
           "Content-Disposition",
-          `attachment; filename="${report.name.replace(/[^a-z0-9]/gi, "_")}.pdf"`
+          `attachment; filename="${sanitizeFilename(report.name)}.pdf"`
         );
         res.send(Buffer.from(pdf.output("arraybuffer")));
       } catch (error) {
@@ -981,14 +993,60 @@ export function registerReportRoutes(app: Express) {
 }
 
 /**
+ * Sanitize filename for safe PDF download
+ * Prevents path traversal, null bytes, and other security issues
+ */
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[/\\?%*:|"<>\x00-\x1f]/g, '_') // Remove dangerous characters
+    .replace(/^\.+/, '_') // Prevent hidden files
+    .substring(0, 200) // Limit length to prevent issues
+    .trim() || 'report'; // Fallback for empty names
+}
+
+/**
+ * Add footer to all pages in the PDF
+ */
+function addFooterToAllPages(doc: jsPDF): void {
+  const pageCount = doc.getNumberOfPages();
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(128, 128, 128); // Gray color
+
+    // Add footer text centered at bottom of page
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const footerText = 'athletemetrics.io';
+    const textWidth = doc.getTextWidth(footerText);
+    const xPosition = (pageWidth - textWidth) / 2;
+
+    doc.text(footerText, xPosition, 287); // 287 is near bottom of A4 page (297mm height)
+  }
+}
+
+/**
  * Generate PDF document from report data
  */
-function generatePDF(report: any, reportData: any): jsPDF {
+function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified'): jsPDF {
   const doc = new jsPDF();
+  const isVisual = format === 'visual';
+
+  // Color schemes
+  const colors = {
+    primary: (isVisual ? [41, 128, 185] : [70, 70, 70]) as [number, number, number],
+    secondary: (isVisual ? [52, 152, 219] : [100, 100, 100]) as [number, number, number],
+    accent: (isVisual ? [46, 204, 113] : [120, 120, 120]) as [number, number, number],
+    text: [40, 40, 40] as [number, number, number],
+  };
 
   // Add title
   doc.setFontSize(20);
+  if (isVisual) {
+    doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+  }
   doc.text(report.name, 14, 20);
+  doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
 
   // Add description
   if (report.description) {
@@ -1007,9 +1065,35 @@ function generatePDF(report: any, reportData: any): jsPDF {
   let yPos = 50;
 
   if (reportData.reportType === 'team') {
-    // Coach report: Team statistics
-    doc.setFontSize(14);
-    doc.text("Team Statistics", 14, yPos);
+    // TEAM REPORT SECTIONS
+
+    // 1. Report Summary
+    doc.setFontSize(16);
+    if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    doc.text("Report Summary", 14, yPos);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    yPos += 10;
+
+    const summaryRows = [
+      ["Athletes Tested", `${reportData.athleteCount || 0}`],
+      ["Metrics", reportData.teamStatistics?.map((s: any) => s.metric).join(', ') || "N/A"],
+    ];
+
+    autoTable(doc, {
+      startY: yPos,
+      body: summaryRows,
+      theme: isVisual ? "grid" : "plain",
+      styles: { fontSize: 10 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } },
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    // 2. Performance Snapshot (Team Statistics)
+    doc.setFontSize(16);
+    if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    doc.text("Performance Snapshot", 14, yPos);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
     yPos += 10;
 
     if (reportData.teamStatistics && reportData.teamStatistics.length > 0) {
@@ -1026,42 +1110,186 @@ function generatePDF(report: any, reportData: any): jsPDF {
         startY: yPos,
         head: [["Metric", "Average", "Median", "Min", "Max", "Top Performer"]],
         body: statsRows,
-        theme: "striped",
-        headStyles: { fillColor: [41, 128, 185] },
+        theme: isVisual ? "striped" : "grid",
+        headStyles: { fillColor: colors.primary },
+        styles: { fontSize: 9 },
       });
 
-      yPos = (doc as any).lastAutoTable.finalY + 10;
+      yPos = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // Athlete rankings
+    // Check if we need a new page
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    // 3. Benchmark Achievement Summary
     if (reportData.athleteRankings && reportData.athleteRankings.length > 0) {
-      doc.setFontSize(14);
-      doc.text("Athlete Rankings", 14, yPos);
+      const benchmarkAchievements = calculateBenchmarkAchievements(reportData.athleteRankings);
+
+      if (benchmarkAchievements.length > 0) {
+        doc.setFontSize(16);
+        if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+        doc.text("Benchmark Achievement Summary", 14, yPos);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        yPos += 10;
+
+        const benchmarkRows = benchmarkAchievements.map((achievement: any) => [
+          achievement.tier,
+          achievement.count.toString(),
+          `${achievement.percentage.toFixed(0)}%`,
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Benchmark", "Athletes", "Percentage"]],
+          body: benchmarkRows,
+          theme: isVisual ? "striped" : "grid",
+          headStyles: { fillColor: colors.secondary },
+          styles: { fontSize: 10 },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 15;
+      }
+    }
+
+    // Check if we need a new page
+    if (yPos > 250) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    // 4. Individual Performance by Metric
+    if (reportData.teamStatistics && reportData.teamStatistics.length > 0 &&
+        reportData.athleteRankings && reportData.athleteRankings.length > 0) {
+
+      doc.setFontSize(16);
+      if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      doc.text("Individual Performance by Metric", 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
 
-      const rankingRows = reportData.athleteRankings
+      reportData.teamStatistics.forEach((stat: any) => {
+        // Check if we need a new page for each metric
+        if (yPos > 200) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(14);
+        if (isVisual) doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+        doc.text(stat.metric, 14, yPos);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        yPos += 6;
+
+        // Sort athletes by this metric
+        const sortedAthletes = sortAthletesByMetric(reportData.athleteRankings, stat.metric);
+        const totalAthletes = sortedAthletes.length;
+        const displayedAthletes = sortedAthletes.slice(0, 50); // Limit to top 50
+
+        if (displayedAthletes.length > 0) {
+          const metricRows = displayedAthletes.map((athlete: any, idx: number) => {
+            const value = athlete.measurements[stat.metric];
+            const percentile = athlete.percentiles?.[stat.metric];
+            const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
+
+            return [
+              (idx + 1).toString(),
+              athlete.userName,
+              value !== null && value !== undefined ? `${value.toFixed(2)} ${stat.units || ''}` : "N/A",
+              percentile !== undefined ? `${percentile.toFixed(0)}th` : "N/A",
+              benchmarkLabel || "-",
+            ];
+          });
+
+          autoTable(doc, {
+            startY: yPos,
+            head: [["Rank", "Athlete", "Value", "Percentile", "Benchmark"]],
+            body: metricRows,
+            theme: isVisual ? "striped" : "grid",
+            headStyles: { fillColor: colors.accent, fontSize: 9 },
+            styles: { fontSize: 8 },
+            margin: { left: 14 },
+          });
+
+          yPos = (doc as any).lastAutoTable.finalY + 5;
+
+          // Add truncation notice if more than 50 athletes
+          if (totalAthletes > 50) {
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`Showing top 50 of ${totalAthletes} athletes`, 14, yPos);
+            doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+            yPos += 5;
+          }
+
+          yPos += 5; // Add spacing before next metric
+        }
+      });
+    }
+
+    // 5. Composite Index Rankings (ONLY if enabled)
+    const hasCompositeIndex = reportData.athleteRankings &&
+                               reportData.athleteRankings.length > 0 &&
+                               reportData.athleteRankings.some((a: any) => a.compositeIndex !== undefined);
+
+    if (hasCompositeIndex) {
+      // Check if we need a new page
+      if (yPos > 200) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(16);
+      if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      doc.text("Composite Index Rankings", 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      yPos += 10;
+
+      const rankingRows = (reportData.athleteRankings || [])
+        .filter((athlete: any) => athlete.compositeIndex !== undefined && athlete.compositeIndex !== null)
+        .sort((a: any, b: any) => (b.compositeIndex || 0) - (a.compositeIndex || 0))
         .slice(0, 20) // Top 20
         .map((athlete: any, index: number) => [
-          index + 1,
+          (index + 1).toString(),
           athlete.userName,
-          athlete.compositeIndex?.toFixed(2) || "N/A",
+          athlete.compositeIndex.toFixed(2),
         ]);
 
       autoTable(doc, {
         startY: yPos,
         head: [["Rank", "Athlete", "Composite Score"]],
         body: rankingRows,
-        theme: "striped",
-        headStyles: { fillColor: [41, 128, 185] },
+        theme: isVisual ? "striped" : "grid",
+        headStyles: { fillColor: colors.primary },
       });
     }
   } else {
-    // Individual report: Athlete performance
+    // INDIVIDUAL REPORT
     const athlete = reportData.athlete;
 
     doc.setFontSize(14);
     doc.text(`Athlete: ${athlete.userName}`, 14, yPos);
-    yPos += 10;
+    yPos += 7;
+
+    // Add athlete demographics
+    doc.setFontSize(10);
+    if (athlete.age) {
+      doc.text(`Age: ${athlete.age}`, 14, yPos);
+      yPos += 5;
+    }
+    if (athlete.gender) {
+      doc.text(`Gender: ${athlete.gender}`, 14, yPos);
+      yPos += 5;
+    }
+    if (athlete.teams && athlete.teams.length > 0) {
+      const teamLabel = athlete.teams.length > 1 ? 'Teams' : 'Team';
+      doc.text(`${teamLabel}: ${athlete.teams.join(', ')}`, 14, yPos);
+      yPos += 5;
+    }
+
+    yPos += 5; // Add spacing before measurements table
 
     if (athlete.measurements) {
       const measurementRows = Object.entries(athlete.measurements).map(
@@ -1076,8 +1304,8 @@ function generatePDF(report: any, reportData: any): jsPDF {
         startY: yPos,
         head: [["Metric", "Value", "Percentile"]],
         body: measurementRows,
-        theme: "striped",
-        headStyles: { fillColor: [41, 128, 185] },
+        theme: isVisual ? "striped" : "grid",
+        headStyles: { fillColor: colors.primary },
       });
 
       yPos = (doc as any).lastAutoTable.finalY + 10;
@@ -1095,7 +1323,7 @@ function generatePDF(report: any, reportData: any): jsPDF {
               comp.benchmarkName,
               comp.benchmarkValue.toFixed(2),
               comp.athleteValue.toFixed(2),
-              comp.meetsTarget ? "Yes" : "No",
+              comp.meetsOrExceeds ? "Yes" : "No",
             ]);
           });
         }
@@ -1112,12 +1340,79 @@ function generatePDF(report: any, reportData: any): jsPDF {
             ["Metric", "Benchmark", "Target", "Actual", "Meets Target"],
           ],
           body: allBenchmarks,
-          theme: "striped",
-          headStyles: { fillColor: [41, 128, 185] },
+          theme: isVisual ? "striped" : "grid",
+          headStyles: { fillColor: colors.primary },
         });
       }
     }
   }
 
+  // Add footer to all pages
+  addFooterToAllPages(doc);
+
   return doc;
 }
+
+/**
+ * Helper function: Calculate benchmark achievements for PDF
+ */
+function calculateBenchmarkAchievements(athleteRankings: any[]) {
+  if (!athleteRankings || athleteRankings.length === 0) {
+    return [];
+  }
+
+  // Get all unique benchmark names
+  const allBenchmarkNames = new Set<string>();
+  athleteRankings.forEach((athlete: any) => {
+    if (athlete.benchmarkComparisons) {
+      Object.values(athlete.benchmarkComparisons).forEach((comparisons: any) => {
+        comparisons.forEach((comp: any) => allBenchmarkNames.add(comp.benchmarkName));
+      });
+    }
+  });
+
+  // Count how many athletes meet each benchmark
+  const benchmarkCounts: Record<string, number> = {};
+  Array.from(allBenchmarkNames).forEach((benchmarkName) => {
+    benchmarkCounts[benchmarkName] = 0;
+  });
+
+  // Track which athletes meet at least one benchmark
+  const athletesWithBenchmarks = new Set<string>();
+
+  athleteRankings.forEach((athlete: any) => {
+    if (athlete.benchmarkComparisons) {
+      Object.values(athlete.benchmarkComparisons).forEach((comparisons: any) => {
+        comparisons.forEach((comp: any) => {
+          if (comp.meetsOrExceeds) {
+            benchmarkCounts[comp.benchmarkName]++;
+            athletesWithBenchmarks.add(athlete.userId);
+          }
+        });
+      });
+    }
+  });
+
+  // Convert to array format, sorted by count descending
+  const achievements = Array.from(allBenchmarkNames)
+    .map((benchmarkName) => ({
+      tier: benchmarkName,
+      count: benchmarkCounts[benchmarkName],
+      percentage: (benchmarkCounts[benchmarkName] / athleteRankings.length) * 100,
+    }))
+    .filter((achievement) => achievement.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  // Add "no benchmark met" if applicable
+  const noTierCount = athleteRankings.length - athletesWithBenchmarks.size;
+  if (noTierCount > 0) {
+    achievements.push({
+      tier: 'No benchmark met',
+      count: noTierCount,
+      percentage: (noTierCount / athleteRankings.length) * 100,
+    });
+  }
+
+  return achievements;
+}
+
