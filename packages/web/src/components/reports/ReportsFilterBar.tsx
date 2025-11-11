@@ -49,14 +49,8 @@ export function ReportsFilterBar({
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('[ReportsFilterBar] Search input changed:', e.target.value);
     updateFilters({ search: e.target.value });
-    console.log('[ReportsFilterBar] After updateFilters, filters:', JSON.stringify(filters, null, 2));
   };
-
-  // Debug: Log filter changes on every render
-  console.log('[ReportsFilterBar] Render - Current filters:', JSON.stringify(filters, null, 2));
-  console.log('[ReportsFilterBar] Render - Active filter count:', activeFilterCount);
 
   // Handle report type change
   const handleReportTypeChange = (value: string) => {
