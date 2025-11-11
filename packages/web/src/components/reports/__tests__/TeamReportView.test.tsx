@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TeamReportView } from '../TeamReportView';
 import { useGenerateReport } from '@/hooks/use-reports';
@@ -92,12 +93,27 @@ describe('TeamReportView - PDF Export', () => {
       },
     });
 
+    // Reset mock implementation
+    mockGenerateReportMutate.mockReset();
+    mockFetch.mockClear();
+    mockCreateObjectURL.mockClear();
+    mockRevokeObjectURL.mockClear();
+
+    // Make mutate call onSuccess callback immediately with mock data
+    mockGenerateReportMutate.mockImplementation((params: any, options: any) => {
+      if (options?.onSuccess) {
+        // Simulate successful report generation
+        options.onSuccess({ data: mockTeamReportData });
+      }
+    });
+
     // Mock useGenerateReport hook
     (useGenerateReport as any).mockReturnValue({
       mutate: mockGenerateReportMutate,
       isPending: false,
       isError: false,
-      data: mockTeamReportData,
+      isSuccess: true,
+      data: { data: mockTeamReportData },
     });
 
     // Mock useTeams hook
@@ -152,10 +168,6 @@ describe('TeamReportView - PDF Export', () => {
       expect(screen.getByText('Report Summary')).toBeInTheDocument();
     });
 
-    // Find and click Export PDF button
-    const exportButton = screen.getByRole('button', { name: /export pdf/i });
-    expect(exportButton).toBeInTheDocument();
-
     // Spy on anchor click
     const mockClick = vi.fn();
     const createElementSpy = vi.spyOn(document, 'createElement');
@@ -163,12 +175,20 @@ describe('TeamReportView - PDF Export', () => {
     mockAnchorElement.click = mockClick;
     createElementSpy.mockReturnValueOnce(mockAnchorElement as any);
 
-    fireEvent.click(exportButton);
+    // Click Export PDF dropdown trigger
+    const user = userEvent.setup();
+    const exportButton = screen.getByRole('button', { name: /export pdf/i });
+    expect(exportButton).toBeInTheDocument();
+    await user.click(exportButton);
+
+    // Wait for dropdown menu to appear and click Visual format option
+    const visualOption = await screen.findByText('Visual (Match UI)');
+    await user.click(visualOption);
 
     // Wait for fetch to be called
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reports/report-123/pdf',
+        '/api/reports/report-123/pdf?format=visual',
         expect.objectContaining({
           method: 'GET',
           credentials: 'include',
@@ -217,9 +237,15 @@ describe('TeamReportView - PDF Export', () => {
       expect(screen.getByText('Report Summary')).toBeInTheDocument();
     });
 
-    // Click Export PDF button
+    // Click Export PDF dropdown trigger
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
     fireEvent.click(exportButton);
+
+    // Click Visual format option from dropdown
+    await waitFor(() => {
+      const visualOption = screen.getByText('Visual (Match UI)');
+      fireEvent.click(visualOption);
+    });
 
     // Wait for error to be logged
     await waitFor(() => {
@@ -260,9 +286,15 @@ describe('TeamReportView - PDF Export', () => {
       expect(screen.getByText('Report Summary')).toBeInTheDocument();
     });
 
-    // Click Export PDF button
+    // Click Export PDF dropdown trigger
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
     fireEvent.click(exportButton);
+
+    // Click Visual format option from dropdown
+    await waitFor(() => {
+      const visualOption = screen.getByText('Visual (Match UI)');
+      fireEvent.click(visualOption);
+    });
 
     // Verify credentials are included
     await waitFor(() => {

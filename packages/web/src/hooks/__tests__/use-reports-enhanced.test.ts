@@ -11,6 +11,10 @@ vi.mock('@/lib/queryClient', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
 }));
 
+// Mock fetch globally
+const mockFetch = vi.fn();
+global.fetch = mockFetch as any;
+
 // Create wrapper with QueryClient
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -27,6 +31,7 @@ const createWrapper = () => {
 describe('useReportsWithFilters', () => {
   beforeEach(() => {
     mockApiRequest.mockClear();
+    mockFetch.mockClear();
   });
 
   afterEach(() => {
@@ -51,20 +56,9 @@ describe('useReportsWithFilters', () => {
       pagination: { total: 0, limit: 20, offset: 0, hasMore: false },
     };
 
-    mockFetch.mockImplementation((url: string) => {
-      if (url === '/api/csrf-token') {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ csrfToken: 'test-token' }),
-        });
-      }
-      if (typeof url === 'string' && url.includes('/api/reports')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => mockResponse,
-        });
-      }
-      return Promise.reject(new Error(`Unmocked fetch call to: ${url}`));
+    mockApiRequest.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
     });
 
     const { result } = renderHook(
@@ -74,17 +68,12 @@ describe('useReportsWithFilters', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // Find the reports API call (not the CSRF call)
-    const reportsCalls = mockFetch.mock.calls.filter((call: any) =>
-      typeof call[0] === 'string' && call[0].includes('/api/reports')
-    );
-    expect(reportsCalls.length).toBeGreaterThan(0);
-
-    const callUrl = reportsCalls[0][0];
+    expect(mockApiRequest).toHaveBeenCalledTimes(1);
+    const callUrl = mockApiRequest.mock.calls[0][1];
 
     expect(callUrl).toContain('organizationId=org-1');
     expect(callUrl).toContain('search=test+report'); // URLSearchParams encodes space as +
-    expect(callUrl).toContain('reportType=coach');
+    expect(callUrl).toContain('reportType=team');
     expect(callUrl).toContain('dateFrom=2025-01-01');
     expect(callUrl).toContain('dateTo=2025-12-31');
     expect(callUrl).toContain('metrics=FLY10_TIME');
@@ -213,7 +202,6 @@ describe('useReportsWithFilters', () => {
 
 describe('usePinReport', () => {
   beforeEach(() => {
-    mockFetch.mockClear();
     mockApiRequest.mockClear();
   });
 
@@ -241,13 +229,14 @@ describe('usePinReport', () => {
     await result.current.mutateAsync('report-1');
 
     // Query invalidation happens automatically via React Query
-    expect(result.current.isSuccess).toBe(true);
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
   });
 });
 
 describe('useUnpinReport', () => {
   beforeEach(() => {
-    mockFetch.mockClear();
     mockApiRequest.mockClear();
   });
 
@@ -274,6 +263,8 @@ describe('useUnpinReport', () => {
 
     await result.current.mutateAsync('report-1');
 
-    expect(result.current.isSuccess).toBe(true);
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
   });
 });
