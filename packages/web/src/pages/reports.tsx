@@ -28,7 +28,7 @@ export default function Reports() {
   const [showWizard, setShowWizard] = useState(false);
   const [deleteReportId, setDeleteReportId] = useState<string | null>(null);
 
-  const { filters } = useReportFilters();
+  const { filters, updateFilters, resetFilters, activeFilterCount } = useReportFilters();
   const deleteReport = useDeleteReport();
 
   // Check access
@@ -80,7 +80,13 @@ export default function Reports() {
       </div>
 
       {/* Filter Bar */}
-      <ReportsFilterBar organizationId={organizationContext || undefined} />
+      <ReportsFilterBar
+        organizationId={organizationContext || undefined}
+        filters={filters}
+        updateFilters={updateFilters}
+        resetFilters={resetFilters}
+        activeFilterCount={activeFilterCount}
+      />
 
       {/* Pinned Reports Section */}
       <PinnedReportsSection

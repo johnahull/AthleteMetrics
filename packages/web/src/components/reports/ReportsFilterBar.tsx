@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Search, Filter, X, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
-import { useReportFilters } from '@/hooks/use-report-filters';
+import type { ReportFilters } from '@/hooks/use-report-filters';
 import { useTeams } from '@/hooks/use-teams';
 import { useMetrics } from '@/hooks/use-metrics';
 import { Input } from '@/components/ui/input';
@@ -27,10 +27,19 @@ import { Separator } from '@/components/ui/separator';
 
 interface ReportsFilterBarProps {
   organizationId?: string;
+  filters: ReportFilters;
+  updateFilters: (updates: Partial<ReportFilters>) => void;
+  resetFilters: () => void;
+  activeFilterCount: number;
 }
 
-export function ReportsFilterBar({ organizationId }: ReportsFilterBarProps) {
-  const { filters, updateFilters, resetFilters, activeFilterCount } = useReportFilters();
+export function ReportsFilterBar({
+  organizationId,
+  filters,
+  updateFilters,
+  resetFilters,
+  activeFilterCount
+}: ReportsFilterBarProps) {
   const { data: teams = [], isLoading: teamsLoading } = useTeams({ organizationId });
   const { data: metrics = [], isLoading: metricsLoading } = useMetrics();
 
@@ -40,8 +49,14 @@ export function ReportsFilterBar({ organizationId }: ReportsFilterBarProps) {
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('[ReportsFilterBar] Search input changed:', e.target.value);
     updateFilters({ search: e.target.value });
+    console.log('[ReportsFilterBar] After updateFilters, filters:', JSON.stringify(filters, null, 2));
   };
+
+  // Debug: Log filter changes on every render
+  console.log('[ReportsFilterBar] Render - Current filters:', JSON.stringify(filters, null, 2));
+  console.log('[ReportsFilterBar] Render - Active filter count:', activeFilterCount);
 
   // Handle report type change
   const handleReportTypeChange = (value: string) => {

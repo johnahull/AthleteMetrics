@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Clock, Pin, FileText, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, usePinReport } from '@/hooks/use-reports';
@@ -30,16 +30,25 @@ export function RecentReportsSection({
 }: RecentReportsSectionProps) {
   const [currentLimit, setCurrentLimit] = useState(limit);
 
+  // Debug: Track when filters prop changes
+  useEffect(() => {
+    console.log('[RecentReportsSection] useEffect - Filters changed!', JSON.stringify(filters, null, 2));
+  }, [filters]);
+
   // Memoize the filters object to prevent unnecessary re-renders
-  const queryFilters = useMemo(() => ({
-    search: filters?.search || undefined,
-    reportType: filters?.reportType === 'all' ? undefined : filters?.reportType,
-    dateFrom: filters?.dateFrom,
-    dateTo: filters?.dateTo,
-    metrics: filters?.metrics,
-    teamIds: filters?.teamIds,
-    pinned: false,
-  }), [filters?.search, filters?.reportType, filters?.dateFrom, filters?.dateTo, filters?.metrics, filters?.teamIds]);
+  const queryFilters = useMemo(() => {
+    const result = {
+      search: filters?.search || undefined,
+      reportType: filters?.reportType === 'all' ? undefined : filters?.reportType,
+      dateFrom: filters?.dateFrom,
+      dateTo: filters?.dateTo,
+      metrics: filters?.metrics,
+      teamIds: filters?.teamIds,
+      pinned: false,
+    };
+    console.log('[RecentReportsSection] useMemo recalculating queryFilters:', JSON.stringify(result, null, 2));
+    return result;
+  }, [filters?.search, filters?.reportType, filters?.dateFrom, filters?.dateTo, filters?.metrics, filters?.teamIds]);
 
   // Memoize pagination params to ensure stable reference
   const paginationParams = useMemo(() => ({
@@ -48,9 +57,9 @@ export function RecentReportsSection({
   }), [currentLimit]);
 
   // Debug logging
-  console.log('[RecentReportsSection] Filters prop:', filters);
-  console.log('[RecentReportsSection] Query filters (memoized):', queryFilters);
-  console.log('[RecentReportsSection] Pagination params (memoized):', paginationParams);
+  console.log('[RecentReportsSection] Render - Filters prop:', JSON.stringify(filters, null, 2));
+  console.log('[RecentReportsSection] Render - Query filters (memoized):', JSON.stringify(queryFilters, null, 2));
+  console.log('[RecentReportsSection] Render - Pagination params (memoized):', paginationParams);
 
   // Fetch reports excluding pinned ones
   const { data, isLoading, error } = useReportsWithFilters(
