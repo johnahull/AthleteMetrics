@@ -95,7 +95,7 @@ interface BenchmarkComparison {
   benchmarkName: string;
   benchmarkValue: number;
   athleteValue: number;
-  meetsTarget: boolean;
+  meetsOrExceeds: boolean;
   percentageDiff: number;
   comparisonOperator: string;
 }
@@ -118,6 +118,9 @@ interface IndividualReportData {
 }
 
 export class ReportService extends BaseService {
+  // Cache for metric info to prevent N+1 queries
+  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; name: string }>();
+
   /**
    * Generate a team report with team-level aggregations and athlete rankings
    */
@@ -1092,7 +1095,7 @@ export class ReportService extends BaseService {
       benchmarkName: name,
       benchmarkValue,
       athleteValue,
-      meetsTarget,
+      meetsOrExceeds: meetsTarget,
       percentageDiff,
       comparisonOperator,
     };
@@ -1246,6 +1249,11 @@ export class ReportService extends BaseService {
   }
 
   private async getMetricInfo(metricCode: string) {
+    // Check cache first to prevent N+1 queries
+    if (this.metricInfoCache.has(metricCode)) {
+      return this.metricInfoCache.get(metricCode)!;
+    }
+
     const metric = await db
       .select()
       .from(siteMetrics)
@@ -1253,11 +1261,13 @@ export class ReportService extends BaseService {
       .limit(1)
       .then((rows) => rows[0]);
 
-    return (
-      metric || {
-        code: metricCode,
-        lowerIsBetter: true,
-      }
-    );
+    const result = metric || {
+      code: metricCode,
+      lowerIsBetter: true,
+    };
+
+    // Cache the result
+    this.metricInfoCache.set(metricCode, result);
+    return result;
   }
 }

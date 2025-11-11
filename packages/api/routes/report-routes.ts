@@ -64,17 +64,10 @@ export function registerReportRoutes(app: Express) {
       // Validate request body
       const { createdBy, id, createdAt, updatedAt, ...bodyData } = req.body;
 
-      console.log('[POST /api/reports] Request body:', JSON.stringify(req.body, null, 2));
-      console.log('[POST /api/reports] bodyData.config:', JSON.stringify(bodyData.config, null, 2));
-      console.log('[POST /api/reports] bodyData.config.athleteIds:', bodyData.config?.athleteIds);
-
       const validatedData = insertReportSchema.parse({
         ...bodyData,
         createdBy: user.id,
       });
-
-      console.log('[POST /api/reports] After validation - validatedData.config:', JSON.stringify(validatedData.config, null, 2));
-      console.log('[POST /api/reports] After validation - athleteIds:', (validatedData.config as any)?.athleteIds);
 
       // Validate organization access
       const hasAccess = await reportService["validateOrganizationAccess"](
@@ -314,7 +307,11 @@ export function registerReportRoutes(app: Express) {
 
       // Metrics filter (check if config.metrics contains any of the specified metrics)
       if (metrics && typeof metrics === 'string') {
-        const metricCodes = metrics.split(',').map(m => m.trim()).filter(Boolean);
+        // Whitelist validation for metrics to prevent SQL injection
+        const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+        const metricCodes = metrics.split(',')
+          .map(m => m.trim())
+          .filter(m => validMetrics.includes(m));
         if (metricCodes.length > 0) {
           conditions.push(
             sql`${reports.config}::jsonb->'metrics' ?| array[${sql.join(metricCodes.map(m => sql`${m}`), sql`, `)}]`
@@ -324,7 +321,11 @@ export function registerReportRoutes(app: Express) {
 
       // Team filter (check if config.filters.teamIds contains any of the specified teams)
       if (teamIds && typeof teamIds === 'string') {
-        const teamIdList = teamIds.split(',').map(t => t.trim()).filter(Boolean);
+        // UUID format validation to prevent SQL injection
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const teamIdList = teamIds.split(',')
+          .map(t => t.trim())
+          .filter(t => uuidRegex.test(t));
         if (teamIdList.length > 0) {
           conditions.push(
             sql`${reports.config}::jsonb->'filters'->'teamIds' ?| array[${sql.join(teamIdList.map(t => sql`${t}`), sql`, `)}]`
@@ -926,11 +927,10 @@ export function registerReportRoutes(app: Express) {
       } catch (error) {
         console.error("Error generating PDF:", {
           reportId,
-          reportType: report?.reportType,
+          reportType: report?.reportType || 'unknown',
           athleteId,
           format,
           error: error instanceof Error ? error.message : error,
-          stack: error instanceof Error ? error.stack : undefined,
         });
         res.status(500).json({
           message:
@@ -994,10 +994,11 @@ export function registerReportRoutes(app: Express) {
 
 /**
  * Sanitize filename for safe PDF download
- * Prevents path traversal, null bytes, and other security issues
+ * Prevents path traversal, null bytes, Unicode normalization attacks, and other security issues
  */
 function sanitizeFilename(filename: string): string {
   return filename
+    .normalize('NFKD') // Unicode normalization to prevent homograph attacks
     .replace(/[/\\?%*:|"<>\x00-\x1f]/g, '_') // Remove dangerous characters
     .replace(/^\.+/, '_') // Prevent hidden files
     .substring(0, 200) // Limit length to prevent issues
