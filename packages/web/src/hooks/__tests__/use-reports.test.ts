@@ -121,7 +121,7 @@ describe('useReports Hook', () => {
       const { result } = renderHook(() => useReports('org-123'), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.error).toBeDefined();
+        expect(result.current.isError).toBe(true);
       });
 
       expect(result.current.error).toBeInstanceOf(Error);
@@ -135,7 +135,7 @@ describe('useReports Hook', () => {
         id: 'report-new',
         name: 'New Report',
         organizationId: 'org-123',
-        reportType: 'coach',
+        reportType: 'team',
       };
 
       mockApiRequest.mockResolvedValueOnce({
@@ -147,7 +147,7 @@ describe('useReports Hook', () => {
 
       const reportData = {
         name: 'New Report',
-        reportType: 'coach' as const,
+        reportType: 'team' as const,
         organizationId: 'org-123',
         config: {
           timeframe: { type: 'preset' as const, preset: 'season' as const },
@@ -194,7 +194,7 @@ describe('useReports Hook', () => {
 
       await result.current.mutateAsync({
         name: 'New Report',
-        reportType: 'coach' as const,
+        reportType: 'team' as const,
         organizationId: 'org-123',
         config: {
           timeframe: { type: 'preset' as const, preset: 'season' as const },
@@ -219,7 +219,7 @@ describe('useReports Hook', () => {
       try {
         await result.current.mutateAsync({
           name: 'Test Report',
-          reportType: 'coach' as const,
+          reportType: 'team' as const,
           organizationId: 'org-123',
           config: {
             timeframe: { type: 'preset' as const, preset: 'season' as const },
@@ -251,7 +251,7 @@ describe('useReports Hook', () => {
 
       await result.current.mutateAsync({
         name: 'New Report',
-        reportType: 'coach' as const,
+        reportType: 'team' as const,
         organizationId: 'org-123',
         config: {
           timeframe: { type: 'preset' as const, preset: 'season' as const },
@@ -276,7 +276,7 @@ describe('useReports Hook', () => {
 
       const reportData = {
         name: 'Config Test Report',
-        reportType: 'coach' as const,
+        reportType: 'team' as const,
         organizationId: 'org-789',
         config: {
           timeframe: { type: 'custom' as const, customStart: '2024-01-01', customEnd: '2024-12-31' },

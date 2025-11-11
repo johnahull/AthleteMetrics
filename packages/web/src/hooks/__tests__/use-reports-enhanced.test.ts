@@ -4,22 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { useReportsWithFilters, usePinReport, useUnpinReport } from '../use-reports';
 import type { ReportFilters } from '../use-report-filters';
-import * as queryClient from '@/lib/queryClient';
 
-// Mock fetch
-const mockFetch = vi.fn();
-global.fetch = mockFetch as any;
-
-// Setup default mock for CSRF token (used by apiRequest)
-mockFetch.mockImplementation((url: string) => {
-  if (url === '/api/csrf-token') {
-    return Promise.resolve({
-      ok: true,
-      json: async () => ({ csrfToken: 'test-token' }),
-    });
-  }
-  return Promise.reject(new Error(`Unmocked fetch call to: ${url}`));
-});
+// Mock apiRequest
+const mockApiRequest = vi.fn();
+vi.mock('@/lib/queryClient', () => ({
+  apiRequest: (...args: any[]) => mockApiRequest(...args),
+}));
 
 // Create wrapper with QueryClient
 const createWrapper = () => {
@@ -36,16 +26,7 @@ const createWrapper = () => {
 
 describe('useReportsWithFilters', () => {
   beforeEach(() => {
-    // Reset mock implementation to include CSRF + custom response
-    mockFetch.mockImplementation((url: string) => {
-      if (url === '/api/csrf-token') {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ csrfToken: 'test-token' }),
-        });
-      }
-      return Promise.reject(new Error(`Unmocked fetch call to: ${url}`));
-    });
+    mockApiRequest.mockClear();
   });
 
   afterEach(() => {
@@ -55,7 +36,7 @@ describe('useReportsWithFilters', () => {
   it('should build query string from filters correctly', async () => {
     const filters: ReportFilters = {
       search: 'test report',
-      reportType: 'coach',
+      reportType: 'team',
       dateFrom: '2025-01-01',
       dateTo: '2025-12-31',
       metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
@@ -200,7 +181,7 @@ describe('useReportsWithFilters', () => {
 
     const mockResponse = {
       reports: [
-        { id: 'report-1', name: 'Test Report 1', reportType: 'coach', createdAt: '2025-01-01' },
+        { id: 'report-1', name: 'Test Report 1', reportType: 'team', createdAt: '2025-01-01' },
         { id: 'report-2', name: 'Test Report 2', reportType: 'individual', createdAt: '2025-01-02' },
       ],
       pagination: {
