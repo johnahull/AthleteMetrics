@@ -21,7 +21,7 @@ import { db } from "../db";
 import { eq, and, desc, asc, sql, inArray, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 // Rate limiting for report endpoints
@@ -226,7 +226,7 @@ export function registerReportRoutes(app: Express) {
    * Query Parameters:
    * - organizationId: Filter by organization
    * - search: Search in name and description
-   * - reportType: Filter by 'coach' or 'individual'
+   * - reportType: Filter by 'team' or 'individual'
    * - dateFrom: Filter by creation date (ISO string)
    * - dateTo: Filter by creation date (ISO string)
    * - metrics: Comma-separated metric codes to filter by
@@ -299,7 +299,7 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Report type filter
-      if (reportType === 'coach' || reportType === 'individual') {
+      if (reportType === 'team' || reportType === 'individual') {
         conditions.push(eq(reports.reportType, reportType));
       }
 
@@ -693,8 +693,8 @@ export function registerReportRoutes(app: Express) {
 
         // Generate report based on type
         let reportData;
-        if (report.reportType === "coach") {
-          reportData = await reportService.generateCoachReport(reportId, user.id);
+        if (report.reportType === 'team') {
+          reportData = await reportService.generateTeamReport(reportId, user.id);
         } else if (report.reportType === "individual") {
           if (!athleteId) {
             return res
@@ -895,8 +895,8 @@ export function registerReportRoutes(app: Express) {
 
         // Generate report data
         let reportData: any;
-        if (report.reportType === "coach") {
-          reportData = await reportService.generateCoachReport(reportId, user.id);
+        if (report.reportType === 'team') {
+          reportData = await reportService.generateTeamReport(reportId, user.id);
         } else {
           if (!athleteId) {
             return res
@@ -1006,7 +1006,7 @@ function generatePDF(report: any, reportData: any): jsPDF {
 
   let yPos = 50;
 
-  if (reportData.reportType === "coach") {
+  if (reportData.reportType === 'team') {
     // Coach report: Team statistics
     doc.setFontSize(14);
     doc.text("Team Statistics", 14, yPos);
@@ -1015,10 +1015,10 @@ function generatePDF(report: any, reportData: any): jsPDF {
     if (reportData.teamStatistics && reportData.teamStatistics.length > 0) {
       const statsRows = reportData.teamStatistics.map((stat: any) => [
         stat.metric,
-        stat.average.toFixed(2),
-        stat.median.toFixed(2),
-        stat.min.toFixed(2),
-        stat.max.toFixed(2),
+        stat.average !== null ? stat.average.toFixed(2) : "N/A",
+        stat.median !== null ? stat.median.toFixed(2) : "N/A",
+        stat.min !== null ? stat.min.toFixed(2) : "N/A",
+        stat.max !== null ? stat.max.toFixed(2) : "N/A",
         stat.topPerformer?.userName || "N/A",
       ]);
 
