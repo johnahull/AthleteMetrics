@@ -138,14 +138,14 @@ afterEach(async () => {
 });
 
 describe('POST /api/reports', () => {
-  it('should create a coach report for authenticated user', async () => {
+  it('should create a team report for authenticated user', async () => {
     const response = await request(app)
       .post('/api/reports')
       .set('Cookie', coachAuthCookie)
       .send({
         name: 'Spring 2025 Performance Report',
         description: 'Quarterly performance analysis',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: testOrg.id,
         config: {
           timeframe: { type: 'preset', preset: 'all_time' },
@@ -156,7 +156,7 @@ describe('POST /api/reports', () => {
     expect(response.status).toBe(201);
     expect(response.body).toHaveProperty('id');
     expect(response.body.name).toBe('Spring 2025 Performance Report');
-    expect(response.body.reportType).toBe('coach');
+    expect(response.body.reportType).toBe('team');
     expect(response.body.organizationId).toBe(testOrg.id);
     expect(response.body.createdBy).toBe(testCoach.id);
 
@@ -172,7 +172,7 @@ describe('POST /api/reports', () => {
       .post('/api/reports')
       .send({
         name: 'Unauthorized Report',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: testOrg.id,
         config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['FLY10_TIME'] },
       });
@@ -186,7 +186,7 @@ describe('POST /api/reports', () => {
       .set('Cookie', coachAuthCookie)
       .send({
         // Missing name
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: testOrg.id,
       });
 
@@ -206,7 +206,7 @@ describe('POST /api/reports', () => {
       .set('Cookie', coachAuthCookie)
       .send({
         name: 'Unauthorized Org Report',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: otherOrg.id,
         config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['FLY10_TIME'] },
       });
@@ -461,13 +461,13 @@ describe('POST /api/reports/:id/generate', () => {
     }
   });
 
-  it('should generate coach report successfully', async () => {
+  it('should generate team report successfully', async () => {
     const response = await request(app)
       .post(`/api/reports/${testReport.id}/generate`)
       .set('Cookie', coachAuthCookie);
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('reportType', 'coach');
+    expect(response.body).toHaveProperty('reportType', 'team');
     expect(response.body).toHaveProperty('generatedAt');
     expect(response.body).toHaveProperty('teamStatistics');
     expect(response.body).toHaveProperty('athleteRankings');

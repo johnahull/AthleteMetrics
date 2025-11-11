@@ -83,7 +83,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
       const report = await storage.createReport({
         name: 'Test Report Org1',
         description: 'Integration test report',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
@@ -105,7 +105,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
         // @ts-expect-error Testing missing organizationId
         await storage.createReport({
           name: 'Invalid Report',
-          reportType: 'coach',
+          reportType: 'team',
           createdBy: orgAdmin1.id,
           config: {
             timeframe: { type: 'preset', preset: 'season' },
@@ -123,7 +123,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
     it('should create multiple reports for same organization', async () => {
       const report1 = await storage.createReport({
         name: 'Report 1 for Org1',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
@@ -156,7 +156,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
       // Create reports for org1
       const report1 = await storage.createReport({
         name: 'Org1 Report 1',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
@@ -167,7 +167,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
 
       const report2 = await storage.createReport({
         name: 'Org1 Report 2',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
@@ -179,7 +179,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
       // Create reports for org2
       const report3 = await storage.createReport({
         name: 'Org2 Report 1',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org2.id,
         createdBy: orgAdmin2.id,
         config: {
@@ -258,7 +258,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
     it('should properly associate report with correct organization', async () => {
       const report = await storage.createReport({
         name: 'Isolation Test Report',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
@@ -307,7 +307,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
       // User1 can create report for org1
       const validReport = await storage.createReport({
         name: 'Valid Permission Report',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
@@ -360,7 +360,7 @@ describe('Report Organization Filtering - Integration Tests', () => {
     it('should maintain organizationId integrity through updates', async () => {
       const report = await storage.createReport({
         name: 'Update Test Report',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: org1.id,
         createdBy: orgAdmin1.id,
         config: {
