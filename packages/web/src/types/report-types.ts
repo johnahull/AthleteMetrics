@@ -53,14 +53,18 @@ export interface TeamReportConfig {
   metrics: string[];
   filters?: ReportFilters;
   includeCompositeIndex?: boolean;
-  benchmarks?: Array<{
-    name: string;
-    metricCode: string;
-    value: number;
-  }>;
+  benchmarks?: {
+    site?: string[]; // Site benchmark IDs
+    custom?: string[]; // Custom benchmark IDs
+    userDefined?: Array<{
+      metricCode: string;
+      value: number;
+      label: string;
+    }>;
+  };
   compositeIndex?: {
     enabled: boolean;
-    weights: Record<string, number>;
+    weights?: Record<string, number>;
   };
 }
 
