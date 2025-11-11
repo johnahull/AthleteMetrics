@@ -100,9 +100,57 @@ export function TeamAthleteSelector({
     return Array.from(genders).sort();
   }, [athletes]);
 
+  // Filter teams based on search term
+  const filteredTeams = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return teams; // Show all teams when no search term
+    }
+
+    const term = searchTerm.toLowerCase();
+    const filtered = teams.filter(team => {
+      // Match team name
+      if (team.name.toLowerCase().includes(term)) {
+        return true;
+      }
+
+      // Match if team has any athletes matching the search term
+      const teamAthletes = athletes.filter(athlete =>
+        athlete.teams?.some(t => t.id === team.id)
+      );
+      return teamAthletes.some(athlete =>
+        athlete.fullName.toLowerCase().includes(term)
+      );
+    });
+
+    console.log('[TeamAthleteSelector] Filtered teams:', {
+      totalTeams: teams.length,
+      searchTerm: term,
+      filteredTeamCount: filtered.length,
+      filteredTeamNames: filtered.map(t => t.name)
+    });
+
+    return filtered;
+  }, [teams, searchTerm, athletes]);
+
   // Filter athletes
   const filteredAthletes = useMemo(() => {
-    return athletes.filter(athlete => {
+    console.log('[TeamAthleteSelector] Filtering athletes:', {
+      totalAthletes: athletes.length,
+      searchTerm,
+      positionFilter,
+      genderFilter,
+      sampleAthlete: athletes[0] ? {
+        id: athletes[0].id,
+        fullName: athletes[0].fullName,
+        firstName: athletes[0].firstName,
+        lastName: athletes[0].lastName,
+        teams: athletes[0].teams,
+        positions: athletes[0].positions,
+        gender: athletes[0].gender,
+      } : null
+    });
+
+    const filtered = athletes.filter(athlete => {
       // Search filter
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -110,6 +158,15 @@ export function TeamAthleteSelector({
         const matchesTeam = athlete.teams?.some(team =>
           team.name.toLowerCase().includes(term)
         );
+
+        console.log('[TeamAthleteSelector] Search check:', {
+          athleteName: athlete.fullName,
+          searchTerm: term,
+          matchesName,
+          matchesTeam,
+          teams: athlete.teams
+        });
+
         if (!matchesName && !matchesTeam) return false;
       }
 
@@ -125,6 +182,13 @@ export function TeamAthleteSelector({
 
       return true;
     });
+
+    console.log('[TeamAthleteSelector] Filtered result:', {
+      filteredCount: filtered.length,
+      filteredAthletes: filtered.map(a => a.fullName)
+    });
+
+    return filtered;
   }, [athletes, searchTerm, positionFilter, genderFilter]);
 
   // Get athletes by team
@@ -318,13 +382,13 @@ export function TeamAthleteSelector({
             ) : (
               <div className="space-y-4">
                 {/* Teams Section */}
-                {teams.length > 0 && (
+                {filteredTeams.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
                       Teams
                     </h4>
                     <div className="space-y-1">
-                      {teams.map(team => {
+                      {filteredTeams.map(team => {
                         const teamAthleteCount = athletesByTeam.get(team.id)?.length || 0;
                         const isSelected = isTeamSelected(team.id);
                         const isPartial = isTeamPartiallySelected(team.id);
@@ -373,9 +437,14 @@ export function TeamAthleteSelector({
                 )}
 
                 {/* Individual Athletes Section */}
-                {filteredAthletes.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
+                {filteredAthletes.length > 0 && (() => {
+                  console.log('[TeamAthleteSelector] RENDERING filtered athletes section', {
+                    filteredCount: filteredAthletes.length,
+                    athleteNames: filteredAthletes.map(a => a.fullName)
+                  });
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
                       <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                         Individual Athletes
                       </h4>
@@ -385,6 +454,7 @@ export function TeamAthleteSelector({
                     </div>
                     <div className="space-y-1">
                       {filteredAthletes.map(athlete => {
+                        console.log('[TeamAthleteSelector] RENDERING athlete item', athlete.fullName);
                         const isSelected = selectedAthleteIds.includes(athlete.id);
 
                         return (
@@ -423,10 +493,11 @@ export function TeamAthleteSelector({
                         );
                       })}
                     </div>
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
 
-                {!isLoading && teams.length === 0 && filteredAthletes.length === 0 && (
+                {!isLoading && filteredTeams.length === 0 && filteredAthletes.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                     <Users className="h-12 w-12 text-muted-foreground/40 mb-4" />
                     <p className="text-sm font-medium text-muted-foreground mb-1">

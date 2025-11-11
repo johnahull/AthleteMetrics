@@ -79,10 +79,10 @@ describe('useReportFilters', () => {
     const { result } = renderHook(() => useReportFilters());
 
     act(() => {
-      result.current.setReportType('coach');
+      result.current.setReportType('team');
     });
 
-    expect(result.current.filters.reportType).toBe('coach');
+    expect(result.current.filters.reportType).toBe('team');
   });
 
   it('should update date range filters', () => {
@@ -145,7 +145,7 @@ describe('useReportFilters', () => {
     // Set various filters
     act(() => {
       result.current.setSearch('test');
-      result.current.setReportType('coach');
+      result.current.setReportType('team');
       result.current.setMetrics(['FLY10_TIME']);
       result.current.setPinned(true);
     });
@@ -173,7 +173,7 @@ describe('useReportFilters', () => {
 
     act(() => {
       result.current.setSearch('test');
-      result.current.setReportType('coach');
+      result.current.setReportType('team');
       result.current.setMetrics(['FLY10_TIME', 'VERTICAL_JUMP']);
     });
 
@@ -188,7 +188,7 @@ describe('useReportFilters', () => {
     const url = lastCall[2] as string;
 
     expect(url).toContain('search=test');
-    expect(url).toContain('reportType=coach');
+    expect(url).toContain('reportType=team');
     expect(url).toContain('metrics=FLY10_TIME');
     expect(url).toContain('metrics=VERTICAL_JUMP');
   });
@@ -258,7 +258,7 @@ describe('useReportFilters', () => {
     window.history.pushState(
       {},
       '',
-      '/reports?search=test&reportType=coach'
+      '/reports?search=test&reportType=team'
     );
 
     const { result } = renderHook(() => useReportFilters());
@@ -283,7 +283,7 @@ describe('useReportFilters', () => {
 
     act(() => {
       result.current.setSearch('test');
-      result.current.setReportType('coach');
+      result.current.setReportType('team');
       result.current.setMetrics(['FLY10_TIME']);
     });
 

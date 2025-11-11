@@ -359,7 +359,7 @@ export const reports = pgTable("reports", {
   // Report identification
   name: varchar("name", { length: 200 }).notNull(),
   description: text("description"),
-  reportType: varchar("report_type", { length: 50 }).notNull(), // 'coach' or 'individual'
+  reportType: varchar("report_type", { length: 50 }).notNull(), // 'team' or 'individual'
 
   // Report configuration (JSONB for flexibility)
   config: jsonb("config").notNull(),
@@ -1080,7 +1080,7 @@ export const insertReportSchema = createInsertSchema(reports).omit({
   organizationId: z.string().min(1, "Organization ID is required"),
   name: z.string().min(1, "Report name is required").max(200),
   description: z.string().optional(),
-  reportType: z.enum(['coach', 'individual']),
+  reportType: z.enum(['team', 'individual']),
   config: z.object({
     timeframe: z.object({
       type: z.enum(['preset', 'custom']),

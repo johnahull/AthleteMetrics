@@ -48,7 +48,7 @@ describe('ReportService', () => {
     const [report] = await db.insert(reports).values({
       name: `Test Report ${uniqueSuffix}`,
       organizationId: testOrgId,
-      reportType: 'coach',
+      reportType: 'team',
       config: {
         timeframe: { type: 'preset', preset: 'all_time' },
         metrics: ['FLY10_TIME'],
