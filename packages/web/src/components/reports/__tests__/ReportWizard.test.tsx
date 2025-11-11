@@ -111,12 +111,12 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
-      // Select coach report type
-      const coachRadio = screen.getByLabelText(/Coach Report/i, { exact: false });
-      fireEvent.click(coachRadio);
+      // Select team report type
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
 
       // Navigate through wizard steps
       const nextButton = screen.getByRole('button', { name: /Next/i });
@@ -170,12 +170,12 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
       // Try to submit form
-      const coachRadio = screen.getByLabelText(/Coach Report/i, { exact: false });
-      fireEvent.click(coachRadio);
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
 
       // Navigate to end
       const nextButton = screen.getByRole('button', { name: /Next/i });
@@ -207,12 +207,12 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
-      // Select coach report
-      const coachRadio = screen.getByLabelText(/Coach Report/i, { exact: false });
-      fireEvent.click(coachRadio);
+      // Select team report
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
       fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
       // Fill details
@@ -271,12 +271,12 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
       // Quick navigation through wizard
-      const coachRadio = screen.getByLabelText(/Coach Report/i, { exact: false });
-      fireEvent.click(coachRadio);
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
       fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
       await waitFor(() => {
@@ -343,7 +343,7 @@ describe('ReportWizard Component', () => {
       await waitFor(() => {
         expect(mockApiRequest).toHaveBeenCalledWith(
           'GET',
-          `/api/organizations/${mockOrganizationContext}/benchmarks/custom`
+          `/api/organizations/${mockOrganizationContext}/benchmarks`
         );
       });
     });
@@ -359,7 +359,7 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
       // Should not fetch organization-scoped endpoints
@@ -386,11 +386,11 @@ describe('ReportWizard Component', () => {
 
       // Navigate to metrics step
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
-      const coachRadio = screen.getByLabelText(/Coach Report/i, { exact: false });
-      fireEvent.click(coachRadio);
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
       fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
       await waitFor(() => {
@@ -421,12 +421,12 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Coach Report')).toBeInTheDocument();
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
       });
 
       // Navigate to metrics step
-      const coachRadio = screen.getByLabelText(/Coach Report/i, { exact: false });
-      fireEvent.click(coachRadio);
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
       fireEvent.click(screen.getByRole('button', { name: /Next/i }));
 
       await waitFor(() => {
