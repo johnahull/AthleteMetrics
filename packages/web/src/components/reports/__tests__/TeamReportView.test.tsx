@@ -43,6 +43,7 @@ describe('TeamReportView - PDF Export', () => {
       },
     },
     isTemplate: false,
+    isPinned: false,
     createdAt: '2025-01-01T00:00:00Z',
   };
 
@@ -316,9 +317,16 @@ describe('TeamReportView - PDF Export', () => {
     mockAnchorElement.click = mockClick;
     createElementSpy.mockReturnValueOnce(mockAnchorElement as any);
 
-    // Click Export PDF button
+    // Click Export PDF dropdown
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
     fireEvent.click(exportButton);
+
+    // Click the simplified format option
+    await waitFor(() => {
+      const simplifiedOption = screen.getByText('Simplified (Print-Friendly)');
+      expect(simplifiedOption).toBeInTheDocument();
+      fireEvent.click(simplifiedOption);
+    });
 
     await waitFor(() => {
       expect(mockClick).toHaveBeenCalled();
@@ -329,6 +337,135 @@ describe('TeamReportView - PDF Export', () => {
     expect(mockAnchorElement.download).toBe('Test/Report\\Name:_2025!.pdf');
 
     createElementSpy.mockRestore();
+  });
+
+  it('should render PDF format dropdown menu', async () => {
+    renderComponent();
+
+    // Wait for report data to load
+    await waitFor(() => {
+      expect(mockGenerateReportMutate).toHaveBeenCalled();
+    });
+
+    // Trigger report data load
+    const mutateCall = mockGenerateReportMutate.mock.calls[0];
+    if (mutateCall && mutateCall[1]?.onSuccess) {
+      mutateCall[1].onSuccess(mockTeamReportData);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Report Summary')).toBeInTheDocument();
+    });
+
+    // Find Export PDF dropdown button
+    const exportButton = screen.getByRole('button', { name: /export pdf/i });
+    expect(exportButton).toBeInTheDocument();
+
+    // Click to open dropdown
+    fireEvent.click(exportButton);
+
+    // Verify both format options are available
+    await waitFor(() => {
+      expect(screen.getByText('PDF Format')).toBeInTheDocument();
+      expect(screen.getByText('Visual (Match UI)')).toBeInTheDocument();
+      expect(screen.getByText('Simplified (Print-Friendly)')).toBeInTheDocument();
+    });
+  });
+
+  it('should download PDF with visual format when selected', async () => {
+    // Mock successful PDF response
+    const mockPdfBlob = new Blob(['mock pdf content'], { type: 'application/pdf' });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      blob: async () => mockPdfBlob,
+    });
+
+    renderComponent();
+
+    // Wait for report data to load
+    await waitFor(() => {
+      expect(mockGenerateReportMutate).toHaveBeenCalled();
+    });
+
+    // Trigger report data load
+    const mutateCall = mockGenerateReportMutate.mock.calls[0];
+    if (mutateCall && mutateCall[1]?.onSuccess) {
+      mutateCall[1].onSuccess(mockTeamReportData);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Report Summary')).toBeInTheDocument();
+    });
+
+    // Click Export PDF dropdown
+    const exportButton = screen.getByRole('button', { name: /export pdf/i });
+    fireEvent.click(exportButton);
+
+    // Click Visual format option
+    await waitFor(() => {
+      const visualOption = screen.getByText('Visual (Match UI)');
+      expect(visualOption).toBeInTheDocument();
+      fireEvent.click(visualOption);
+    });
+
+    // Verify fetch was called with format=visual parameter
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/reports/report-123/pdf?format=visual',
+        expect.objectContaining({
+          method: 'GET',
+          credentials: 'include',
+        })
+      );
+    });
+  });
+
+  it('should download PDF with simplified format when selected', async () => {
+    // Mock successful PDF response
+    const mockPdfBlob = new Blob(['mock pdf content'], { type: 'application/pdf' });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      blob: async () => mockPdfBlob,
+    });
+
+    renderComponent();
+
+    // Wait for report data to load
+    await waitFor(() => {
+      expect(mockGenerateReportMutate).toHaveBeenCalled();
+    });
+
+    // Trigger report data load
+    const mutateCall = mockGenerateReportMutate.mock.calls[0];
+    if (mutateCall && mutateCall[1]?.onSuccess) {
+      mutateCall[1].onSuccess(mockTeamReportData);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Report Summary')).toBeInTheDocument();
+    });
+
+    // Click Export PDF dropdown
+    const exportButton = screen.getByRole('button', { name: /export pdf/i });
+    fireEvent.click(exportButton);
+
+    // Click Simplified format option
+    await waitFor(() => {
+      const simplifiedOption = screen.getByText('Simplified (Print-Friendly)');
+      expect(simplifiedOption).toBeInTheDocument();
+      fireEvent.click(simplifiedOption);
+    });
+
+    // Verify fetch was called with format=simplified parameter
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/reports/report-123/pdf?format=simplified',
+        expect.objectContaining({
+          method: 'GET',
+          credentials: 'include',
+        })
+      );
+    });
   });
 });
 
@@ -350,6 +487,7 @@ describe('TeamReportView - Benchmark Achievement Summary', () => {
       metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
     },
     isTemplate: false,
+    isPinned: false,
     createdAt: '2025-01-01T00:00:00Z',
   };
 

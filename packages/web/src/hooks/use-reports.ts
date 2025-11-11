@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ReportFilters } from "./use-report-filters";
+import type { Report } from "@/types/report-types";
 
 interface CreateReportData {
   name: string;
@@ -34,20 +35,6 @@ interface CreateReportData {
       positions?: string[];
     };
   };
-}
-
-interface Report {
-  id: string;
-  organizationId: string;
-  createdBy: string;
-  name: string;
-  description?: string;
-  reportType: "team" | "individual";
-  config: CreateReportData["config"];
-  isTemplate: boolean;
-  isPinned: boolean;
-  createdAt: string;
-  updatedAt?: string;
 }
 
 interface ReportsResponse {

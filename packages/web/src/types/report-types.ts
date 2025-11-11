@@ -89,6 +89,7 @@ export interface Report {
   reportType: "team" | "individual";
   config: TeamReportConfig;
   isTemplate: boolean;
+  isPinned: boolean;
   createdAt: string;
   updatedAt?: string;
 }
